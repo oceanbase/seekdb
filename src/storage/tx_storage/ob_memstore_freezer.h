@@ -129,8 +129,6 @@ public:
   const static int64_t REPLAY_RESERVE_MEMSTORE_BYTES = 100 * 1024 * 1024; // 100 MB
   const static int64_t MEMSTORE_USED_CACHE_REFRESH_INTERVAL = 100_ms;
   const static int64_t FREEZE_RETRY_TIME_US = 600LL * 1000LL * 1000LL; // 10 minutes
-  static double MDS_TABLE_FREEZE_TRIGGER_PERCENTAGE;
-
 public:
   ObMemstoreFreezer();
   ~ObMemstoreFreezer();

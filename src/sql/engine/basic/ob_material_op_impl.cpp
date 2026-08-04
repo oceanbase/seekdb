@@ -111,7 +111,7 @@ int ObMaterialOpImpl::add_row(const common::ObIArray<ObExpr*> &exprs,
   if (OB_FAIL(before_add_row())) {
     LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(exprs, eval_ctx_, &sr))) {
-    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(lib::get_memory_budget()));
   } else {
     store_row = sr;
   }
@@ -126,7 +126,7 @@ int ObMaterialOpImpl::add_row(const ObChunkDatumStore::StoredRow &src_sr,
   if (OB_FAIL(before_add_row())) {
     LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(src_sr, &sr))) {
-    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(lib::get_memory_budget()));
   } else {
     store_row = sr;
   }
@@ -143,7 +143,7 @@ int ObMaterialOpImpl::add_row(const ObDatum *src_datums,
   if (OB_FAIL(before_add_row())) {
     LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_row(src_datums, datum_cnt, extra_size, &sr))) {
-    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(lib::get_memory_budget()));
   } else {
     store_row = sr;
   }
@@ -159,7 +159,7 @@ int ObMaterialOpImpl::add_batch(const common::ObIArray<ObExpr *> &exprs,
   if (OB_FAIL(before_add_row())) {
     LOG_WARN("before add row process failed");
   } else if (OB_FAIL(datum_store_.add_batch(exprs, *eval_ctx_, skip, batch_size, read_rows))) {
-    LOG_WARN("add store row failed", K(mem_context_->used()), K(get_memory_limit()));
+    LOG_WARN("add store row failed", K(mem_context_->used()), K(lib::get_memory_budget()));
   }
   return ret;
 }

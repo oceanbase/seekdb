@@ -18,6 +18,8 @@
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/utility/ob_tracepoint.h"
 
+#include <atomic>
+
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::lib;
@@ -27,82 +29,19 @@ namespace oceanbase
 namespace lib
 {
 
-void set_hard_memory_limit(int64_t bytes)
+namespace
 {
-  
-  // Set the allocator hard memory limit.
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_allocator_hard_limit(bytes);
-  }
-
-  // set chunk manager hard memory limit
-  CHUNK_MGR.set_hard_limit(bytes);
+std::atomic<int64_t> g_memory_budget(DEFAULT_MEMORY_BUDGET);
 }
 
-int64_t get_hard_memory_limit()
+void set_memory_budget(int64_t bytes)
 {
-  return CHUNK_MGR.get_hard_limit();
+  g_memory_budget.store(bytes, std::memory_order_release);
 }
 
-void set_memory_limit(int64_t bytes)
+int64_t get_memory_budget()
 {
-  
-  // Set the allocator memory limit.
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_allocator_limit(bytes);
-  }
-
-  // set chunk manager memory limit
-  CHUNK_MGR.set_limit(bytes);
-}
-
-int64_t get_memory_limit()
-{
-  return CHUNK_MGR.get_limit();
-}
-
-int64_t get_memory_hold()
-{
-  return CHUNK_MGR.get_hold();
-}
-
-int64_t get_memory_used()
-{
-  return CHUNK_MGR.get_used();
-}
-
-int64_t get_memory_avail()
-{
-  return get_memory_limit() - get_memory_used();
-}
-
-int64_t get_hard_memory_remain()
-{
-  return get_hard_memory_limit() - get_memory_used() + get_allocator_cache_hold();
-}
-
-void set_allocator_memory_limit(int64_t bytes)
-{
-  // Set the allocator memory limit.
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    allocator->set_allocator_limit(bytes);
-  }
-
-  // set chunk manager memory limit
-  CHUNK_MGR.set_limit(bytes);
-}
-
-int64_t get_allocator_memory_limit()
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_total_limit();
-  }
-  return bytes;
+  return g_memory_budget.load(std::memory_order_acquire);
 }
 
 int64_t get_allocator_memory_hold()
@@ -131,16 +70,6 @@ int64_t get_allocator_cache_hold()
   ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
   if (!OB_ISNULL(allocator)) {
     bytes = allocator->get_allocator_cache_hold();
-  }
-  return bytes;
-}
-
-int64_t get_allocator_memory_remain()
-{
-  int64_t bytes = 0;
-  ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-  if (!OB_ISNULL(allocator)) {
-    bytes = allocator->get_allocator_remain();
   }
   return bytes;
 }
@@ -192,21 +121,10 @@ int set_ctx_limit(uint64_t ctx_id, const int64_t limit)
   return ret;
 }
 
-int set_wa_limit(int64_t wa_pctg)
-{
-  const int64_t memory_limit = get_allocator_memory_limit();
-  // Keep a practical lower bound for the work area on small servers.
-  const int64_t lower_limit = 150L << 20;
-  const int64_t wa_limit =
-    std::min(static_cast<int64_t>(memory_limit * 0.8),
-             std::max(lower_limit, (memory_limit / 100) * wa_pctg));
-  return set_ctx_limit(common::ObCtxIds::WORK_AREA, wa_limit);
-}
-
 int set_meta_obj_limit(int64_t meta_obj_pct_lmt)
 {
-  const int64_t memory_limit = get_allocator_memory_limit();
-  const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? memory_limit : (memory_limit / 100) * meta_obj_pct_lmt;
+  const int64_t memory_budget = get_memory_budget();
+  const int64_t ctx_limit = 0 == meta_obj_pct_lmt ? memory_budget : (memory_budget / 100) * meta_obj_pct_lmt;
 
   return set_ctx_limit(common::ObCtxIds::META_OBJ_CTX_ID, ctx_limit);
 }

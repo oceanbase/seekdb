@@ -104,7 +104,7 @@ public:
   }
 
 public:
-  static const int64_t MEMORY_PERCENTAGE = 1;   // max size = runtime memory size * MEMORY_PERCENTAGE / 100
+  static const int64_t MEMORY_PERCENTAGE = 2;   // max size = logical memory budget * MEMORY_PERCENTAGE / 100
   static const int64_t POOL_MAX_SIZE = 64LL * 1024LL * 1024LL; // 64MB
 
 private:

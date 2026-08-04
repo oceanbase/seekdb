@@ -161,8 +161,8 @@ public:
   int64_t get_max_cached_memstore_size() const {
     return arena_.get_max_cached_memstore_size();
   }
-  int64_t hold() const { return arena_.hold(); }
-  int64_t get_total_memstore_used() const { return arena_.hold(); }
+  int64_t hold() const { return get_memstore_quota_used(); }
+  int64_t get_memstore_quota_used() const { return arena_.hold(); }
   int64_t get_frozen_memstore_pos() const {
     int64_t hazard = hlist_.hazard();
     return  hazard == INT64_MAX? 0: hazard;

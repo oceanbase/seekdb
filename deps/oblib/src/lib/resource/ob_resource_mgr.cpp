@@ -18,7 +18,9 @@
 
 
 #include "ob_resource_mgr.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/utility/utility.h"
+#include <cstdlib>
 
 namespace oceanbase
 {
@@ -112,13 +114,18 @@ void ObMemoryMgr::free_chunk(AChunk *chunk, const ObMemAttr &attr)
 void *ObMemoryMgr::alloc_cache_mb(const int64_t size)
 {
   void *ptr = NULL;
-  AChunk *chunk = NULL;
-  ObMemAttr attr;
-  
-  attr.prio_ = OB_NORMAL_ALLOC;
-  attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
-  if (NULL != (chunk = alloc_chunk(size, attr))) {
-    ptr = chunk->data_;
+  const ObMallocBackend backend = get_ob_malloc_backend();
+  if (OB_LIKELY(common::is_ob_malloc_backend(backend))) {
+    AChunk *chunk = NULL;
+    ObMemAttr attr;
+
+    attr.prio_ = OB_NORMAL_ALLOC;
+    attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
+    if (NULL != (chunk = alloc_chunk(size, attr))) {
+      ptr = chunk->data_;
+    }
+  } else if (OB_LIKELY(common::is_jemalloc_backend(backend) && size > 0)) {
+    ptr = common::jemalloc_malloc(static_cast<size_t>(size));
   }
   return ptr;
 }
@@ -126,12 +133,17 @@ void *ObMemoryMgr::alloc_cache_mb(const int64_t size)
 void ObMemoryMgr::free_cache_mb(void *ptr)
 {
   if (NULL != ptr) {
-    ObMemAttr attr;
-    
-    attr.prio_ = OB_NORMAL_ALLOC;
-    attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
-    AChunk *chunk = ptr2chunk(ptr);
-    free_chunk(chunk, attr);
+    const ObMallocBackend backend = get_ob_malloc_backend();
+    if (OB_LIKELY(common::is_ob_malloc_backend(backend))) {
+      ObMemAttr attr;
+
+      attr.prio_ = OB_NORMAL_ALLOC;
+      attr.label_ = ObNewModIds::OB_KVSTORE_CACHE_MB;
+      AChunk *chunk = ptr2chunk(ptr);
+      free_chunk(chunk, attr);
+    } else if (OB_LIKELY(common::is_jemalloc_backend(backend))) {
+      common::jemalloc_free(ptr);
+    }
   }
 }
 

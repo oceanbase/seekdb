@@ -117,7 +117,6 @@ ObKVCacheInstMap::ObKVCacheInstMap()
   : lock_(common::ObLatchIds::KV_CACHE_INST_LOCK),
     inst_map_(),
     configs_(NULL),
-    mem_limit_getter_(NULL),
     node_allocator_(NULL),
     is_inited_(false)
 {
@@ -129,7 +128,6 @@ ObKVCacheInstMap::~ObKVCacheInstMap()
 }
 
 int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-                           const ObIServerMemLimitGetter &mem_limit_getter,
                            ObLfFIFOAllocator *node_allocator)
 {
   int ret = OB_SUCCESS;
@@ -150,7 +148,6 @@ int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *c
 
   if (OB_SUCC(ret)) {
     configs_ = configs;
-    mem_limit_getter_ = &mem_limit_getter;
     node_allocator_ = node_allocator;
     is_inited_ = true;
   }

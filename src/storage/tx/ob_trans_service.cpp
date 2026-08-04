@@ -77,10 +77,15 @@ int ObTransService::init(const ObAddr &self,
   int ret = OB_SUCCESS;
   set_run_wrapper(share::server_runtime());
   
-  const int64_t runtime_memory_limit = lib::get_allocator_memory_limit();
-  int64_t msg_task_cnt = MSG_TASK_CNT_PER_GB * (runtime_memory_limit / (1024 * 1024 * 1024));
-  if (msg_task_cnt < MSG_TASK_CNT_PER_GB) {
-    msg_task_cnt = MSG_TASK_CNT_PER_GB;
+  const int64_t memory_budget = lib::get_memory_budget();
+  static const int64_t ONE_GB = 1024L * 1024L * 1024L;
+  const int64_t whole_gb = memory_budget / ONE_GB;
+  int64_t msg_task_cnt = whole_gb >= MAX_MSG_TASK_CNT / MSG_TASK_CNT_PER_GB
+      ? MAX_MSG_TASK_CNT
+      : whole_gb * MSG_TASK_CNT_PER_GB
+          + memory_budget % ONE_GB * MSG_TASK_CNT_PER_GB / ONE_GB;
+  if (msg_task_cnt < MIN_MSG_TASK_CNT) {
+    msg_task_cnt = MIN_MSG_TASK_CNT;
   }
   if (msg_task_cnt > MAX_MSG_TASK_CNT) {
     msg_task_cnt = MAX_MSG_TASK_CNT;
@@ -117,7 +122,7 @@ int ObTransService::init(const ObAddr &self,
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
-    TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(runtime_memory_limit));
+    TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(memory_budget));
   }
   if (OB_SUCC(ret)) {
 #ifdef ENABLE_DEBUG_LOG
@@ -141,7 +146,7 @@ int ObTransService::init(const ObAddr &self,
     }
 #endif
   } else {
-    TRANS_LOG(WARN, "transaction service inited failed", K(ret), K(runtime_memory_limit));
+    TRANS_LOG(WARN, "transaction service inited failed", K(ret), K(memory_budget));
   }
   return ret;
 }

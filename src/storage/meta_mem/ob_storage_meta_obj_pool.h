@@ -296,8 +296,8 @@ ObStorageMetaObjPool<T>::ObStorageMetaObjPool(
       allow_over_max_free_num_(allow_over_max_free_num)
 {
   int ret = OB_SUCCESS;
-  const int64_t mem_limit = true
-      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+  const int64_t mem_limit = 2 * (true
+      ? GCONF._storage_meta_memory_limit_percentage : OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT);
   if (ObCtxIds::META_OBJ_CTX_ID == ctx_id && OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
     STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,

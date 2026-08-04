@@ -542,13 +542,8 @@ double ObTopKFrequencyHistograms::get_current_min_topk_ratio() const
 //allocte object total memory used restict[1MB ~ 10MB]
 void ObTopKFrequencyHistograms::set_the_obj_memory_use_limit()
 {
-  // Default to one thousandth of the runtime memory limit.
-  obj_memory_limit_ = lib::get_allocator_memory_limit() / 1000;
-  //then see the sql work arena limit, set the limit's 1/100
-  if (lib::ObMallocAllocator::get_instance() != NULL) {
-    auto ta = lib::ObMallocAllocator::get_instance()->get_ctx_allocator(common::ObCtxIds::WORK_AREA);
-    obj_memory_limit_ = std::min(obj_memory_limit_, ta->get_limit() / 100);
-  }
+  // Keep the historical capacity when the logical memory budget uses the new scale.
+  obj_memory_limit_ = lib::get_memory_budget() / 500;
   obj_memory_limit_ = std::max(obj_memory_limit_, MIN_OBJ_MEMORY_LIMIT);
   obj_memory_limit_ = std::min(obj_memory_limit_, MAX_OBJ_MEMORY_LIMIT);
   LOG_TRACE("set the memory use limit", K(obj_memory_limit_));

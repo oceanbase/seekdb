@@ -323,8 +323,8 @@ int ObTxDataMemtableMgr::calc_new_memtable_buckets_cnt_(const double load_factor
                                                         int64_t &new_buckets_cnt)
 {
   // acquire the max memory which tx data memtable buckets can use
-  int64_t remain_memory = lib::get_allocator_memory_remain();
-  int64_t buckets_size_limit = remain_memory >> 4; /* remain_memory * (1/16) */
+  const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
+  const int64_t buckets_size_limit = tx_data_limit >> 4; /* tx_data_limit * (1/16) */
 
   int64_t expect_buckets_cnt = old_buckets_cnt;
   if (load_factory > ObTxDataHashMap::LOAD_FACTORY_MAX_LIMIT && 
@@ -348,7 +348,7 @@ int ObTxDataMemtableMgr::calc_new_memtable_buckets_cnt_(const double load_factor
               K(load_factory),
               K(old_buckets_cnt),
               K(new_buckets_cnt),
-              K(remain_memory));
+              K(tx_data_limit));
   return OB_SUCCESS;
 }
 

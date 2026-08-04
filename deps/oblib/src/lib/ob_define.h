@@ -518,6 +518,21 @@ const int64_t OB_DEFAULT_RPC_TIMEOUT = 9000 * 1000;  // 9s
 const int OB_TBNET_PACKET_FLAG = 0x416e4574;
 const int OB_SERVER_ADDR_STR_LEN = 128; //used for buffer size of easy_int_addr_to_str
 
+/*   3bytes   1 byte
+ * ------------------
+ * |   len  |  seq  |
+ * ------------------
+ */
+const int64_t OB_MYSQL_HEADER_LENGTH = 4; /** 3bytes length + 1byte seq*/
+
+/*      3bytes     1 byte      3bytes
+ * -----------------------------------------
+ * |  compr_len  |  seq  |  len_before_comp
+ * -----------------------------------------
+ */
+const int64_t OB_MYSQL_COMPRESSED_HEADER_SIZE = OB_MYSQL_HEADER_LENGTH + 3;  /* compression header size */
+
+
 const int OB_THREAD_NAME_BUF_LEN = 16;
 const int OB_EXTENED_THREAD_NAME_BUF_LEN = 32;
 
@@ -829,7 +844,7 @@ const int64_t MAX_PHY_MEM_PERCENTAGE = 90;
 
 // mem factor
 const double SQL_AUDIT_MEM_FACTOR = 0.1;
-const double MONITOR_MEM_FACTOR = 0.01;
+const double MONITOR_MEM_FACTOR = 0.02;
 const double KVCACHE_FACTOR = SERVER_RESERVE_MEM_RATIO;
 
 const double OB_DTL_CPU = 5.;
@@ -1575,6 +1590,15 @@ const uint32_t HIGH_PRIO_RPC_PORT_DELTA = 0;
 
 const int64_t UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM = 128;
 
+const char *const OB_SSL_CA_FILE = "wallet/ca.pem";
+const char *const OB_SSL_CERT_FILE = "wallet/server-cert.pem";
+const char *const OB_SSL_KEY_FILE = "wallet/server-key.pem";
+
+const char *const OB_SSL_SM_SIGN_CERT_FILE = "wallet/SS.cert.pem";
+const char *const OB_SSL_SM_SIGN_KEY_FILE  = "wallet/SS.key.pem";
+const char *const OB_SSL_SM_ENC_CERT_FILE  = "wallet/SE.cert.pem";
+const char *const OB_SSL_SM_ENC_KEY_FILE   = "wallet/SE.key.pem";
+
 
 //Application context
 const int64_t OB_MAX_CONTEXT_STRING_LENGTH = 128;
@@ -1587,14 +1611,6 @@ const int64_t OB_MAX_CONTEXT_CLIENT_IDENTIFIER_LENGTH_IN_SESSION = 64;
 // Resource limit calculator
 const int64_t MAX_RESOURCE_NAME_LEN = 128;
 const int64_t MAX_CONSTRAINT_NAME_LEN = 128;
-
-// SQL-endpoint TLS certificate material, relative to the base dir (the
-// process cwd), as in upstream master. Consumed by ObSqlNioServer::start,
-// which passes the paths verbatim across the sql-nio C ABI when
-// ssl_client_authentication is enabled.
-const char *const OB_SSL_CA_FILE = "wallet/ca.pem";
-const char *const OB_SSL_CERT_FILE = "wallet/server-cert.pem";
-const char *const OB_SSL_KEY_FILE = "wallet/server-key.pem";
 
 // log row value options
 const char *const OB_LOG_ROW_VALUE_PARTIAL_LOB = "partial_lob";

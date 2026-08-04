@@ -33,21 +33,14 @@ int64_t ObMdsAllocator::resource_unit_size()
 void ObMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration)
 {
   // define some default value
-  const int64_t MDS_LIMIT_PERCENTAGE = 5;
   const int64_t MDS_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t MDS_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  int64_t total_memory = lib::get_allocator_memory_limit();
-
-  // Use runtime config to init throttle config
-  omt::ObRuntimeConfigGuard runtime_config(RUNTIME_CONF());
-  if (runtime_config.is_valid()) {
-    resource_limit = total_memory * runtime_config->_mds_memory_limit_percentage / 100LL;
-    trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
-    max_duration = runtime_config->writing_throttling_maximum_duration;
-  } else {
+  resource_limit = lib::get_mds_memory_limit();
+  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
+  max_duration = GCONF.writing_throttling_maximum_duration;
+  if (trigger_percentage <= 0 || max_duration <= 0) {
     SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
-    resource_limit = total_memory * MDS_LIMIT_PERCENTAGE / 100;
     trigger_percentage = MDS_THROTTLE_TRIGGER_PERCENTAGE;
     max_duration = MDS_THROTTLE_MAX_DURATION;
   }

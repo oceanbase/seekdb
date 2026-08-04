@@ -42,7 +42,6 @@ TEST(TestLogAllocator, test_managed_allocator)
   void *buffer = allocator->alloc(1024);
   ASSERT_NE(nullptr, buffer);
   allocator->free(buffer);
-  PALF_LOG(INFO, "test_log_allocator end", "memory hold", lib::get_memory_hold());
   EXPECT_EQ(OB_SUCCESS, LOG_ALLOCATOR_MGR_INSTANCE.delete_log_allocator());
 }
 

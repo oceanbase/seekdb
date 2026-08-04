@@ -769,7 +769,7 @@ int ObServerResource::generate_default(const int64_t log_disk_size)
   int ret = OB_SUCCESS;
 
   reset();
-  memory_size_ = GMEMCONF.get_server_memory_limit();
+  memory_size_ = GMEMCONF.get_server_memory_budget();
   max_cpu_ = GCONF.get_server_default_max_cpu();
   min_cpu_ = GCONF.get_server_default_min_cpu();
   log_disk_size_ = log_disk_size;

@@ -68,6 +68,7 @@ void ObGlobalIteratorPoolTest::TearDownTestCase()
 void ObGlobalIteratorPoolTest::SetUp()
 {
   ASSERT_TRUE(MockServerRuntimeEnv::get_instance().is_inited());
+  lib::set_memory_budget(ObGlobalIteratorPool::ITER_POOL_MIN_MEM_THRESHOLD * 2);
 }
 
 void ObGlobalIteratorPoolTest::TearDown()
@@ -78,10 +79,10 @@ TEST_F(ObGlobalIteratorPoolTest, init)
 {
   int ret = 0;
   ObGlobalIteratorPool iter_pool;
-  iter_pool.runtime_mem_limit_ = ObGlobalIteratorPool::ITER_POOL_RUNTIME_MIN_MEM_THRESHOLD + 1;
+  ASSERT_TRUE(iter_pool.check_need_iterator_pool());
   ret = iter_pool.init();
   ASSERT_EQ(ret, OB_SUCCESS);
-  const int64_t mem_limit = iter_pool.runtime_mem_limit_ * ObGlobalIteratorPool::ITER_POOL_MAX_MEM_PERCENT;
+  const int64_t mem_limit = iter_pool.memory_budget_ * ObGlobalIteratorPool::ITER_POOL_MAX_MEM_PERCENT;
   const int64_t bucket_cnt = mem_limit / (ObGlobalIteratorPool::ITER_POOL_ITER_MEM_LIMIT * (1 + ObGlobalIteratorPool::ITER_POOL_MAX_CACHED_ITER_TYPE));
   ASSERT_EQ(bucket_cnt, iter_pool.bucket_cnt_);
   for (int64_t i = 0; i <= ObGlobalIteratorPool::ITER_POOL_MAX_CACHED_ITER_TYPE; ++i) {
@@ -100,7 +101,6 @@ TEST_F(ObGlobalIteratorPoolTest, get)
 {
   int ret = 0;
   ObGlobalIteratorPool iter_pool;
-  iter_pool.runtime_mem_limit_ = ObGlobalIteratorPool::ITER_POOL_RUNTIME_MIN_MEM_THRESHOLD + 1;
   ret = iter_pool.init();
   ASSERT_EQ(ret, OB_SUCCESS);
   ObQRIterType type = T_INVALID_ITER_TYPE;
@@ -175,7 +175,6 @@ TEST_F(ObGlobalIteratorPoolTest, release)
 {
   int ret = 0;
   ObGlobalIteratorPool iter_pool;
-  iter_pool.runtime_mem_limit_ = ObGlobalIteratorPool::ITER_POOL_RUNTIME_MIN_MEM_THRESHOLD + 1;
   ret = iter_pool.init();
   ASSERT_EQ(ret, OB_SUCCESS);
   ObQRIterType type = T_MULTI_GET;
@@ -245,7 +244,6 @@ TEST_F(ObGlobalIteratorPoolTest, destroy)
 {
   int ret = 0;
   ObGlobalIteratorPool iter_pool;
-  iter_pool.runtime_mem_limit_ = ObGlobalIteratorPool::ITER_POOL_RUNTIME_MIN_MEM_THRESHOLD + 1;
   ret = iter_pool.init();
   ASSERT_EQ(ret, OB_SUCCESS);
 
@@ -276,10 +274,12 @@ TEST_F(ObGlobalIteratorPoolTest, destroy)
 TEST_F(ObGlobalIteratorPoolTest, wash)
 {
   int ret = 0;
-  const int64_t runtime_mem_limit = lib::get_allocator_memory_limit();
-  const int64_t runtime_mem_hold = lib::get_allocator_memory_hold();
+  const int64_t original_memory_budget = lib::get_memory_budget();
+  const int64_t initial_memory_budget = ObGlobalIteratorPool::ITER_POOL_MIN_MEM_THRESHOLD * 2;
+  const int64_t shrunk_memory_budget = ObGlobalIteratorPool::ITER_POOL_MIN_MEM_THRESHOLD;
+  lib::set_memory_budget(initial_memory_budget);
   ObGlobalIteratorPool iter_pool;
-  iter_pool.runtime_mem_limit_ = runtime_mem_limit;
+  iter_pool.memory_budget_ = initial_memory_budget;
   ret = iter_pool.init();
   ASSERT_EQ(ret, OB_SUCCESS);
   ObQRIterType type = T_SINGLE_SCAN;
@@ -298,17 +298,13 @@ TEST_F(ObGlobalIteratorPoolTest, wash)
   buf = iter_alloc->alloc(256 * 1024);
   ASSERT_TRUE(nullptr != buf);
 
-  ASSERT_EQ(runtime_mem_limit, iter_pool.runtime_mem_limit_);
-
-  ASSERT_TRUE(runtime_mem_limit > runtime_mem_hold) << "runtime_mem_hold=" << runtime_mem_hold
-                                                    << "runtime_mem_hold=" << runtime_mem_hold;
-  const int64_t test_runtime_mem_limit_low = runtime_mem_hold * 100 / ObGlobalIteratorPool::ITER_POOL_WASH_HIGH_THRESHOLD;
-
-  set_allocator_memory_limit(test_runtime_mem_limit_low - 10);
+  ASSERT_EQ(initial_memory_budget, iter_pool.memory_budget_);
+  lib::set_memory_budget(shrunk_memory_budget);
   iter_pool.wash();
-  STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_runtime_mem_limit_low));
+  STORAGE_LOG(INFO, "after memory budget shrink", K(iter_pool), K(shrunk_memory_budget));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_TRUE(iter_pool.is_disabled_);
+  ASSERT_LT(iter_pool.calc_bucket_cnt(), iter_pool.bucket_cnt_);
 
   iter_pool.release(cached_node);
   ret = iter_pool.get(type, cached_node);
@@ -316,25 +312,25 @@ TEST_F(ObGlobalIteratorPoolTest, wash)
   ASSERT_TRUE(nullptr == cached_node);
   STORAGE_LOG(INFO, "after release", K(iter_pool));
 
-  set_allocator_memory_limit(runtime_mem_limit);
+  lib::set_memory_budget(initial_memory_budget);
   iter_pool.wash();
-  STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_runtime_mem_limit_low));
+  STORAGE_LOG(INFO, "after memory budget restore", K(iter_pool), K(initial_memory_budget));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_FALSE(iter_pool.is_disabled_);
 
-  set_allocator_memory_limit(runtime_mem_hold + 10);
+  lib::set_memory_budget(ObGlobalIteratorPool::ITER_POOL_MIN_MEM_THRESHOLD - 1);
   iter_pool.wash();
-  STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_runtime_mem_limit_low));
+  STORAGE_LOG(INFO, "after disabling iterator pool", K(iter_pool));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_TRUE(iter_pool.is_disabled_);
-  ASSERT_EQ(runtime_mem_hold + 10, iter_pool.runtime_mem_limit_);
 
-  set_allocator_memory_limit(runtime_mem_limit);
+  lib::set_memory_budget(initial_memory_budget);
   iter_pool.wash();
-  STORAGE_LOG(INFO, "after wash", K(iter_pool), K(test_runtime_mem_limit_low));
+  STORAGE_LOG(INFO, "after re-enabling iterator pool", K(iter_pool));
   ASSERT_FALSE(iter_pool.is_washing_);
   ASSERT_FALSE(iter_pool.is_disabled_);
-  ASSERT_EQ(runtime_mem_limit, iter_pool.runtime_mem_limit_);
+  ASSERT_EQ(initial_memory_budget, iter_pool.memory_budget_);
+  lib::set_memory_budget(original_memory_budget);
 }
 
 }

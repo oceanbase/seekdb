@@ -117,7 +117,6 @@ ob_set_subtarget(ob_share common
   ob_share_util.cpp
   ob_standby_source_util.cpp
   ob_simple_batch.cpp
-  ob_simple_mem_limit_getter.cpp
   ob_tablet_autoincrement_param.cpp
   ob_tablet_checksum_operator.cpp
   ob_tablet_local_checksum_operator.cpp

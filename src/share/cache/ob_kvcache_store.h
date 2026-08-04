@@ -25,7 +25,6 @@
 #include "share/cache/ob_kvcache_hazard_pointer.h"
 #include "share/cache/ob_kvcache_inst_map.h"
 #include "share/cache/ob_kvcache_struct.h"
-#include "share/ob_i_server_mem_limit_getter.h"
 
 namespace oceanbase
 {
@@ -69,8 +68,7 @@ class ObKVCacheStore final : public ObIKVCacheStore,
 public:
   ObKVCacheStore();
   virtual ~ObKVCacheStore();
-  int init(const int64_t max_cache_size,
-           const int64_t block_size, const ObIServerMemLimitGetter &mem_limit_getter);
+  int init(const int64_t max_cache_size, const int64_t block_size);
   void destroy();
   int refresh_score();
   bool wash();
@@ -88,6 +86,7 @@ public:
   virtual int free_mbhandle(ObKVMemBlockHandle *mb_handle, const bool do_retire);
 
   virtual int64_t get_block_size() const { return block_size_; }
+  int64_t get_store_size() const { return ATOMIC_LOAD(&global_status_.store_size_); }
   // implement functions of ObIObKVMemBlockHandleMgr
   virtual int alloc(const enum ObKVCachePolicy policy,
       const int64_t block_size, ObKVMemBlockHandle *&mb_handle);
@@ -99,6 +98,18 @@ public:
   static int64_t compute_mb_handle_num(const int64_t max_cache_size, const int64_t block_size)
   {
     return max_cache_size / block_size + 2 * (WASH_THREAD_RETIRE_LIMIT + RETIRE_LIMIT * QClock::MAX_QCLOCK_SLOT_NUM);
+  }
+  static int64_t compute_fixed_cache_limit(const int64_t memory_budget, const int64_t block_size)
+  {
+    const int64_t cache_limit = memory_budget / 100 * KV_CACHE_LIMIT_PERCENTAGE
+        + memory_budget % 100 * KV_CACHE_LIMIT_PERCENTAGE / 100;
+    return memory_budget > 0 && block_size > 0 ? cache_limit / block_size * block_size : 0;
+  }
+  static int64_t compute_fixed_wash_size(const int64_t cache_size,
+                                         const int64_t memory_budget,
+                                         const int64_t block_size)
+  {
+    return MAX(cache_size - compute_fixed_cache_limit(memory_budget, block_size), 0);
   }
 
 private:
@@ -120,11 +131,7 @@ private:
   static const int64_t RETIRE_LIMIT = 2;
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
-  static const int64_t SAFE_COUNT = 5;
-  static const int64_t MAX_SKIP_REFRESH_TIMES = 100; // max skip refresh_score times during free time
-  static const int64_t GLOBAL_WASH_THRESHOLD_RATIO = 8;
-  static const int64_t MAX_GLOBAL_WASH_THRESHOLD = 64L;  // 64 * 2M = 128M
-  static const int64_t MIN_GLOBAL_WASH_THRESHOLD = 8L;  // 8 * 2M = 16M
+  static const int64_t KV_CACHE_LIMIT_PERCENTAGE = 30;
 #ifndef _WIN32
   static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
 #else
@@ -182,8 +189,7 @@ private:
     const enum ObKVCachePolicy policy,
     const int64_t block_size,
     ObKVMemBlockHandle *&mb_handle);
-  bool compute_global_wash_size(int64_t &wash_size);
-  bool is_global_wash_valid(const int64_t total_global_wash_block_count, const int64_t global_cache_size);
+  void compute_wash_size(int64_t &wash_size);
   void wash_mb(ObKVMemBlockHandle *mb_handle);
   void wash_mbs(WashHeap &heap);
   int do_wash_mb(ObKVMemBlockHandle *mb_handle, void *&buf, int64_t &mb_size);
@@ -232,7 +238,6 @@ private:
   ObWashableSizeInfo washbale_size_info_;
   ObWashableSizeInfo tmp_washbale_size_info_;
   int64_t wash_itid_;
-  const ObIServerMemLimitGetter *mem_limit_getter_;
 };
 
 uint32_t handle_index_of(ObKVMemBlockHandle* mb_handle);

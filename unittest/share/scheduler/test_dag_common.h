@@ -231,11 +231,17 @@ void wait_scheduler() {
     ::usleep(100000);
   }
   ObIAllocator &basic_allocator = scheduler->get_allocator(false /*use_reserved_allocator*/);
-  ObIAllocator &basic_root_allocator = static_cast<ObParallelAllocator *>(&basic_allocator)->root_allocator_;
-  while ((basic_allocator.used() - basic_root_allocator.used()) != 0) {
+  ObIAllocator *basic_root_allocator = nullptr;
+  if (is_ob_malloc_backend()) {
+    basic_root_allocator =
+        &static_cast<ObParallelAllocator *>(&basic_allocator)->root_allocator_;
+  }
+  while ((basic_allocator.used()
+          - (nullptr == basic_root_allocator ? 0 : basic_root_allocator->used())) != 0) {
     ::usleep(100000);
   }
-  while ((basic_allocator.total() - basic_root_allocator.total()) != 0) {
+  while ((basic_allocator.total()
+          - (nullptr == basic_root_allocator ? 0 : basic_root_allocator->total())) != 0) {
     ::usleep(100000);
   }
 }

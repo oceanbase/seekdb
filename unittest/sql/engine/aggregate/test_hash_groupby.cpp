@@ -23,13 +23,10 @@
 #include "storage/memtable/ob_row_compactor.h"
 #include "sql/engine/test_engine_util.h"
 #include "storage/blocksstable/ob_data_file_prepare.h"
-#include "share/ob_simple_mem_limit_getter.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::blocksstable;
-
-static ObSimpleMemLimitGetter getter;
 
 class ObHashGroupbyTest: public TestDataFilePrepare
 {
@@ -45,8 +42,7 @@ private:
 private:
   // data members
 };
-ObHashGroupbyTest::ObHashGroupbyTest() : TestDataFilePrepare(&getter,
-                                                             "TestDisk_groupby", 2<<20, 5000)
+ObHashGroupbyTest::ObHashGroupbyTest() : TestDataFilePrepare("TestDisk_groupby", 2<<20, 5000)
 {
 }
 

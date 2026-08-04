@@ -29,7 +29,6 @@ using namespace blocksstable;
 using namespace common;
 using namespace storage;
 using namespace share::schema;
-static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
@@ -80,7 +79,7 @@ protected:
 };
 
 TestLinkedMacroBlock::TestLinkedMacroBlock()
-  : TestDataFilePrepare(&getter, "linked_macro_block_test", MACRO_BLOCK_SIZE)
+  : TestDataFilePrepare("linked_macro_block_test", MACRO_BLOCK_SIZE)
 {
   build_test_data_buf();
 }

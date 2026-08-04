@@ -28,6 +28,14 @@ namespace share {
 
 thread_local int64_t ObTxDataOpAllocator::local_alloc_size_ = 0;
 
+int64_t ObTxDataAllocator::hold() const
+{
+  ObSharedMemAllocMgr *manager = nullptr != share::g_mp
+      ? share::g_mp->shared_mem_alloc_mgr()
+      : nullptr;
+  return nullptr != manager ? manager->tx_data_quota_used() : slice_backing();
+}
+
 int64_t ObTxDataAllocator::resource_unit_size()
 {
   static const int64_t TX_DATA_RESOURCE_UNIT_SIZE = OB_MALLOC_NORMAL_BLOCK_SIZE; /* 8KB */
@@ -38,10 +46,7 @@ void ObTxDataAllocator::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  int64_t total_memory = lib::get_allocator_memory_limit();
-
-  // init throttle config from cluster config
-  resource_limit = total_memory * GCONF._tx_data_memory_limit_percentage / 100LL;
+  resource_limit = lib::get_tx_data_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
 }
@@ -79,8 +84,7 @@ int ObTxDataOpAllocator::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr mem_attr;
-
-  mem_attr.ctx_id_ = ObCtxIds::MDS_DATA_ID;
+  mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   mem_attr.label_ = "TX_OP";
   ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
@@ -118,6 +122,12 @@ void *ObTxDataOpAllocator::alloc(const int64_t size, const ObMemAttr &attr)
 
 void *ObTxDataOpAllocator::alloc(const int64_t size, const int64_t abs_expire_time)
 {
+  bool is_throttled = false;
+  (void)throttle_tool_->alloc_resource<ObTxDataAllocator>(
+      size, abs_expire_time, is_throttled);
+  if (OB_UNLIKELY(is_throttled)) {
+    share::tx_data_throttled_alloc() += size;
+  }
   void *obj = allocator_.alloc(size);
   return obj;
 }

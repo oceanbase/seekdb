@@ -29,7 +29,7 @@ public:
     : check_cnt_(0),
       memory_context_(nullptr),
       throttle_tool_(nullptr) {};
-  int init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool);
+  int init(lib::MemoryContext &mem_context, share::VectorThrottleTool *throttle_tool);
 
   void *alloc(int64_t size);
   void free(void *ptr);
@@ -41,8 +41,8 @@ private:
   uint32_t check_cnt_;
   // Created by parent node memory_context
   lib::MemoryContext memory_context_;
-  // Reference to the shared memory accounting tool.
-  share::TxShareThrottleTool *throttle_tool_;
+  // Reference memory statistics tool.
+  share::VectorThrottleTool *throttle_tool_;
 };
 
 class ObVectorAllocator : public ObVectorMemContext,
@@ -68,7 +68,7 @@ public:
 private:
   bool is_inited_;
   uint64_t all_used_mem_;
-  share::TxShareThrottleTool *throttle_tool_;
+  share::VectorThrottleTool *throttle_tool_;
   lib::MemoryContext memory_context_;
 };
 

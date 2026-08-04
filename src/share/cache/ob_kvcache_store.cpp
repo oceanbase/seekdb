@@ -94,8 +94,7 @@ ObKVCacheStore::ObKVCacheStore()
       wash_out_lock_(common::ObLatchIds::WASH_OUT_LOCK),
       washbale_size_info_(),
       tmp_washbale_size_info_(),
-      wash_itid_(-1),
-      mem_limit_getter_(NULL)
+      wash_itid_(-1)
 {
 }
 
@@ -104,9 +103,7 @@ ObKVCacheStore::~ObKVCacheStore()
   destroy();
 }
 
-int ObKVCacheStore::init(const int64_t max_cache_size,
-                         const int64_t block_size,
-                         const ObIServerMemLimitGetter &mem_limit_getter)
+int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
 {
   int ret = OB_SUCCESS;
   void *buf = NULL;
@@ -145,7 +142,6 @@ int ObKVCacheStore::init(const int64_t max_cache_size,
   }
 
   if (OB_SUCC(ret)) {
-    mem_limit_getter_ = &mem_limit_getter;
     inited_ = true;
     COMMON_LOG(INFO, "ObKVCacheStore init success", K(max_cache_size), K(block_size));
   }
@@ -183,6 +179,7 @@ void ObKVCacheStore::destroy()
 
   destroy_wash_structs();
   cur_mb_num_ = 0;
+  global_status_.reset();
   inited_ = false;
 }
 
@@ -346,7 +343,7 @@ bool ObKVCacheStore::wash()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  int64_t global_wash_size = 0;
+  int64_t wash_size = 0;
 
   // Record time cost of every step of wash
   int64_t compute_wash_size_time = 0;
@@ -361,10 +358,10 @@ bool ObKVCacheStore::wash()
   }
   lib::ObMutexGuard guard(wash_out_lock_);
 
-  // Compute the process-wide wash size.
+  // Compute the amount by which KV store blocks exceed their fixed quota.
   start_time = ObTimeUtility::current_time();
 
-  compute_global_wash_size(global_wash_size);
+  compute_wash_size(wash_size);
   current_time = ObTimeUtility::current_time();
   compute_wash_size_time = current_time - start_time;
   start_time = current_time;
@@ -382,7 +379,7 @@ bool ObKVCacheStore::wash()
   tmp_washbale_size_info_.reuse();
 
   wash_heap_.mb_cnt_ = 0;
-  int64_t heap_size = global_wash_size / block_size_;
+  int64_t heap_size = wash_size / block_size_;
   wash_heap_.heap_size_ = std::min(heap_size, WASH_HEAP_SIZE);
 
   // refresh score and sort mb_handles to wash in a single pass
@@ -434,8 +431,8 @@ bool ObKVCacheStore::wash()
   // Wash memory selected by the process-wide heap.
   if (wash_heap_.mb_cnt_ > 0) {
     wash_mbs(wash_heap_);
-    COMMON_LOG(INFO, "Wash memory globally, ",
-        K(global_wash_size),
+    COMMON_LOG(INFO, "Wash KV cache to fixed limit, ",
+        K(wash_size),
         "wash_heap_cnt", wash_heap_.mb_cnt_);
   }
   wash_time = ObTimeUtility::current_time() - start_time;
@@ -923,47 +920,14 @@ int ObKVCacheStore::alloc_mbhandle(
   return ret;
 }
 
-bool ObKVCacheStore::compute_global_wash_size(int64_t &wash_size)
+void ObKVCacheStore::compute_wash_size(int64_t &wash_size)
 {
-  bool is_wash_valid = false;
-  wash_size = 0;
-
-  // Wash against the process-wide memory budget.
-  const int64_t memory_limit = lib::get_memory_limit();
-  int64_t reserve_mem = 0;
-  if (memory_limit <= 1024L * 1024L * 1024L) {
-    reserve_mem = memory_limit / 10;
-  } else {
-    reserve_mem = log10(static_cast<double>(memory_limit)/(1024.0 * 1024.0 * 1024.0)) * memory_limit / 20
-                  + 100L * 1024L * 1024L;
-  }
-  reserve_mem = MAX(reserve_mem, lib::ob_get_reserved_memory());
-  int64_t sys_total_wash_size = MAX(lib::get_memory_used() - memory_limit + reserve_mem, 0);
-
-  if (sys_total_wash_size > 0) {
-    wash_size = sys_total_wash_size;
-  }
-
-  int64_t total_global_wash_block_count = wash_size / block_size_;
-  int64_t global_cache_size = global_status_.store_size_;
-
-  if (is_global_wash_valid(total_global_wash_block_count, global_cache_size)) {
-    is_wash_valid = true;
-  }
-
-  COMMON_LOG(INFO, "Wash compute global wash size", K(is_wash_valid), K(sys_total_wash_size), K(global_cache_size), K(wash_size));
-  return is_wash_valid;
-}
-
-bool ObKVCacheStore::is_global_wash_valid(const int64_t total_global_wash_block_count, const int64_t global_cache_size)
-{
-  int64_t threshold = global_cache_size / block_size_ >> GLOBAL_WASH_THRESHOLD_RATIO;
-  if (threshold > MAX_GLOBAL_WASH_THRESHOLD) {
-    threshold = MAX_GLOBAL_WASH_THRESHOLD;
-  } else if (threshold < MIN_GLOBAL_WASH_THRESHOLD) {
-    threshold = MIN_GLOBAL_WASH_THRESHOLD;
-  }
-  return total_global_wash_block_count >= threshold;
+  const int64_t memory_budget = lib::get_memory_budget();
+  const int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
+  const int64_t cache_limit = compute_fixed_cache_limit(memory_budget, block_size_);
+  wash_size = compute_fixed_wash_size(cache_size, memory_budget, block_size_);
+  COMMON_LOG(INFO, "Compute fixed KV cache wash size", K(memory_budget), K(cache_limit),
+             K(cache_size), K(wash_size));
 }
 
 void ObKVCacheStore::wash_mbs(WashHeap &heap)

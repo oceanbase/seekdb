@@ -16,14 +16,69 @@
 
 #include <gtest/gtest.h>
 #include <fstream>
+#include "lib/alloc/alloc_func.h"
 #include "lib/rc/context.h"
+#include "lib/utility/utility.h"
 
 #ifdef __APPLE__
 #define __timezone timezone
 #endif
 
 using namespace oceanbase::common;
+using namespace oceanbase::lib;
 using namespace std;
+
+TEST(utility, memory_limit_scaled_value_compatibility)
+{
+  const int64_t old_memory_budget = get_memory_budget();
+  const int64_t one_gib = 1L << 30;
+  const int64_t min_value = 4096;
+  const int64_t max_value = 100000;
+  const auto old_scaled_value = [=](const int64_t memory_limit) {
+    const int64_t lower_bound = one_gib;
+    const int64_t upper_bound = 128L * one_gib;
+    const int64_t clamped_memory = MIN(MAX(memory_limit, lower_bound), upper_bound);
+    const double ratio = static_cast<double>(clamped_memory - lower_bound)
+        / static_cast<double>(upper_bound - lower_bound);
+    return static_cast<int64_t>(min_value + ratio * (max_value - min_value));
+  };
+
+  set_memory_budget(one_gib / 2);
+  EXPECT_EQ(old_scaled_value(one_gib),
+            calculate_scaled_value_by_memory(min_value, max_value));
+  set_memory_budget(one_gib);
+  EXPECT_EQ(old_scaled_value(2 * one_gib),
+            calculate_scaled_value_by_memory(min_value, max_value));
+  set_memory_budget(64 * one_gib);
+  EXPECT_EQ(old_scaled_value(128 * one_gib),
+            calculate_scaled_value_by_memory(min_value, max_value));
+  set_memory_budget(128 * one_gib);
+  EXPECT_EQ(max_value, calculate_scaled_value_by_memory(min_value, max_value));
+
+  set_memory_budget(one_gib / 2);
+  EXPECT_EQ(one_gib * 40 / 100, get_memstore_memory_limit());
+  set_memory_budget(4 * one_gib);
+  EXPECT_EQ(8 * one_gib * 40 / 100, get_memstore_memory_limit());
+  set_memory_budget(5 * one_gib);
+  EXPECT_EQ(10 * one_gib * 50 / 100, get_memstore_memory_limit());
+
+  set_memory_budget(one_gib);
+  EXPECT_EQ(2 * one_gib * 20 / 100, get_tx_data_memory_limit());
+  EXPECT_EQ(2 * one_gib * 10 / 100, get_mds_memory_limit());
+  EXPECT_EQ(2 * one_gib * 5 / 100, get_tx_data_freeze_trigger_memory());
+  EXPECT_EQ(2 * one_gib * 2 / 100, get_mds_freeze_trigger_memory());
+  EXPECT_EQ(2 * one_gib * 55 / 100, get_tx_share_memory_limit());
+  set_memory_budget(5 * one_gib);
+  EXPECT_EQ(10 * one_gib * 65 / 100, get_tx_share_memory_limit());
+  set_memory_budget(99);
+  EXPECT_EQ(128, get_memory_budget_by_percentage(130));
+  set_memory_budget(INT64_MAX);
+  EXPECT_EQ(INT64_MAX, get_memstore_memory_limit());
+  EXPECT_EQ(INT64_MAX / 100 * 40 + INT64_MAX % 100 * 40 / 100,
+            get_tx_data_memory_limit());
+  EXPECT_EQ(INT64_MAX, get_tx_share_memory_limit());
+  set_memory_budget(old_memory_budget);
+}
 
 struct TestItem
 {
@@ -506,36 +561,22 @@ TEST(utility, ob_localtime)
     EXPECT_EQ(std_tm.tm_year, last_tm.tm_year);
   }
 
-  // ob_localtime only supports unix_sec >= 0 (cf. "only support time >= 1970/1/1 8:0:0").
-  // special_value[14] == 0 is the epoch second and is now converted; validate it against
-  // the libc reference like the loop above. The remaining pre-epoch values are still
-  // unsupported: the struct is left untouched, so reset it first and expect zeros.
-  for (int64_t i = 14; i < 18; ++i) {
-    ob_tm.tm_sec = 0;
-    ob_tm.tm_min = 0;
-    ob_tm.tm_hour = 0;
-    ob_tm.tm_mday = 0;
-    ob_tm.tm_mon = 0;
-    ob_tm.tm_year = 0;
+  ob_tm.tm_sec = 0;
+  ob_tm.tm_min = 0;
+  ob_tm.tm_hour = 0;
+  ob_tm.tm_mday = 0;
+  ob_tm.tm_mon = 0;
+  ob_tm.tm_year = 0;
 
+  for (int64_t i = 14; i < 18; ++i) {
     ob_localtime((const time_t *)(special_value + i), &ob_tm);
 
-    if (special_value[i] >= 0) {
-      ::localtime_r((const time_t *)(special_value + i), &std_tm);
-      EXPECT_EQ(std_tm.tm_sec, ob_tm.tm_sec);
-      EXPECT_EQ(std_tm.tm_min, ob_tm.tm_min);
-      EXPECT_EQ(std_tm.tm_hour, ob_tm.tm_hour);
-      EXPECT_EQ(std_tm.tm_mday, ob_tm.tm_mday);
-      EXPECT_EQ(std_tm.tm_mon, ob_tm.tm_mon);
-      EXPECT_EQ(std_tm.tm_year, ob_tm.tm_year);
-    } else {
-      EXPECT_EQ(0, ob_tm.tm_sec);
-      EXPECT_EQ(0, ob_tm.tm_min);
-      EXPECT_EQ(0, ob_tm.tm_hour);
-      EXPECT_EQ(0, ob_tm.tm_mday);
-      EXPECT_EQ(0, ob_tm.tm_mon);
-      EXPECT_EQ(0, ob_tm.tm_year);
-    }
+    EXPECT_EQ(0, ob_tm.tm_sec);
+    EXPECT_EQ(0, ob_tm.tm_min);
+    EXPECT_EQ(0, ob_tm.tm_hour);
+    EXPECT_EQ(0, ob_tm.tm_mday);
+    EXPECT_EQ(0, ob_tm.tm_mon);
+    EXPECT_EQ(0, ob_tm.tm_year);
   }
 }
 

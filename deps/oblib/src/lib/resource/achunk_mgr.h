@@ -193,6 +193,7 @@ private:
   static constexpr int32_t HUGE_ACHUNK_INDEX = MAX_LARGE_ACHUNK_INDEX + 1;
 public:
   static AChunkMgr &instance();
+  static int64_t get_default_max_chunk_cache_size() { return DEFAULT_LIMIT; }
 public:
   AChunkMgr();
 

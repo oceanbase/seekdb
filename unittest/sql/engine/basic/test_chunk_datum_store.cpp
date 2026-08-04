@@ -25,7 +25,6 @@ namespace oceanbase
 namespace sql
 {
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 class TestEnv : public ::testing::Environment
 {
@@ -406,15 +405,8 @@ protected:
 
 int TestChunkDatumStore::init_memory_limits()
 {
-  int ret = OB_SUCCESS;
-  ObAddr self;
-  self.set_ip_addr("127.0.0.1", 8086);
-  const int64_t ulmt = 128LL << 30;
-  const int64_t llmt = 128LL << 30;
-  ret = getter.set_memory_limit(llmt, ulmt);
-  EXPECT_EQ(OB_SUCCESS, ret);
-  oceanbase::lib::set_memory_limit(128LL << 32);
-  return ret;
+  oceanbase::lib::set_memory_budget(128LL << 32);
+  return OB_SUCCESS;
 }
 
 

@@ -19,7 +19,6 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/ob_errno.h"
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
 #include "storage/fts/dict/ob_ft_dat_dict.h"
@@ -104,8 +103,7 @@ protected:
     const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024 * 1024 * 1024;
     int ret = OB_SUCCESS;
     ASSERT_EQ(OB_SUCCESS, ObTimerService::get_instance().start());
-    if (OB_FAIL(ObKVGlobalCache::get_instance().init(&(ObServerMemLimitGetter::get_instance()),
-                                                     DEFAULT_BUCKET_NUM,
+    if (OB_FAIL(ObKVGlobalCache::get_instance().init(DEFAULT_BUCKET_NUM,
                                                      DEFAULT_MAX_CACHE_SIZE,
                                                      lib::ACHUNK_SIZE,
                                                      KV_CACHE_WASH_TIMER_INTERVAL_US))) {

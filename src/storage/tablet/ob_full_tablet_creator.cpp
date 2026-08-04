@@ -94,7 +94,7 @@ int ObFullTabletCreator::throttle_tablet_creation()
   int ret = OB_SUCCESS;
 
   bool need_wait = false;
-  const int64_t limit_size = get_allocator_memory_limit() / 20; // 5%
+  const int64_t limit_size = lib::get_memory_budget() / 20; // 5%
   const int64_t timeout = 5 * 1000L; // 5ms for effective replay
   const int64_t log_timeout = 1 * 1000 * 1000L; // 1s
   const int64_t start_time = ObTimeUtility::fast_current_time();

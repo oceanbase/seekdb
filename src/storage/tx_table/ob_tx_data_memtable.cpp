@@ -17,6 +17,7 @@
 
 #include "ob_tx_data_memtable.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/ls/ob_freezer.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 
@@ -112,6 +113,10 @@ void ObTxDataMemtable::init_arena_allocator_()
   attr.label_ = "MEMTABLE_ARENA";
   attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(attr);
+  ObSharedMemAllocMgr *manager = share::g_mp->shared_mem_alloc_mgr();
+  if (nullptr != manager) {
+    arena_allocator_.set_memory_tracker(&manager->tx_data_memtable_tracker());
+  }
 }
 
 void ObTxDataMemtable::reset()

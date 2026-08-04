@@ -18,6 +18,7 @@
 
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/px/ob_px_util.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase {
 
@@ -29,6 +30,21 @@ using namespace share::schema;
 using namespace oceanbase::observer;
 
 namespace sql {
+
+namespace
+{
+common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)
+{
+  common::MemoryUsageTracker *tracker = nullptr;
+  if (common::ObCtxIds::WORK_AREA == ctx_id && nullptr != share::g_mp) {
+    ObSqlMemoryManager *manager = share::g_mp->sql_memory_manager();
+    if (nullptr != manager) {
+      tracker = &manager->get_workarea_managed_tracker();
+    }
+  }
+  return tracker;
+}
+}
 
 ////////////////////////////////////////////////////////////////////////////////////
 const int64_t ObSqlWorkAreaProfile::MIN_BOUND_SIZE[ObSqlWorkAreaType::MAX_TYPE] = {
@@ -422,6 +438,9 @@ int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
       common::ob_delete(sql_mem_mgr);
     }
     sql_mem_mgr = nullptr;
+  } else {
+    common::set_memory_usage_tracker_resolver(
+        common::ObCtxIds::WORK_AREA, resolve_sql_memory_usage_tracker);
   }
   return ret;
 }
@@ -543,6 +562,7 @@ int ObSqlMemoryManager::register_work_area_profile(ObSqlWorkAreaProfile &profile
         LOG_WARN("failed to register work area profile", K(hash_val), K(profile));
       } else {
         increase_profile_cnt();
+        adjust_active_profile_used(profile.get_profile_total_used());
         profile.active_time_ = ObTimeUtility::current_time();
       }
     }
@@ -790,6 +810,7 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
       LOG_WARN("failed to register work area profile", K(hash_val), K(profile));
     } else {
       decrease_profile_cnt();
+      adjust_active_profile_used(-profile.get_profile_total_used());
       if (enable_auto_memory_mgr_ && profile.get_auto_policy()) {
         decrease(profile.get_cache_size());
       }
@@ -831,93 +852,21 @@ int ObSqlMemoryManager::get_max_work_area_size(
   } else if (OB_FAIL(value.get_int(pctg))) {
     LOG_WARN("get int from value failed", K(ret), K(value));
   } else {
-    int64_t memory_limit = get_allocator_memory_limit();
-    int64_t memory_hold = get_allocator_memory_hold();
-    int64_t work_area_max_size = memory_limit * pctg / 100;
-    int64_t work_area_memory_hold =
-      get_allocator_memory_hold(common::ObCtxIds::WORK_AREA);
-    int64_t max_available_memory = std::max(MIN_AVAILABLE_MEMORY,
-                                              memory_limit - memory_hold);
-    int64_t max_workarea_memory_size = std::max(MIN_AVAILABLE_MEMORY,
-                                  work_area_max_size - work_area_memory_hold);
-    int64_t washable_size = -2;
-    int wash_ratio = 6; // valid value: [0-6]
-    if (max_workarea_memory_size > max_available_memory) {
-      int tmp_ret = EVENT_CALL(EventTable::EN_AMM_WASH_RATIO);
-      if (0 != tmp_ret) {
-        wash_ratio = -tmp_ret;
-      }
-      if (0 <= wash_ratio && wash_ratio <=6 && auto_calc) {
-        if (OB_FAIL(ObKVGlobalCache::get_instance().get_washable_size(washable_size))) {
-          LOG_WARN("failed to get washable memory size", K(ret));
-        } else {
-          max_available_memory += washable_size;
-          ATOMIC_SET(&max_memory_size_, max_available_memory);
-        }
-        // if failed to get washable size, then reset OB_SUCCESS and just use little memory
-        ret = OB_SUCCESS;
-      } else {
-        int64_t tmp_max_available_memory = ATOMIC_LOAD(&max_memory_size_);
-        if (0 != tmp_max_available_memory && 0 <= wash_ratio && wash_ratio <=6) {
-          // use the value that background thread calculate
-          max_available_memory += tmp_max_available_memory;
-        } else {
-          ObResourceMgrHandle resource_handle;
-          if (OB_FAIL(ObResourceMgr::get_instance().get_handle(
-              resource_handle))) {
-            ret = OB_SUCCESS;
-          } else {
-            // TODO: kvcache can roughly evict how much memory, currently there is no data, Hanyi will provide an interface later
-            // bug34818894
-            // Here temporarily write a default ratio
-            max_available_memory += resource_handle.get_memory_mgr()->get_cache_hold() * pctg / 100;
-            washable_size = -1;
-          }
-        }
-      }
-    }
-    // Take the minimum value between the maximum available memory and ctx's maximum available memory
-    int64_t remain_memory_size = min(max_workarea_memory_size, max_available_memory);
-    int64_t total_alloc_size = sql_mem_callback_.get_total_alloc_size();
-    double ratio = total_alloc_size * 1.0 / work_area_memory_hold;
-    // 1 - x^3 function, indicating that as hold memory increases, available memory decreases, and as alloc increases, available memory decreases
-    // Conversely, the less hold, the more available memory, the less alloc, the more available memory again
-    // Here square is used mainly for smooth memory growth and reduction
-    // so: formula
-    //    hold_ratio = hold / max_size;
-    //    tmp_max_wa = (1 - hold_ratio * hold_ratio * hold_ratio) * (max - hold) + alloc
-    //    alloc_ratio = alloc / tmp_max_wa
-    //    max_wa = tmp_max_wa * (1 - alloc_ratio * alloc_ratio * alloc_ratio)
-    int64_t pre_mem_target = mem_target_;
-    double hold_ratio = 1. * work_area_memory_hold / work_area_max_size;
-    int64_t tmp_max_wa_memory_size = (remain_memory_size > 0)
-              ? remain_memory_size + total_alloc_size
-              : total_alloc_size;
-    double alloc_ratio = total_alloc_size * 1.0 / tmp_max_wa_memory_size;
-    // if (total_alloc_size >= tmp_max_wa_memory_size) {
-    //   // Here using the results from the last N times for fitting might be better, but due to the delay in memory usage after the global bound is decided, it is quite difficult to determine their relationship
-    //   max_wa_memory_size = (tmp_max_wa_memory_size >> 1);
-    // } else
-    {
-      // only use formula (1 - ratio ^ 3)
-      max_wa_memory_size = tmp_max_wa_memory_size * (1 - alloc_ratio * alloc_ratio * alloc_ratio);
-    }
+    const int64_t memory_budget = lib::get_memory_budget();
+    const int64_t work_area_max_size = memory_budget / 100 * pctg;
+    const int64_t workarea_managed_used = get_workarea_managed_used();
+    const int64_t active_profile_used = MAX(get_active_profile_used(), 0);
+    const int64_t non_active_workarea_used =
+        MAX(workarea_managed_used - active_profile_used, 0);
+    max_wa_memory_size = MAX(
+        work_area_max_size - non_active_workarea_used, MIN_AVAILABLE_MEMORY);
     max_workarea_size_ = work_area_max_size;
-    workarea_hold_size_ = work_area_memory_hold;
+    workarea_hold_size_ = workarea_managed_used;
     max_auto_workarea_size_ = max_wa_memory_size;
-    if (0 >= max_wa_memory_size) {
-      max_wa_memory_size = 0;
-      LOG_INFO("max work area is 0", K(memory_limit), K(total_alloc_size),
-      K(work_area_memory_hold), K(work_area_max_size));
-    }
-    if (auto_calc
-        || MIN_AVAILABLE_MEMORY == max_available_memory
-        || MIN_AVAILABLE_MEMORY == max_workarea_memory_size) {
-      LOG_INFO("trace max work area", K(auto_calc), K(memory_limit), K(total_alloc_size),
-        K(work_area_memory_hold), K(work_area_max_size), K(max_wa_memory_size),
-        K(tmp_max_wa_memory_size), K(pre_mem_target), K(remain_memory_size), K(ratio),
-        K(alloc_ratio), K(hold_ratio), K(memory_hold), K(washable_size),
-        K(max_workarea_memory_size), K(max_available_memory), K(wash_ratio));
+    if (auto_calc || MIN_AVAILABLE_MEMORY == max_wa_memory_size) {
+      LOG_INFO("trace max work area", K(auto_calc), K(memory_budget), K(pctg),
+          K(work_area_max_size), K(workarea_managed_used),
+          K(active_profile_used), K(non_active_workarea_used), K(max_wa_memory_size));
     }
   }
   return ret;
@@ -1300,7 +1249,7 @@ int ObSqlMemoryManager::get_workarea_memory_info(
   memory_info.workarea_hold_size_ = workarea_hold_size_;
   memory_info.max_auto_workarea_size_ = max_auto_workarea_size_;
   memory_info.mem_target_ = mem_target_;
-  memory_info.total_mem_used_ = sql_mem_callback_.get_total_alloc_size();
+  memory_info.total_mem_used_ = get_workarea_managed_used();
   memory_info.global_bound_size_ = global_bound_size_;
   memory_info.drift_size_ = drift_size_;
   memory_info.workarea_cnt_ = profile_cnt_;

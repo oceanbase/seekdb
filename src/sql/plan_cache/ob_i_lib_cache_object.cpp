@@ -32,7 +32,8 @@ ObILibCacheObject::ObILibCacheObject(ObLibCacheNameSpace ns, lib::MemoryContext 
     log_del_time_(INT64_MAX),
     added_to_lc_(false),
     ns_(ns),
-    obj_status_(ObILibCacheObject::ACTIVE)
+    obj_status_(ObILibCacheObject::ACTIVE),
+    accounted_size_(0)
 {
 }
 
@@ -44,6 +45,7 @@ void ObILibCacheObject::reset()
   added_to_lc_ = false;
   ns_ = NS_INVALID;
   obj_status_ = ObILibCacheObject::ACTIVE;
+  accounted_size_ = 0;
 }
 
 void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true */) const

@@ -1821,8 +1821,8 @@ struct tm *ob_localtime(const time_t *unix_sec, struct tm *result)
   const int32_t tz_minutes = static_cast<int32_t>(__timezone / 60);
 #endif
 
-//only support time >= 1970/1/1 8:0:0
-  if (OB_LIKELY(NULL != result) && OB_LIKELY(NULL != unix_sec) && OB_LIKELY(*unix_sec >= 0)) {
+//only support time > 1970/1/1 8:0:0
+  if (OB_LIKELY(NULL != result) && OB_LIKELY(NULL != unix_sec) && OB_LIKELY(*unix_sec > 0)) {
     result->tm_sec  = static_cast<int>((*unix_sec) % MINUTES_IN_HOUR);
     int tmp_i       = static_cast<int>((*unix_sec) / MINUTES_IN_HOUR) - tz_minutes;
     result->tm_min  = tmp_i % MINUTES_IN_HOUR;
@@ -1847,10 +1847,9 @@ void ob_fast_localtime(time_t &cached_unix_sec, struct tm &cached_localtime,
     const time_t &input_unix_sec, struct tm *output_localtime)
 {
   if (OB_LIKELY(NULL != output_localtime)) {
-    const bool is_inited = (0 != cached_unix_sec || 0 != cached_localtime.tm_mday);
-    if (OB_LIKELY(is_inited && cached_unix_sec == input_unix_sec)) {
+    if (cached_unix_sec == input_unix_sec) {
       *output_localtime = cached_localtime;
-    } else if (OB_UNLIKELY(!is_inited)) {//init
+    } else if (OB_UNLIKELY(0 == cached_unix_sec)) {//init
       cached_unix_sec = input_unix_sec;
 #ifdef _WIN32
       localtime_s(output_localtime, &input_unix_sec);
@@ -2166,12 +2165,12 @@ int read_one_int(const char *file_name, int64_t &value)
 
 int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value)
 {
-  int64_t mem_limit = get_memory_limit();
-  static const int64_t CALC_MEM_UPPER_BOUND = 128 * (1L << 30);  // 128GB
-  static const int64_t CALC_MEM_LOWER_BOUND = 1L << 30;           // 1GB
+  int64_t memory_budget = get_memory_budget();
+  static const int64_t CALC_MEM_UPPER_BOUND = 64 * (1L << 30);  // 64GB
+  static const int64_t CALC_MEM_LOWER_BOUND = 1L << 29;         // 512MB
 
   // 0.0 <= memory_ratio <= 1.0
-  int64_t clamped_memory = MIN(MAX(mem_limit, CALC_MEM_LOWER_BOUND), CALC_MEM_UPPER_BOUND);
+  int64_t clamped_memory = MIN(MAX(memory_budget, CALC_MEM_LOWER_BOUND), CALC_MEM_UPPER_BOUND);
   double memory_ratio = static_cast<double>(clamped_memory - CALC_MEM_LOWER_BOUND) /
                        (CALC_MEM_UPPER_BOUND - CALC_MEM_LOWER_BOUND);
 

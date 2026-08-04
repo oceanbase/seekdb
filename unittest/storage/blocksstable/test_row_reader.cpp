@@ -43,7 +43,6 @@ using namespace blocksstable;
 using namespace storage;
 using namespace common::number;
 using namespace share::schema;
-static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
@@ -62,7 +61,7 @@ public:
   static const int64_t column_num = ObMaxType - sizeof(not_test_type) / sizeof(ObObjType);
 public:
   TestNewRowReader()
-      : TestDataFilePrepare(&getter, "TestNewRowReader", 2 * 1024 * 1024),
+      : TestDataFilePrepare("TestNewRowReader", 2 * 1024 * 1024),
       read_info_()
   {}
   virtual ~TestNewRowReader() {}

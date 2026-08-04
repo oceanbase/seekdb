@@ -1176,11 +1176,6 @@ int ObWindowFunctionOp::init()
     }
   }
   if (OB_SUCC(ret)) {
-    
-    
-    local_allocator_.set_label(ObModIds::OB_SQL_WINDOW_LOCAL);
-    local_allocator_.set_ctx_id(ObCtxIds::WORK_AREA);
-    
     rescan_alloc_.set_label("WfRescanAlloc");
     
     patch_alloc_.set_label("WfPatchAlloc");

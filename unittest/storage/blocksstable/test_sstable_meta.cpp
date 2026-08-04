@@ -32,7 +32,6 @@ using namespace blocksstable;
 using namespace compaction;
 namespace unittest
 {
-static ObSimpleMemLimitGetter getter;
 
 class TestRootBlockInfo : public TestDataFilePrepare
 {
@@ -69,7 +68,7 @@ protected:
 };
 
 TestRootBlockInfo::TestRootBlockInfo()
-  : TestDataFilePrepare(&getter, "TestRootBlockInfo", 2 * 1024 * 1024, 2048),
+  : TestDataFilePrepare("TestRootBlockInfo", 2 * 1024 * 1024, 2048),
     root_info_(),
     table_read_info_(),
     des_meta_(),
@@ -284,7 +283,7 @@ private:
 };
 
 TestSSTableMeta::TestSSTableMeta()
-  : TestDataFilePrepare(&getter, "TestBaseSSTableMeta", 2 * 1024 * 1024, 2048),
+  : TestDataFilePrepare("TestBaseSSTableMeta", 2 * 1024 * 1024, 2048),
     param_(),
     tablet_id_(1),
     data_version_(0),

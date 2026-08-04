@@ -52,7 +52,9 @@ public:
                                   const ExprFixedArray &left_output,
                                   const common::ObIArray<ObExpr *> &output_union_exprs) :
       state_(RecursiveUnionState::R_UNION_READ_LEFT),
-      stored_row_buf_(ObModIds::OB_SQL_CTE_ROW),
+      stored_row_buf_(ObModIds::OB_SQL_CTE_ROW,
+                      OB_MALLOC_NORMAL_BLOCK_SIZE,
+                      ObCtxIds::WORK_AREA),
       pump_operator_(nullptr),
       left_op_(nullptr),
       right_op_(nullptr),

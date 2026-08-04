@@ -61,6 +61,9 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_config())) {
       LOG_WARN("reload configuration for net frame fail", K(tmp_ret));
     }
+    if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
+      LOG_WARN("reload ssl config for net frame fail", K(tmp_ret));
+    }
 
   }
   {
@@ -105,10 +108,7 @@ int ObServerReloadConfig::operator()()
   int64_t cache_size = GCONF.memory_chunk_cache_size;
   bool use_large_chunk_cache = false;
   if (0 == cache_size || 1 == cache_size) {
-    cache_size = GMEMCONF.get_server_memory_limit();
-    if (cache_size >= (32L<<30)) {
-      cache_size -= (4L<<30);
-    }
+    cache_size = lib::AChunkMgr::get_default_max_chunk_cache_size();
   }
   lib::AChunkMgr::instance().set_max_chunk_cache_size(cache_size, use_large_chunk_cache);
 
@@ -148,6 +148,8 @@ int ObServerReloadConfig::operator()()
   // moved from share ObConfigManager::reload_config(share base must not touch observer components;
   // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
+    LOG_WARN("reload ssl config for net frame fail", K(ret));
   } else if (OB_FAIL(GCTX.server_runtime_controller_->refresh_runtime_resources())) {
     LOG_WARN("refresh server runtime resources failed", K(ret));
   }

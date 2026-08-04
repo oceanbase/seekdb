@@ -41,17 +41,22 @@ struct TestCtxAllocator
   ObCtxAllocator allocator_;
 };
 
+static void set_allocator_hard_limit(const int64_t bytes)
+{
+  ObMallocAllocator::get_instance()->set_allocator_hard_limit(bytes);
+  CHUNK_MGR.set_hard_limit(bytes);
+}
+
 TEST(TestAllocator, CtxAlloc)
 {
   CHUNK_MGR.set_max_chunk_cache_size(1<<20);
   TestCtxAllocator test_allocator(1);
   ObCtxAllocator &ta = test_allocator.allocator_;
   ObMemAttr attr("CtxAlloc", 1);
-  const int64_t hold = get_memory_hold();
+  const int64_t hold = CHUNK_MGR.get_hold();
 
   cout << "current hold: " << hold << endl;
 
-  set_memory_limit(hold + (3<<20));
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 
   ta.print_memory_usage();
@@ -68,22 +73,18 @@ TEST(TestAllocator, SysLimit)
 
   cout << "current hold: " << hold << endl;
 
-  set_memory_limit(hold);
-  set_hard_memory_limit(hold);
+  set_allocator_hard_limit(hold);
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   hold = test_allocator.ctx_allocator_.get_total_hold();
-  set_memory_limit(hold + (1<<20));
-  set_hard_memory_limit(hold + (1<<20));
+  set_allocator_hard_limit(hold + (1<<20));
   EXPECT_EQ(NULL, ta.alloc(1, attr));
 
   hold = test_allocator.ctx_allocator_.get_total_hold();
-  set_memory_limit(hold + 8L * INTACT_ACHUNK_SIZE);
-  set_hard_memory_limit(hold + 8L * INTACT_ACHUNK_SIZE);
+  set_allocator_hard_limit(hold + 8L * INTACT_ACHUNK_SIZE);
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 
-  set_memory_limit(INT64_MAX);
-  set_hard_memory_limit(INT64_MAX);
+  set_allocator_hard_limit(INT64_MAX);
 }
 
 TEST(TestAllocator, TotalLimit)
@@ -98,8 +99,7 @@ TEST(TestAllocator, TotalLimit)
   // One chunk of headroom: it fits the NORMAL-priority metadata chunk but not the
   // data chunk, so NORMAL is rejected while OB_HIGH_ALLOC bypasses the hard limit.
   // Keep CHUNK_MGR open so only the allocator limit is under test.
-  set_memory_limit(hold + INTACT_ACHUNK_SIZE);
-  set_hard_memory_limit(hold + INTACT_ACHUNK_SIZE);
+  set_allocator_hard_limit(hold + INTACT_ACHUNK_SIZE);
   CHUNK_MGR.set_limit(INT64_MAX);
   CHUNK_MGR.set_hard_limit(INT64_MAX);
   EXPECT_FALSE(NULL != ta.alloc(1, attr));
@@ -114,8 +114,7 @@ TEST(TestAllocator, TotalLimit)
   attr.prio_ = OB_HIGH_ALLOC;
   EXPECT_TRUE(NULL != ta.alloc(1, attr));
 
-  set_memory_limit(INT64_MAX);
-  set_hard_memory_limit(INT64_MAX);
+  set_allocator_hard_limit(INT64_MAX);
 }
 
 TEST(TestAllocator, SetMemoryMgrTwice)

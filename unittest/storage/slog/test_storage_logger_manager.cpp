@@ -25,7 +25,6 @@
 namespace oceanbase
 {
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 namespace storage
 {
@@ -34,7 +33,7 @@ class TestStorageLoggerManager : public blocksstable::TestDataFilePrepare
 {
 public:
   TestStorageLoggerManager()
-    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLoggerManager")
+    : blocksstable::TestDataFilePrepare("TestStorageLoggerManager")
   {
   }
   virtual ~TestStorageLoggerManager() {}

@@ -19,7 +19,6 @@
 #include "observer/ob_server.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
 #include "share/rc/ob_server_runtime.h"
 using namespace oceanbase::observer;
 //c funcs
@@ -189,7 +188,7 @@ void TestSqlUtils::init()
 
   GCTX.schema_service_ = schema_service_;
 
-  ObKVGlobalCache::get_instance().init(&ObServerMemLimitGetter::get_instance());
+  ObKVGlobalCache::get_instance().init();
 
   if (OB_SUCCESS != (ret = ObPreProcessSysVars::init_sys_var())) {
     _OB_LOG(WARN, "PreProcessing system value init failed, ret=%ld", ret);

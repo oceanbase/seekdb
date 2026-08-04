@@ -31,7 +31,6 @@
 namespace oceanbase
 {
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 namespace storage
 {
@@ -40,7 +39,7 @@ class TestStorageLogRW : public blocksstable::TestDataFilePrepare
 {
 public:
   TestStorageLogRW()
-    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLogRW"),
+    : blocksstable::TestDataFilePrepare("TestStorageLogRW"),
       slogger_(nullptr)
   {
   }

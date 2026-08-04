@@ -69,14 +69,17 @@ private:
   static const int64_t MIN_PARALLEL_MERGE_BLOCKS = 32;
   static const int64_t PARALLEL_MERGE_TARGET_TASK_CNT = 20;
   static const int64_t DEFAULT_MERGE_THREAD_CNT = 6;
+  static const int64_t MINI_MEM_PER_THREAD = 7 * 1024L * 1024L;
+  static const int64_t MINOR_MEM_PER_THREAD = 6 * 1024L * 1024L;
   static const int64_t MINI_PARALLEL_BASE_MEM = 1L << 30; // 1GB
 
   //TODO @hanhui parallel in ai
   int init_parallel_mini_merge(compaction::ObBasicTabletMergeCtx &merge_ctx);
   int init_parallel_mini_minor_merge(compaction::ObBasicTabletMergeCtx &merge_ctx);
   int init_parallel_major_merge(compaction::ObBasicTabletMergeCtx &merge_ctx);
-  void calc_parallel_degree(
+  void calc_adaptive_parallel_degree(
       const int64_t prio,
+      const int64_t mem_per_thread,
       const int64_t origin_degree,
       int64_t &parallel_degree);
 

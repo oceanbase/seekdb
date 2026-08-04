@@ -36,14 +36,10 @@ public:
   using SliceAllocator = ObSliceAlloc;
 
   // define some default value
-  static const int64_t TX_DATA_LIMIT_PERCENTAGE = 20;
   static const int64_t TX_DATA_THROTTLE_TRIGGER_PERCENTAGE = 60;
   static const int64_t TX_DATA_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
   static const int64_t ALLOC_TX_DATA_MAX_CONCURRENCY = 8;
   static const uint32_t THROTTLE_TX_DATA_INTERVAL = 20 * 1000; // 20ms
-
-  // The tx data memtable will trigger a freeze if its memory use is more than 5%
-  static constexpr double TX_DATA_FREEZE_TRIGGER_PERCENTAGE = 5;
 
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(TxData);
@@ -55,7 +51,8 @@ public:
   int init(const char* label);
   void *alloc(const bool enable_throttle = true, const int64_t abs_expire_time = 0);
   void reset();
-  int64_t hold() const { return block_alloc_.hold(); }
+  int64_t hold() const;
+  int64_t slice_backing() const { return block_alloc_.hold(); }
 
   DELEGATE_WITH_RET(slice_allocator_, free, void);
 
@@ -84,9 +81,6 @@ class ObTxDataOpAllocator : public ObIAllocator {
 private:
   static const int64_t MDS_ALLOC_CONCURRENCY = 8;
 public:
-  DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
-
-public:
   ObTxDataOpAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
 
   int init();
@@ -96,7 +90,7 @@ public:
   virtual void *alloc(const int64_t size, const ObMemAttr &attr) override;
   virtual void free(void *ptr) override;
   virtual void set_attr(const ObMemAttr &attr) override;
-  int64_t hold() { return allocator_.hold(); }
+  int64_t hold() const { return allocator_.hold(); }
   int64_t get_local_alloc_size() { return local_alloc_size_; }
   void reset_local_alloc_size() { local_alloc_size_ = 0; }
   TO_STRING_KV(K(is_inited_), KP(this), KP(throttle_tool_), KP(&block_alloc_), KP(&allocator_));

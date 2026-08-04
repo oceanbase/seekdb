@@ -301,7 +301,7 @@ ObPlanCache::ObPlanCache()
    mem_limit_pct_(OB_PLAN_CACHE_PERCENTAGE),
    mem_high_pct_(OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE),
    mem_low_pct_(OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE),
-   mem_used_(0),
+   managed_used_(0),
    bucket_num_(0),
    inner_allocator_(),
    destroy_(0),
@@ -343,7 +343,7 @@ int ObPlanCache::init(int64_t hash_bucket)
       .set_mem_attr(attr);
     if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(root_context_, param))) {
       SQL_PC_LOG(WARN, "failed to create context", K(ret));
-    } else if (OB_FAIL(co_mgr_.init(hash_bucket))) {
+    } else if (OB_FAIL(co_mgr_.init(hash_bucket, this))) {
       SQL_PC_LOG(WARN, "failed to init lib cache manager", K(ret));
     } else if (OB_FAIL(cache_key_node_map_.create(hash::cal_next_prime(hash_bucket),
                                                   ObModIds::OB_HASH_BUCKET_PLAN_CACHE,
@@ -941,8 +941,6 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
         && OB_PC_LOCK_CONFLICT != ret) {
       SQL_PC_LOG(WARN, "fail to add plan", K(ret));
     }
-  } else {
-    (void)inc_mem_used(plan->get_mem_size());
   }
 
   return ret;
@@ -1039,6 +1037,7 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
         // that has not been added to cache_key_node_map_.
         cache_node->dec_ref_count(); //cache node dec ref in block
         cache_node->dec_ref_count(); //cache node dec ref in alloc
+        cache_node = NULL;
         if (OB_FAIL(add_cache_obj(ctx, key, cache_obj))) {
           SQL_PC_LOG(TRACE, "fail to add cache obj", K(ret), K(cache_obj));
         }
@@ -1080,15 +1079,16 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
             cache_node->dec_ref_count(); //cache node dec ref in alloc
           }
         } else {
-          cache_node->inc_added_mem_size(cache_obj->get_mem_size());
           cache_node->unlock();
           cache_node->dec_ref_count(); //cache node dec ref in block
         }
       } else {
+        ret = hash_err;
         SQL_PC_LOG(TRACE, "failed to add node to key_node_map", K(ret), KPC(cache_obj));
         cache_node->unlock();
         cache_node->dec_ref_count(); //cache node dec ref in block
         cache_node->dec_ref_count(); //cache node dec ref in alloc
+        cache_node = NULL;
       }
     } else {
       if (!ctx.need_destroy_node_ && ret != OB_SQL_PC_PLAN_DUPLICATE) {
@@ -1105,8 +1105,6 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
       SQL_PC_LOG(WARN, "failed to update node stat", K(ret));
     } else if (OB_FAIL(add_stat_for_cache_obj(ctx, cache_obj))) {
       LOG_WARN("failed to add stat", K(ret), K(ctx));
-    } else {
-      cache_node->inc_added_mem_size(cache_obj->get_mem_size());
     }
     if (OB_FAIL(ret)) {
       if (!ctx.need_destroy_node_ && ret != OB_SQL_PC_PLAN_DUPLICATE) {
@@ -1116,6 +1114,10 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
     // release wlock whatever
     cache_node->unlock();
     cache_node->dec_ref_count();
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(cache_node) && cache_obj->added_lc()) {
+    account_cache_object(*cache_obj);
+    refresh_cache_node(*cache_node);
   }
   return ret;
 }
@@ -1746,14 +1748,36 @@ int ObPlanCache::update_memory_conf()
 
 int64_t ObPlanCache::get_mem_hold() const
 {
-  return get_allocator_memory_hold(ObCtxIds::PLAN_CACHE_CTX_ID);
+  return get_managed_used();
 }
 
-int64_t ObPlanCache::get_label_hold(lib::ObLabel &label) const
+void ObPlanCache::account_cache_object(ObILibCacheObject &cache_obj)
 {
-  common::ObLabelItem item;
-  get_label_memory(label, item);
-  return item.hold_;
+  const int64_t accounted_size = cache_obj.get_mem_size() + lib::MemoryContext::metadata_size();
+  if (cache_obj.set_accounted_size_once(accounted_size)) {
+    inc_managed_used(accounted_size);
+  }
+}
+
+void ObPlanCache::refresh_cache_node(ObILibCacheNode &cache_node)
+{
+  const int64_t accounted_size = cache_node.get_own_mem_size() + lib::MemoryContext::metadata_size();
+  const int64_t old_size = cache_node.exchange_accounted_size(accounted_size);
+  if (accounted_size > old_size) {
+    inc_managed_used(accounted_size - old_size);
+  } else if (old_size > accounted_size) {
+    dec_managed_used(old_size - accounted_size);
+  }
+}
+
+void ObPlanCache::release_cache_object(ObILibCacheObject &cache_obj)
+{
+  dec_managed_used(cache_obj.take_accounted_size());
+}
+
+void ObPlanCache::release_cache_node(ObILibCacheNode &cache_node)
+{
+  dec_managed_used(cache_node.exchange_accounted_size(0));
 }
 // Add plan to plan cache
 // 1. Determine if plan cache memory has reached its limit;
@@ -1772,7 +1796,7 @@ int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
   } else if (is_reach_memory_limit()) {
     ret = OB_REACH_MEMORY_LIMIT;
     SQL_PC_LOG(TRACE, "plan cache memory used reach the high water mark",
-    K(mem_used_), K(get_mem_limit()), K(ret));
+    K(managed_used_), K(get_mem_limit()), K(ret));
   } else if (plan->get_mem_size() >= get_mem_high()) {
     // plan mem is too big to reach memory highwater, do not add plan
   } else if (OB_FAIL(construct_plan_cache_key(pc_ctx, ObLibCacheNameSpace::NS_CRSR))) {
@@ -1787,8 +1811,6 @@ int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
     pc_ctx.fp_result_.pc_key_.key_id_ = OB_INVALID_ID;
     if (OB_FAIL(add_plan_cache(pc_ctx, plan))) {
       SQL_PC_LOG(TRACE, "fail to add plan", K(ret));
-    } else {
-      (void)inc_mem_used(plan->get_mem_size());
     }
     // reset pc_ctx
     pc_ctx.fp_result_.pc_key_.name_.reset();

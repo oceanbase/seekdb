@@ -25,7 +25,6 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
-#include "share/ob_autoincrement_service.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
@@ -53,7 +52,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "share/ob_device_manager.h"
 #include "storage/ob_tablet_autoincrement_service.h"
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
@@ -958,7 +956,6 @@ bool ObServer::is_stopped()
 
 void ObServer::set_stop()
 {
-  net_frame_.sql_nio_stop();
   stop_ = true;
   ob_service_.set_stop();
   gctx_.status_ = SS_STOPPING;
@@ -1118,7 +1115,6 @@ int ObServer::wait_no_client()
                  LOCKFILE_EXCLUSIVE_LOCK,
                  0, MAXDWORD, MAXDWORD, &ov)) {
     FLOG_INFO("no clients remaining, exiting");
-    net_frame_.sql_nio_stop();
     _Exit(0);
   } else {
     ret = OB_ERROR;
@@ -1127,7 +1123,6 @@ int ObServer::wait_no_client()
 #else
   if (flock(clients_fd_, LOCK_EX) == 0) {
     FLOG_INFO("no clients remaining, exiting");
-    net_frame_.sql_nio_stop();
     _Exit(0);
   } else {
     ret = OB_ERROR;
@@ -1406,15 +1401,15 @@ int ObServer::init_config_module(const char *optstr)
 int ObServer::set_running_mode()
 {
   int ret = OB_SUCCESS;
-  const int64_t memory_limit = GMEMCONF.get_server_memory_limit();
+  const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
   const int64_t cnt = GCONF.cpu_count;
   const int64_t cpu_cnt = cnt > 0 ? cnt : common::get_cpu_num();
-  if (memory_limit < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
+  if (memory_budget < lib::ObRunningModeConfig::MINI_MEM_UPPER) {
     ObTaskController::get().allow_next_syslog();
-    LOG_INFO("observer start with mini_mode", K(memory_limit));
-    lib::update_mini_mode(memory_limit, cpu_cnt);
+    LOG_INFO("observer start with mini_mode", K(memory_budget));
+    lib::update_mini_mode(memory_budget, cpu_cnt);
   } else {
-    lib::update_mini_mode(memory_limit, cpu_cnt);
+    lib::update_mini_mode(memory_budget, cpu_cnt);
   }
   _OB_LOG(INFO, "mini mode: %s", lib::is_mini_mode() ? "true" : "false");
   return ret;
@@ -1462,15 +1457,13 @@ int ObServer::init_pre_setting()
     }
   }
 
-  // total memory limit
+  // Publish the logical memory budget and derive allocator cache sizing from it.
   if (OB_SUCC(ret)) {
-    const int64_t limit_memory = GMEMCONF.get_server_memory_limit();
-    const int64_t hard_limit_memory = GMEMCONF.get_server_hard_memory_limit();
+    const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
     const int64_t reserved_memory = std::min(config_.cache_wash_threshold.get_value(),
-        static_cast<int64_t>(static_cast<double>(limit_memory) * KVCACHE_FACTOR));
-    LOG_INFO("set memory config", K(hard_limit_memory), K(limit_memory), K(reserved_memory));
-    set_hard_memory_limit(hard_limit_memory);
-    set_memory_limit(limit_memory);
+        static_cast<int64_t>(static_cast<double>(memory_budget) * KVCACHE_FACTOR));
+    LOG_INFO("set memory config", K(memory_budget), K(reserved_memory));
+    set_memory_budget(memory_budget);
     ob_set_reserved_memory(reserved_memory);
   }
   if (OB_SUCC(ret)) {
@@ -1714,12 +1707,10 @@ int ObServer::init_global_kvcache()
 {
   int ret = OB_SUCCESS;
   int64_t bucket_num;
-  const int64_t max_cache_size = MIN(GMEMCONF.get_server_memory_limit(), ObKVGlobalCache::DEFAULT_MAX_CACHE_SIZE);
+  const int64_t max_cache_size = MIN(GMEMCONF.get_server_memory_budget(), ObKVGlobalCache::DEFAULT_MAX_CACHE_SIZE);
   if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(bucket_num))) {
     LOG_WARN("Failed to get suitable bucket num");
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(&ObServerMemLimitGetter::get_instance(),
-                                                   bucket_num,
-                                                   max_cache_size))) {
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size))) {
     LOG_WARN("Fail to init ObKVGlobalCache, ", KR(ret));
   } else if (OB_FAIL(ObResourceMgr::get_instance().set_cache_washer(
       ObKVGlobalCache::get_instance()))) {

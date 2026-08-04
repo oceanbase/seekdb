@@ -2817,22 +2817,10 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
     if (item->name_.is_empty()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("empty config name", "item", *item, K(ret));
-    } else if (0 == STRCMP(item->name_.ptr(), _TX_SHARE_MEMORY_LIMIT_PERCENTAGE)) {
-      ret = check_tx_share_memory_limit_(*item);
-    } else if (0 == STRCMP(item->name_.ptr(), MEMSTORE_LIMIT_PERCENTAGE)) {
-      ret = check_memstore_limit_(*item);
-    } else if (0 == STRCMP(item->name_.ptr(), OB_VECTOR_MEMORY_LIMIT_PERCENTAGE)) {
-      ret = check_vector_memory_limit_(*item);
     } else if (0 == STRCMP(item->name_.ptr(), DATA_DISK_WRITE_LIMIT_PERCENTAGE)) {
       ret = check_data_disk_write_limit_(*item);
     } else if (0 == STRCMP(item->name_.ptr(), DATA_DISK_USAGE_LIMIT_PERCENTAGE)) {
       ret = check_data_disk_usage_limit_(*item);
-    } else if (0 == STRCMP(item->name_.ptr(), INTERNAL_MEMSTORE_LIMIT_PERCENTAGE)) {
-      ret = check_internal_memstore_limit_(*item);
-    } else if (0 == STRCMP(item->name_.ptr(), _TX_DATA_MEMORY_LIMIT_PERCENTAGE)) {
-      ret = check_tx_data_memory_limit_(*item);
-    } else if (0 == STRCMP(item->name_.ptr(), _MDS_MEMORY_LIMIT_PERCENTAGE)) {
-      ret = check_mds_memory_limit_(*item);
     } else if (0 == STRCMP(item->name_.ptr(), FREEZE_TRIGGER_PERCENTAGE)) {
       ret = check_freeze_trigger_percentage_(*item);
     } else if (0 == STRCMP(item->name_.ptr(), WRITING_THROTTLEIUNG_TRIGGER_PERCENTAGE)) {
@@ -2875,69 +2863,6 @@ int ObLocalManagementService::set_config_pre_hook(obcall::ObAdminSetConfigArg &a
       LOG_WARN("config invalid", "item", item, K(ret));                                   \
     }                                                                                      \
   } while (0)
-
-int ObLocalManagementService::check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  // There is a prefix "Incorrect arguments to " before user log so the warn log looked kinds of wired
-  const char *warn_log = "internal config _tx_share_memory_limit_percentage. "
-                         "It should larger than or equal with any single module in it(Memstore, TxData, Mds, Vector)";
-  CHECK_CONFIG_WITH_FUNC(ObConfigTxShareMemoryLimitChecker, warn_log);
-  return ret;
-}
-
-int ObLocalManagementService::check_memstore_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  const char *warn_log = "cluster config memstore_limit_percentage. "
-                         "It should be less than or equal to the runtime _tx_share_memory_limit_percentage";
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
-  } else if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
-  } else {
-    CHECK_CONFIG_WITH_FUNC(ObConfigMemstoreLimitChecker, warn_log);
-  }
-  return ret;
-}
-
-int ObLocalManagementService::check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  const char *warn_log = "ob_vector_limit_percentage. "
-                         "It should be less than _tx_share_memory_limit_percentage";
-  CHECK_CONFIG_WITH_FUNC(ObConfigVectorMemoryChecker, warn_log);
-  return ret;
-}
-
-int ObLocalManagementService::check_internal_memstore_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  const char *warn_log = "internal config _memstore_limit_percentage. "
-    "It should less than or equal with _tx_share_memory_limit_percentage";
-  CHECK_CONFIG_WITH_FUNC(ObConfigMemstoreLimitChecker, warn_log);
-  return ret;
-}
-
-int ObLocalManagementService::check_tx_data_memory_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  const char *warn_log = "internal config _tx_data_memory_limit_percentage. "
-                         "It should less than or equal with _tx_share_memory_limit_percentage";
-  CHECK_CONFIG_WITH_FUNC(ObConfigTxDataLimitChecker, warn_log);
-  return ret;
-}
-
-int ObLocalManagementService::check_mds_memory_limit_(obcall::ObAdminSetConfigItem &item)
-{
-  int ret = OB_SUCCESS;
-  const char *warn_log = "internal config _mds_memory_limit_percentage. "
-                         "It should less than or equal with _tx_share_memory_limit_percentage";
-  CHECK_CONFIG_WITH_FUNC(ObConfigMdsLimitChecker, warn_log);
-  return ret;
-}
 
 int ObLocalManagementService::check_freeze_trigger_percentage_(obcall::ObAdminSetConfigItem &item)
 {

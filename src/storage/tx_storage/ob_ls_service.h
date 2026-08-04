@@ -20,7 +20,6 @@
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"          // ObConcurrentFIFOAllocator
 #include "storage/ls/ob_ls.h"
-#include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/tx/ob_tx_result_struct.h"
 
 namespace oceanbase
@@ -37,15 +36,14 @@ class ObLS;
 struct ObLSMeta;
 
 // Maintain the single local log stream and its persistent metadata/checkpoint.
-class ObLSService : public ObIResourceLimitCalculatorHandler
+class ObLSService
 {
   static const int64_t DEFAULT_LOCK_TIMEOUT = 60_s;
-  static const int64_t BASE_RUNTIME_MEMORY_LIMIT = 4LL * 1024 * 1024 * 1024; // 4G
 public:
   int64_t break_point = -1; // just for test
 public:
   ObLSService();
-  virtual ~ObLSService();
+  ~ObLSService();
 
   static int server_module_init(ObLSService* &ls_service);
   int init();
@@ -53,12 +51,6 @@ public:
   int stop();
   int wait();
   void destroy();
-public:
-  // for limit calculator
-  virtual int get_current_info(share::ObResourceInfo &info) override;
-  virtual int get_resource_constraint_value(share::ObResoureConstraintValue &constraint_value) override;
-  virtual int cal_min_phy_resource_needed(share::ObMinPhyResourceResult &min_phy_res) override;
-  virtual int cal_min_phy_resource_needed(const int64_t num, share::ObMinPhyResourceResult &min_phy_res) override;
 public:
   // create a LS
   int create_ls(const share::ObServerRole &server_role = share::PRIMARY_SERVER_ROLE);
@@ -134,10 +126,6 @@ private:
   int replay_update_ls_(const ObLSMeta &ls_meta);
   int post_create_ls_(const bool is_restore, ObLS *ls);
   void del_ls_after_create_ls_failed_(ObLSCreateState& ls_create_state, ObLS *ls);
-
-  // for resource limit calculator
-  int cal_min_phy_resource_needed_(ObMinPhyResourceResult &min_phy_res);
-  int get_resource_constraint_value_(ObResoureConstraintValue &constraint_value);
 
 private:
   bool is_inited_;

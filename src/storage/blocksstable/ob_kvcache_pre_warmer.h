@@ -44,7 +44,7 @@ public:
 protected:
   void update_rest();
   void inner_update_rest();
-  virtual void calculate_base_percentage(const int64_t free_memory);
+  virtual void calculate_base_percentage(const int64_t memory_budget);
   virtual int do_reserve_kvpair(
       const blocksstable::ObMicroBlockDesc &micro_block_desc,
       int64_t &kvpair_size);
@@ -78,7 +78,7 @@ public:
   virtual ~ObIndexBlockCachePreWarmer();
   virtual int init(const ObITableReadInfo *table_read_info) override;
 protected:
-  virtual void calculate_base_percentage(const int64_t free_memory) override;
+  virtual void calculate_base_percentage(const int64_t memory_limit) override;
   virtual int do_reserve_kvpair(
       const blocksstable::ObMicroBlockDesc &micro_block_desc,
       int64_t &kvpair_size) override;

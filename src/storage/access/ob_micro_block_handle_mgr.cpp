@@ -360,20 +360,14 @@ int ObCacheMemController::update_limit(const ObQueryFlag &query_flag)
 {
   int ret = OB_SUCCESS;
   if (0 == (++update_limit_count_ % UPDATE_INTERVAL)) {
-    
-    int64_t runtime_free_memory = lib::get_allocator_memory_limit() - lib::get_allocator_memory_hold();
-    hold_limit_ = HOLD_LIMIT_BASE + runtime_free_memory / 1024 ;
-    int64_t cache_washable_size = 0;
+    const int64_t memory_budget = lib::get_memory_budget();
+    hold_limit_ = HOLD_LIMIT_BASE + memory_budget / 1024;
     if (query_flag.is_use_block_cache()) {
-      if (OB_FAIL(ObKVGlobalCache::get_instance().get_washable_size(cache_washable_size))) {
-        LOG_WARN("Fail to get kvcache washable size", K(ret));
-      } else {
-        data_block_use_cache_limit_ = runtime_free_memory / 5 + cache_washable_size / 10;
-        use_data_block_cache_ = data_block_submit_io_size_ <= data_block_use_cache_limit_;
-      }
+      data_block_use_cache_limit_ = memory_budget / 5;
+      use_data_block_cache_ = data_block_submit_io_size_ <= data_block_use_cache_limit_;
     }
-    LOG_DEBUG("Update limit details", K(runtime_free_memory), K(cache_washable_size),
-                                 K(query_flag.is_use_block_cache()), KPC(this));
+    LOG_DEBUG("Update limit details", K(memory_budget),
+              K(query_flag.is_use_block_cache()), KPC(this));
   }
   return ret;
 }

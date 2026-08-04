@@ -80,6 +80,10 @@ int ObTxDataTable::init_arena_allocator_()
   
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(mem_attr);
+  ObSharedMemAllocMgr *manager = share::g_mp->shared_mem_alloc_mgr();
+  if (nullptr != manager) {
+    arena_allocator_.set_memory_tracker(&manager->tx_data_metadata_tracker());
+  }
   return OB_SUCCESS;
 }
 

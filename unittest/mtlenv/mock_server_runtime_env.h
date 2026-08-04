@@ -83,7 +83,6 @@
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"   // ObSharedMemAllocMgr
-#include "storage/tx_storage/ob_server_mem_limit_getter.h"
 #include "logservice/palf/log_define.h"
 #include "storage/access/ob_empty_read_bucket.h"
 #include "observer/ob_startup_accel_task_handler.h"
@@ -360,8 +359,7 @@ int MockServerRuntimeEnv::prepare_io()
     SERVER_LOG(ERROR, "init log pool fail", K(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().start())) {
     STORAGE_LOG(WARN, "fail to start io manager", K(ret));
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(&common::ObServerMemLimitGetter::get_instance(),
-      bucket_num,
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
       max_cache_size,
       block_size))) {
     STORAGE_LOG(WARN, "fail to init kv global cache ", K(ret));

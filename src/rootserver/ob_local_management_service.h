@@ -298,16 +298,10 @@ private:
 
 
   int parallel_ddl_pre_check_();
-  int check_tx_share_memory_limit_(obcall::ObAdminSetConfigItem &item);
-  int check_memstore_limit_(obcall::ObAdminSetConfigItem &item);
-  int check_internal_memstore_limit_(obcall::ObAdminSetConfigItem &item);
-  int check_tx_data_memory_limit_(obcall::ObAdminSetConfigItem &item);
-  int check_mds_memory_limit_(obcall::ObAdminSetConfigItem &item);
   int check_freeze_trigger_percentage_(obcall::ObAdminSetConfigItem &item);
   int check_write_throttle_trigger_percentage(obcall::ObAdminSetConfigItem &item);
   int check_data_disk_write_limit_(obcall::ObAdminSetConfigItem &item);
   int check_data_disk_usage_limit_(obcall::ObAdminSetConfigItem &item);
-  int check_vector_memory_limit_(obcall::ObAdminSetConfigItem &item);
   int start_ddl_service_();
 private:
   bool inited_;

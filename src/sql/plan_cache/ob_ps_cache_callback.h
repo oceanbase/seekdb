@@ -28,13 +28,24 @@ namespace sql
 {
 class ObPCVSet;
 
+struct PsClosedStmt
+{
+  PsClosedStmt() : stmt_id_(OB_INVALID_STMT_ID), closed_timestamp_(0), reclaimable_size_(0) {}
+  ObPsStmtId stmt_id_;
+  int64_t closed_timestamp_;
+  int64_t reclaimable_size_;
+  TO_STRING_KV(K_(stmt_id), K_(closed_timestamp), K_(reclaimable_size));
+};
+
 class ObGetClosedStmtIdOp
 {
 public:
-  ObGetClosedStmtIdOp(common::ObIArray< std::pair<ObPsStmtId, int64_t> > *expired_ps,
-                      common::ObIArray< std::pair<ObPsStmtId, int64_t> > *closed_ps)
+  ObGetClosedStmtIdOp(common::ObIArray<PsClosedStmt> *expired_ps,
+                      common::ObIArray<PsClosedStmt> *closed_ps,
+                      const int64_t map_entry_charge)
     : closed_ps_(closed_ps),
       expired_ps_(expired_ps),
+      map_entry_charge_(map_entry_charge),
       used_size_(0),
       callback_ret_(OB_SUCCESS)
   {
@@ -50,22 +61,26 @@ public:
       callback_ret_ = common::OB_INVALID_ARGUMENT;
       SQL_PC_LOG(WARN, "ps session info is null", KP(entry.second), K_(callback_ret));
     } else if (1 == entry.second->get_ref_count()) {
-      std::pair<ObPsStmtId, int64_t> id_time;
-      id_time.first = entry.first;
-      id_time.second = entry.second->get_last_closed_timestamp();
+      PsClosedStmt closed_stmt;
+      closed_stmt.stmt_id_ = entry.first;
+      closed_stmt.closed_timestamp_ = entry.second->get_last_closed_timestamp();
+      closed_stmt.reclaimable_size_ = entry.second->get_accounted_size() + map_entry_charge_;
+      if (OB_NOT_NULL(entry.second->get_ps_item())) {
+        closed_stmt.reclaimable_size_ += entry.second->get_ps_item()->get_accounted_size();
+      }
       if (entry.second->is_expired()) {
         // for expired ps info, only evicted once;
         // use cas, because auto cache evict and flush ps cache may concurrent processing
         if (ATOMIC_BCAS(entry.second->get_is_expired_evicted_ptr(), false, true)) {
-          if (OB_SUCCESS != (callback_ret_ = expired_ps_->push_back(id_time))) {
+          if (OB_SUCCESS != (callback_ret_ = expired_ps_->push_back(closed_stmt))) {
             SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
           }
         }
       } else {
-        if (OB_SUCCESS != (callback_ret_ = closed_ps_->push_back(id_time))) {
+        if (OB_SUCCESS != (callback_ret_ = closed_ps_->push_back(closed_stmt))) {
           SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
         } else {
-          used_size_ += entry.second->get_item_and_info_size();
+          used_size_ += closed_stmt.reclaimable_size_;
         }
       }
     }
@@ -84,8 +99,9 @@ public:
   int get_callback_ret() { return callback_ret_; }
   int64_t get_used_size() { return used_size_; }
 private:
-  common::ObIArray< std::pair<ObPsStmtId, int64_t> > *closed_ps_;
-  common::ObIArray< std::pair<ObPsStmtId, int64_t> > *expired_ps_;
+  common::ObIArray<PsClosedStmt> *closed_ps_;
+  common::ObIArray<PsClosedStmt> *expired_ps_;
+  int64_t map_entry_charge_;
   int64_t used_size_;
   int callback_ret_;
   DISALLOW_COPY_AND_ASSIGN(ObGetClosedStmtIdOp);

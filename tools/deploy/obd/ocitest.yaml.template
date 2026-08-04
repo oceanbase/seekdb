@@ -5,7 +5,7 @@ oceanbase-ce:
     log_disk_size: '240G'
     home_path: /data/{user}/{deploy_name}/observer/{server}
     production_mode: false
-    memory_limit: '80G'
+    memory_budget: '80G'
     datafile_size: '40G'
   runtime_dependencies:
   - src_path: admin

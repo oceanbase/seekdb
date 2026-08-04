@@ -78,7 +78,6 @@ public:
   //stmt_id -> plan
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsStmtInfo *, common::hash::SpinReadWriteDefendMode> PsStmtInfoMap;
   typedef common::hash::ObHashMap<ObPsStmtId, ObPsSessionInfo *, common::hash::SpinReadWriteDefendMode> PsSessionInfoMap;
-  typedef common::ObSEArray<std::pair<ObPsStmtId, int64_t>, 1024> PsIdClosedTimePairs;
 
   ObPsCache();
   virtual ~ObPsCache();
@@ -122,6 +121,8 @@ public:
   }
 
   int mem_total(int64_t &mem_total) const;
+  int64_t get_managed_used() const { return ATOMIC_LOAD(&managed_used_); }
+  void release_managed_memory(const int64_t size);
 
   inline int64_t get_stmt_id_map_size() { return stmt_id_map_.size(); }
   inline int64_t get_stmt_info_map_size() { return stmt_info_map_.size(); }
@@ -148,17 +149,17 @@ private:
   {
     const double PS_EVICT_PERCENT_ON_PC = 0.5;
     const int64_t MAX_RUNTIME_MEM = ((int64_t)(1) << 40); // 1T
-    int64_t runtime_mem = lib::get_allocator_memory_limit();
+    int64_t runtime_mem = lib::get_memory_budget();
     int64_t mem_limit = -1;
     if (OB_UNLIKELY(0 >= runtime_mem || runtime_mem >= MAX_RUNTIME_MEM)) {
       mem_limit = MAX_RUNTIME_MEM * PS_EVICT_PERCENT_ON_PC;
     }
-    mem_limit = runtime_mem / 100
-                * get_mem_limit_pct() * PS_EVICT_PERCENT_ON_PC;
+    mem_limit = runtime_mem / 200 * get_mem_limit_pct();
     return mem_limit;
   }
 
   int64_t get_mem_high() const { return get_mem_limit()/100 * get_mem_high_pct(); }
+  int64_t get_mem_low() const { return get_mem_limit()/100 * get_mem_low_pct(); }
 
   inline int64_t get_mem_limit_pct() const { return ATOMIC_LOAD(&mem_limit_pct_); }
   inline int64_t get_mem_high_pct() const { return ATOMIC_LOAD(&mem_high_pct_); }
@@ -188,8 +189,20 @@ private:
   lib::ObMutex mutex_;
   lib::MemoryContext mem_context_;
   common::ObIAllocator *inner_allocator_;
+  int64_t managed_used_;
+  int64_t bucket_charge_;
   ObPsCacheEliminationTask evict_task_;
   common::ObTimer evict_timer_;
+
+  static int64_t stmt_id_entry_charge();
+  static int64_t stmt_info_entry_charge();
+  static int64_t stmt_id_bucket_charge(const int64_t bucket_count);
+  static int64_t stmt_info_bucket_charge(const int64_t bucket_count);
+  void add_managed_memory(const int64_t size);
+  void account_stmt_item(ObPsStmtItem &item, const int64_t size);
+  void account_stmt_info(ObPsStmtInfo &info, const int64_t size);
+  void rollback_stmt_item(ObPsStmtItem &item);
+  void rollback_stmt_info(ObPsStmtInfo &info);
 };
 
 } // end namespace sql

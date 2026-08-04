@@ -151,6 +151,7 @@ public:
     : ObOpInput(ctx, spec), local_task_count_(1), total_task_count_(1),
       wf_participator_shared_info_(0) {};
   virtual ~ObWindowFunctionOpInput() = default;
+  virtual int init(ObTaskInfo &task_info) override { UNUSED(task_info); return common::OB_SUCCESS; }
   virtual void reset() override { local_task_count_ = 1; total_task_count_ = 1;}
 
   void set_local_task_count(uint64_t task_count) { local_task_count_ = task_count; }
@@ -770,7 +771,9 @@ public:
 public:
   ObWindowFunctionOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
     : ObOperator(exec_ctx, spec, input),
-      local_allocator_(),
+      local_allocator_(ObModIds::OB_SQL_WINDOW_LOCAL,
+                       OB_MALLOC_NORMAL_BLOCK_SIZE,
+                       ObCtxIds::WORK_AREA),
       stat_(ProcessStatus::PARTIAL),
       input_rows_(),
       wf_list_(),

@@ -44,7 +44,6 @@ const int64_t BATCH_SIZE = 10000;
 const int64_t ROUND[6] = {2,8,32,128,512, 1024};
 int64_t RESULT_ADD[6] = {0,0,0,0,0,0};
 int64_t RESULT_BUILD[6] = {0,0,0,0,0,0};
-static ObSimpleMemLimitGetter getter;
 
 // Route the test's process-wide temporary-file manager through share::g_mp.
 class FakeModuleProvider : public share::ObIModuleProvider
@@ -183,17 +182,10 @@ public:
     ObTimerService::get_instance().destroy();
   }
 
-  int init_memory_limit()
+  int init_memory_budget()
   {
-    int ret = OB_SUCCESS;
-    ObAddr self;
-    self.set_ip_addr("127.0.0.1", 8086);
-    const int64_t ulmt = 128LL << 30;
-    const int64_t llmt = 128LL << 30;
-    ret = getter.set_memory_limit(llmt, ulmt);
-    EXPECT_EQ(OB_SUCCESS, ret);
-    lib::set_memory_limit(128LL << 32);
-    return ret;
+    lib::set_memory_budget(128LL << 32);
+    return OB_SUCCESS;
   }
 
 protected:
@@ -204,7 +196,7 @@ protected:
   share::ObIModuleProvider *old_module_provider_;
 };
 TestCompactChunk::TestCompactChunk()
-  : TestDataFilePrepare(&getter, "TestTmpFile", 2 * 1024 * 1024, 2048),
+  : TestDataFilePrepare("TestTmpFile", 2 * 1024 * 1024, 2048),
     provider_(),
     tmp_file_mgr_(nullptr),
     old_module_provider_(nullptr)
@@ -217,9 +209,7 @@ void TestCompactChunk::SetUp()
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   TestDataFilePrepare::SetUp();
-  ret = getter.set_memory_limit(8LL * 1024 * 1024, 2LL * 1024 * 1024 * 1024);
-  ASSERT_EQ(OB_SUCCESS, ret);
-  ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
+  ret = ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
     ret = OB_SUCCESS;
   } else {
@@ -228,7 +218,7 @@ void TestCompactChunk::SetUp()
   // set observer memory limit
   CHUNK_MGR.set_limit(8LL * 1024 * 1024 * 1024);
 
-  EXPECT_EQ(OB_SUCCESS, init_memory_limit());
+  EXPECT_EQ(OB_SUCCESS, init_memory_budget());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));

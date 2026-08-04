@@ -101,8 +101,7 @@ class ObKVGlobalCache : public lib::ObICacheWasher
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
   static ObKVGlobalCache &get_instance();
-  int init(ObIServerMemLimitGetter *mem_limit_getter,
-           const int64_t bucket_num = DEFAULT_BUCKET_NUM,
+  int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
            const int64_t max_cache_size = DEFAULT_MAX_CACHE_SIZE,
            const int64_t block_size = lib::ACHUNK_SIZE,
            const int64_t cache_wash_interval = 0);
@@ -115,7 +114,6 @@ public:
   int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
   virtual int erase_cache() override;
-  int sync_flush();
   int erase_cache(const char *cache_name);
 
   int get_washable_size(int64_t &washable_size);
@@ -128,6 +126,10 @@ public:
     return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
   }
   OB_INLINE int64_t get_bucket_num() const { return map_.get_bucket_num(); }
+  int64_t get_managed_used() const
+  {
+    return store_.get_store_size() + map_.get_managed_used();
+  }
   HazardDomain& get_hazard_domain() { return hazard_domain_; }
 private:
   template<class Key, class Value> friend class ObIKVCache;
@@ -190,7 +192,7 @@ private:
   static const int64_t MAX_MAP_ONCE_REPLACE_NUM = 100000;  // 100K
   static const int64_t TIMER_SCHEDULE_INTERVAL_US = 800 * 1000;
   static const int64_t WORKING_SET_LIMIT_PERCENTAGE = 5;
-  static const int64_t BASE_SERVER_MEMORY_FACTOR = 1LL << 31; // 2G is the start level
+  static const int64_t BASE_SERVER_MEMORY_FACTOR = 1LL << 30; // 1G is the start level
   static constexpr double MAX_RESERVED_MEMORY_RATIO = 0.3;
   static const int64_t MAX_BUCKET_NUM_LEVEL = 10;
   static const int64_t bucket_num_array_[MAX_BUCKET_NUM_LEVEL];
@@ -232,8 +234,6 @@ private:
   };
 private:
   bool inited_;
-  // mem limit getter
-  ObIServerMemLimitGetter *mem_limit_getter_;
   // map
   ObKVCacheMap map_;
   // store

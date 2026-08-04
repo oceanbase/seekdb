@@ -27,6 +27,7 @@ using common::ObPsStmtId;
 using namespace share::schema;
 namespace sql
 {
+class ObPsCache;
 class ObCallProcedureStmt;
 
 // prepared statement stmt key
@@ -93,6 +94,9 @@ public:
   bool *get_is_expired_evicted_ptr() { return &is_expired_evicted_; }
 
   ObIAllocator *get_external_allocator() { return external_allocator_; }
+  void set_memory_account(ObPsCache *owner, const int64_t accounted_size);
+  void release_memory_account();
+  int64_t get_accounted_size() const { return ATOMIC_LOAD(&accounted_size_); }
 
   TO_STRING_KV(K_(ref_count), K_(ps_key), K_(stmt_id), K_(is_expired_evicted));
 
@@ -105,6 +109,8 @@ private:
   common::ObIAllocator *allocator_;
   // Point to inner_allocator_ in ObPsPlancache, used for releasing the memory of the entire ObPsStmtItem
   common::ObIAllocator *external_allocator_;
+  ObPsCache *memory_owner_;
+  int64_t accounted_size_;
 };
 
 struct ObPsSqlMeta
@@ -195,6 +201,9 @@ public:
     ps_key_ = ps_stmt_item.get_sql_key();
   }
   ObIAllocator *get_external_allocator() { return external_allocator_; }
+  void set_memory_account(ObPsCache *owner, const int64_t accounted_size);
+  void release_memory_account();
+  int64_t get_accounted_size() const { return ATOMIC_LOAD(&accounted_size_); }
   void set_inner_allocator(common::ObIAllocator *allocator)
   {
     allocator_ = allocator;
@@ -255,6 +264,8 @@ private:
   ObFixedArray<ObPCParam *, common::ObIAllocator> raw_params_;
   ObFixedArray<int64_t, common::ObIAllocator> raw_params_idx_;
   stmt::StmtType literal_stmt_type_;
+  ObPsCache *memory_owner_;
+  int64_t accounted_size_;
 };
 
 struct TypeInfo {
@@ -296,7 +307,6 @@ struct TypeInfo {
 };
 
 typedef common::ObSEArray<obmysql::EMySQLFieldType, 48> ParamTypeArray;
-typedef common::ObSEArray<uint8_t, 48> ParamTypeFlagArray;
 typedef common::ObSEArray<TypeInfo, 16> ParamTypeInfoArray;
 typedef common::ObSEArray<bool, 16> ParamCastArray;
 // Each session records only one stmt_id-->ps_session_info mapping for the same statement
@@ -320,10 +330,8 @@ public:
     inner_stmt_id_(0)
   {
     param_types_.set_attr(ObMemAttr("ParamTypes"));
-    param_type_flags_.set_attr(ObMemAttr("ParamTypeFlags"));
     param_type_infos_.set_attr(ObMemAttr("ParamTypesInfo"));
     param_types_.reserve(num_of_params_);
-    param_type_flags_.reserve(num_of_params_);
   }
   //{ param_types_.set_label(common::ObModIds::OB_PS_SESSION_INFO_ARRAY); }
   virtual ~ObPsSessionInfo() {}
@@ -334,10 +342,6 @@ public:
 
   const ParamTypeArray &get_param_types() const { return param_types_; }
   ParamTypeArray &get_param_types() { return param_types_; }
-  const ParamTypeFlagArray &get_param_type_flags() const {
-    return param_type_flags_;
-  }
-  ParamTypeFlagArray &get_param_type_flags() { return param_type_flags_; }
 
   const ParamTypeInfoArray &get_param_type_infos() const { return param_type_infos_; }
   ParamTypeInfoArray &get_param_type_infos() { return param_type_infos_; }
@@ -371,7 +375,6 @@ private:
   int64_t num_of_params_;
   uint64_t ps_stmt_checksum_; //actual is crc32
   ParamTypeArray param_types_;
-  ParamTypeFlagArray param_type_flags_;
   ParamTypeInfoArray param_type_infos_;
   int64_t ref_cnt_;
   ObPsStmtId inner_stmt_id_;

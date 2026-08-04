@@ -16,7 +16,6 @@
 
 #ifdef CTX_ITEM_DEF
 CTX_ITEM_DEF(DEFAULT_CTX_ID)
-CTX_ITEM_DEF(MEMSTORE_CTX_ID)
 CTX_ITEM_DEF(PLAN_CACHE_CTX_ID)
 CTX_ITEM_DEF(WORK_AREA)
 CTX_ITEM_DEF(GLIBC)
@@ -479,6 +478,7 @@ struct ObCtxIds
 #undef CTX_ITEM_DEF
   };
   static constexpr int SCHEMA_SERVICE = DEFAULT_CTX_ID;
+  static constexpr int MEMSTORE_CTX_ID = DEFAULT_CTX_ID;
   static constexpr int EXECUTE_CTX_ID = DEFAULT_CTX_ID;
   static constexpr int TRANS_CTX_MGR_ID = DEFAULT_CTX_ID;
   static constexpr int TX_CALLBACK_CTX_ID = DEFAULT_CTX_ID;

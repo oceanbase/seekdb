@@ -43,7 +43,7 @@ int64_t ObVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfi
   const int64_t LOW_RESOURCE_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
   const int64_t SMALL_VECTOR_LIMIT_PERCENTAGE = 40;
   const int64_t LARGE_VECTOR_LIMIT_PERCENTAGE = 50;
-  const int64_t memory_limit = lib::get_allocator_memory_limit();
+  const int64_t memory_budget = lib::get_memory_budget();
   int64_t configured_limit_percent = 0;
   int64_t percent = 0;
   if (nullptr != runtime_config) {
@@ -53,7 +53,7 @@ int64_t ObVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfi
     percent = configured_limit_percent;
   } else {
     // both is default value, adjust automatically
-    if (memory_limit <= LOW_RESOURCE_MEMORY_LIMIT) {
+    if (memory_budget <= LOW_RESOURCE_MEMORY_LIMIT) {
       percent = SMALL_VECTOR_LIMIT_PERCENTAGE;
     } else {
       percent = LARGE_VECTOR_LIMIT_PERCENTAGE;
@@ -65,17 +65,19 @@ int64_t ObVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfi
 void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
 {
   const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  const int64_t hard_memory_limit = lib::get_hard_memory_limit();
+  const int64_t memory_budget = lib::get_memory_budget();
   int64_t percent = 0;
   common::ObServerConfig *runtime_config = &GCONF;
   max_duration = runtime_config->writing_throttling_maximum_duration;
   percent = get_vector_mem_limit_percentage(runtime_config);
-  resource_limit = hard_memory_limit * percent / 100;
+  resource_limit = memory_budget / 100 * percent;
 }
 
 int64_t ObVectorAllocator::hold()
 {
-  return lib::get_allocator_memory_hold(ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used();
+  return common::is_ob_malloc_backend()
+      ? lib::get_allocator_memory_hold(ObCtxIds::VECTOR_CTX_ID) + get_rb_mem_used()
+      : used();
 }
 
 int64_t ObVectorAllocator::get_rb_mem_used()
@@ -86,7 +88,7 @@ int64_t ObVectorAllocator::get_rb_mem_used()
 
 int64_t ObVectorAllocator::used()
 {
-  return all_used_mem_ + get_rb_mem_used();
+  return ATOMIC_LOAD(&all_used_mem_) + get_rb_mem_used();
 }
 
 void *ObVectorAllocator::alloc(const int64_t size, const ObMemAttr &attr)
@@ -166,7 +168,7 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
     OB_LOG(WARN, "create memory entity failed", K(ret));
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
     SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
@@ -207,7 +209,7 @@ void ObVectorMemContext::free(void *ptr)
   }
 }
 
-int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool)
+int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::VectorThrottleTool *throttle_tool)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context) || OB_ISNULL(throttle_tool)) {
@@ -236,7 +238,7 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
     OB_LOG(WARN, "create memory entity failed", K(ret));
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
     SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;

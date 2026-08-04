@@ -43,7 +43,7 @@ public sealed class WizardConfig
 
     public void ApplyConfigTypePresets()
     {
-        (MemoryLimit, CpuCount) = ConfigType switch
+        (MemoryBudget, CpuCount) = ConfigType switch
         {
             "Server Computer" => ("4G", Math.Max(2, Environment.ProcessorCount / 2)),
             "Dedicated Computer" => ("8G", Math.Max(4, Environment.ProcessorCount)),
@@ -51,7 +51,7 @@ public sealed class WizardConfig
         };
     }
 
-    public string MemoryLimit { get; private set; } = "2G";
+    public string MemoryBudget { get; private set; } = "2G";
 
     public int CpuCount { get; private set; } = 4;
 }

@@ -38,10 +38,6 @@ namespace storage
 {
 using namespace mds;
 
-
-double ObMemstoreFreezer::MDS_TABLE_FREEZE_TRIGGER_PERCENTAGE = 2;
-
-
 ObMemstoreFreezer::ObMemstoreFreezer()
 	: is_inited_(false),
     is_freezing_tx_data_(false),
@@ -226,29 +222,20 @@ bool ObMemstoreFreezer::memstore_remain_memory_is_exhausting()
       LOG_INFO("[MemstoreFreezer] runtime is unavailable", KR(ret));
     } else {
       const int64_t MEMORY_IS_EXHAUSTING_PERCENTAGE = 10;
-
-      // runtime memory condition
-      const int64_t memory_limit = get_allocator_memory_limit();
-      const int64_t memory_remain = get_allocator_memory_remain();
-      const bool memory_exhausting =
-          memory_remain < (memory_limit * MEMORY_IS_EXHAUSTING_PERCENTAGE / 100);
-
-      // memstore memory condition
+      ObMemstoreAllocator &memstore_allocator =
+          share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
       const int64_t memstore_limit = memstore_info_.get_memstore_limit();
-      const int64_t memstore_remain = (memstore_limit - get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID));
-      const bool memstore_memory_exhausting = memstore_remain < (memstore_limit * MEMORY_IS_EXHAUSTING_PERCENTAGE / 100);
-
-      remain_mem_exhausting = memory_exhausting || memstore_memory_exhausting;
+      const int64_t memstore_used = memstore_allocator.get_memstore_quota_used();
+      const int64_t memstore_remain = memstore_limit - memstore_used;
+      remain_mem_exhausting =
+          memstore_remain < (memstore_limit * MEMORY_IS_EXHAUSTING_PERCENTAGE / 100);
 
       if (remain_mem_exhausting && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
         STORAGE_LOG(INFO,
                     "[MemstoreFreezer] memstore remain memory is exhausting",
-                    K(memory_limit),
-                    K(memory_remain),
-                    K(memory_exhausting),
                     K(memstore_limit),
                     K(memstore_remain),
-                    K(memstore_memory_exhausting));
+                    K(memstore_used));
       }
     }
 
@@ -469,22 +456,19 @@ int ObMemstoreFreezer::check_and_freeze_normal_data_(ObMemstoreFreezeCtx &ctx)
 
 static const int64_t ONE_MB = 1024L * 1024L;
 #define STATISTIC_PRINT_MACRO                                               \
-  "Total Memory(MB)", total_memory/ONE_MB,                           \
+  "Memory Budget(MB)", memory_budget/ONE_MB,                         \
   "Frozen TxData Memory(MB)", frozen_tx_data_mem_used/ONE_MB,        \
   "Active TxData Memory(MB)", active_tx_data_mem_used/ONE_MB,        \
   "Freeze TxData Trigger Memory(MB)", self_freeze_trigger_memory/ONE_MB,    \
-  "Total TxDataTable Hold Memory(MB)", tx_data_mem_hold/ONE_MB,             \
   "Total TxDataTable Memory Limit(MB)", tx_data_mem_limit/ONE_MB
 int ObMemstoreFreezer::check_and_freeze_tx_data_()
 {
   int ret = OB_SUCCESS;
   int64_t frozen_tx_data_mem_used = 0;
   int64_t active_tx_data_mem_used = 0;
-  int64_t total_memory = lib::get_allocator_memory_limit();
-  int64_t tx_data_mem_hold = lib::get_allocator_memory_hold(ObCtxIds::TX_DATA_TABLE);
-  int64_t self_freeze_trigger_memory =
-      total_memory * ObTxDataAllocator::TX_DATA_FREEZE_TRIGGER_PERCENTAGE / 100;
-  int64_t tx_data_mem_limit = total_memory * ObTxDataAllocator::TX_DATA_LIMIT_PERCENTAGE / 100;
+  int64_t memory_budget = lib::get_memory_budget();
+  int64_t self_freeze_trigger_memory = lib::get_tx_data_freeze_trigger_memory();
+  int64_t tx_data_mem_limit = lib::get_tx_data_memory_limit();
 
   static int skip_count = 0;
   bool need_re_freeze = false;
@@ -616,8 +600,8 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
 
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000 /*10 seconds*/)) {
     bool trigger_flush = false;
-    int64_t total_memory = lib::get_allocator_memory_limit();
-    int64_t trigger_freeze_memory = total_memory * (ObMemstoreFreezer::MDS_TABLE_FREEZE_TRIGGER_PERCENTAGE / 100);
+    int64_t memory_budget = lib::get_memory_budget();
+    int64_t trigger_freeze_memory = lib::get_mds_freeze_trigger_memory();
     ObMdsAllocator &mds_allocator = share::g_mp->shared_mem_alloc_mgr()->mds_allocator();
     int64_t hold_memory = mds_allocator.hold();
 
@@ -625,8 +609,9 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid trigger freeze memory",
                 K(trigger_freeze_memory),
-                K(total_memory),
-                K(ObMemstoreFreezer::MDS_TABLE_FREEZE_TRIGGER_PERCENTAGE));
+                K(memory_budget),
+                "mds_freeze_memory_percent",
+                lib::MDS_FREEZE_MEMORY_PERCENT);
     } else if (hold_memory >= trigger_freeze_memory) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(post_mds_table_freeze_request_())) {
@@ -634,7 +619,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
       }
 
       LOG_INFO(
-          "[MemstoreFreezer] Trigger Mds Table Self Freeze. ", KR(tmp_ret), K(total_memory), K(trigger_freeze_memory));
+          "[MemstoreFreezer] Trigger Mds Table Self Freeze. ", KR(tmp_ret), K(memory_budget), K(trigger_freeze_memory));
     }
   }
 
@@ -903,9 +888,9 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
                  "mem_upper_limit", upper_limit,
                  "mem_memstore_limit", ctx.mem_memstore_limit_,
                  "memstore_freeze_trigger_limit", ctx.memstore_freeze_trigger_,
-                 "memory_limit", get_allocator_memory_limit(),
-                 "memory_hold", get_allocator_memory_hold(),
-                 "mem_memstore_used", get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID));
+                 "memory_budget", lib::get_memory_budget(),
+                 "memstore_quota_used",
+                 share::g_mp->shared_mem_alloc_mgr()->memstore_allocator().get_memstore_quota_used());
       }
     }
   }
@@ -937,21 +922,21 @@ bool ObMemstoreFreezer::is_replay_pending_log_too_large(const int64_t pending_si
 {
   int ret = OB_SUCCESS;
   bool bool_ret = true;
-  int64_t total_memstore_used = 0;
+  int64_t memstore_quota_used = 0;
   int64_t memstore_limit = 0;
   int64_t unused = 0;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_FAIL(get_memstore_condition(unused,
-                                              total_memstore_used,
+                                              memstore_quota_used,
                                               unused,
                                               memstore_limit,
                                               unused,
                                               false/* not force refresh */))) {
     LOG_WARN("get memstore condition failed", K(ret));
   } else {
-    int64_t memstore_left = memstore_limit - total_memstore_used - REPLAY_RESERVE_MEMSTORE_BYTES;
+    int64_t memstore_left = memstore_limit - memstore_quota_used - REPLAY_RESERVE_MEMSTORE_BYTES;
     memstore_left = (memstore_left > 0 ? memstore_left : 0);
     memstore_left >>= 5; // Estimate the size of memstore based on 32 times expansion.
                          // 16 times for replay and 16 times for replay
@@ -1027,7 +1012,7 @@ int ObMemstoreFreezer::get_memstore_condition_(
     } else {
       memstore_limit = ctx.mem_memstore_limit_;
       active_memstore_used = ctx.active_memstore_used_;
-      total_memstore_used = ctx.total_memstore_used_;
+      total_memstore_used = ctx.memstore_quota_used_;
       memstore_freeze_trigger = ctx.memstore_freeze_trigger_ + ctx.max_cached_memstore_size_;
       freeze_cnt = memstore_info_.freeze_cnt_;
 
@@ -1074,20 +1059,17 @@ int ObMemstoreFreezer::get_memory_usage_(ObMemstoreFreezeCtx &ctx)
 
   int64_t active_memstore_used = 0;
   int64_t freezable_active_memstore_used = 0;
-  int64_t total_memstore_used = 0;
-  int64_t total_memstore_hold = 0;
+  int64_t memstore_quota_used = 0;
   int64_t max_cached_memstore_size = 0;
 
 
   active_memstore_used = memstore_allocator.get_active_memstore_used();
   freezable_active_memstore_used = memstore_allocator.get_freezable_active_memstore_used();
-  total_memstore_used = memstore_allocator.get_total_memstore_used();
+  memstore_quota_used = memstore_allocator.get_memstore_quota_used();
   max_cached_memstore_size = memstore_allocator.get_max_cached_memstore_size();
-  total_memstore_hold = get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID);
   ctx.active_memstore_used_ = active_memstore_used;
   ctx.freezable_active_memstore_used_ = freezable_active_memstore_used;
-  ctx.total_memstore_used_ = total_memstore_used;
-  ctx.total_memstore_hold_ = total_memstore_hold;
+  ctx.memstore_quota_used_ = memstore_quota_used;
   ctx.max_cached_memstore_size_ = max_cached_memstore_size;
 
   return ret;
@@ -1098,8 +1080,7 @@ int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
   int ret = OB_SUCCESS;
   ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
   int64_t active_memstore_used = 0;
-  int64_t total_memstore_used = 0;
-  int64_t total_memstore_hold = 0;
+  int64_t memstore_quota_used = 0;
   int64_t max_cached_memstore_size = 0;
 
   int64_t memstore_allocated_pos = 0;
@@ -1113,22 +1094,18 @@ int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
     LOG_WARN("[MemstoreFreezer] get minor freeze trigger error", KR(ret));
   } else {
     active_memstore_used = memstore_allocator.get_active_memstore_used();
-    total_memstore_used = memstore_allocator.get_total_memstore_used();
-    total_memstore_hold = get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID);
+    memstore_quota_used = memstore_allocator.get_memstore_quota_used();
     max_cached_memstore_size = memstore_allocator.get_max_cached_memstore_size();
     memstore_allocated_pos = memstore_allocator.get_memstore_allocated_pos();
     memstore_frozen_pos = memstore_allocator.get_frozen_memstore_pos();
     memstore_reclaimed_pos = memstore_allocator.get_memstore_reclaimed_pos();
   }
   stat.active_memstore_used_ = active_memstore_used;
-  stat.total_memstore_used_ = total_memstore_used;
-  stat.total_memstore_hold_ = total_memstore_hold;
+  stat.memstore_quota_used_ = memstore_quota_used;
   stat.memstore_freeze_trigger_ = ctx.memstore_freeze_trigger_;
   stat.memstore_limit_ = ctx.mem_memstore_limit_;
-  stat.memory_limit_ = get_allocator_memory_limit();
-  stat.memory_hold_ = get_allocator_memory_hold();
+  stat.memory_budget_ = lib::get_memory_budget();
   stat.max_cached_memstore_size_ = max_cached_memstore_size;
-  stat.memstore_can_get_now_ = ctx.max_mem_memstore_can_get_now_;
 
   stat.memstore_allocated_pos_ = memstore_allocated_pos;
   stat.memstore_frozen_pos_ = memstore_frozen_pos;
@@ -1137,56 +1114,12 @@ int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
   return ret;
 }
 
-static inline bool is_add_overflow(int64_t first, int64_t second, int64_t &res)
-{
-  if (first + second < 0) {
-    return true;
-  } else {
-    res = first + second;
-    return false;
-  }
-}
-
 int ObMemstoreFreezer::get_freeze_trigger_(ObMemstoreFreezeCtx &ctx)
 {
-  static const int64_t MEMSTORE_USABLE_REMAIN_MEMORY_PERCETAGE = 50;
-  static const int64_t MAX_UNUSABLE_MEMORY = 2LL * 1024LL * 1024LL * 1024LL;
-
   int ret = OB_SUCCESS;
-  ObResourceMgrHandle resource_handle;
-
   const int64_t mem_memstore_limit = ctx.mem_memstore_limit_;
-  int64_t memstore_freeze_trigger = 0;
-  int64_t max_mem_memstore_can_get_now = 0;
-  int64_t remaining_memory = get_allocator_memory_remain();
-  int64_t memstore_hold = get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID);
-  int64_t usable_remain_memory = remaining_memory / 100 * MEMSTORE_USABLE_REMAIN_MEMORY_PERCETAGE;
-  if (remaining_memory > MAX_UNUSABLE_MEMORY) {
-    usable_remain_memory = std::max(usable_remain_memory, remaining_memory - MAX_UNUSABLE_MEMORY);
-  }
-
-  bool is_overflow = true;
-  if (is_add_overflow(usable_remain_memory, memstore_hold, max_mem_memstore_can_get_now)) {
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      LOG_WARN("[MemstoreFreezer] max memstore can get is overflow",
-               K(memstore_hold),
-               K(usable_remain_memory),
-               K(remaining_memory));
-    }
-  } else {
-    is_overflow = false;
-  }
-
-  int64_t min = mem_memstore_limit;
-  if (!is_overflow) {
-    min = MIN(mem_memstore_limit, max_mem_memstore_can_get_now);
-  }
-
-  memstore_freeze_trigger = min / 100 * get_freeze_trigger_percentage_();
-
-  // result
-  ctx.max_mem_memstore_can_get_now_ = max_mem_memstore_can_get_now;
-  ctx.memstore_freeze_trigger_ = memstore_freeze_trigger;
+  ctx.memstore_freeze_trigger_ =
+      mem_memstore_limit / 100 * get_freeze_trigger_percentage_();
 
   return ret;
 }
@@ -1217,7 +1150,7 @@ int ObMemstoreFreezer::check_memstore_full_(bool &last_result,
       } else if (OB_FAIL(get_memory_usage_(ctx))) {
         LOG_WARN("[MemstoreFreezer] fail to get mem usage", KR(ret));
       } else {
-        is_out_of_mem = (ctx.total_memstore_hold_ > ctx.mem_memstore_limit_ - reserved_memstore);
+        is_out_of_mem = (ctx.memstore_quota_used_ > ctx.mem_memstore_limit_ - reserved_memstore);
       }
       last_check_timestamp = current_time;
     }
@@ -1299,29 +1232,7 @@ int64_t ObMemstoreFreezer::get_freeze_trigger_percentage_()
 
 int64_t ObMemstoreFreezer::get_memstore_limit_percentage_()
 {
-  int ret = OB_SUCCESS;
-  static const int64_t LOW_RESOURCE_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
-  static const int64_t SMALL_MEMSTORE_LIMIT_PERCENTAGE = 40;
-  static const int64_t LARGE_MEMSTORE_LIMIT_PERCENTAGE = 50;
-
-  const int64_t memory_limit = lib::get_allocator_memory_limit();
-  const int64_t cluster_memstore_limit_percent = GCONF.memstore_limit_percentage;
-  int64_t memstore_limit_percent = 0;
-  int64_t percent = 0;
-  memstore_limit_percent = GCONF._memstore_limit_percentage;
-  if (memstore_limit_percent != 0) {
-    percent = memstore_limit_percent;
-  } else if (cluster_memstore_limit_percent != 0) {
-    percent = cluster_memstore_limit_percent;
-  } else {
-    // both is default value, adjust automatically
-    if (memory_limit <= LOW_RESOURCE_MEMORY_LIMIT) {
-      percent = SMALL_MEMSTORE_LIMIT_PERCENTAGE;
-    } else {
-      percent = LARGE_MEMSTORE_LIMIT_PERCENTAGE;
-    }
-  }
-  return percent;
+  return lib::get_memstore_memory_limit_percentage();
 }
 
 int ObMemstoreFreezer::async_freeze_(const ObMemstoreFreezeArg &arg)
@@ -1444,25 +1355,21 @@ int ObMemstoreFreezer::print_memory_usage(
                           "[MEMORY] "
                           "now=% '15ld "
                           "active_memstore_used=% '15ld "
-                          "total_memstore_used=% '15ld "
-                          "total_memstore_hold=% '15ld "
+                          "memstore_quota_used=% '15ld "
                           "memstore_freeze_trigger_limit=% '15ld "
                           "memstore_limit=% '15ld "
-                          "memory_limit=% '15ld "
-                          "memory_hold=% '15ld "
-                          "max_mem_memstore_can_get_now=% '15ld "
+                          "memory_budget=% '15ld "
+                          "max_cached_memstore_size=% '15ld "
                           "memstore_alloc_pos=% '15ld "
                           "memstore_frozen_pos=% '15ld "
                           "memstore_reclaimed_pos=% '15ld\n",
                           ObClockGenerator::getClock(),
                           stat.active_memstore_used_,
-                          stat.total_memstore_used_,
-                          stat.total_memstore_hold_,
+                          stat.memstore_quota_used_,
                           stat.memstore_freeze_trigger_,
                           stat.memstore_limit_,
-                          stat.memory_limit_,
-                          stat.memory_hold_,
-                          stat.memstore_can_get_now_,
+                          stat.memory_budget_,
+                          stat.max_cached_memstore_size_,
                           stat.memstore_allocated_pos_,
                           stat.memstore_frozen_pos_,
                           stat.memstore_reclaimed_pos_);
@@ -1527,10 +1434,9 @@ int ObMemstoreFreezer::do_minor_freeze_data_(const ObMemstoreFreezeCtx &ctx)
            "active_memstore_used_", ctx.freezable_active_memstore_used_,
            "memstore_freeze_trigger", ctx.memstore_freeze_trigger_,
            "max_cached_memstore_size", ctx.max_cached_memstore_size_,
-           "memory_remain", get_allocator_memory_remain(),
-           "memory_limit", get_allocator_memory_limit(),
-           "memory_hold", get_allocator_memory_hold(),
-           "mem_memstore_used", get_allocator_memory_hold(ObCtxIds::MEMSTORE_CTX_ID));
+           "memstore_quota_used", ctx.memstore_quota_used_,
+           "memstore_limit", ctx.mem_memstore_limit_,
+           "memory_budget", lib::get_memory_budget());
 
   if (OB_FAIL(set_freezing_())) {
   } else {
@@ -1614,13 +1520,12 @@ void ObMemstoreFreezer::log_frozen_memstore_info_if_need_(const ObMemstoreFreeze
 {
   int ret = OB_SUCCESS;
   ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
-  if (ctx.total_memstore_hold_ > ctx.memstore_freeze_trigger_ ||
+  if (ctx.memstore_quota_used_ > ctx.memstore_freeze_trigger_ ||
       ctx.freezable_active_memstore_used_ > ctx.memstore_freeze_trigger_) {
     // There is an unreleased memstable
     LOG_INFO("[MemstoreFreezer] runtime has inactive memstores",
              K(ctx.freezable_active_memstore_used_),
-             K(ctx.total_memstore_used_),
-             K(ctx.total_memstore_hold_),
+             K(ctx.memstore_quota_used_),
              "memstore_freeze_trigger_limit_",
              ctx.memstore_freeze_trigger_);
 
@@ -1804,23 +1709,6 @@ void ObMemstoreFreezerStatHistory::reset()
 }
 }
 
-namespace oceanbase
-{
-namespace storage
-{
-// share/throttle hook registration(avoids share->storage dependency, predecessor ob_srs_service.cpp)
-static struct ObMemstoreLimitPctFnRegister
-{
-  ObMemstoreLimitPctFnRegister()
-  {
-    share::g_memstore_limit_percentage_fn = []() -> int64_t {
-      return share::g_mp->memstore_freezer()->get_memstore_limit_percentage();
-    };
-  }
-} g_memstore_limit_pct_fn_register;
-}  // namespace storage
-}  // namespace oceanbase
-
 // ===== definition moved from storage/allocator/ob_memstore_allocator.cpp(Memtable/Freezer real user) =====
 namespace oceanbase
 {
@@ -1938,19 +1826,14 @@ void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
   const int64_t MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t MEMSTORE_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  int64_t total_memory = lib::get_allocator_memory_limit();
-
-  // Use runtime config to init throttle config
-  omt::ObRuntimeConfigGuard runtime_config(RUNTIME_CONF());
-  if (runtime_config.is_valid()) {
-    trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
-    max_duration = runtime_config->writing_throttling_maximum_duration;
-  } else {
+  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
+  max_duration = GCONF.writing_throttling_maximum_duration;
+  if (trigger_percentage <= 0 || max_duration <= 0) {
     COMMON_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
     trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
     max_duration = MEMSTORE_THROTTLE_MAX_DURATION;
   }
-  resource_limit = total_memory * share::g_mp->memstore_freezer()->get_memstore_limit_percentage() / 100;
+  resource_limit = lib::get_memstore_memory_limit();
 }
 
 
@@ -1967,27 +1850,18 @@ void ObSharedMemAllocMgr::update_throttle_config()
 {
 
 
-  int64_t total_memory = lib::get_allocator_memory_limit();
-  int64_t hard_memory_limit = lib::get_hard_memory_limit();
+  const int64_t memory_budget = lib::get_memory_budget();
   common::ObServerConfig *runtime_config = &GCONF;
   {
-    int64_t share_mem_limit_percentage = runtime_config->_tx_share_memory_limit_percentage;
-    int64_t memstore_limit_percentage = share::g_mp->memstore_freezer()->get_memstore_limit_percentage();
-    int64_t tx_data_limit_percentage = runtime_config->_tx_data_memory_limit_percentage;
-    int64_t mds_limit_percentage = runtime_config->_mds_memory_limit_percentage;
     int64_t trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
     int64_t max_duration = runtime_config->writing_throttling_maximum_duration;
-    int64_t vector_limit_percentage = ObVectorAllocator::get_vector_mem_limit_percentage(runtime_config);
-    if (0 == share_mem_limit_percentage) {
-      // 0 means use (max(memstore_limit, vector_limit + 5) + 10)
-      share_mem_limit_percentage = MAX(memstore_limit_percentage, vector_limit_percentage + 5) + 10;
-    }
-
-    int64_t share_mem_limit = hard_memory_limit / 100 * share_mem_limit_percentage;
-    int64_t memstore_limit = total_memory / 100 * memstore_limit_percentage;
-    int64_t tx_data_limit = total_memory / 100 * tx_data_limit_percentage;
-    int64_t mds_limit = total_memory / 100 * mds_limit_percentage;
-    int64_t vector_limit = hard_memory_limit / 100 * vector_limit_percentage;
+    int64_t vector_limit_percentage =
+        ObVectorAllocator::get_vector_mem_limit_percentage(runtime_config);
+    const int64_t share_mem_limit = lib::get_tx_share_memory_limit();
+    const int64_t memstore_limit = lib::get_memstore_memory_limit();
+    const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
+    const int64_t mds_limit = lib::get_mds_memory_limit();
+    const int64_t vector_limit = memory_budget / 100 * vector_limit_percentage;
 
     bool share_config_changed = false;
     (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(
@@ -2006,21 +1880,17 @@ void ObSharedMemAllocMgr::update_throttle_config()
         mds_limit, trigger_percentage, max_duration, mds_config_changed);
 
     bool vector_config_changed = false;
-    (void)share_resource_throttle_tool_.update_throttle_config<ObVectorAllocator>(
+    (void)vector_throttle_tool_.update_throttle_config<ObVectorAllocator>(
         vector_limit, trigger_percentage, max_duration, vector_config_changed);
 
     if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||
         vector_config_changed) {
       SHARE_LOG(INFO,
                 "[Throttle] Update Config",
-                K(total_memory),
-                K(share_mem_limit_percentage),
+                K(memory_budget),
                 K(share_mem_limit),
-                K(memstore_limit_percentage),
                 K(memstore_limit),
-                K(tx_data_limit_percentage),
                 K(tx_data_limit),
-                K(mds_limit_percentage),
                 K(mds_limit),
                 K(trigger_percentage),
                 K(max_duration),

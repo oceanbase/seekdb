@@ -15,7 +15,7 @@ int benchmark_initialize(void)
 {
   OB_TSC_TIMESTAMP.init();
   init_malloc_hook();
-  oceanbase::lib::set_memory_limit(1L<<40);
+  oceanbase::lib::set_memory_budget(1L<<40);
 #if defined(VSLICE_MALLOC)
   g_alloc.init(8L<<10, default_blk_alloc,
                ObMemAttr("test", ObCtxIds::DEFAULT_CTX_ID));

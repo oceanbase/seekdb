@@ -73,17 +73,16 @@ adb shell chmod +x /data/local/tmp/seekdb
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
 adb shell "/data/local/tmp/seekdb --nodaemon \
   --base-dir /data/local/tmp/seekdb_data \
-  --parameter memory_limit=4G \
+  --parameter memory_budget=4G \
   --parameter datafile_size=2G \
   --parameter datafile_maxsize=4G \
   --parameter log_disk_size=2G \
   --log-level INFO"
 ```
 
-The `memory_limit` and related parameters are required. Without them, seekdb
-auto-calculates resource requirements based on system memory, which can exceed
-what the Android kernel allows and cause `OB_RESOURCE_UNIT_VALUE_INVALID` at
-startup.
+Explicit resource values are recommended on Android. `memory_budget` defaults
+to 1 GiB when omitted; size it together with the data and log files for the
+available device resources.
 
 ### Forward ports
 

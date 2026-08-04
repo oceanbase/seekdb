@@ -1478,7 +1478,7 @@ int main(int argc, char **argv)
 {
   int ret = OB_SUCCESS;
   LOG_INFO("io scheduler V2 test begin");
-  set_memory_limit(20LL * 1024 * 1024 * 1024);
+  set_memory_budget(20LL * 1024 * 1024 * 1024);
   oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
   oceanbase::common::ObLogger::get_logger().set_file_name(LOG_FILE_PATH, true);
   testing::InitGoogleTest(&argc, argv);

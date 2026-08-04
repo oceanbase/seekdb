@@ -40,11 +40,9 @@ OB_SERIALIZE_MEMBER(ObMemstoreFreezeArg,
 ObMemstoreFreezeCtx::ObMemstoreFreezeCtx()
   : mem_memstore_limit_(0),
     memstore_freeze_trigger_(0),
-    max_mem_memstore_can_get_now_(0),
     active_memstore_used_(0),
     freezable_active_memstore_used_(0),
-    total_memstore_used_(0),
-    total_memstore_hold_(0),
+    memstore_quota_used_(0),
     max_cached_memstore_size_(0)
 {
 }
@@ -53,23 +51,18 @@ void ObMemstoreFreezeCtx::reset()
 {
   mem_memstore_limit_ = 0;
   memstore_freeze_trigger_ = 0;
-  max_mem_memstore_can_get_now_ = 0;
   active_memstore_used_ = 0;
   freezable_active_memstore_used_ = 0;
-  total_memstore_used_ = 0;
-  total_memstore_hold_ = 0;
+  memstore_quota_used_ = 0;
   max_cached_memstore_size_ = 0;
 }
 
 ObMemstoreStatistic::ObMemstoreStatistic()
   : active_memstore_used_(0),
-    total_memstore_used_(0),
-    total_memstore_hold_(0),
+    memstore_quota_used_(0),
     memstore_freeze_trigger_(0),
     memstore_limit_(0),
-    memory_limit_(0),
-    memory_hold_(0),
-    memstore_can_get_now_(0),
+    memory_budget_(0),
     max_cached_memstore_size_(0),
     memstore_allocated_pos_(0),
     memstore_frozen_pos_(0),
@@ -79,13 +72,10 @@ ObMemstoreStatistic::ObMemstoreStatistic()
 void ObMemstoreStatistic::reset()
 {
   active_memstore_used_ = 0;
-  total_memstore_used_ = 0;
-  total_memstore_hold_ = 0;
+  memstore_quota_used_ = 0;
   memstore_freeze_trigger_ = 0;
   memstore_limit_ = 0;
-  memory_limit_ = 0;
-  memory_hold_ = 0;
-  memstore_can_get_now_ = 0;
+  memory_budget_ = 0;
   max_cached_memstore_size_ = 0;
   memstore_allocated_pos_ = 0;
   memstore_frozen_pos_ = 0;

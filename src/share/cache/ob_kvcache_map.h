@@ -67,6 +67,14 @@ public:
   int get_batch_data_block_cache_key(const int bucket_count, ObIArray<blocksstable::ObMicroBlockCacheKey> &keys);
   OB_INLINE int64_t get_bucket_num() const { return bucket_num_; }
   OB_INLINE ObLfFIFOAllocator *get_node_allocator() { return &node_allocator_; }
+  int64_t get_managed_used() const
+  {
+    const int64_t bucket_group_count =
+        bucket_size_ > 0 ? (bucket_num_ + bucket_size_ - 1) / bucket_size_ : 0;
+    return node_allocator_.allocated()
+        + bucket_num_ * static_cast<int64_t>(sizeof(Node *))
+        + bucket_group_count * static_cast<int64_t>(sizeof(Bucket));
+  }
   void print_hazard_version_info();
 private:
   friend class ObKVCacheIterator;

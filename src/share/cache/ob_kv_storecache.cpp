@@ -117,7 +117,6 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
 
 ObKVGlobalCache::ObKVGlobalCache()
     : inited_(false),
-      mem_limit_getter_(nullptr),
       cache_num_(0),
       mutex_(common::ObLatchIds::GLOBAL_KV_CACHE_CONFIG_LOCK),
       map_clean_pos_(0),
@@ -146,8 +145,8 @@ ObKVGlobalCache &ObKVGlobalCache::get_instance()
 int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
 {
   INIT_SUCC(ret);
-  int64_t memory_limit = GMEMCONF.get_server_memory_limit();
-  int64_t server_memory_factor = upper_align(memory_limit, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
+  int64_t memory_budget = GMEMCONF.get_server_memory_budget();
+  int64_t server_memory_factor = upper_align(memory_budget, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
   int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
   bucket_num = -1;
   for (int64_t bucket_level = MAX_BUCKET_NUM_LEVEL -1; bucket_level >= 0; bucket_level--) {
@@ -162,7 +161,7 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
   }
   if (-1 == bucket_num) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_limit), K(server_memory_factor), K(reserved_memory));
+    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_budget), K(server_memory_factor), K(reserved_memory));
   } else {
     share::ObTaskController::get().allow_next_syslog();
     COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num), K(server_memory_factor), K(reserved_memory));
@@ -172,7 +171,6 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
 }
 
 int ObKVGlobalCache::init(
-    ObIServerMemLimitGetter *mem_limit_getter,
     const int64_t bucket_num,
     const int64_t max_cache_size,
     const int64_t block_size,
@@ -183,23 +181,20 @@ int ObKVGlobalCache::init(
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVGlobalCache has been inited, ", K(ret));
-  } else if (OB_ISNULL(mem_limit_getter) ||
-             bucket_num <= 0 ||
+  } else if (bucket_num <= 0 ||
              max_cache_size <= 0 ||
              block_size <= 0 ||
              cache_wash_interval < 0) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(mem_limit_getter),
-               K(bucket_num), K(max_cache_size), K(block_size), K(cache_wash_interval));
+    COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(bucket_num),
+               K(max_cache_size), K(block_size), K(cache_wash_interval));
   } else if (OB_FAIL(hazard_domain_.init(ObKVCacheStore::compute_mb_handle_num(max_cache_size, block_size)))) {
     COMMON_LOG(WARN, "Fail to init hazard domain, ", K(ret));
-  } else if (OB_FAIL(store_.init(max_cache_size,
-                                 block_size,
-                                 *mem_limit_getter))) {
+  } else if (OB_FAIL(store_.init(max_cache_size, block_size))) {
     COMMON_LOG(WARN, "Fail to init store, ", K(ret));
   } else if (OB_FAIL(map_.init(hash::cal_next_prime(bucket_num), &store_))) {
     COMMON_LOG(WARN, "Fail to init map, ", K(ret), K(bucket_num));
-  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, *mem_limit_getter, map_.get_node_allocator()))) {
+  } else if (OB_FAIL(insts_.init(MAX_CACHE_NUM, configs_, map_.get_node_allocator()))) {
     COMMON_LOG(WARN, "Fail to init insts, ", K(ret));
   } else if (OB_FAIL(wash_timer_.init("KVCacheWash", ObMemAttr("KVCacheWash")))) {
     COMMON_LOG(WARN, "Fail to init wash timer, ", K(ret));
@@ -211,7 +206,6 @@ int ObKVGlobalCache::init(
   } else {
     cache_num_ = 0;
     stopped_ = false;
-    mem_limit_getter_ = mem_limit_getter;
     map_once_clean_num_ = bucket_num / MAP_ONCE_CLEAN_RATIO;
     if (map_once_clean_num_ > MAX_MAP_ONCE_CLEAN_NUM) {
       map_once_clean_num_ = MAX(MAX_MAP_ONCE_CLEAN_NUM, map_once_clean_num_/EXPAND_MAP_ONCE_CLEAN_RATIO);
@@ -265,7 +259,6 @@ void ObKVGlobalCache::destroy()
       configs_[i].reset();
     }
     cache_num_ = 0;
-    mem_limit_getter_ = nullptr;
 
     inited_ = false;
     COMMON_LOG(INFO, "The ObKVGlobalCache has been destroyed!");
@@ -429,34 +422,6 @@ int ObKVGlobalCache::erase_cache()
       COMMON_LOG(WARN, "fail to erase cache, ", K(ret));
     }
   }
-  return ret;
-}
-
-int ObKVGlobalCache::sync_flush()
-{
-  int ret = OB_SUCCESS;
-
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    COMMON_LOG(WARN, "The global kvcache has not been inited", K(ret));
-  } else if (OB_ISNULL(mem_limit_getter_)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Unexpected null mem limit getter", K(ret), KP(mem_limit_getter_));
-  } else if (mem_limit_getter_->has_memory_limit()) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "The server memory limit is still active", K(ret));
-  } else if (OB_FAIL(insts_.mark_all_delete())) {
-    COMMON_LOG(WARN, "Fail to mark cache instances for deletion", K(ret));
-  } else if (OB_FAIL(store_.flush_washable_mbs(true /* force flush */))) {
-    COMMON_LOG(WARN, "Fail to flush cache blocks from store", K(ret));
-  } else if (OB_FAIL(map_.erase_all())) {
-    COMMON_LOG(WARN, "Fail to retire cache node from map", K(ret));
-  } else if (OB_FAIL(insts_.erase_all())) {
-    COMMON_LOG(WARN, "Fail to erase cache instances", K(ret));
-  }
-
-  COMMON_LOG(INFO, "flush cache details", K(ret));
-
   return ret;
 }
 

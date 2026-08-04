@@ -163,7 +163,7 @@ AChunk *chunk(void *ptr)
 TEST_F(TestObjectMgr, TestSubObjectMgr)
 {
   AChunkMgr::instance().set_max_chunk_cache_size(0);
-  oceanbase::lib::set_memory_limit(20LL<<30);
+  oceanbase::lib::set_memory_budget(20LL<<30);
   int fd = open("alloc_flow_records", O_RDONLY, S_IRWXU | S_IRGRP);
   abort_unless(fd > 0);
   struct stat fileInfo;
