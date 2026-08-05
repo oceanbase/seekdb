@@ -45,7 +45,7 @@ int ObMySQLLockTableExecutor::execute(ObExecContext &ctx,
   bool is_rollback = false;
   ObTxParam tx_param;
   int64_t timeout_us = THIS_WORKER.get_timeout_ts() - ObTimeUtility::current_time();
-  query::ObSessionInnerSql session_io(sess, ctx.get_sql_proxy());
+  query::ObSessionInnerSql session_io(sess);
   const data_plane::ObSessionLockOwner owner(session_id, session_create_ts);
   OZ (ObLockContext::valid_execute_context(ctx));
 

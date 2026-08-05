@@ -191,7 +191,7 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
           MYSQL_PROCESSOR(ObMPStmtExecute, gctx_);
           MYSQL_PROCESSOR(ObMPStmtFetch, gctx_);
           MYSQL_PROCESSOR(ObMPStmtReset, gctx_);
-          MYSQL_PROCESSOR(ObMPStmtSendLongData, gctx_, *vt_iter_creator_);
+          MYSQL_PROCESSOR(ObMPStmtSendLongData, gctx_);
           MYSQL_PROCESSOR(ObMPResetConnection, gctx_);
           MYSQL_PROCESSOR(ObMPAuthResponse, gctx_);
           MYSQL_PROCESSOR(ObMPSetOption, gctx_);
@@ -347,7 +347,7 @@ int ObSrvMySQLXlator::get_mp_connect_processor(ObReqProcessor *&ret_proc)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate memory for ObMPConnect", K(ret));
   } else  {
-    proc = new(buf) ObMPConnect(gctx_, *vt_iter_creator_);
+    proc = new(buf) ObMPConnect(gctx_);
     if (OB_FAIL(proc->init())) {
       LOG_ERROR("init ObMPConnect fail", K(ret));
       worker_allocator_delete(proc);

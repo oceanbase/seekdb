@@ -2657,12 +2657,11 @@ int ObDDLResolver::resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
       LOG_USER_ERROR(OB_ERR_SRID_WRONG_USAGE);
     } else {
       int64_t srid = srid_node.children_[0]->value_;
-      if (OB_ISNULL(session_info_)
-          || OB_ISNULL(session_info_->get_srs_provider())) {
+      if (OB_ISNULL(params_.srs_provider_)) {
         ret = OB_NOT_INIT;
         SQL_RESV_LOG(WARN, "SRS provider is not configured", K(ret));
       } else if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(
-                     *session_info_->get_srs_provider(), srid))) {
+                     *params_.srs_provider_, srid))) {
         SQL_RESV_LOG(WARN, "invalid srid", K(ret), K(srid));
       } else {
         column.set_srid(srid);
@@ -3911,6 +3910,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        ObIArray<ObString> &gen_col_expr_arr,
                                        const ObSQLMode sql_mode,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        share::schema::ObColumnSchemaV2 *hidden_col)
 {
   int ret = OB_SUCCESS;
@@ -3931,7 +3932,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
     } else if (OB_FAIL(check_default_value(default_value, tz_info_wrap, allocator,
                                           table_schema, dummy_array,column, gen_col_expr_arr, sql_mode,
-                                          &empty_session, schema_checker))) {
+                                          &empty_session, schema_checker,
+                                          srs_provider, lob_read_service))) {
       LOG_WARN("check default value failed", K(ret));
     }
     exec_ctx.set_physical_plan_ctx(NULL);
@@ -3949,6 +3951,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const ObSQLMode sql_mode,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        bool coltype_not_defined)
 {
   int ret = OB_SUCCESS;
@@ -3993,6 +3997,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     params.session_info_ = session_info;
     params.param_list_ = &empty_param_list;
     params.schema_checker_ = schema_checker;
+    params.srs_provider_ = srs_provider;
+    params.lob_read_service_ = lob_read_service;
     common::ObObj tmp_default_value;
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
@@ -4004,6 +4010,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
+    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
     ObAccuracy res_acc = accuracy;
     cast_ctx.res_accuracy_ = &res_acc;
     bool transform_happened = false;
@@ -4039,7 +4046,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
-    } else if (OB_FAIL(obj_collation_check(is_strict, collation_type,  *const_cast<ObObj*>(tmp_res_obj)))) {
+    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                           *const_cast<ObObj*>(tmp_res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), K(tmp_dest_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(tmp_res_obj));
@@ -4081,6 +4089,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const ObSQLMode sql_mode,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        bool coltype_not_defined)
 {
   int ret = OB_SUCCESS;
@@ -4090,7 +4100,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   }
   OZ (check_default_value(default_value, tz_info_wrap, allocator, table_schema,
                           resolved_col_ptrs, column, gen_col_expr_arr, sql_mode,
-                          session_info, schema_checker, coltype_not_defined));
+                          session_info, schema_checker, srs_provider,
+                          lob_read_service, coltype_not_defined));
   return ret;
 }
 
@@ -4163,9 +4174,8 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       } else if (OB_ISNULL(lob_read_service = ::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
         ret = OB_NOT_INIT;
         LOG_WARN("LOB read service is not installed", K(ret));
-      } else if (FALSE_IT(
-                     empty_session.set_lob_read_service(lob_read_service))) {
       } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
+      } else if (FALSE_IT(exec_ctx.set_lob_read_service(lob_read_service))) {
       } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
@@ -4245,11 +4255,14 @@ int ObDDLResolver::check_udt_default_value(ObObj &default_value,
                                            const ObSQLMode sql_mode,
                                            ObSQLSessionInfo *session_info,
                                            ObSchemaChecker *schema_checker,
+                                           common::ObISrsProvider *srs_provider,
+                                           common::ObILobReadService *lob_read_service,
                                            ObDDLArg &ddl_arg)
 {
   ObObj extend_result;
   return get_udt_column_default_values(default_value, tz_info_wrap, allocator,
                                        column, sql_mode, session_info, schema_checker,
+                                       srs_provider, lob_read_service,
                                        extend_result, ddl_arg);
 }
 
@@ -4380,6 +4393,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
                                                  const ObSQLMode sql_mode,
                                                  ObSQLSessionInfo *session_info,
                                                  ObSchemaChecker *schema_checker,
+                                                 common::ObISrsProvider *srs_provider,
+                                                 common::ObILobReadService *lob_read_service,
                                                  ObObj &extend_result,
                                                  obcall::ObDDLArg &ddl_arg)
 {
@@ -4412,6 +4427,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     params.session_info_ = session_info;
     params.param_list_ = &empty_param_list;
     params.schema_checker_ = schema_checker;
+    params.srs_provider_ = srs_provider;
+    params.lob_read_service_ = lob_read_service;
     common::ObObj tmp_default_value;
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
@@ -4423,6 +4440,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
+    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
 
     if (OB_FAIL(input_default_value.get_string(expr_str))) {
       LOG_WARN("get expr string from default value failed", K(ret), K(input_default_value));
@@ -4448,7 +4466,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
-    } else if (OB_FAIL(obj_collation_check(is_strict, collation_type,  *const_cast<ObObj*>(tmp_res_obj)))) {
+    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                           *const_cast<ObObj*>(tmp_res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), K(tmp_dest_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(tmp_res_obj));

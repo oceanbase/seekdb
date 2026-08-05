@@ -117,6 +117,7 @@ public:
       factory_(&allocator),
       filter_(filter),
       external_executor_(nullptr),
+      original_filter_(nullptr),
       combined_node_(nullptr),
       combined_executor_(nullptr),
       attached_(false)
@@ -161,13 +162,27 @@ public:
     } else if (OB_ISNULL(external_executor_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("external filter runtime is not initialized", K(ret));
+    } else if (root_filter == external_executor_) {
+      // The previous attachment had no query filter. Reusing the scan must not
+      // combine the external executor with itself.
     } else if (nullptr == root_filter) {
       root_filter = external_executor_;
     } else {
+      // A scan can reuse its filter root after detach(). In that case the
+      // caller still owns the wrapper pointer, while detach() has cleared its
+      // children. Recover the original query filter before rebuilding it.
+      ObPushdownFilterExecutor *query_filter =
+          root_filter == combined_executor_ ? original_filter_ : root_filter;
+      if (OB_ISNULL(query_filter)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("original pushdown filter is null", K(ret), KP(root_filter),
+                 KP_(combined_executor));
+      }
       if (nullptr == combined_node_ &&
-          OB_FAIL(factory_.alloc(AND_FILTER, 2, combined_node_))) {
+          OB_SUCC(ret) && OB_FAIL(factory_.alloc(AND_FILTER, 2, combined_node_))) {
         LOG_WARN("failed to allocate combined filter node", K(ret));
       } else if (nullptr == combined_executor_ &&
+                 OB_SUCC(ret) &&
                  OB_FAIL(factory_.alloc(
                      AND_FILTER_EXECUTOR,
                      2,
@@ -175,8 +190,9 @@ public:
                      combined_executor_,
                      op_))) {
         LOG_WARN("failed to allocate combined filter executor", K(ret));
-      } else {
-        combined_executor_->set_child(0, root_filter);
+      } else if (OB_SUCC(ret)) {
+        original_filter_ = query_filter;
+        combined_executor_->set_child(0, query_filter);
         combined_executor_->set_child(1, external_executor_);
         root_filter = combined_executor_;
       }
@@ -205,6 +221,7 @@ private:
   ObPushdownFilterFactory factory_;
   ObIExternalPushdownFilter &filter_;
   ObExternalFilterExecutor *external_executor_;
+  ObPushdownFilterExecutor *original_filter_;
   ObPushdownFilterNode *combined_node_;
   ObPushdownFilterExecutor *combined_executor_;
   bool attached_;
@@ -2966,7 +2983,7 @@ ObPushdownOperator::ObPushdownOperator(
     ObEvalCtx &eval_ctx,
     const ObPushdownExprSpec &expr_spec)
   : pd_storage_filters_(nullptr),
-    pd_aggregate_program_(nullptr),
+    pd_aggregate_plan_(nullptr),
     eval_ctx_(eval_ctx),
     expr_spec_(expr_spec)
 {
@@ -2974,8 +2991,7 @@ ObPushdownOperator::ObPushdownOperator(
 
 ObPushdownOperator::~ObPushdownOperator()
 {
-  destroy_pushdown_aggregate_program(
-      eval_ctx_.exec_ctx_.get_allocator(), pd_aggregate_program_);
+  destroy_pushdown_aggregate_plan(pd_aggregate_plan_);
 }
 
 int ObPushdownOperator::init_pushdown_storage_filter()
@@ -2998,21 +3014,21 @@ int ObPushdownOperator::init_pushdown_storage_filter()
       && expr_spec_.pd_storage_flag_.is_aggregate_pushdown()
       && !expr_spec_.pd_storage_flag_.is_group_by_pushdown()
       && !expr_spec_.pd_storage_aggregate_output_.empty()) {
-    int agg_ret = create_pushdown_aggregate_program(
+    int agg_ret = create_pushdown_aggregate_plan(
         eval_ctx_,
         expr_spec_.pd_storage_aggregate_output_,
         false,
         eval_ctx_.exec_ctx_.get_allocator(),
-        pd_aggregate_program_);
+        pd_aggregate_plan_);
     if (OB_NOT_SUPPORTED == agg_ret) {
       // Keep the legacy aggregate path as the capability fallback.
       agg_ret = OB_SUCCESS;
     } else if (OB_SUCCESS != agg_ret) {
       ret = agg_ret;
-      LOG_WARN("failed to initialize pushdown aggregate program", K(ret));
+      LOG_WARN("failed to initialize pushdown aggregate plan", K(ret));
     } else {
-      LOG_DEBUG("initialized query-owned pushdown aggregate program",
-                KP(pd_aggregate_program_));
+      LOG_DEBUG("initialized query-owned pushdown aggregate plan",
+                KP(pd_aggregate_plan_));
     }
   }
   return ret;

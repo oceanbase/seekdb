@@ -63,6 +63,7 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "storage/access/ob_empty_read_bucket.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -1369,8 +1370,6 @@ int ObServer::obs_construct_modules()
         &local_management_service_);
     ::oceanbase::share::bind_server_service<observer::ObService>(&ob_service_);
     ::oceanbase::share::bind_server_service<sql::ObSQLSessionMgr>(&session_mgr_);
-    ::oceanbase::share::bind_server_service<sql::ObSql>(&sql_engine_);
-    ::oceanbase::share::bind_server_service<pl::ObPL>(&pl_engine_);
     ::oceanbase::share::bind_server_service<omt::ObServerRuntimeController>(
         &server_runtime_controller_);
     ::oceanbase::share::bind_server_service<observer::ObVTIterCreator>(
@@ -1561,17 +1560,42 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
+      &ObOptStatManager::get_instance(),
+      &vt_data_service_,
+      self_addr_,
+      *mods_plan_cache_,
+      *mods_ps_cache_,
+      pl_engine_,
+      *this,
+      *this,
+      local_management_service_,
+      ob_service_,
+      *this,
+      *this,
+      *this,
+      *mods_srs_service_,
+      *mods_lob_manager_))) {
+    SERVER_LOG(WARN, "sql_engine_ init failed", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(internal_table_refresh_adapter_.init(
       timezone_mgr_, *mods_srs_service_))) {
     SERVER_LOG(WARN, "internal_table_refresh_adapter_ init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(mods_resource_limit_calculator_->init(
-      mods_ls_service_, mods_storage_meta_mem_mgr_->get_t3m_limit_calculator()))) {
+      mods_storage_meta_mem_mgr_->get_t3m_limit_calculator()))) {
     SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(pl_engine_.init(
+      sql_proxy_, *this, *mods_resource_limit_calculator_))) {
+    SERVER_LOG(WARN, "pl_engine_ init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::server_module_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(common::ObRbMemMgr::server_module_init(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(
+      mods_plugin_vector_index_service_, mods_lob_manager_))) {
+    SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::server_module_init(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObSystemPackageLoadService::server_module_init(mods_system_package_load_service_))) { SERVER_LOG(WARN, "mods_system_package_load_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
@@ -1593,18 +1617,9 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "ls_runtime_adapter_ init failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    session_mgr_.bind_runtime_services(
-        *mods_plan_cache_,
+    session_mgr_.bind_lifecycle_services(
         *mods_ps_cache_,
-        *this,
-        *this,
-        local_management_service_,
-        ob_service_,
-        *this,
-        *this,
-        *this,
-        *mods_srs_service_,
-        *mods_lob_manager_,
+        debug_sync_broadcaster_,
         conn_res_mgr_);
   }
   return ret;
@@ -1816,8 +1831,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(rootserver::ObLocalManagementService);
   UNBIND_SERVICE(observer::ObService);
   UNBIND_SERVICE(sql::ObSQLSessionMgr);
-  UNBIND_SERVICE(sql::ObSql);
-  UNBIND_SERVICE(pl::ObPL);
   UNBIND_SERVICE(omt::ObServerRuntimeController);
   UNBIND_SERVICE(observer::ObVTIterCreator);
   UNBIND_SERVICE(observer::ObSrvNetworkFrame);

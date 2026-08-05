@@ -13709,7 +13709,10 @@ int ObDatumCast::cast_obj(ObEvalCtx &ctx, ObIAllocator &alloc, const ObObjType &
     } else {
       ObCastCtx cast_ctx(&alloc, &dtc_params, get_cur_time(phy_plan_ctx), def_cm,
                          dst_cs_type, NULL, &dst_acc);
-      session->configure_obj_cast(cast_ctx);
+      session->configure_obj_cast(
+          cast_ctx,
+          ctx.exec_ctx_.get_srs_provider(),
+          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(dst_type, cast_ctx, src_obj, dst_obj))) {
         LOG_WARN("failed to cast object to ", K(ret), K(src_obj), K(dst_type));
       }

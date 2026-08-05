@@ -181,6 +181,11 @@ public:
                share::schema::ObSchemaGetterGuard &schema_guard,
                ObPLPackageGuard &package_guard,
                common::ObMySQLProxy &sql_proxy,
+               sql::ObPlanCache *plan_cache,
+               sql::ObIPLSqlRuntime *pl_sql_runtime,
+               pl::ObPL *pl_engine,
+               common::ObISrsProvider *srs_provider,
+               common::ObILobReadService *lob_read_service,
                sql::ObRawExprFactory &expr_factory,
                const ObPLBlockNS *parent_ns,
                bool is_ps,
@@ -210,7 +215,15 @@ public:
     question_mark_cnt_(0),
     next_user_defined_exception_id_(1),
     item_type_(T_MAX),
-    fast_check_status_times_(0) { expr_factory_.set_is_called_sql(false); }
+    fast_check_status_times_(0)
+  {
+    resolve_ctx_.params_.plan_cache_ = plan_cache;
+    resolve_ctx_.params_.pl_sql_runtime_ = pl_sql_runtime;
+    resolve_ctx_.params_.pl_engine_ = pl_engine;
+    resolve_ctx_.params_.srs_provider_ = srs_provider;
+    resolve_ctx_.params_.lob_read_service_ = lob_read_service;
+    expr_factory_.set_is_called_sql(false);
+  }
   virtual ~ObPLResolver() {}
 
   enum GotoRestrictionType {

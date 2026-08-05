@@ -105,7 +105,10 @@ public:
 
   typedef common::ObFastArray<ObPhysicalPlan*, 8> CandidatePlanArray;
 public:
-  explicit ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator &allocator);
+  explicit ObResultSet(
+      ObSQLSessionInfo &session,
+      common::ObIAllocator &allocator,
+      query::ObIPlanCacheAccessService &plan_cache_access_service);
   virtual ~ObResultSet();
 
   static ObResultSet *alloc(ObSQLSessionInfo &session, common::ObIAllocator &allocator);
@@ -458,7 +461,10 @@ private:
 //  return other;
 //}
 
-inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator &allocator)
+inline ObResultSet::ObResultSet(
+    ObSQLSessionInfo &session,
+    common::ObIAllocator &allocator,
+    query::ObIPlanCacheAccessService &plan_cache_access_service)
     : is_user_sql_(false),
       cache_obj_guard_(),
       inner_mem_pool_(),
@@ -483,7 +489,7 @@ inline ObResultSet::ObResultSet(ObSQLSessionInfo &session, common::ObIAllocator 
       has_global_variable_(false),
       errcode_(0),
       my_session_(session),
-      plan_cache_access_service_(session.get_plan_cache_access_service()),
+      plan_cache_access_service_(plan_cache_access_service),
       begin_timestamp_(0),
       exec_result_(nullptr),
       cmd_(NULL),

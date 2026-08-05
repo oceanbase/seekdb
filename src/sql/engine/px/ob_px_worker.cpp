@@ -89,6 +89,8 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
     ret = OB_DESERIALIZE_ERROR;
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   } else {
+    dest.exec_ctx_->set_runtime_services(
+        src.exec_ctx_->get_runtime_services());
     // PLACE_HOLDER: if want to shared trans_desc
     // dest.exec_ctx_->get_my_session()->set_effective_trans_desc(src.exec_ctx_->get_my_session()->get_effective_trans_desc());
   }
@@ -239,10 +241,8 @@ int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
   static constexpr int64_t DEFAULT_PX_GROUP_ID = 0;
-  ObSQLSessionInfo *session = OB_ISNULL(task_arg.exec_ctx_)
-      ? nullptr : task_arg.exec_ctx_->get_my_session();
-  query::ObIQueryRuntimeEnvironment *runtime = OB_ISNULL(session)
-      ? nullptr : session->get_query_runtime_environment();
+  query::ObIQueryRuntimeEnvironment *runtime = OB_ISNULL(task_arg.exec_ctx_)
+      ? nullptr : task_arg.exec_ctx_->get_query_runtime_environment();
   if (OB_ISNULL(runtime)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("query runtime environment is unavailable", K(ret));

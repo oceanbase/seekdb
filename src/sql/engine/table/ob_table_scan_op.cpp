@@ -3828,9 +3828,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
           common::ObSrsCacheGuard srs_guard;
           const ObSrsItem *srs_item = NULL;
           const ObSrsBoundsItem *srs_bound = NULL;
-          ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
-          common::ObISrsProvider *srs_provider =
-              OB_ISNULL(my_session) ? nullptr : my_session->get_srs_provider();
+          common::ObISrsProvider *srs_provider = get_exec_ctx().get_srs_provider();
           
           ObS2Cellids cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));

@@ -1,6 +1,17 @@
 /*
  * Copyright (c) 2025 OceanBase.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #define USING_LOG_PREFIX SQL
@@ -20,9 +31,8 @@ namespace oceanbase
 namespace query
 {
 
-ObSessionInnerSql::ObSessionInnerSql(void *native_session, void *native_sql_proxy)
+ObSessionInnerSql::ObSessionInnerSql(void *native_session)
   : native_session_(native_session),
-    native_sql_proxy_(native_sql_proxy),
     native_connection_(nullptr),
     connection_guard_(),
     owns_connection_(false),
@@ -36,7 +46,7 @@ ObSessionInnerSql::~ObSessionInnerSql()
 
 bool ObSessionInnerSql::is_valid() const
 {
-  return nullptr != native_session_ && nullptr != native_sql_proxy_;
+  return nullptr != native_session_;
 }
 
 uint32_t ObSessionInnerSql::server_session_id() const
@@ -51,10 +61,8 @@ int ObSessionInnerSql::open_()
   int ret = common::OB_SUCCESS;
   sql::ObSQLSessionInfo *session =
       static_cast<sql::ObSQLSessionInfo *>(native_session_);
-  common::ObMySQLProxy *sql_proxy =
-      static_cast<common::ObMySQLProxy *>(native_sql_proxy_);
   if (nullptr != native_connection_) {
-  } else if (OB_ISNULL(session) || OB_ISNULL(sql_proxy)) {
+  } else if (OB_ISNULL(session)) {
     ret = common::OB_NOT_INIT;
   } else if (nullptr != session->get_inner_conn()) {
     native_connection_ = session->get_inner_conn();

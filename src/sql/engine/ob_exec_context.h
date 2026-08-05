@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SQL_OB_EXEC_CONTEXT_H
 #define OCEANBASE_SQL_OB_EXEC_CONTEXT_H
 #include "share/interrupt/ob_global_interrupt_call.h"
-#include "share/rc/ob_server_runtime.h"
 #include "lib/net/ob_addr.h"
 #include "lib/allocator/page_arena.h"
 #include "sql/engine/ob_phy_operator_type.h"
@@ -72,6 +71,7 @@ namespace common
 class ObMySQLProxy;
 class ObILobAccessContext;
 class ObILobReadService;
+class ObISrsProvider;
 struct ObLobReadOptions;
 struct ObDatumAccessContext;
 }
@@ -97,6 +97,10 @@ namespace query
 {
 class ObILocalCommandService;
 class ObIRootCommandService;
+class ObIPlanCacheAccessService;
+class ObIQueryRuntimeEnvironment;
+class ObIChangeStreamService;
+class ObIDdlExecutionLimiter;
 }
 
 namespace sql
@@ -111,7 +115,12 @@ class ObOpSpec;
 class ObOperator;
 class ObOpInput;
 class ObSql;
+class ObPlanCache;
+class ObPsCache;
 class ObIVirtualTableFactoryProvider;
+class ObIPLSqlRuntime;
+class ObIPreparedStatementRuntime;
+class ObISqlExecutionIdProvider;
 struct ObEvalCtx;
 typedef  common::ObArray<const common::ObIArray<int64_t> *> ObRowIdListArray;
 struct ColumnContent;
@@ -211,6 +220,48 @@ struct ObTempExprBackupCtx;
 class ObExecContext
 {
 public:
+  // Process-local collaborators are intentionally excluded from execution
+  // context serialization.  Async/PX clone boundaries must carry this small
+  // value object explicitly and install it on the deserialized context.
+  struct RuntimeServices
+  {
+    RuntimeServices()
+      : lob_read_service_(nullptr),
+        plan_cache_(nullptr),
+        ps_cache_(nullptr),
+        plan_cache_access_service_(nullptr),
+        pl_sql_runtime_(nullptr),
+        pl_engine_(nullptr),
+        prepared_statement_runtime_(nullptr),
+        sql_execution_id_provider_(nullptr),
+        query_runtime_environment_(nullptr),
+        root_command_service_(nullptr),
+        local_command_service_(nullptr),
+        change_stream_service_(nullptr),
+        ddl_execution_limiter_(nullptr),
+        virtual_table_factory_provider_(nullptr),
+        srs_provider_(nullptr),
+        resource_limit_calculator_(nullptr)
+    {}
+
+    common::ObILobReadService *lob_read_service_;
+    ObPlanCache *plan_cache_;
+    ObPsCache *ps_cache_;
+    query::ObIPlanCacheAccessService *plan_cache_access_service_;
+    ObIPLSqlRuntime *pl_sql_runtime_;
+    pl::ObPL *pl_engine_;
+    ObIPreparedStatementRuntime *prepared_statement_runtime_;
+    ObISqlExecutionIdProvider *sql_execution_id_provider_;
+    query::ObIQueryRuntimeEnvironment *query_runtime_environment_;
+    query::ObIRootCommandService *root_command_service_;
+    query::ObILocalCommandService *local_command_service_;
+    query::ObIChangeStreamService *change_stream_service_;
+    query::ObIDdlExecutionLimiter *ddl_execution_limiter_;
+    ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
+    common::ObISrsProvider *srs_provider_;
+    share::ObResourceLimitCalculator *resource_limit_calculator_;
+  };
+
   friend struct pl::ExecCtxBak;
   friend class pl::LinkPLStackGuard;
   friend class LinkExecCtxGuard;
@@ -287,6 +338,80 @@ public:
   query::ObILocalCommandService *get_local_command_service() const;
   query::ObIRootCommandService &root_command_service() const;
   query::ObILocalCommandService &local_command_service() const;
+  void set_plan_cache_access_service(
+      query::ObIPlanCacheAccessService *plan_cache_access_service)
+  {
+    plan_cache_access_service_ = plan_cache_access_service;
+  }
+  query::ObIPlanCacheAccessService *get_plan_cache_access_service() const
+  {
+    return plan_cache_access_service_;
+  }
+  void set_pl_sql_runtime(ObIPLSqlRuntime *pl_sql_runtime)
+  {
+    pl_sql_runtime_ = pl_sql_runtime;
+  }
+  ObIPLSqlRuntime *get_pl_sql_runtime() const
+  {
+    return pl_sql_runtime_;
+  }
+  void set_pl_engine(pl::ObPL *pl_engine) { pl_engine_ = pl_engine; }
+  void set_prepared_statement_runtime(ObIPreparedStatementRuntime *runtime)
+  {
+    prepared_statement_runtime_ = runtime;
+  }
+  ObIPreparedStatementRuntime *get_prepared_statement_runtime() const
+  {
+    return prepared_statement_runtime_;
+  }
+  void set_sql_execution_id_provider(ObISqlExecutionIdProvider *provider)
+  {
+    sql_execution_id_provider_ = provider;
+  }
+  ObISqlExecutionIdProvider *get_sql_execution_id_provider() const
+  {
+    return sql_execution_id_provider_;
+  }
+  void set_plan_cache(ObPlanCache *plan_cache) { plan_cache_ = plan_cache; }
+  ObPlanCache *get_plan_cache() const { return plan_cache_; }
+  void set_ps_cache(ObPsCache *ps_cache) { ps_cache_ = ps_cache; }
+  ObPsCache *get_ps_cache() const { return ps_cache_; }
+  void set_query_runtime_environment(
+      query::ObIQueryRuntimeEnvironment *query_runtime_environment)
+  {
+    query_runtime_environment_ = query_runtime_environment;
+  }
+  query::ObIQueryRuntimeEnvironment *get_query_runtime_environment() const
+  {
+    return query_runtime_environment_;
+  }
+  void set_command_services(
+      query::ObIRootCommandService *root_command_service,
+      query::ObILocalCommandService *local_command_service,
+      query::ObIChangeStreamService *change_stream_service,
+      query::ObIDdlExecutionLimiter *ddl_execution_limiter,
+      ObIVirtualTableFactoryProvider *virtual_table_factory_provider)
+  {
+    root_command_service_ = root_command_service;
+    local_command_service_ = local_command_service;
+    change_stream_service_ = change_stream_service;
+    ddl_execution_limiter_ = ddl_execution_limiter;
+    vt_factory_provider_ = virtual_table_factory_provider;
+  }
+  query::ObIChangeStreamService *get_change_stream_service() const
+  {
+    return change_stream_service_;
+  }
+  query::ObIDdlExecutionLimiter *get_ddl_execution_limiter() const
+  {
+    return ddl_execution_limiter_;
+  }
+  RuntimeServices get_runtime_services() const;
+  void set_runtime_services(const RuntimeServices &services);
+  ObIVirtualTableFactoryProvider *get_virtual_table_factory_provider() const
+  {
+    return vt_factory_provider_;
+  }
   //get the parent execute context in nested sql
   ObExecContext *get_parent_ctx() { return parent_ctx_; }
   int64_t get_nested_level() const { return nested_level_; }
@@ -395,7 +520,7 @@ public:
   bool &get_need_disconnect_for_update() { return need_disconnect_; }
   bool need_disconnect() const { return need_disconnect_; }
   void set_need_disconnect(bool need_disconnect) { need_disconnect_ = need_disconnect; }
-  inline pl::ObPL *get_pl_engine() { return ::oceanbase::share::server_service<::oceanbase::pl::ObPL>(); }
+  inline pl::ObPL *get_pl_engine() const { return pl_engine_; }
   inline pl::ObPLCtx *get_pl_ctx() { return pl_ctx_; }
   inline void set_pl_ctx(pl::ObPLCtx *pl_ctx) { pl_ctx_ = pl_ctx; }
   pl::ObPLPackageGuard* get_package_guard();
@@ -587,6 +712,14 @@ public:
   {
     return lob_read_service_;
   }
+  void set_srs_provider(common::ObISrsProvider *srs_provider)
+  {
+    srs_provider_ = srs_provider;
+  }
+  common::ObISrsProvider *get_srs_provider() const
+  {
+    return srs_provider_;
+  }
   void set_resource_limit_calculator(
       share::ObResourceLimitCalculator *resource_limit_calculator)
   {
@@ -674,6 +807,19 @@ protected:
   ObSQLSessionInfo *my_session_;
   ObSQLSessionMgr *session_mgr_;
   common::ObILobReadService *lob_read_service_;
+  ObPlanCache *plan_cache_;
+  ObPsCache *ps_cache_;
+  query::ObIPlanCacheAccessService *plan_cache_access_service_;
+  ObIPLSqlRuntime *pl_sql_runtime_;
+  pl::ObPL *pl_engine_;
+  ObIPreparedStatementRuntime *prepared_statement_runtime_;
+  ObISqlExecutionIdProvider *sql_execution_id_provider_;
+  query::ObIQueryRuntimeEnvironment *query_runtime_environment_;
+  query::ObIRootCommandService *root_command_service_;
+  query::ObILocalCommandService *local_command_service_;
+  query::ObIChangeStreamService *change_stream_service_;
+  query::ObIDdlExecutionLimiter *ddl_execution_limiter_;
+  common::ObISrsProvider *srs_provider_;
   ObExecStatCollector *exec_stat_collector_;
   ObStmtFactory *stmt_factory_;
   ObRawExprFactory *expr_factory_;

@@ -158,11 +158,13 @@ void ObPxSqcHandler::check_rf_leak()
   IGNORE_RETURN sub_coord_->destroy_shared_rf_msgs();
 }
 
-int ObPxSqcHandler::init()
+int ObPxSqcHandler::init(
+    const ObExecContext::RuntimeServices &runtime_services)
 {
   int ret = OB_SUCCESS;
   reserved_px_thread_count_ = 0;
   request_level_ = THIS_WORKER.get_curr_request_level();
+  runtime_services_ = runtime_services;
   void *buf = nullptr;
   share::ObGlobalContext &gctx = GCTX;
   lib::ContextParam param;
@@ -249,6 +251,8 @@ int ObPxSqcHandler::copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_
       sqc_init_args_->set_deserialize_param(*exec_ctx_, *des_phy_plan_, allocator);
       if (OB_FAIL(sqc_init_args_->do_deserialize(pos, data_buf, data_len))) {
         LOG_WARN("Failed to deserialize", K(ret));
+      } else {
+        exec_ctx_->set_runtime_services(runtime_services_);
       }
       sqc_init_args_->sqc_handler_ = this;
     }

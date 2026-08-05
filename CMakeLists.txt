@@ -97,13 +97,30 @@ endif()
 if(NOT OB_ENABLE_UNITY)
   message(FATAL_ERROR "The compatibility CMake build supports only Unity compilation")
 endif()
-if(OB_ERRSIM OR WITH_COVERAGE OR ENABLE_SANITY OR ENABLE_AUTO_FDO OR
-   ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR OB_BUILD_CCLS OR
-   OB_BUILD_PACKAGE OR OB_BUILD_RPM OR OB_BUILD_TGZ OR OB_BUILD_DEB)
+set(SEEKDB_CMAKE_RPM_BUILD OFF)
+if(OB_BUILD_RPM)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "The CMake RPM compatibility build supports Linux only")
+  endif()
+  if(NOT OB_BUILD_PACKAGE)
+    message(FATAL_ERROR "OB_BUILD_RPM requires OB_BUILD_PACKAGE=ON")
+  endif()
+  set(SEEKDB_CMAKE_RPM_BUILD ON)
+endif()
+
+if(OB_ERRSIM OR WITH_COVERAGE OR ENABLE_SANITY OR OB_BUILD_CCLS OR
+   OB_BUILD_TGZ OR OB_BUILD_DEB)
   message(FATAL_ERROR
-    "Non-pretest tests, packaging and non-release instrumentation belong "
-    "to Bazel; "
-    "the compatibility CMake build supports release Unity only")
+    "The compatibility CMake build supports Release Unity and Linux RPM only")
+endif()
+if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
+    OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_RPM_BUILD)
+  message(FATAL_ERROR
+    "Package optimization options are supported only by the CMake RPM profile")
+endif()
+if((OB_BUILD_PACKAGE OR OB_BUILD_RPM) AND NOT SEEKDB_CMAKE_RPM_BUILD)
+  message(FATAL_ERROR
+    "The compatibility CMake packaging surface supports Linux RPM only")
 endif()
 
 string(TOLOWER "${ARCHITECTURE}" SEEKDB_HOST_ARCHITECTURE)
@@ -171,6 +188,13 @@ include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
 add_subdirectory(src)
 
+# Farm compile and pretest still publish and consume liboberror.so.  Keep the
+# legacy error-code utility available as an explicit compatibility target
+# without adding it to the default production build.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_subdirectory(tools/ob_error EXCLUDE_FROM_ALL)
+endif()
+
 # The farm pretest contract remains available during the CMake transition.
 # Other unit-test workflows and their architecture rules stay Bazel-owned.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -185,4 +209,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       DESTINATION "unittest/${SEEKDB_PRETEST_MODULE}"
       COMPONENT pretest)
   endforeach()
+endif()
+
+if(SEEKDB_CMAKE_RPM_BUILD)
+  include(cmake/RPM.cmake)
 endif()

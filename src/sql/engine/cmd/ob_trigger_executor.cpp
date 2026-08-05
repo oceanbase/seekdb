@@ -55,6 +55,9 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
       get_runtime_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
+                           *ctx.get_plan_cache(),
+                           ctx.get_pl_sql_runtime(),
+                           ctx.get_pl_engine(),
                            ctx.get_sql_proxy(),
                            ctx.get_allocator(),
                            arg));
@@ -122,6 +125,9 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
 
 int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_guard,
                                                   ObSQLSessionInfo *session_info,
+                                                  ObPlanCache &plan_cache,
+                                                  ObIPLSqlRuntime *pl_sql_runtime,
+                                                  pl::ObPL *pl_engine,
                                                   ObMySQLProxy *sql_proxy,
                                                   ObIAllocator &allocator,
                                                   ObCreateTriggerArg &arg)
@@ -138,7 +144,8 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
     ret = OB_ERR_TRIGGER_NOT_EXIST;
     LOG_WARN("trigger not exist", K(db_name), K(trigger_name), K(ret));
   } else {
-    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, sql_proxy,
+    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, plan_cache,
+                                                   pl_sql_runtime, pl_engine, sql_proxy,
                                                    allocator, *trigger_info, db_name, arg.dependency_infos_))) {
       LOG_WARN("analyze trigger failed", K(trigger_info), K(db_name), K(ret));
     }

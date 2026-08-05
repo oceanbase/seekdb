@@ -169,17 +169,8 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(
 ObSQLSessionMgr::ObSQLSessionMgr()
   : sessinfo_map_(),
     next_sessid_(1),
-    srs_provider_(nullptr),
-    lob_read_service_(nullptr),
-    plan_cache_(nullptr),
+    debug_sync_broadcaster_(nullptr),
     ps_cache_(nullptr),
-    plan_cache_access_service_(nullptr),
-    query_runtime_environment_(nullptr),
-    root_command_service_(nullptr),
-    local_command_service_(nullptr),
-    change_stream_service_(nullptr),
-    ddl_execution_limiter_(nullptr),
-    virtual_table_factory_provider_(nullptr),
     connect_resource_manager_(nullptr)
 {}
 
@@ -235,17 +226,7 @@ int ObSQLSessionMgr::init()
 void ObSQLSessionMgr::destroy()
 {
   sessinfo_map_.destroy();
-  srs_provider_ = nullptr;
-  lob_read_service_ = nullptr;
-  plan_cache_ = nullptr;
   ps_cache_ = nullptr;
-  plan_cache_access_service_ = nullptr;
-  query_runtime_environment_ = nullptr;
-  root_command_service_ = nullptr;
-  local_command_service_ = nullptr;
-  change_stream_service_ = nullptr;
-  ddl_execution_limiter_ = nullptr;
-  virtual_table_factory_provider_ = nullptr;
   connect_resource_manager_ = nullptr;
 }
 
@@ -317,17 +298,8 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
   int err = OB_SUCCESS;
   session_info = NULL;
   ObSQLSessionInfo *tmp_sess = NULL;
-  if (OB_ISNULL(plan_cache_)
-      || OB_ISNULL(ps_cache_)
-      || OB_ISNULL(plan_cache_access_service_)
-      || OB_ISNULL(query_runtime_environment_)
-      || OB_ISNULL(root_command_service_)
-      || OB_ISNULL(local_command_service_)
-      || OB_ISNULL(change_stream_service_)
-      || OB_ISNULL(ddl_execution_limiter_)
-      || OB_ISNULL(virtual_table_factory_provider_)
-      || OB_ISNULL(srs_provider_)
-      || OB_ISNULL(lob_read_service_)
+  if (OB_ISNULL(ps_cache_)
+      || OB_ISNULL(debug_sync_broadcaster_)
       || OB_ISNULL(connect_resource_manager_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("SQL session runtime services are not bound", K(ret));
@@ -360,21 +332,9 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
       LOG_DEBUG("free session successfully in create session", K(err), K(sessid));
     }
   } else {
-    tmp_sess->set_srs_provider(srs_provider_);
-    tmp_sess->set_lob_read_service(lob_read_service_);
+    tmp_sess->set_debug_sync_broadcaster(debug_sync_broadcaster_);
     tmp_sess->set_connect_resource_manager(connect_resource_manager_);
     tmp_sess->set_session_manager(this);
-    tmp_sess->bind_plan_cache_runtime(
-        *plan_cache_,
-        *ps_cache_,
-        *plan_cache_access_service_,
-        *query_runtime_environment_);
-    tmp_sess->bind_command_services(
-        *root_command_service_,
-        *local_command_service_,
-        *change_stream_service_,
-        *ddl_execution_limiter_,
-        *virtual_table_factory_provider_);
     tmp_sess->update_last_active_time();
     session_info = tmp_sess;
   }
@@ -390,6 +350,15 @@ int ObSQLSessionMgr::free_session(const ObFreeSessionCtx &ctx)
   ObSQLSessionInfo *sess_info = NULL;
   sessinfo_map_.get(Key(sessid), sess_info);
   if (NULL != sess_info) {
+    if (OB_ISNULL(ps_cache_)) {
+      LOG_ERROR("PS cache is not bound while freeing SQL session", K(sessid));
+    } else {
+      const int close_ret = sess_info->close_all_ps_stmt(*ps_cache_);
+      if (OB_UNLIKELY(OB_SUCCESS != close_ret)) {
+        LOG_WARN("failed to close prepared statements while freeing session",
+                 K(close_ret), K(sessid));
+      }
+    }
     if (OB_UNLIKELY(OB_SUCCESS != sess_info->on_user_disconnect())) {
       LOG_WARN("user disconnect failed", K(ret), K(sess_info->get_user_id()));
     }

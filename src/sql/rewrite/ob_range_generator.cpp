@@ -1037,6 +1037,7 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *phy_ctx = NULL;
+  const common::ObLobReadOptions *lob_read_options = nullptr;
   is_valid = true;
   if (OB_ISNULL(phy_ctx = exec_ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1056,7 +1057,10 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
         if (OB_UNLIKELY(value.is_nop_value())) {
           ret = OB_ERR_UNEXPECTED;
         } else if (value.is_lob_storage()) {
-          if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(value, value, NULL, &allocator, true))) {
+          if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
+            LOG_WARN("failed to get LOB read options", K(ret));
+          } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                         value, value, lob_read_options, &allocator, true))) {
             LOG_WARN("fail to convert to inrow lob", K(value));
           }
         }
@@ -1070,7 +1074,10 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       } else if (OB_UNLIKELY(value.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (value.is_lob_storage()) {
-        if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(value, value, NULL, &allocator, true))) {
+        if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
+          LOG_WARN("failed to get LOB read options", K(ret));
+        } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                       value, value, lob_read_options, &allocator, true))) {
           LOG_WARN("fail to convert to inrow lob", K(value));
         }
       }
@@ -1086,7 +1093,10 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       } else if (OB_UNLIKELY(result.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (result.is_lob_storage()) {
-        if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(result, value, NULL, &allocator, true, true))) {
+        if (OB_FAIL(exec_ctx.get_lob_read_options(lob_read_options))) {
+          LOG_WARN("failed to get LOB read options", K(ret));
+        } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                       result, value, lob_read_options, &allocator, true, true))) {
           LOG_WARN("fail to convert to inrow lob", K(ret), K(result));
         }
       } else if (OB_FAIL(ob_write_obj(allocator, result, value))) {
@@ -1695,12 +1705,11 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
     LOG_WARN("fail to get real string data", K(ret), K(objs_ptr[0]));
   } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, input_srid))) {
     LOG_WARN("failed to get srid", K(ret), K(wkb_str));
-  } else if (OB_ISNULL(exec_ctx_.get_my_session())
-             || OB_ISNULL(exec_ctx_.get_my_session()->get_srs_provider())) {
+  } else if (OB_ISNULL(exec_ctx_.get_srs_provider())) {
     ret = OB_NOT_INIT;
     LOG_WARN("SRS provider is not configured", K(ret));
   } else if (OB_FAIL(ObSqlGeoUtils::check_srid(
-                 *exec_ctx_.get_my_session()->get_srs_provider(),
+                 *exec_ctx_.get_srs_provider(),
                  node.domain_extra_.srid_,
                  input_srid))) {
     ret = OB_ERR_WRONG_SRID_FOR_COLUMN;
@@ -1752,10 +1761,7 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
   const ObSrsBoundsItem *srs_bound = NULL;
   ObS2Adapter *s2object = NULL;
   ObString buffer_geo;
-  common::ObISrsProvider *srs_provider =
-      OB_ISNULL(exec_ctx_.get_my_session())
-          ? nullptr
-          : exec_ctx_.get_my_session()->get_srs_provider();
+  common::ObISrsProvider *srs_provider = exec_ctx_.get_srs_provider();
 
   if (OB_ISNULL(srs_provider)) {
     ret = OB_NOT_INIT;
@@ -1885,10 +1891,7 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
   const ObSrsBoundsItem *srs_bound = NULL;
   ObS2Adapter *s2object = NULL;
   ObString buffer_geo;
-  common::ObISrsProvider *srs_provider =
-      OB_ISNULL(exec_ctx_.get_my_session())
-          ? nullptr
-          : exec_ctx_.get_my_session()->get_srs_provider();
+  common::ObISrsProvider *srs_provider = exec_ctx_.get_srs_provider();
 
   if (OB_ISNULL(srs_provider)) {
     ret = OB_NOT_INIT;

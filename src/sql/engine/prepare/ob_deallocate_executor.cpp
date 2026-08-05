@@ -36,8 +36,10 @@ int ObDeallocateExecutor::execute(ObExecContext &ctx, ObDeallocateStmt &stmt)
              K(ctx.get_my_session()), KP(ctx.get_ps_cache()), K(ret));
   } else {
     if (OB_FAIL(ctx.get_my_session()->remove_prepare(stmt.get_prepare_name()))) {
+      LOG_WARN("failed to remove prepare", K(stmt.get_prepare_name()), K(ret));
     } else if (OB_FAIL(ctx.get_my_session()->close_ps_stmt(
                    *ctx.get_ps_cache(), stmt.get_prepare_id()))) {
+      LOG_WARN("fail to deallocate ps stmt", K(ret), K(stmt.get_prepare_id()));
     } else { /*do nothing*/ }
   }
   return ret;

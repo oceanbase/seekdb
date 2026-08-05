@@ -311,7 +311,7 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
           if (OB_ISNULL(str_iter = OB_NEWx(ObTextStringIter, allocator, ObLongTextType, CS_TYPE_BINARY, data_datum.get_string(), true))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to new ObTextStringIter", KR(ret));
-          } else if (OB_FAIL(str_iter->init(0, NULL, allocator))) {
+          } else if (OB_FAIL(str_iter->init(0, param.lob_read_options_, allocator))) {
             LOG_WARN("init lob str iter failed ", K(ret));
           } else if (index_type_ == VIAT_MAX) {
             ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);

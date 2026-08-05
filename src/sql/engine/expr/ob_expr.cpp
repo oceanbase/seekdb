@@ -853,7 +853,10 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       }
       ObSqlObjCastRuntime cast_runtime(&ctx.exec_ctx_);
       cast_ctx.runtime_ = &cast_runtime;
-      session->configure_obj_cast(cast_ctx);
+      session->configure_obj_cast(
+          cast_ctx,
+          ctx.exec_ctx_.get_srs_provider(),
+          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(dst_meta.get_type(), cast_ctx, v, dst_obj))) {
         LOG_WARN("failed to cast obj to dst type", K(ret), K(v), K(dst_meta));
       } else if (OB_FAIL(datum_param.alloc_datum_reserved_buff(

@@ -147,7 +147,7 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
-  ObPlanCache *plan_cache = OB_ISNULL(session_info) ? NULL : session_info->get_plan_cache();
+  ObPlanCache *plan_cache = ctx.get_plan_cache();
   ObPhysicalPlan *phy_plan = NULL;
   ObOptimizer optimizer(opt_ctx);
   ObCacheObjGuard guard;

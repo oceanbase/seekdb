@@ -84,13 +84,15 @@ Before submitting, you must ensure the code builds and passes tests locally.The 
 **Basic build commands**:
 
 ```bash
-# Initialize the Linux Release Unity build.
-source ~/.bashrc
-./build.sh release --init
+# Configure the project (Generate build files)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-# Build the complete seekdb binary through the compatibility Makefile.
-cd build_release
-make -j"$(nproc)"
+# Build for debugging
+cmake debug
+
+# Build the project
+cmake --build build -- -j$(nproc)
+
 ```
 
 * Coverage: Write unit tests for all new features and bug fixes, including edge cases.
@@ -98,11 +100,15 @@ make -j"$(nproc)"
 * Consistency: Follow existing test patterns.
 
 **Run tests**:
+```bash
+# Run all tests via [CTest](https://cmake.org/cmake/help/latest/manual/ctest.1.html):
+cd build
+ctest --output-on-failure
 
-The historical unit-test build has not yet been migrated. Until Bazel test
-targets are available, validate the release binary with the relevant focused
-test plus a fresh-instance CRUD smoke test. Do not report an unsupported test
-suite as passing.
+# Alternatively, for Debug build:
+cd build_debug
+ctest --output-on-failure
+```
 
 ### Step 5: Submit Pull Request
 When you are ready to submit your code:

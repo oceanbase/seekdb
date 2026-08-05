@@ -66,13 +66,13 @@ void ObOptOSGColumnStat::reset()
 
 ObOptOSGColumnStat* ObOptOSGColumnStat::create_new_osg_col_stat(
     common::ObIAllocator &allocator,
-    const ObDatumAccessContext &datum_access_ctx)
+    const ObDatumAccessContext *datum_access_ctx)
 {
   ObOptOSGColumnStat *new_osg_col_stat = OB_NEWx(ObOptOSGColumnStat, (&allocator), allocator);
   ObOptColumnStat *new_col_stat = ObOptColumnStat::malloc_new_column_stat(allocator);
   if (OB_NOT_NULL(new_osg_col_stat) && OB_NOT_NULL(new_col_stat)) {
     new_osg_col_stat->col_stat_ = new_col_stat;
-    new_osg_col_stat->datum_access_ctx_ = &datum_access_ctx;
+    new_osg_col_stat->datum_access_ctx_ = datum_access_ctx;
   } else {
     if (new_osg_col_stat != NULL) {
       new_osg_col_stat->~ObOptOSGColumnStat();
@@ -120,9 +120,6 @@ int ObOptOSGColumnStat::set_min_max_datum_to_obj()
     LOG_WARN("failed to get min obj");
   } else if (OB_FAIL(max_val_.get_obj(*max_obj))) {
     LOG_WARN("failed to get max obj");
-  } else if (OB_ISNULL(datum_access_ctx_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("datum access context is not initialized", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  *min_obj, allocator_, datum_access_ctx_))) {
     LOG_WARN("fail to truncate string", K(ret));
@@ -146,10 +143,7 @@ int ObOptOSGColumnStat::set_min_max_datum_to_obj()
 int ObOptOSGColumnStat::merge_column_stat(const ObOptOSGColumnStat &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(datum_access_ctx_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("datum access context is not initialized", K(ret));
-  } else if (OB_ISNULL(col_stat_) || OB_ISNULL(other.col_stat_)) {
+  if (OB_ISNULL(col_stat_) || OB_ISNULL(other.col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(col_stat_));
   } else if (OB_UNLIKELY(col_stat_->get_table_id() != other.col_stat_->get_table_id() ||
@@ -186,10 +180,7 @@ int ObOptOSGColumnStat::update_column_stat_info(const ObDatum *datum,
 {
   int ret = OB_SUCCESS;
   int64_t col_len = 0;
-  if (OB_ISNULL(datum_access_ctx_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("datum access context is not initialized", K(ret));
-  } else if (OB_ISNULL(datum) || OB_ISNULL(col_stat_) || datum->is_nop()) {
+  if (OB_ISNULL(datum) || OB_ISNULL(col_stat_) || datum->is_nop()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KPC(datum), KP(col_stat_));
   } else if (OB_FAIL(calc_col_len(*datum, meta, col_len))) {

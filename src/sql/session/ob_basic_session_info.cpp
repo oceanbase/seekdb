@@ -122,6 +122,7 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       changed_var_pool_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_database_changed_(false),
       debug_sync_actions_(),
+      debug_sync_broadcaster_(nullptr),
       magic_num_(0x13572468),
       current_execution_id_(-1),
       database_id_(OB_INVALID_ID),

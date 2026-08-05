@@ -2239,10 +2239,10 @@ int ObAlterTableResolver::resolve_exchange_partition(const ParseNode &node,
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(session_info_->get_root_command_service())) {
+  } else if (OB_ISNULL(params_.root_command_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("root command service is not bound", KR(ret));
-  } else if (OB_FAIL(session_info_->get_root_command_service()->
+  } else if (OB_FAIL(params_.root_command_service_->
       check_partition_exchange_schema_for_user(
       orig_table_schema, *exchange_table_schema, orig_part_name, exchange_part_level))) {
     LOG_WARN("failed to check partition exchange schema for user", KR(ret), K(orig_table_schema),

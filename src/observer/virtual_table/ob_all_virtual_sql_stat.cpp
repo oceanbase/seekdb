@@ -22,6 +22,8 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_context.h"
 #include "share/ob_server_struct.h"
+#include "observer/ob_server_runtime_access.h"
+#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 
 using namespace oceanbase::common;
@@ -143,11 +145,11 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
     {
       if (!key.is_valid()) {
         // do nothing
-      } else if (OB_ISNULL(sess_info->get_query_runtime_environment())) {
+      } else if (OB_ISNULL(get_observer_sql_engine())) {
         ret = OB_NOT_INIT;
         LOG_WARN("query runtime environment is not bound", K(ret));
       } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(
-                     *sess_info->get_query_runtime_environment()))) {
+                     get_observer_sql_engine()->get_query_runtime_environment()))) {
         LOG_WARN("failed to record sqlstat end value in query virtual table", K(ret));
       } else if (OB_SUCC(tmp_sql_stat_map_.get_refactored(key, value))) {
         if (OB_FAIL(value->sum_stat_value(executing_sql_stat_record))) {

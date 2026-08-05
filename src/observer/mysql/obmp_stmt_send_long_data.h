@@ -31,16 +31,12 @@ class ObMultiStmtItem;
 namespace observer
 {
 
-class ObVTIterCreator;
-
 class ObMPStmtSendLongData : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_SEND_LONG_DATA;
 
-  ObMPStmtSendLongData(
-      const share::ObGlobalContext &gctx,
-      ObVTIterCreator &vt_iter_creator);
+  explicit ObMPStmtSendLongData(const share::ObGlobalContext &gctx);
   virtual ~ObMPStmtSendLongData() {}
   int64_t get_single_process_timestamp() const { return single_process_timestamp_; }
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
@@ -66,7 +62,6 @@ private:
   uint64_t buffer_len_;
   common::ObString buffer_;
   bool need_disconnect_;
-  ObVTIterCreator &vt_iter_creator_;
   ObPSAnalysisChecker defender_;
 
 private:

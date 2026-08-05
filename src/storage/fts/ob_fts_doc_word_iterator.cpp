@@ -72,7 +72,9 @@ void ObFTDocWordScanIterator::reset()
     doc_word_iter_ = nullptr;
   }
   table_param_.reset();
-  allocator_.reset();
+  // table_param_ owns main_read_info_ allocated from allocator_.  The pointer
+  // remains part of table_param_ after reset and is reused by the next scan,
+  // so allocator_ must live until table_param_ is destroyed.
   scan_allocator_.reset();
   is_inited_ = false;
 }

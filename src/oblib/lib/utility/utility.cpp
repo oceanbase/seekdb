@@ -235,7 +235,7 @@ int escape_range_string(char *buffer, const int64_t length, int64_t &pos, const 
   if (pos + in.length() >= length || NULL == buffer) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {
-    char escape = 0;;
+    char escape = 0;
     for (int i = 0; OB_SUCC(ret) && i < in.length(); ++i) {
       escape = 0;
       switch (in.ptr()[i]) {
@@ -1857,7 +1857,7 @@ void ob_fast_localtime(time_t &cached_unix_sec, struct tm &cached_localtime,
 #else
       localtime_r(&input_unix_sec, output_localtime);
 #endif
-      cached_localtime = *output_localtime;;
+      cached_localtime = *output_localtime;
     } else {
       cached_unix_sec = input_unix_sec;
       cached_localtime = *ob_localtime(&input_unix_sec, output_localtime);

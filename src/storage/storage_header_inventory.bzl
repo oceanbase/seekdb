@@ -128,7 +128,6 @@ STORAGE_PUBLIC_HEADER_ROOTS = [
     "tx_storage/ob_ls_service.h",
     "tx_storage/ob_memory_printer.h",
     "tx_storage/ob_memstore_freezer.h",
-    "tx_storage/ob_server_mem_limit_getter.h",
     "tx_table/ob_tx_data_cache.h",
     "vector_index/ob_vector_kmeans_ctx.h",
     "vector_type/ob_vector_common_util.h",

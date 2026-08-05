@@ -43,7 +43,7 @@ public:
       unregister_interrupt_(false)
   {}
   ~ObLocalSqcLauncher() = default;
-  int init();
+  int init(const ObExecContext::RuntimeServices &runtime_services);
   void destroy();
   int process();
   int after_process(int error_code);
@@ -73,7 +73,7 @@ public:
       phy_plan_()
   {}
   ~ObLocalFastSqcLauncher() = default;
-  int init();
+  int init(const ObExecContext::RuntimeServices &runtime_services);
   void destroy();
   int process();
   int decode_arg(const char *buf, const int64_t len, int64_t &pos);
@@ -111,8 +111,15 @@ public:
 
 // Local SQC launch entry points. The buffer is a private deep-clone boundary
 // between QC and the independently owned SQC execution context.
-int launch_sqc_async_local(const char *buf, const int64_t len, ObPxInitSqcResponse &resp);
-int launch_sqc_fast_local(const char *buf, const int64_t len);
+int launch_sqc_async_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services,
+    ObPxInitSqcResponse &resp);
+int launch_sqc_fast_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services);
 
 }  // sql
 }  // oceanbase

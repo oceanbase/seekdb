@@ -142,7 +142,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/ob_server_struct.cpp",
             "src/share/ob_share_util.cpp",
             "src/share/ob_simple_batch.cpp",
-            "src/share/ob_simple_mem_limit_getter.cpp",
             "src/share/ob_snapshot_table_proxy.cpp",
             "src/share/ob_merge_info.cpp",
             "src/share/ob_standby_source_util.cpp",

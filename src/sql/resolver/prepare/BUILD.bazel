@@ -79,7 +79,6 @@ _RESOLVER_PREPARE_SHARE_DEPS = [
     "//src/share:tablet_autoincrement_types",
     "//src/share:tablet_metadata",
     "//src/share:task_control",
-    "//src/share:tenant_mem_limit_interface",
     "//src/share:tenant_runtime",
     "//src/share:timezone_runtime",
     "//src/share:transaction_id",

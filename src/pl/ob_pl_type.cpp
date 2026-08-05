@@ -389,7 +389,9 @@ int ObPLDataType::convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const
     CK (OB_NOT_NULL(get_data_type()));
     OX (result_type.set_meta(get_data_type()->get_meta_type()));
     OX (result_type.set_accuracy(get_data_type()->get_accuracy()));
-    OZ (ObSPIService::spi_convert(ctx.session_info_, tmp_alloc, *src, result_type, tmp));
+    OZ (ObSPIService::spi_convert(
+        ctx.session_info_, tmp_alloc, *src, result_type, tmp,
+        ctx.params_.srs_provider_, ctx.params_.lob_read_service_));
     OZ (deep_copy_obj(ctx.allocator_, tmp, *dst));
     OX (src ++);
     OX (dst ++);
@@ -1652,7 +1654,10 @@ int ObPLCursorInfo::prepare_spi_result(ObPLExecCtx *ctx, ObSPIResultSet *&spi_re
   }
   OX (spi_result = new (spi_cursor_) ObSPIResultSet());
   OX (last_stream_cursor_ = true);
-  OZ (spi_result->init(*ctx->exec_ctx_->get_my_session()));
+  CK (OB_NOT_NULL(ctx->exec_ctx_->get_plan_cache_access_service()));
+  OZ (spi_result->init(
+      *ctx->exec_ctx_->get_my_session(),
+      *ctx->exec_ctx_->get_plan_cache_access_service()));
   return ret;
 }
 

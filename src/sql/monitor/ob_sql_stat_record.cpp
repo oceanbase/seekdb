@@ -275,6 +275,8 @@ int ObExecutingSqlStatRecord::record_sqlstat_end_value(
 
 int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   ObSQLSessionInfo &session_info,
+  ObPlanCache &plan_cache,
+  query::ObIPlanCacheAccessService &access_service,
   ObString &cur_sql,
   const ObPhysicalPlan *plan /*= nullptr*/)
 {
@@ -288,19 +290,15 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   if (key.is_valid()) {
     if (OB_ISNULL(plan)) {
       ObCacheObjGuard guard;
-      ObPlanCache *plan_cache = session_info.get_plan_cache();
       bool is_use_cache = true;
-      if (OB_ISNULL(plan_cache)) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("plan cache is not bound to SQL session", K(ret));
-      } else if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(
-          *plan_cache, session_info.get_plan_cache_access_service(), key, guard))) {
+      if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(
+          plan_cache, access_service, key, guard))) {
         if (ret == OB_SQL_PC_NOT_EXIST) {
           // not found, need create 
           ret =OB_SUCCESS;
           is_use_cache = false;
           if (OB_FAIL(ObSqlStatRecordUtil::create_cache_obj(
-              *plan_cache, session_info.get_plan_cache_access_service(), key, guard))) {
+              plan_cache, access_service, key, guard))) {
             LOG_WARN("failed to create cache obj", K(ret));
           }
         } else {

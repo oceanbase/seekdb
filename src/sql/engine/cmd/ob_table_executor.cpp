@@ -347,7 +347,8 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
       } else {// 2. create table
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
         create_table_arg.is_parallel_ = false;
-        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(my_session, "[parallel create table]",
+        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(
+            my_session, ctx.root_command_service(), "[parallel create table]",
                                                             create_table_arg, create_table_res))) {
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(create_table_res));
         }
@@ -538,7 +539,8 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
         // do nothing
       } else {
         DEBUG_SYNC(BEFORE_SEND_PARALLEL_CREATE_TABLE);
-        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(my_session, "[parallel create table]",
+        if (OB_FAIL(ObDDLExecutorUtil::execute_pcreate_table(
+            my_session, ctx.root_command_service(), "[parallel create table]",
                                                           create_table_arg, res))) {
           LOG_WARN("fail to execute parallel ddl", KR(ret), K(create_table_arg), K(res));
         }
@@ -561,7 +563,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     if (0 != table_schema.get_session_id()) {
       LOG_TRACE("CTAS or temporary table create detected", K(table_schema));
       query::request_query_ctas_cleanup(
-          my_session->get_query_runtime_environment());
+          ctx.get_query_runtime_environment());
     }
   }
   return ret;
@@ -641,7 +643,9 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     obcall::ObAlterTableRes &res,
     common::ObIAllocator &allocator,
     ObSQLSessionInfo *my_session,
-    query::ObIRootCommandService &root_commands)
+    query::ObIRootCommandService &root_commands,
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    query::ObILocalCommandService &local_commands)
 {
   int ret = OB_SUCCESS;
   // do not support cancel drop_index_task.
@@ -711,7 +715,9 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
     ObIArray<obcall::ObDDLRes> &ddl_ress = res.ddl_res_array_;
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_ress.count(); ++i) {
       obcall::ObDDLRes &ddl_res = ddl_ress.at(i);
-      if (!alter_table_arg.is_update_global_indexes_ && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(ddl_res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
+      if (!alter_table_arg.is_update_global_indexes_ && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+          ddl_res.task_id_, res.ddl_need_retry_at_executor_, my_session,
+          runtime_environment, local_commands, is_support_cancel))) {
         LOG_WARN("wait drop index finish", K(ret));
       }
     }
@@ -731,7 +737,8 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
         SMART_VAR(obcall::ObCreateIndexArg, create_index_arg) {
           create_index_arg.index_schema_.set_table_id(res_array.at(i).schema_id_);
           create_index_arg.index_schema_.set_schema_version(res_array.at(i).schema_version_);
-          if (OB_FAIL(create_index_executor.sync_check_index_status(*my_session, create_index_arg, res, allocator))) {
+          if (OB_FAIL(create_index_executor.sync_check_index_status(
+              *my_session, root_commands, create_index_arg, res, allocator))) {
             LOG_WARN("failed to sync_check_index_status", KR(ret), K(create_index_arg), K(i));
           }
         }
@@ -760,7 +767,8 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
         } else {
           create_index_arg->index_schema_.set_table_id(res.res_arg_array_.at(i).schema_id_);
           create_index_arg->index_schema_.set_schema_version(res.res_arg_array_.at(i).schema_version_);
-          if (OB_FAIL(create_index_executor.sync_check_index_status(*my_session, *create_index_arg, res, allocator))) {
+          if (OB_FAIL(create_index_executor.sync_check_index_status(
+              *my_session, root_commands, *create_index_arg, res, allocator))) {
             failed_index_no = i;
             LOG_WARN("failed to sync_check_index_status", KR(ret), K(*create_index_arg), K(i));
           }
@@ -914,7 +922,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
                                                 res,
                                                 allocator,
                                                 my_session,
-                                                ctx.root_command_service()))) {
+                                                ctx.root_command_service(),
+                                                *ctx.get_query_runtime_environment(),
+                                                ctx.local_command_service()))) {
             LOG_WARN("Failed to alter table rpc v2", K(ret));
           }
         }
@@ -925,7 +935,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
         // do nothing, don't check if data is valid
       } else if (OB_FAIL(refresh_schema_for_table())) {
         LOG_WARN("refresh_schema_for_table failed", K(ret));
-      } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+      } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+          res.task_id_, res.ddl_need_retry_at_executor_, my_session,
+          *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
         LOG_WARN("wait check constraint finish", K(ret));
       }
     }
@@ -936,7 +948,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       } else {
         if (OB_FAIL(refresh_schema_for_table())) {
           LOG_WARN("refresh_schema_for_table failed", K(ret));
-        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+            res.task_id_, res.ddl_need_retry_at_executor_, my_session,
+            *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
           LOG_WARN("wait fk constraint finish", K(ret));
         }
       }
@@ -951,7 +965,9 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
         int64_t affected_rows = 0;
         if (OB_FAIL(refresh_schema_for_table())) {
           LOG_WARN("refresh_schema_for_table failed", K(ret));
-        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session, is_support_cancel))) {
+        } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+            res.task_id_, res.ddl_need_retry_at_executor_, my_session,
+            *ctx.get_query_runtime_environment(), ctx.local_command_service(), is_support_cancel))) {
           LOG_WARN("fail to wait ddl finish", K(ret), K(res));
         }
       }
@@ -1732,7 +1748,9 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
           if (OB_FAIL(query::serialize_root_service_call(
                   [&]{ return ctx.root_command_service().drop_table(drop_table_arg, res); }))) {
             LOG_WARN("rpc proxy drop table failed", KR(ret), "dst", GCTX.self_addr());
-          } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(res.task_id_, *my_session, affected_rows))) {
+          } else if (res.is_valid() && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
+              res.task_id_, *my_session, *ctx.get_query_runtime_environment(),
+              ctx.local_command_service(), affected_rows))) {
             LOG_WARN("wait ddl finish failed", KR(ret), K(res.task_id_));
           } else {
             //do nothing
@@ -1860,7 +1878,9 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
                 [&]{ return ctx.root_command_service().truncate_table(truncate_table_arg, res); }))) {
           LOG_WARN("rpc proxy alter table failed", K(ret));
         } else if (res.is_valid()
-          && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(res.task_id_, *my_session, affected_rows))) {
+          && OB_FAIL(ObDDLExecutorUtil::wait_ddl_retry_task_finish(
+              res.task_id_, *my_session, *ctx.get_query_runtime_environment(),
+              ctx.local_command_service(), affected_rows))) {
           LOG_WARN("wait ddl finish failed", K(ret));
         }
       } else {

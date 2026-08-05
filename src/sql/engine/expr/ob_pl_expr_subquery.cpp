@@ -154,6 +154,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   CK(OB_NOT_NULL(info));
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
+  CK (OB_NOT_NULL(ctx.exec_ctx_.get_plan_cache_access_service()));
 
   ObQueryRetryCtrl retry_ctrl;
   int64_t database_schema_version = 0;
@@ -181,7 +182,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
     pl::ObPLExecCtx pl_exec_ctx(&alloc, &ctx.exec_ctx_, params, nullptr, &ret, nullptr);
 
     SMART_VAR(ObSPIResultSet, spi_result) {
-      OZ (spi_result.init(*session));
+      OZ (spi_result.init(
+          *session,
+          *ctx.exec_ctx_.get_plan_cache_access_service()));
       OZ (spi_result.start_nested_stmt_if_need(&pl_exec_ctx, info->route_sql_, static_cast<stmt::StmtType>(info->type_), false));
 
       if (OB_SUCC(ret)) {
@@ -254,6 +257,8 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
                                              result,
                                              info->result_type_,
                                              conv_res,
+                                             ctx.exec_ctx_.get_srs_provider(),
+                                             ctx.exec_ctx_.get_lob_read_service(),
                                              info->is_ignore_fail_,
                                              &info->type_info_));
           OX (result = conv_res);

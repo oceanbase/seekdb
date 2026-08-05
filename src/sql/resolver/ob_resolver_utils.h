@@ -131,6 +131,7 @@ public:
   static int resolve_local_runtime_selector(const ParseNode *runtime_selector);
   static int get_user_type(common::ObIAllocator *allocator,
                            ObSQLSessionInfo *session_info,
+                           ObPlanCache *plan_cache,
                            common::ObMySQLProxy *sql_proxy,
                            share::schema::ObSchemaGetterGuard *schema_guard,
                            pl::ObPLPackageGuard &package_guard,

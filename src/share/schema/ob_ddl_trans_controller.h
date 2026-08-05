@@ -41,10 +41,14 @@ struct TaskDesc
 };
 
 // impl for ddl schema change trans commit in order with schema_version
-class ObDDLTransController
+class ObDDLTransController : public lib::ThreadPool
 {
 public:
-  ObDDLTransController() : inited_(false), schema_service_(NULL) {}
+  ObDDLTransController()
+      : inited_(false),
+        schema_service_(NULL),
+        pending_refresh_version_(0)
+  {}
   ~ObDDLTransController();
   int init(share::schema::ObMultiVersionSchemaService *schema_service);
   void stop();
@@ -58,6 +62,7 @@ public:
   int remove_task(const int64_t task_id);
   int reserve_schema_version(const uint64_t schema_version_count);
 private:
+  virtual void run1() override;
   int check_task_ready_(const int64_t task_id, bool &ready);
 private:
   bool inited_;
@@ -65,6 +70,8 @@ private:
   ObSEArray<TaskDesc, 32> tasks_;
   common::SpinRWLock lock_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  int64_t pending_refresh_version_;
+  common::ObCond wait_cond_;
 };
 
 } // end schema

@@ -359,6 +359,7 @@ public:
         lob_read_options),
     doc_word_info_(ft_doc_word_info),
     ft_doc_word_iter_(nullptr),
+    ft_doc_word_allocator_(allocator),
     ft_parse_helper_(),
     is_inited_(false)
   {
@@ -391,6 +392,7 @@ protected:
 private:
   const ObFTDocWordInfo *doc_word_info_;
   data_plane::ObFTDocWordIterator *ft_doc_word_iter_;
+  common::ObArenaAllocator ft_doc_word_allocator_;
   storage::ObFTParseHelper ft_parse_helper_;
   bool is_inited_;
 };

@@ -102,6 +102,11 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
                                   package_guard,
                                   *(exec_ctx.get_sql_proxy()),
                                   false);
+    resolve_ctx.params_.plan_cache_ = exec_ctx.get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx.get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx.get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx.get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx.get_lob_read_service();
     pl::ObPLINS *ns = NULL;
     if (NULL == session->get_pl_context()) {
       OZ (package_guard.init());
@@ -189,6 +194,8 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
                                       objs[i],
                                       info->elem_types_.at(i),
                                       tmp,
+                                      ctx.exec_ctx_.get_srs_provider(),
+                                      ctx.exec_ctx_.get_lob_read_service(),
                                       false));
         if (OB_FAIL(ret)) {
         } else if (tmp.is_ext()) {

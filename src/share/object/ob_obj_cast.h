@@ -386,7 +386,10 @@ private:
 //==============================
 
 
-int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type, ObObj &obj);
+int obj_collation_check(ObCastCtx &cast_ctx,
+                        const bool is_strict_mode,
+                        const ObCollationType cs_type,
+                        ObObj &obj);
 int obj_accuracy_check(ObCastCtx &cast_ctx, const ObAccuracy &accuracy, const ObCollationType cs_type,
                        const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj);
 int get_bit_len(const ObString &str, int32_t &bit_len);

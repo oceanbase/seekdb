@@ -217,7 +217,7 @@ int Parser::parse_value(const char *&begin, const char *end, Value *&value)
         if (OB_FAIL(alloc_value(JT_STRING, value))) {
           LOG_WARN("fail to alloc value", K(ret));
         } else if (OB_ISNULL(value)) {
-          ret = OB_ERR_UNEXPECTED;;
+          ret = OB_ERR_UNEXPECTED;
           LOG_WARN("succ to alloc value, but value is NULL", K(ret));
         } else {
           value->set_string(const_cast<char *>(cur_token_.value_.str_.begin_),

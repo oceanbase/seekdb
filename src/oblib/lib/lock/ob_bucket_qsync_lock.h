@@ -78,7 +78,7 @@ public:
     if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.rdlock(index_)))) {
       SHARE_LOG_RET(WARN, ret_, "Fail to read lock bucket, ", K_(index), K_(ret));
     } else {
-      lock_start_ts_ = ObClockGenerator::getClock();;
+      lock_start_ts_ = ObClockGenerator::getClock();
     }
   };
   ~ObBucketQSyncRLockGuard()
@@ -87,7 +87,7 @@ public:
       if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.rdunlock(index_)))) {
         SHARE_LOG_RET(WARN,  ret_, "Fail to unlock bucket, ", K_(ret));
       } else {
-        const int64_t lock_end_ts = ObClockGenerator::getClock();;
+        const int64_t lock_end_ts = ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
           SHARE_LOG(INFO, "bucket lock handle cost too much time",
                                             K_(lock_start_ts),
@@ -119,7 +119,7 @@ public:
     if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.wrlock(index_)))) {
       SHARE_LOG_RET(WARN, ret_, "Fail to write lock bucket, ", K_(index), K_(ret));
     } else {
-      lock_start_ts_ = ObClockGenerator::getClock();;
+      lock_start_ts_ = ObClockGenerator::getClock();
     }
   };
   ~ObBucketQSyncWLockGuard()
@@ -128,7 +128,7 @@ public:
       if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.wrunlock(index_)))) {
         SHARE_LOG_RET(WARN, ret_, "Fail to unlock bucket, ", K_(index), K_(ret));
       } else {
-        const int64_t lock_end_ts = ObClockGenerator::getClock();;
+        const int64_t lock_end_ts = ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
           SHARE_LOG(INFO, "bucket lock handle cost too much time",
                                             K_(lock_start_ts),
@@ -187,7 +187,7 @@ public:
     if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.wrlock_all()))) {
       SHARE_LOG_RET(WARN, ret_, "Fail to try write lock all buckets", K_(ret));
     } else {
-      lock_start_ts_ = ObClockGenerator::getClock();;
+      lock_start_ts_ = ObClockGenerator::getClock();
     }
   };
   ~ObBucketQSyncWLockAllGuard()
@@ -196,7 +196,7 @@ public:
       if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.wrunlock_all()))) {
         SHARE_LOG_RET(WARN, ret_, "Fail to unlock all buckets, ", K_(ret));
       } else {
-        const int64_t lock_end_ts = ObClockGenerator::getClock();;
+        const int64_t lock_end_ts = ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
           STORAGE_LOG(INFO, "bucket lock handle cost too much time",
                                             K_(lock_start_ts),
@@ -232,7 +232,7 @@ public:
         }
       }
     } else {
-      lock_start_ts_ = ObClockGenerator::getClock();;
+      lock_start_ts_ = ObClockGenerator::getClock();
     }
   };
   ~ObBucketTryQSyncRLockAllGuard()
@@ -241,7 +241,7 @@ public:
       if (OB_UNLIKELY(OB_SUCCESS != (ret_ = lock_.rdunlock_all()))) {
         SHARE_LOG_RET(WARN, ret_, "Fail to unlock all buckets, ", K_(ret));
       } else {
-        const int64_t lock_end_ts = ObClockGenerator::getClock();;
+        const int64_t lock_end_ts = ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
           STORAGE_LOG(INFO, "bucket lock handle cost too much time",
                                             K_(lock_start_ts),

@@ -99,13 +99,16 @@ void ObResultSet::reset_implicit_cursor_idx()
 
 ObResultSet::~ObResultSet()
 {
+  // The execution context owns the explicit plan-cache dependency. Preserve it
+  // before destroying the inline context because the cache-object guard still
+  // needs it to release the guarded plan.
+  ObPlanCache *pc = get_exec_context().get_plan_cache();
   // when ObExecContext is destroyed, it also depends on the physical plan, so need to ensure
   // that inner_exec_ctx_ is destroyed before cache_obj_guard_
   if (NULL != inner_exec_ctx_) {
     inner_exec_ctx_->~ObExecContext();
     inner_exec_ctx_ = NULL;
   }
-  ObPlanCache *pc = my_session_.get_plan_cache_directly();
   if (OB_NOT_NULL(pc)) {
     cache_obj_guard_.force_early_release(pc);
   }

@@ -822,7 +822,7 @@ public:
   }
   int create(int64_t bucket_num, _allocer *allocer, _bucket_allocer *bucket_allocer)
   {
-    int ret = OB_SUCCESS;;
+    int ret = OB_SUCCESS;
     if (OB_UNLIKELY(0 >= bucket_num) || OB_UNLIKELY(NULL == allocer)) {
       HASH_WRITE_LOG(HASH_WARNING, "invalid param bucket_num=%ld allocer=%p", bucket_num, allocer);
       ret = OB_INVALID_ARGUMENT;
@@ -873,7 +873,7 @@ public:
 
   int clear()
   {
-    int ret = OB_SUCCESS;;
+    int ret = OB_SUCCESS;
     if (OB_UNLIKELY(!inited(buckets_)) || OB_UNLIKELY(NULL == allocer_)) {
       ret = OB_NOT_INIT;
     } else {

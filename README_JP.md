@@ -370,8 +370,7 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
 source ~/.bashrc
-./build.sh release --init
-cd build_release && make -j"$(nproc)" && cd ..
+./build.sh release --init --make
 mkdir -p ~/seekdb/bin
 cp build_release/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb

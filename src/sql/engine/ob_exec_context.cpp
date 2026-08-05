@@ -39,14 +39,12 @@ OB_SERIALIZE_MEMBER(GroupPWJTabletIdInfo, group_id_, tablet_id_array_);
 
 query::ObIRootCommandService *ObExecContext::get_root_command_service() const
 {
-  return OB_ISNULL(my_session_)
-      ? nullptr : my_session_->get_root_command_service();
+  return root_command_service_;
 }
 
 query::ObILocalCommandService *ObExecContext::get_local_command_service() const
 {
-  return OB_ISNULL(my_session_)
-      ? nullptr : my_session_->get_local_command_service();
+  return local_command_service_;
 }
 
 query::ObIRootCommandService &ObExecContext::root_command_service() const
@@ -202,6 +200,19 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     my_session_(NULL),
     session_mgr_(session_mgr),
     lob_read_service_(nullptr),
+    plan_cache_(nullptr),
+    ps_cache_(nullptr),
+    plan_cache_access_service_(nullptr),
+    pl_sql_runtime_(nullptr),
+    pl_engine_(nullptr),
+    prepared_statement_runtime_(nullptr),
+    sql_execution_id_provider_(nullptr),
+    query_runtime_environment_(nullptr),
+    root_command_service_(nullptr),
+    local_command_service_(nullptr),
+    change_stream_service_(nullptr),
+    ddl_execution_limiter_(nullptr),
+    srs_provider_(nullptr),
     exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
@@ -237,6 +248,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     group_pwj_map_(nullptr),
     check_status_times_(0),
     vt_ift_(nullptr),
+    vt_factory_provider_(nullptr),
     px_batch_id_(0),
     admission_acquired_(false),
     use_temp_expr_ctx_cache_(false),
@@ -266,6 +278,48 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     diagnosis_manager_(),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
+}
+
+ObExecContext::RuntimeServices ObExecContext::get_runtime_services() const
+{
+  RuntimeServices services;
+  services.lob_read_service_ = lob_read_service_;
+  services.plan_cache_ = plan_cache_;
+  services.ps_cache_ = ps_cache_;
+  services.plan_cache_access_service_ = plan_cache_access_service_;
+  services.pl_sql_runtime_ = pl_sql_runtime_;
+  services.pl_engine_ = pl_engine_;
+  services.prepared_statement_runtime_ = prepared_statement_runtime_;
+  services.sql_execution_id_provider_ = sql_execution_id_provider_;
+  services.query_runtime_environment_ = query_runtime_environment_;
+  services.root_command_service_ = root_command_service_;
+  services.local_command_service_ = local_command_service_;
+  services.change_stream_service_ = change_stream_service_;
+  services.ddl_execution_limiter_ = ddl_execution_limiter_;
+  services.virtual_table_factory_provider_ = vt_factory_provider_;
+  services.srs_provider_ = srs_provider_;
+  services.resource_limit_calculator_ = resource_limit_calculator_;
+  return services;
+}
+
+void ObExecContext::set_runtime_services(const RuntimeServices &services)
+{
+  lob_read_service_ = services.lob_read_service_;
+  plan_cache_ = services.plan_cache_;
+  ps_cache_ = services.ps_cache_;
+  plan_cache_access_service_ = services.plan_cache_access_service_;
+  pl_sql_runtime_ = services.pl_sql_runtime_;
+  pl_engine_ = services.pl_engine_;
+  prepared_statement_runtime_ = services.prepared_statement_runtime_;
+  sql_execution_id_provider_ = services.sql_execution_id_provider_;
+  query_runtime_environment_ = services.query_runtime_environment_;
+  root_command_service_ = services.root_command_service_;
+  local_command_service_ = services.local_command_service_;
+  change_stream_service_ = services.change_stream_service_;
+  ddl_execution_limiter_ = services.ddl_execution_limiter_;
+  vt_factory_provider_ = services.virtual_table_factory_provider_;
+  srs_provider_ = services.srs_provider_;
+  resource_limit_calculator_ = services.resource_limit_calculator_;
 }
 
 ObExecContext::~ObExecContext()
@@ -349,8 +403,6 @@ void ObExecContext::set_my_session(ObSQLSessionInfo *session)
   if (OB_NOT_NULL(session)) {
     session_mgr_ = session->get_session_manager();
   }
-  lob_read_service_ =
-      OB_ISNULL(session) ? nullptr : session->get_lob_read_service();
   if (OB_NOT_NULL(session)) {
     set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                           ObCtxIds::EXECUTE_CTX_ID));
@@ -838,9 +890,6 @@ ObVirtualTableCtx ObExecContext::get_virtual_table_ctx()
   int ret = OB_SUCCESS;
   ObVirtualTableCtx vt_ctx;
   if (OB_ISNULL(vt_ift_)) {
-    vt_factory_provider_ = OB_ISNULL(my_session_)
-        ? nullptr
-        : my_session_->get_virtual_table_factory_provider();
     if (OB_ISNULL(vt_factory_provider_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("virtual table factory provider is null", K(ret));
@@ -1372,9 +1421,6 @@ int ObExecContext::get_lob_read_options(
   lob_read_options = nullptr;
   common::ObILobReadService *read_service = lob_read_service_;
   common::ObILobAccessContext *lob_access_ctx = nullptr;
-  if (OB_ISNULL(read_service) && OB_NOT_NULL(my_session_)) {
-    read_service = my_session_->get_lob_read_service();
-  }
   if (OB_ISNULL(read_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("LOB read service is not installed in execution context", K(ret));
@@ -1412,9 +1458,6 @@ int ObExecContext::get_datum_access_ctx(
   datum_access_ctx = nullptr;
   const common::ObLobReadOptions *lob_read_options = nullptr;
   common::ObILobReadService *read_service = lob_read_service_;
-  if (OB_ISNULL(read_service) && OB_NOT_NULL(my_session_)) {
-    read_service = my_session_->get_lob_read_service();
-  }
   // Datum comparison and hashing only need this context when they encounter
   // an out-row LOB.  Keep it absent for pure in-row execution; the LOB
   // iterator rejects a missing read service at the actual dereference point.
@@ -1450,6 +1493,16 @@ namespace query
 sql::ObSQLSessionInfo *ObExecContextAccess::get_session(sql::ObExecContext &ctx)
 {
   return ctx.get_my_session();
+}
+
+void ObExecContextAccess::configure_obj_cast(
+    sql::ObExecContext &ctx,
+    common::ObObjCastParams &params)
+{
+  if (OB_NOT_NULL(ctx.get_my_session())) {
+    ctx.get_my_session()->configure_obj_cast(
+        params, ctx.get_srs_provider(), ctx.get_lob_read_service());
+  }
 }
 
 common::ObMySQLProxy *ObExecContextAccess::get_sql_proxy(sql::ObExecContext &ctx)

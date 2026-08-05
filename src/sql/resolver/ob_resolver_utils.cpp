@@ -88,6 +88,7 @@ const ObString ObResolverUtils::stmt_type_string[] = {
 
 int ObResolverUtils::get_user_type(ObIAllocator *allocator,
                                    ObSQLSessionInfo *session_info,
+                                   ObPlanCache *plan_cache,
                                    ObMySQLProxy *sql_proxy,
                                    share::schema::ObSchemaGetterGuard *schema_guard,
                                    pl::ObPLPackageGuard &package_guard,
@@ -97,12 +98,16 @@ int ObResolverUtils::get_user_type(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(allocator));
   CK (OB_NOT_NULL(session_info));
+  CK (OB_NOT_NULL(plan_cache));
   CK (OB_NOT_NULL(sql_proxy));
   CK (OB_NOT_NULL(schema_guard));
   OX (user_type = NULL);
   if (OB_SUCC(ret)) {
     pl::ObPLResolveCtx resolve_ctx(
       *allocator, *session_info, *schema_guard, package_guard, *sql_proxy, false);
+    resolve_ctx.params_.plan_cache_ = plan_cache;
+    resolve_ctx.params_.srs_provider_ = nullptr;
+    resolve_ctx.params_.lob_read_service_ = nullptr;
     if (!package_guard.is_inited()) {
       OZ (package_guard.init());
     }
@@ -129,7 +134,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
 
   CK (OB_NOT_NULL(params.schema_checker_));
   OZ (ObResolverUtils::get_user_type(
-    params.allocator_, params.session_info_, params.sql_proxy_,
+    params.allocator_, params.session_info_, params.plan_cache_, params.sql_proxy_,
     params.schema_checker_->get_schema_guard(),
     *package_guard,
     table_expr->get_udt_id(), user_type));
@@ -162,7 +167,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
     const ObUserDefinedType *user_type = NULL;
     CK (OB_NOT_NULL(params.schema_checker_));
     OZ (ObResolverUtils::get_user_type(
-      params.allocator_, params.session_info_, params.sql_proxy_,
+      params.allocator_, params.session_info_, params.plan_cache_, params.sql_proxy_,
       params.schema_checker_->get_schema_guard(),
       *package_guard,
       coll_type->get_element_type().get_user_type_id(), user_type));
@@ -862,6 +867,11 @@ int ObResolverUtils::check_type_match(ObResolverParams &params,
                              package_guard,
                              *(params.sql_proxy_),
                              false);
+  resolve_ctx.params_.plan_cache_ = params.plan_cache_;
+  resolve_ctx.params_.pl_sql_runtime_ = params.pl_sql_runtime_;
+  resolve_ctx.params_.pl_engine_ = params.pl_engine_;
+  resolve_ctx.params_.srs_provider_ = params.srs_provider_;
+  resolve_ctx.params_.lob_read_service_ = params.lob_read_service_;
   OZ (package_guard.init());
   OZ (check_type_match(
     resolve_ctx, match_info, expr, src_type, src_type_id, dst_pl_type));
@@ -1002,6 +1012,11 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                         resolve_ctx.package_guard_,
                                         resolve_ctx.sql_proxy_,
                                         false);
+          pl_resolve_ctx.params_.plan_cache_ = resolve_ctx.params_.plan_cache_;
+          pl_resolve_ctx.params_.pl_sql_runtime_ = resolve_ctx.params_.pl_sql_runtime_;
+          pl_resolve_ctx.params_.pl_engine_ = resolve_ctx.params_.pl_engine_;
+          pl_resolve_ctx.params_.srs_provider_ = resolve_ctx.params_.srs_provider_;
+          pl_resolve_ctx.params_.lob_read_service_ = resolve_ctx.params_.lob_read_service_;
           const pl::ObUserDefinedType *pl_user_type = NULL;
           const pl::ObCollectionType *coll_type = NULL;
           OZ (pl_resolve_ctx.get_user_type(dst_pl_type.get_user_type_id(), pl_user_type));
@@ -1469,6 +1484,11 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
                                false, /*check mode*/
                                true, /*sql scope*/
                                params.param_list_);
+    resolve_ctx.params_.plan_cache_ = params.plan_cache_;
+    resolve_ctx.params_.pl_sql_runtime_ = params.pl_sql_runtime_;
+    resolve_ctx.params_.pl_engine_ = params.pl_engine_;
+    resolve_ctx.params_.srs_provider_ = params.srs_provider_;
+    resolve_ctx.params_.lob_read_service_ = params.lob_read_service_;
     resolve_ctx.params_.secondary_namespace_ = params.secondary_namespace_;
     resolve_ctx.params_.param_list_ = params.param_list_;
     resolve_ctx.params_.is_execute_call_stmt_ = params.is_execute_call_stmt_;
@@ -5775,6 +5795,11 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                   schema_guard,
                                   *package_guard,
                                   NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
+                                  session_info.get_cur_exec_ctx()->get_plan_cache(),
+                                  session_info.get_cur_exec_ctx()->get_pl_sql_runtime(),
+                                  session_info.get_cur_exec_ctx()->get_pl_engine(),
+                                  session_info.get_cur_exec_ctx()->get_srs_provider(),
+                                  session_info.get_cur_exec_ctx()->get_lob_read_service(),
                                   expr_factory,
                                   NULL == ns ? NULL : ns->get_external_ns()->get_parent_ns(),
                                   is_prepare_protocol,
@@ -5786,6 +5811,9 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
         if (OB_FAIL(pl::ObPLBuilder::init_anonymous_ast(func_ast,
                                                         allocator,
                                                         session_info,
+                                                        *session_info.get_cur_exec_ctx()->get_plan_cache(),
+                                                        session_info.get_cur_exec_ctx()->get_srs_provider(),
+                                                        session_info.get_cur_exec_ctx()->get_lob_read_service(),
                                                         NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
                                                         schema_guard,
                                                         *package_guard,

@@ -570,7 +570,9 @@ int ObInnerConnectionLockRuntime::replace_lock(
   observer::ObInnerSQLConnection *inner_conn =
       static_cast<observer::ObInnerSQLConnection *>(conn);
 
-  SMART_VAR(ObInnerSQLResult, res, inner_conn->get_session(), inner_conn->is_inner_session())
+  SMART_VAR(ObInnerSQLResult, res, inner_conn->get_session(),
+            inner_conn->get_sql_engine()->get_plan_cache_access_service(),
+            inner_conn->is_inner_session())
   {
     if (!inner_conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
@@ -593,7 +595,9 @@ int ObInnerConnectionLockRuntime::replace_lock(const ObReplaceAllLocksRequest &r
   observer::ObInnerSQLConnection *inner_conn =
       static_cast<observer::ObInnerSQLConnection *>(conn);
 
-  SMART_VAR(ObInnerSQLResult, res, inner_conn->get_session(), inner_conn->is_inner_session())
+  SMART_VAR(ObInnerSQLResult, res, inner_conn->get_session(),
+            inner_conn->get_sql_engine()->get_plan_cache_access_service(),
+            inner_conn->is_inner_session())
   {
     if (!inner_conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
@@ -743,7 +747,9 @@ int ObInnerConnectionLockRuntime::request_lock_(const ObLockRequest &arg,
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(),
+            conn->get_sql_engine()->get_plan_cache_access_service(),
+            conn->is_inner_session())
   {
     if (!conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;
@@ -769,7 +775,9 @@ int ObInnerConnectionLockRuntime::request_lock_(const uint64_t table_id, // as o
   int ret = OB_SUCCESS;
   observer::ObReqTimeGuard req_timeinfo_guard;
 
-  SMART_VAR(ObInnerSQLResult, res, conn->get_session(), conn->is_inner_session())
+  SMART_VAR(ObInnerSQLResult, res, conn->get_session(),
+            conn->get_sql_engine()->get_plan_cache_access_service(),
+            conn->is_inner_session())
   {
     if (!conn->is_in_trans()) {
       ret = OB_ERR_UNEXPECTED;

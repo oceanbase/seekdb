@@ -259,9 +259,8 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
 {
   int ret = OB_SUCCESS;
   ObDASParallelTask *task = nullptr;
-  ObSQLSessionInfo *session = das_ref.get_exec_ctx().get_my_session();
   query::ObIQueryRuntimeEnvironment *runtime =
-      OB_ISNULL(session) ? nullptr : session->get_query_runtime_environment();
+      das_ref.get_exec_ctx().get_query_runtime_environment();
   ObPhysicalPlanCtx *plan_ctx = das_ref.get_exec_ctx().get_physical_plan_ctx();
   int64_t timeout_ts = plan_ctx->get_timeout_timestamp();
   if (OB_ISNULL(runtime)) {

@@ -57,6 +57,8 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
 int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
     const bool ddl_need_retry_at_executor,
     ObSQLSessionInfo *session,
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    query::ObILocalCommandService &local_command_service,
     const bool is_support_cancel)
 {
   int ret = OB_SUCCESS;
@@ -110,7 +112,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         if (OB_FAIL(ret)) {
         } else if (nullptr != session && OB_FAIL(handle_session_exception(*session))) {
           LOG_WARN("session exeception happened", K(ret), K(is_support_cancel));
-          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task(*session))) {
+          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task(local_command_service))) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -119,7 +121,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         } 
         
         if (OB_FAIL(ret)) {
-        } else if (is_server_stopped(session)) {
+        } else if (is_server_stopped(runtime_environment)) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
           LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
@@ -175,6 +177,8 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
 
 int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
     ObSQLSessionInfo &session,
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    query::ObILocalCommandService &local_command_service,
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
@@ -244,7 +248,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(handle_session_exception(session))) {
           LOG_WARN("session exception happened", K(ret));
-          if (OB_TMP_FAIL(cancel_ddl_task(session))) {
+          if (OB_TMP_FAIL(cancel_ddl_task(local_command_service))) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -253,7 +257,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
         } 
         
         if (OB_FAIL(ret)) {
-        } else if (is_server_stopped(&session)) {
+        } else if (is_server_stopped(runtime_environment)) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
           LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
@@ -274,18 +278,15 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
   return ret;
 }
 
-int ObDDLExecutorUtil::cancel_ddl_task(ObSQLSessionInfo &session)
+int ObDDLExecutorUtil::cancel_ddl_task(
+    query::ObILocalCommandService &local_command_service)
 {
   int ret = OB_SUCCESS;
   obcall::ObCancelTaskArg rpc_arg;
   rpc_arg.task_id_ = *ObCurTraceId::get_trace_id();
 
-  query::ObILocalCommandService *local_commands =
-      session.get_local_command_service();
-  if (OB_ISNULL(local_commands)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local command service is null", KR(ret));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{ return local_commands->cancel_sys_task(rpc_arg.task_id_); }))) {
+  if (OB_FAIL(ex_rpc::sync_call(
+      [&]{ return local_command_service.cancel_sys_task(rpc_arg.task_id_); }))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
@@ -300,20 +301,17 @@ int ObDDLExecutorUtil::cancel_ddl_task(ObSQLSessionInfo &session)
   return ret;
 }
 
-int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const char* parallel_ddl_type,
+int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session,
+                                            query::ObIRootCommandService &root_commands,
+                                            const char* parallel_ddl_type,
                                             const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res)
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::current_time();
   ObTimeoutCtx ctx;
-  query::ObIRootCommandService *root_commands =
-      OB_ISNULL(my_session) ? nullptr : my_session->get_root_command_service();
-  if (OB_ISNULL(root_commands)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("root command service is not bound", KR(ret), KP(my_session));
-  } else if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
+  if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
     LOG_WARN("fail to set timeout ctx", KR(ret));
-  } else if (OB_FAIL(root_commands->parallel_create_table(arg, res))) {
+  } else if (OB_FAIL(root_commands.parallel_create_table(arg, res))) {
     LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
@@ -331,11 +329,9 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
 }
 
 bool ObDDLExecutorUtil::is_server_stopped(
-    const ObSQLSessionInfo *session)
+    query::ObIQueryRuntimeEnvironment &runtime_environment)
 {
-  query::ObIQueryRuntimeEnvironment *runtime =
-      OB_ISNULL(session) ? nullptr : session->get_query_runtime_environment();
-  return OB_NOT_NULL(runtime) && query::query_server_stopped(*runtime);
+  return query::query_server_stopped(runtime_environment);
 }
 
 } //end namespace sql
@@ -390,10 +386,13 @@ int ObDDLExecution::wait_ddl_finish(
     const int64_t task_id,
     const bool ddl_need_retry_at_executor,
     sql::ObSQLSessionInfo *session,
+    ObIQueryRuntimeEnvironment &runtime_environment,
+    ObILocalCommandService &local_command_service,
     const bool is_support_cancel)
 {
   return sql::ObDDLExecutorUtil::wait_ddl_finish(
-      task_id, ddl_need_retry_at_executor, session, is_support_cancel);
+      task_id, ddl_need_retry_at_executor, session,
+      runtime_environment, local_command_service, is_support_cancel);
 }
 
 int ObDDLExecution::handle_session_exception(sql::ObSQLSessionInfo &session)

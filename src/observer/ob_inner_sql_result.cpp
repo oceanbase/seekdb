@@ -45,12 +45,16 @@ inline int ObInnerSQLResult::check_extend_value(const common::ObObj &obj)
   return ret;
 }
 
-ObInnerSQLResult::ObInnerSQLResult(ObSQLSessionInfo &session, bool is_inner_session)
+ObInnerSQLResult::ObInnerSQLResult(
+    ObSQLSessionInfo &session,
+    query::ObIPlanCacheAccessService &plan_cache_access_service,
+    bool is_inner_session)
     : column_map_created_(false), column_indexed_(false), column_map_(),
       mem_context_(nullptr),
       mem_context_destroy_guard_(mem_context_),
       sql_ctx_(), schema_guard_(share::schema::ObSchemaMgrItem::MOD_INNER_SQL_RESULT),
       opened_(false), session_(session),
+      plan_cache_access_service_(plan_cache_access_service),
       result_set_(nullptr), row_(NULL),
       execute_start_ts_(0), execute_end_ts_(0),
       is_inited_(false),
@@ -86,7 +90,9 @@ int ObInnerSQLResult::init()
     {
       // Inner SQL executes in the server runtime that owns this result.
       SERVER_MODULE_SCOPE {
-        result_set_ = new (buf_) ObResultSet(session_, mem_context_->get_arena_allocator());
+        result_set_ = new (buf_) ObResultSet(
+            session_, mem_context_->get_arena_allocator(),
+            plan_cache_access_service_);
         result_set_->set_is_inner_result_set(true);
       }
     }

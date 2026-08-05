@@ -473,7 +473,10 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
       ObCastCtx cast_ctx(&allocator, &dtc_params, get_cur_time(phy_plan_ctx), def_cm,
                          cs_type, NULL, NULL);
-      session->configure_obj_cast(cast_ctx);
+      session->configure_obj_cast(
+          cast_ctx,
+          ctx.exec_ctx_.get_srs_provider(),
+          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(obj_type, cs_type, cast_ctx, src_obj, dst_obj))) {
         LOG_WARN("failed to cast object to ", K(ret), K(src_obj), K(obj_type));
       } else if (FALSE_IT(get_accuracy_from_expr(expr, out_acc))) {

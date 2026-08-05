@@ -70,7 +70,7 @@
                     "where a.table_type in (0, 1, 2, 3, 4, 14) " \
                     "and b.database_name != '__recyclebin' " \
                     "and b.in_recyclebin = 0 " \
-                    "and 0 = sys_privilege_check('table_acc', 1, b.database_name, a.table_name) "
+                    "and 0 = sys_privilege_check('table_acc', b.database_name, a.table_name) "
 
 #define NEW_TABLE_STATUS_SQL_ORA  "select /*+ leading(a) no_use_nl(ts)*/" \
                     "a.database_id as DATABASE_ID," \

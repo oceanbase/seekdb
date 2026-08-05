@@ -49,6 +49,8 @@ REQUIRED_DEFINITIONS = {
 FORBIDDEN_RUNTIME_ESCAPE_PATTERNS = (
     r"\bquery::set_(?:ai_endpoint_resolver|scheduler_service|vector_index_service)\s*\(",
     r"\bquery::(?:ai_endpoint_resolver|scheduler_service|vector_index_service)\s*\(\s*\)",
+    r"\b(?:bind_|unbind_)?server_service\s*<\s*(?:(?:::)?oceanbase::)?(?:sql::ObSql|pl::ObPL)\s*>",
+    r"\bget_observer_pl_engine\s*\(",
 )
 
 FORBIDDEN_RUNTIME_REGISTRY_FILES = (

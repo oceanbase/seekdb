@@ -126,7 +126,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       }
       if (enable_sqlstat) {
         sqlstat_record.record_sqlstat_start_value(
-            *session.get_query_runtime_environment());
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -174,7 +174,7 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
 
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_end_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.inc_fetch_cnt();
       ObString sql = ObString::make_empty_string();
       if (OB_NOT_NULL(cursor)) {
@@ -182,14 +182,18 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         ObPsStmtInfo *ps_info = NULL;
         ObPsStmtId inner_stmt_id = OB_INVALID_ID;
         if (OB_SUCC(session.get_inner_ps_stmt_id(cursor_id_, inner_stmt_id))
-              && OB_SUCC(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))
+              && OB_SUCC(get_observer_sql_engine()->get_ps_cache().get_stmt_info_guard(inner_stmt_id, guard))
               && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
           sql = ps_info->get_ps_sql();
         } else {
           LOG_WARN("get sql fail in fetch", K(ret), K(cursor_id_), K(cursor->get_id()));
         }
       }
-      sqlstat_record.move_to_sqlstat_cache(session, sql);
+      sqlstat_record.move_to_sqlstat_cache(
+          session,
+          get_observer_sql_engine()->get_plan_cache(),
+          get_observer_sql_engine()->get_plan_cache_access_service(),
+          sql);
     }
     session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
 
@@ -271,6 +275,7 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
               tmp_exec_ctx.set_my_session(&session);
               tmp_exec_ctx.set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
                                                   ObCtxIds::EXECUTE_CTX_ID));
+              get_observer_sql_engine()->bind_exec_context_runtime_services(tmp_exec_ctx);
               exec_ctx = &tmp_exec_ctx;
               if (OB_ISNULL(cursor.get_spi_cursor())) {
                 ret = OB_ERR_UNEXPECTED;

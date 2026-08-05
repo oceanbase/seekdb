@@ -396,10 +396,11 @@ public:
     }
   }
 
-  void destroy(common::ObIAllocator &allocator) override
+  void destroy() override
   {
+    common::ObIAllocator *allocator = &allocator_;
     this->~ObScalarPushdownAggregateProgram();
-    allocator.free(this);
+    allocator->free(this);
   }
 
   int init(const common::ObIArray<ObExpr *> &aggregate_exprs)
@@ -959,10 +960,11 @@ public:
 
   ~ObProcessorSumPushdownAggregateProgram() override = default;
 
-  void destroy(common::ObIAllocator &allocator) override
+  void destroy() override
   {
+    common::ObIAllocator *allocator = &allocator_;
     this->~ObProcessorSumPushdownAggregateProgram();
-    allocator.free(this);
+    allocator->free(this);
   }
 
   int init(const common::ObIArray<ObExpr *> &aggregate_exprs)
@@ -1212,7 +1214,10 @@ private:
 
 } // namespace
 
-int create_pushdown_aggregate_program(
+namespace
+{
+
+int create_pushdown_aggregate_program_instance(
     ObEvalCtx &eval_ctx,
     const common::ObIArray<ObExpr *> &aggregate_exprs,
     const bool rich_format,
@@ -1240,13 +1245,92 @@ int create_pushdown_aggregate_program(
   return ret;
 }
 
-void destroy_pushdown_aggregate_program(
-    common::ObIAllocator &allocator,
-    share::aggregate::ObIPushdownAggregateProgram *&program)
+class ObPushdownAggregatePlan final
+  : public share::aggregate::ObIPushdownAggregatePlan
 {
-  if (nullptr != program) {
-    program->destroy(allocator);
-    program = nullptr;
+public:
+  ObPushdownAggregatePlan(
+      ObEvalCtx &eval_ctx,
+      const common::ObIArray<ObExpr *> &aggregate_exprs,
+      const bool rich_format,
+      common::ObIAllocator &allocator)
+    : eval_ctx_(eval_ctx),
+      aggregate_exprs_(aggregate_exprs),
+      rich_format_(rich_format),
+      allocator_(allocator)
+  {}
+
+  ~ObPushdownAggregatePlan() override = default;
+
+  void destroy() override
+  {
+    common::ObIAllocator *allocator = &allocator_;
+    this->~ObPushdownAggregatePlan();
+    allocator->free(this);
+  }
+
+  int validate()
+  {
+    int ret = OB_SUCCESS;
+    share::aggregate::ObIPushdownAggregateProgram *probe = nullptr;
+    if (OB_FAIL(create_program(probe))) {
+    } else {
+      probe->destroy();
+      probe = nullptr;
+    }
+    return ret;
+  }
+
+  int create_program(
+      share::aggregate::ObIPushdownAggregateProgram *&program) const override
+  {
+    return create_pushdown_aggregate_program_instance(
+        eval_ctx_, aggregate_exprs_, rich_format_, allocator_, program);
+  }
+
+private:
+  ObEvalCtx &eval_ctx_;
+  const common::ObIArray<ObExpr *> &aggregate_exprs_;
+  bool rich_format_;
+  common::ObIAllocator &allocator_;
+  DISALLOW_COPY_AND_ASSIGN(ObPushdownAggregatePlan);
+};
+
+} // namespace
+
+int create_pushdown_aggregate_plan(
+    ObEvalCtx &eval_ctx,
+    const common::ObIArray<ObExpr *> &aggregate_exprs,
+    const bool rich_format,
+    common::ObIAllocator &allocator,
+    share::aggregate::ObIPushdownAggregatePlan *&plan)
+{
+  int ret = OB_SUCCESS;
+  void *buf = nullptr;
+  ObPushdownAggregatePlan *aggregate_plan = nullptr;
+  plan = nullptr;
+  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObPushdownAggregatePlan)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate pushdown aggregate plan", K(ret));
+  } else {
+    aggregate_plan = new (buf) ObPushdownAggregatePlan(
+        eval_ctx, aggregate_exprs, rich_format, allocator);
+    if (OB_FAIL(aggregate_plan->validate())) {
+      aggregate_plan->destroy();
+      aggregate_plan = nullptr;
+    } else {
+      plan = aggregate_plan;
+    }
+  }
+  return ret;
+}
+
+void destroy_pushdown_aggregate_plan(
+    share::aggregate::ObIPushdownAggregatePlan *&plan)
+{
+  if (nullptr != plan) {
+    plan->destroy();
+    plan = nullptr;
   }
 }
 

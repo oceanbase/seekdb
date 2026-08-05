@@ -849,9 +849,7 @@ int ObDbmsStatsExecutor::check_need_split_gather(
   if (param.is_auto_gather_ || param.is_async_gather_) {
     int64_t max_wa_memory_size = MIN_GATHER_WORK_ARANA_SIZE;
     query::ObIQueryRuntimeEnvironment *runtime =
-        OB_ISNULL(ctx.get_my_session())
-            ? nullptr
-            : ctx.get_my_session()->get_query_runtime_environment();
+        ctx.get_query_runtime_environment();
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
       LOG_WARN("query runtime environment is not bound", K(ret));
@@ -1721,9 +1719,7 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   query::ObIQueryRuntimeEnvironment *runtime_environment =
-      OB_ISNULL(ctx.get_my_session())
-          ? nullptr
-          : ctx.get_my_session()->get_query_runtime_environment();
+      ctx.get_query_runtime_environment();
   int64_t cpu_mhz = 0;
   int64_t network_speed = 0;
   int64_t disk_seq_read_speed = 0;

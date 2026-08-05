@@ -32,9 +32,12 @@ namespace sql
 int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())) {
+  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())
+      || OB_ISNULL(ctx.get_plan_cache_access_service())
+      || OB_ISNULL(ctx.get_prepared_statement_runtime())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql ctx or session is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()), K(ret));
+    LOG_WARN("required execution dependency is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()),
+        KP(ctx.get_plan_cache_access_service()), K(ret));
   } else if (stmt::T_CALL_PROCEDURE != stmt.get_prepare_type()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("it must be call procedure stmt", K(ret), K(stmt));
@@ -60,7 +63,8 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
 
     if (OB_SUCC(ret)) {
       ObSqlCtx sql_ctx;
-      SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator()) {
+      SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator(),
+          *ctx.get_plan_cache_access_service()) {
         result_set.set_ps_protocol();
         ObSqlExecutorCtx *task_ctx = result_set.get_exec_context().get_sql_executor_ctx();
         int64_t database_schema_version = 0;
@@ -85,12 +89,13 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           } else {
             if (OB_FAIL(result_set.init())) {
               LOG_WARN("result set init failed", K(ret));
-            } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->stmt_execute(stmt.get_prepare_id(),
-                                                              stmt.get_prepare_type(),
-                                                              params_array,
-                                                              sql_ctx,
-                                                              result_set,
-                                                              false/* is_inner_sql */))) {
+            } else if (OB_FAIL(ctx.get_prepared_statement_runtime()->stmt_execute(
+                stmt.get_prepare_id(),
+                stmt.get_prepare_type(),
+                params_array,
+                sql_ctx,
+                result_set,
+                false/* is_inner_sql */))) {
               LOG_WARN("failed to prepare stmt", K(stmt.get_prepare_id()), K(stmt.get_prepare_type()), K(ret));
             } else {
               if (OB_ISNULL(ctx.get_sql_ctx()->schema_guard_)) {
@@ -110,12 +115,12 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                 if (OB_ISNULL(call_proc_info = call_stmt->get_call_proc_info())) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("call procedure info is null", K(ret));
-                } else if (OB_ISNULL(ctx.get_my_session()->get_ps_cache())) {
+                } else if (OB_ISNULL(ctx.get_ps_cache())) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("ps cache is null", K(ret));
                 } else if (OB_FAIL(ctx.get_my_session()->get_inner_ps_stmt_id(stmt.get_prepare_id(), inner_stmt_id))) {
                   LOG_WARN("get_inner_ps_stmt_id failed", K(ret), K(stmt.get_prepare_id()), K(inner_stmt_id));
-                } else if (OB_FAIL(ctx.get_my_session()->get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+                } else if (OB_FAIL(ctx.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
                   LOG_WARN("get stmt info guard failed", K(ret), K(inner_stmt_id));
                 } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
                   ret = OB_ERR_UNEXPECTED;

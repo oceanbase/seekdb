@@ -3335,12 +3335,15 @@ int ObStaticEngineCG::generate_popular_values_hash(
     common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash)
 {
   int ret = OB_SUCCESS;
+  ObExecContext *exec_ctx = OB_ISNULL(opt_ctx_)
+      ? nullptr
+      : opt_ctx_->get_exec_ctx();
   ObSQLSessionInfo *session = OB_ISNULL(opt_ctx_)
       ? nullptr
       : opt_ctx_->get_session_info();
-  common::ObILobReadService *lob_read_service = OB_ISNULL(session)
+  common::ObILobReadService *lob_read_service = OB_ISNULL(exec_ctx)
       ? nullptr
-      : session->get_lob_read_service();
+      : exec_ctx->get_lob_read_service();
   popular_values_hash.set_capacity(popular_values_expr.count());
   popular_values_hash.set_allocator(&phy_plan_->get_allocator());
   // we allocate a temp buffer for datum, it's enough to hold any datatype

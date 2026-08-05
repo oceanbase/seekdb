@@ -146,6 +146,9 @@ int ObPLBuilder::init_anonymous_ast(
   ObPLFunctionAST &func_ast,
   ObIAllocator &allocator,
   ObSQLSessionInfo &session_info,
+  ObPlanCache &plan_cache,
+  common::ObISrsProvider *srs_provider,
+  common::ObILobReadService *lob_read_service,
   ObMySQLProxy &sql_proxy,
   ObSchemaGetterGuard &schema_guard,
   ObPLPackageGuard &package_guard,
@@ -156,6 +159,9 @@ int ObPLBuilder::init_anonymous_ast(
   ObPLDataType pl_type;
   common::ObDataType data_type;
   ObPLResolveCtx resolve_ctx(allocator, session_info, schema_guard, package_guard, sql_proxy, false);
+  resolve_ctx.params_.plan_cache_ = &plan_cache;
+  resolve_ctx.params_.srs_provider_ = srs_provider;
+  resolve_ctx.params_.lob_read_service_ = lob_read_service;
 
   func_ast.set_name(ObPLResolver::ANONYMOUS_BLOCK);
   data_type.set_obj_type(common::ObNullType);
@@ -278,6 +284,9 @@ int ObPLBuilder::compile(
     OZ (init_anonymous_ast(func_ast,
                            allocator_,
                            session_info_,
+                           plan_cache_,
+                           srs_provider_,
+                           lob_read_service_,
                            sql_proxy_,
                            schema_guard_,
                            package_guard_,
@@ -288,6 +297,7 @@ int ObPLBuilder::compile(
     int64_t init_end = ObTimeUtility::current_time();
     if (OB_SUCC(ret)) {
       ObPLResolver resolver(allocator_, session_info_, schema_guard_, package_guard_, sql_proxy_,
+                            &plan_cache_, pl_sql_runtime_, pl_engine_, srs_provider_, lob_read_service_,
                             func_ast.get_expr_factory(), NULL/*parent ns*/, is_prepare_protocol,
                             false/*is_check_mode_ = false*/, false/*bool is_sql_scope_ = false*/,
                             params);
@@ -489,6 +499,7 @@ int ObPLBuilder::compile(
   if (OB_SUCC(ret)) {
     bool is_prepare_protocol = false;
     ObPLResolver resolver(allocator_, session_info_, schema_guard_, package_guard_, sql_proxy_,
+                          &plan_cache_, pl_sql_runtime_, pl_engine_, srs_provider_, lob_read_service_,
                           func_ast.get_expr_factory(), NULL/*parent ns*/, false/*is_prepare_protocol*/);
     CK (OB_NOT_NULL(parse_tree));
     OZ (resolver.init(func_ast));
@@ -702,6 +713,11 @@ int ObPLBuilder::analyze_package(const ObString &source,
                           schema_guard_,
                           package_guard_,
                           sql_proxy_,
+                          &plan_cache_,
+                          pl_sql_runtime_,
+                          pl_engine_,
+                          srs_provider_,
+                          lob_read_service_,
                           package_ast.get_expr_factory(),
                           parent_ns,
                           false);
@@ -742,7 +758,7 @@ int ObPLBuilder::analyze_package(const ObString &source,
 int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(session_info_.get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine_));
   if (OB_SUCC(ret)) {
     WITH_CONTEXT(package.get_mem_context()) {
       CK (package.is_inited());
@@ -752,8 +768,8 @@ int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &pack
       OZ (generate_package_types(package_ast.get_user_type_table(), package));
       {
         // latch_id = (bucket_id % bucket_cnt_) / 8, so it is needed to multiply 8 to avoid consecutive ids being mapped to the same latch
-        ObBucketHashWLockGuard build_id_guard(::oceanbase::share::server_service<::oceanbase::pl::ObPL>()->get_build_lock().first, package.get_id() * 8);
-        ObBucketHashWLockGuard build_concurrency_guard(::oceanbase::share::server_service<::oceanbase::pl::ObPL>()->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
+        ObBucketHashWLockGuard build_id_guard(pl_engine_->get_build_lock().first, package.get_id() * 8);
+        ObBucketHashWLockGuard build_concurrency_guard(pl_engine_->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
 
         OZ (ObPL::check_session_alive(session_info_));
         OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));

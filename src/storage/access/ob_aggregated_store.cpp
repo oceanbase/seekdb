@@ -59,7 +59,11 @@ void ObAggRow::reuse()
   }
 }
 
-int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &context, const int64_t batch_size)
+int ObAggRow::init(
+    const ObTableAccessParam &param,
+    const ObTableAccessContext &context,
+    const int64_t batch_size,
+    sql::ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
   const common::ObIArray<share::schema::ObColumnParam *> *out_cols_param = param.iter_param_.get_col_params();
@@ -86,7 +90,8 @@ int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &
         sql::ObExpr *expr = param.output_exprs_->at(i);
         ObAggCellBasicInfo basic_info(col_offset, col_index, col_param, expr, 
                                       batch_size, is_pad_char_to_full_length(context.sql_mode_));
-        if (OB_FAIL(agg_cell_factory_.alloc_cell(basic_info, dummy_agg_cells_))) {
+        if (OB_FAIL(agg_cell_factory_.alloc_cell(
+                basic_info, dummy_agg_cells_, false, false, &eval_ctx))) {
           LOG_WARN("Failed to alloc agg cell", K(ret), K(i));
         } else if (FALSE_IT(cell = dummy_agg_cells_.at(dummy_agg_cells_.count() - 1))) {
         } else if (OB_UNLIKELY(PD_FIRST_ROW != cell->get_type())) {
@@ -120,7 +125,8 @@ int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &
         }
         ObAggCellBasicInfo basic_info(col_offset, col_index, col_param, agg_expr, 
                                       batch_size, is_pad_char_to_full_length(context.sql_mode_));
-        if (OB_FAIL(agg_cell_factory_.alloc_cell(basic_info, agg_cells_, exclude_null))) {
+        if (OB_FAIL(agg_cell_factory_.alloc_cell(
+                basic_info, agg_cells_, exclude_null, false, &eval_ctx))) {
           LOG_WARN("Failed to alloc agg cell", K(ret), K(i));
         }
       }
@@ -147,6 +153,7 @@ ObAggregatedStore::ObAggregatedStore(const int64_t batch_size, sql::ObEvalCtx &e
       agg_row_(*context_.stmt_allocator_),
       agg_flat_row_mode_(false),
       row_buf_(),
+      aggregate_plan_(nullptr),
       aggregate_program_(nullptr)
 {
 }
@@ -158,11 +165,15 @@ ObAggregatedStore::~ObAggregatedStore()
 
 void ObAggregatedStore::reset()
 {
+  if (nullptr != aggregate_program_) {
+    aggregate_program_->destroy();
+    aggregate_program_ = nullptr;
+  }
   ObBlockBatchedRowStore::reset();
   agg_row_.reset();
   agg_flat_row_mode_ = false;
   row_buf_.reset();
-  aggregate_program_ = nullptr;
+  aggregate_plan_ = nullptr;
 }
 
 void ObAggregatedStore::reuse()
@@ -198,21 +209,22 @@ int ObAggregatedStore::init(const ObTableAccessParam &param, common::hash::ObHas
 {
   UNUSED(agg_col_mask);
   int ret = OB_SUCCESS;
-  aggregate_program_ = nullptr == param.get_op()
+  aggregate_plan_ = nullptr == param.get_op()
       ? nullptr
-      : param.get_op()->get_pushdown_aggregate_program();
-  if (nullptr != aggregate_program_) {
+      : param.get_op()->get_pushdown_aggregate_plan();
+  if (nullptr != aggregate_plan_) {
     if (OB_ISNULL(param.iter_param_.agg_cols_project_)
         || param.iter_param_.agg_cols_project_->count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected aggregate input projector", K(ret), KP(param.iter_param_.agg_cols_project_));
     } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
       LOG_WARN("failed to initialize aggregate program row store", K(ret));
-    } else if (OB_FAIL(aggregate_program_->reset_scan())) {
-      LOG_WARN("failed to reset pushdown aggregate program", K(ret));
+    } else if (OB_FAIL(aggregate_plan_->create_program(aggregate_program_))) {
+      LOG_WARN("failed to create scan-owned aggregate program", K(ret), KP(aggregate_plan_));
     } else {
-      LOG_DEBUG("selected query-owned scalar aggregate program",
-                KP(aggregate_program_), K(param.iter_param_.agg_cols_project_->count()));
+      LOG_DEBUG("created scan-owned aggregate program",
+                KP(aggregate_plan_), KP(aggregate_program_),
+                K(param.iter_param_.agg_cols_project_->count()));
     }
   } else if (OB_ISNULL(param.output_exprs_) ||
       OB_ISNULL(param.iter_param_.out_cols_project_) ||
@@ -231,7 +243,7 @@ int ObAggregatedStore::init(const ObTableAccessParam &param, common::hash::ObHas
         K(param.aggregate_exprs_->count()), K(param.iter_param_.agg_cols_project_->count()));
   } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
     LOG_WARN("Failed to init ObBlockBatchedRowStore", K(ret));
-  } else if (OB_FAIL(agg_row_.init(param, context_, batch_size_))) {
+  } else if (OB_FAIL(agg_row_.init(param, context_, batch_size_, eval_ctx_))) {
     LOG_WARN("Failed to init agg cells", K(ret));
   } else if (OB_FAIL(check_agg_in_row_mode(param.iter_param_))) {
     LOG_WARN("Failed to check agg in row mode", K(ret));

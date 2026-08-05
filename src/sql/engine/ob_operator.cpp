@@ -482,6 +482,7 @@ ObOperator::ObOperator(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput 
     : spec_(spec),
     ctx_(exec_ctx),
     eval_ctx_(exec_ctx),
+    datum_access_ctx_(nullptr),
     eval_infos_(exec_ctx.get_allocator()),
     input_(input),
     parent_(NULL),
@@ -562,7 +563,7 @@ int ObOperator::set_child(const uint32_t idx, ObOperator *child)
 
 int ObOperator::init()
 {
-  return OB_SUCCESS;
+  return ctx_.get_datum_access_ctx(datum_access_ctx_);
 }
 
 int ObOperator::check_stack_once()
@@ -936,9 +937,8 @@ int ObOperator::setup_op_feedback_info()
     common::ObIArray<ObExecFeedbackNode> &nodes = fb_info.get_feedback_nodes();
     int64_t &total_db_time = fb_info.get_total_db_time();
     uint64_t db_time = op_monitor_info_.calc_db_time();
-    ObSQLSessionInfo *session = ctx_.get_my_session();
     uint64_t cpu_khz = query::query_cpu_frequency_khz(
-        OB_ISNULL(session) ? nullptr : session->get_query_runtime_environment());
+        ctx_.get_query_runtime_environment());
     db_time = db_time * 1000 / cpu_khz;
     total_db_time += db_time;
     if (fb_node_idx_ >= 0 && fb_node_idx_ < nodes.count()) {

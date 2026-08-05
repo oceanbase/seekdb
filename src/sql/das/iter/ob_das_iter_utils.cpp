@@ -2484,6 +2484,11 @@ int ObDASIterUtils::create_functional_lookup_sub_tree(ObTableScanParam &scan_par
       }
     }
     if (OB_SUCC(ret)) {
+      fts_merge_iter_param.max_size_ = func_lookup_rtdef->eval_ctx_->is_vectorized()
+          ? func_lookup_rtdef->eval_ctx_->max_batch_size_ : 1;
+      fts_merge_iter_param.eval_ctx_ = func_lookup_rtdef->eval_ctx_;
+      fts_merge_iter_param.exec_ctx_ = &func_lookup_rtdef->eval_ctx_->exec_ctx_;
+      fts_merge_iter_param.output_ = &func_lookup_ctdef->result_output_;
       fts_merge_iter_param.tr_merge_iters_ = data_table_iters;
       fts_merge_iter_param.iter_count_ = func_lookup_cnt;
       fts_merge_iter_param.doc_id_expr_ = func_lookup_ctdef->lookup_domain_id_expr_;

@@ -903,7 +903,8 @@ void ObPluginVectorIndexService::destroy()
 }
 
 int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema_service,
-                                     storage::ObLSService *ls_service)
+                                     storage::ObLSService *ls_service,
+                                     common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr mem_attr("VecIdxSrv");
@@ -911,7 +912,8 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_ISNULL(schema_service)
-      || OB_ISNULL(ls_service)) {
+      || OB_ISNULL(ls_service)
+      || OB_ISNULL(lob_read_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument to init ObPluginVectorIndexService", KR(ret));
   } else if (OB_FAIL(allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
@@ -931,6 +933,7 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
     } else {
       schema_service_ = schema_service;
       ls_service_ = ls_service;
+      lob_read_service_ = lob_read_service;
       sql_proxy_ = GCTX.sql_proxy_;
       is_inited_ = true;
       LOG_INFO("plugin vector index service: init", KR(ret));
@@ -1022,13 +1025,15 @@ int ObPluginVectorIndexService::alloc_vec_async_task_sched()
   return ret;
 }
 
-int ObPluginVectorIndexService::server_module_init(ObPluginVectorIndexService *&service)
+int ObPluginVectorIndexService::server_module_init(
+    ObPluginVectorIndexService *&service,
+    common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
   schema::ObMultiVersionSchemaService *schema_service = &GSCHEMASERVICE;
   storage::ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
 
-  if (OB_FAIL(service->init(schema_service, ls_service))) {
+  if (OB_FAIL(service->init(schema_service, ls_service, lob_read_service))) {
     LOG_WARN("fail to init plugin vector index service service", KR(ret));
   }
   return ret;

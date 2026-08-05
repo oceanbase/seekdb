@@ -130,7 +130,8 @@ int ObMPResetConnection::process()
     // 6. Releases prepared statements. (include ps stmt, ps cursor, piece)
     if (OB_SUCC(ret)) {
       // 6.1 ps stmt
-      if (OB_FAIL(session->close_all_ps_stmt())) {
+      if (OB_FAIL(session->close_all_ps_stmt(
+              get_observer_sql_engine()->get_ps_cache()))) {
         LOG_WARN("failed to close all stmt", K(ret));
       }
 

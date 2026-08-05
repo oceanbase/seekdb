@@ -130,7 +130,9 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
         ret = OB_ERR_ADD_INDEX;
         LOG_WARN("index table id is invalid", KR(ret));
       }
-    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(res.task_id_, res.ddl_need_retry_at_executor_, my_session))) {
+    } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
+        res.task_id_, res.ddl_need_retry_at_executor_, my_session,
+        *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
       LOG_WARN("failed to wait ddl finish", K(ret));
     }
   }
@@ -183,14 +185,13 @@ int ObCreateIndexExecutor::set_drop_index_stmt_str(
 // is_update_global_indexes = true: drop/truncate partition will trigger index building, no need delete failed index at exception
 // is_update_global_indexes = false: create index/alter table add index will trigger index building, need delete failed index at exception
 int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_session,
+    query::ObIRootCommandService &root_commands,
     const obcall::ObCreateIndexArg &create_index_arg,
     const obcall::ObAlterTableRes &res,
     common::ObIAllocator &allocator,
     bool is_update_global_indexes)
 {
   int ret = OB_SUCCESS;
-  query::ObIRootCommandService *root_commands =
-      my_session.get_root_command_service();
   // Force refresh schema version, ensure observer version is latest
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   bool is_finish = false;
@@ -201,10 +202,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
   const uint64_t index_table_id = create_index_arg.index_schema_.get_table_id();
   ObSqlString           drop_index_sql;
 
-  if (OB_ISNULL(root_commands)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("root command service is not bound", KR(ret));
-  } else if (!is_update_global_indexes) {
+  if (!is_update_global_indexes) {
     ret = drop_index_sql.append_fmt("drop index `%.*s` on `%.*s`",
                                     create_index_arg.index_name_.length(),
                                     create_index_arg.index_name_.ptr(),
@@ -255,7 +253,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         if (OB_SUCCESS != (tmp_ret = set_drop_index_stmt_str(drop_index_arg, allocator))) {
           LOG_WARN("fail to set drop index ddl_stmt_str", K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = query::serialize_root_service_call(
-            [&]{ return root_commands->drop_index(drop_index_arg, drop_index_res); }))) {
+            [&]{ return root_commands.drop_index(drop_index_arg, drop_index_res); }))) {
           LOG_WARN("drop index failed", "dst", GCTX.self_addr(), K(tmp_ret),
               K(drop_index_arg.table_name_), K(drop_index_arg.index_name_));
         }

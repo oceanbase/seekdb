@@ -622,7 +622,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_start_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_is_in_retry(false);
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
@@ -713,7 +713,7 @@ OB_INLINE int ObMPQuery::do_process_trans_ctrl(ObSQLSessionInfo &session,
   }
   if (enable_sqlstat) {
     sqlstat_record.record_sqlstat_end_value(
-        *session.get_query_runtime_environment());
+        ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
     sqlstat_record.set_rows_processed(0);
     sqlstat_record.set_partition_cnt(0);
     sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
@@ -845,7 +845,8 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   int64_t database_schema_version = 0;
   SQL_INFO_GUARD(sql, session.get_cur_sql_id());
   ObIAllocator &allocator = CURRENT_CONTEXT->get_arena_allocator();
-  SMART_VAR(ObMySQLResultSet, result, session, allocator) {
+  SMART_VAR(ObMySQLResultSet, result, session, allocator,
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
     if (OB_FAIL(get_schema_info_(&cached_schema_info,
                                  schema_guard,
                                  database_schema_version))) {
@@ -871,7 +872,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       }
       if (enable_sqlstat) {
         sqlstat_record.record_sqlstat_start_value(
-            *session.get_query_runtime_environment());
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -1019,11 +1020,13 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_end_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }

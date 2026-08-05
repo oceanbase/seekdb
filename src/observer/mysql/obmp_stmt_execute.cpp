@@ -1515,7 +1515,9 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   inner_stmt_id = OB_INVALID_ID;
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
-  if (OB_ISNULL(session.get_ps_cache())) {
+  ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
+      ? nullptr : &get_observer_sql_engine()->get_ps_cache();
+  if (OB_ISNULL(ps_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ps : ps cache is null.", K(ret), K(stmt_id_));
   } else if (OB_FAIL(session.get_inner_ps_stmt_id(stmt_id_, inner_stmt_id))) {
@@ -1524,7 +1526,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   } else {
     ObPsStmtInfoGuard guard;
     ObPsStmtInfo *ps_info = NULL;
-    if (OB_FAIL(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+    if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
       LOG_WARN("get stmt info guard failed", K(ret), K(stmt_id_), K(inner_stmt_id));
     } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1665,7 +1667,8 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_sql_arena_allocator()) {
+  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_sql_arena_allocator(),
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
 
     int64_t execution_id = 0;
     {
@@ -1675,7 +1678,7 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
 
       if (enable_sqlstat) {
         sqlstat_record.record_sqlstat_start_value(
-            *session.get_query_runtime_environment());
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -1754,12 +1757,14 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_end_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       ObString sql_id = ObString::make_string(ctx_.sql_id_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }
@@ -2198,42 +2203,6 @@ int ObMPStmtExecute::process()
   }
 
   return (OB_SUCCESS != ret) ? ret : flush_ret;
-}
-
-int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
-                                              const TypeInfo *type_info,
-                                              const pl::ObUserDefinedType *&pl_type)
-{
-  int ret = OB_SUCCESS;
-  const share::schema::ObPackageInfo *package_info = NULL;
-  ObSchemaChecker schema_checker;
-  CK (OB_NOT_NULL(type_info));
-  CK (OB_NOT_NULL(ctx_.schema_guard_));
-  CK (OB_NOT_NULL(ctx_.session_info_));
-  CK (OB_NOT_NULL(ctx_.session_info_->get_pl_engine()));
-  if (OB_SUCC(ret) && OB_ISNULL(pl_type ))
-  OZ (schema_checker.init(*ctx_.schema_guard_, ctx_.session_info_->get_server_sid()));
-  OZ (schema_checker.get_package_info(
-                                      type_info->relation_name_,
-                                      type_info->package_name_,
-                                      share::schema::PACKAGE_TYPE,
-                                      package_info));
-  CK (OB_NOT_NULL(package_info));
-  if (OB_SUCC(ret)) {
-    pl::ObPLPackageManager &package_manager
-      = ctx_.session_info_->get_pl_engine()->get_package_manager();
-    pl::ObPLPackageGuard package_guard{};
-    pl::ObPLResolveCtx resolve_ctx(allocator,
-                                   *(ctx_.session_info_),
-                                   *(ctx_.schema_guard_),
-                                   package_guard,
-                                   *(GCTX.sql_proxy_),
-                                   false);
-    OZ (package_manager.get_package_type(
-      resolve_ctx, package_info->get_package_id(), type_info->type_name_, pl_type));
-    CK (OB_NOT_NULL(pl_type));
-  }
-  return ret;
 }
 
 int ObMPStmtExecute::get_pl_type_by_type_info(ObIAllocator &allocator,

@@ -340,8 +340,9 @@ private:
 
 struct ObPLCacheCtx : public ObILibCacheCtx
 {
-  ObPLCacheCtx()
+  explicit ObPLCacheCtx(sql::ObPlanCache &plan_cache)
     : ObILibCacheCtx(),
+      plan_cache_(plan_cache),
       key_(),
       session_info_(NULL),
       schema_guard_(NULL),
@@ -354,6 +355,7 @@ struct ObPLCacheCtx : public ObILibCacheCtx
     sql_id_[common::OB_MAX_SQL_ID_LENGTH] = '\0';
   }
 
+  sql::ObPlanCache &plan_cache_;
   ObPLObjectKey key_;
   char sql_id_[common::OB_MAX_SQL_ID_LENGTH + 1];
   ObSQLSessionInfo *session_info_;

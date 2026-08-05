@@ -55,6 +55,7 @@ class ObISrsProvider;
 namespace sql
 {
 class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
+class ObMaintainDepInfoTaskQueue;
 class RowDesc;
 class ObSQLSessionInfo;
 class ObRawExpr;
@@ -606,10 +607,12 @@ public:
                                   ObSelectStmt *select_stmt,
                                   bool reset_column_infos,
                                   common::ObIAllocator &alloc,
-                                  sql::ObSQLSessionInfo &session_info);
+                                  sql::ObSQLSessionInfo &session_info,
+                                  ObMaintainDepInfoTaskQueue &dependency_info_queue);
   static int check_sys_view_changed(const share::schema::ObTableSchema &old_view_schema,
                                     const share::schema::ObTableSchema &new_view_schema,
-                                    bool &changed);
+                                    bool &changed,
+                                    ObMaintainDepInfoTaskQueue &dependency_info_queue);
   static bool check_need_disconnect_parser_err(const int ret_code);
   static bool check_json_expr(const ObRawExpr &expr);
 

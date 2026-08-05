@@ -119,8 +119,7 @@ public:
     }
   }
   ~ObResourceLimitCalculator() { destroy(); }
-  int init(ObIResourceLimitCalculatorHandler *ls_handler,
-           ObIResourceLimitCalculatorHandler *tablet_handler);
+  int init(ObIResourceLimitCalculatorHandler *tablet_handler);
   void destroy()
   {
     WLockGuard guard(lock_);

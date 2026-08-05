@@ -30,7 +30,8 @@ namespace sql
 
 int materialize_lob_result(common::ObObj &value,
                            common::ObIAllocator *allocator,
-                           const ObSQLSessionInfo &session_info)
+                           const ObSQLSessionInfo &session_info,
+                           common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
   if (!(value.is_lob() || value.is_json() || value.is_geometry()) ||
@@ -43,13 +44,11 @@ int materialize_lob_result(common::ObObj &value,
     common::ObTextStringIter text_iter(value);
     common::ObArenaAllocator tmp_allocator(
         "LobRead", common::OB_MALLOC_NORMAL_BLOCK_SIZE);
-    common::ObILobReadService *read_service =
-        session_info.get_lob_read_service();
-    if (OB_ISNULL(read_service)) {
+    if (OB_ISNULL(lob_read_service)) {
       ret = text_iter.init(0, nullptr, allocator, &tmp_allocator);
     } else {
       const common::ObLobReadOptions read_options(
-          *read_service,
+          *lob_read_service,
           query::ObSessionAccess::get_query_timeout_ts(&session_info));
       ret = text_iter.init(0, &read_options, allocator, &tmp_allocator);
     }

@@ -64,9 +64,13 @@ public:
   static int wait_ddl_finish(const int64_t task_id,
       const bool ddl_need_retry_at_executor,
       ObSQLSessionInfo *session,
+      query::ObIQueryRuntimeEnvironment &runtime_environment,
+      query::ObILocalCommandService &local_command_service,
       const bool is_support_cancel = true);
   static int wait_ddl_retry_task_finish(const int64_t task_id,
       ObSQLSessionInfo &session,
+      query::ObIQueryRuntimeEnvironment &runtime_environment,
+      query::ObILocalCommandService &local_command_service,
       int64_t &affected_rows);
   static int wait_build_index_finish(const int64_t task_id, bool &is_finish);
   static int wait_ddl_task_to_status(
@@ -75,11 +79,13 @@ public:
       ObSQLSessionInfo *session,
       bool &is_reached);
   static int handle_session_exception(ObSQLSessionInfo &session);
-  static int cancel_ddl_task(ObSQLSessionInfo &session);
-  static int execute_pcreate_table(ObSQLSessionInfo *my_session, const char* parallel_ddl_type,
+  static int cancel_ddl_task(query::ObILocalCommandService &local_command_service);
+  static int execute_pcreate_table(ObSQLSessionInfo *my_session,
+                                  query::ObIRootCommandService &root_commands,
+                                  const char* parallel_ddl_type,
                                   const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res);
 private:
-  static bool is_server_stopped(const ObSQLSessionInfo *session);
+  static bool is_server_stopped(query::ObIQueryRuntimeEnvironment &runtime_environment);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDDLExecutorUtil);
 };

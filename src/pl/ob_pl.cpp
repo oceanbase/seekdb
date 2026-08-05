@@ -51,10 +51,15 @@ namespace pl
 ERRSIM_POINT_DEF(OBPLCONTEXT_INIT);
 #endif // ERRSIM
 
-int ObPL::init(common::ObMySQLProxy &sql_proxy)
+int ObPL::init(
+    common::ObMySQLProxy &sql_proxy,
+    query::ObIAiEndpointAdmin &ai_endpoint_admin,
+    share::ObResourceLimitCalculator &resource_limit_calculator)
 {
   int ret = OB_SUCCESS;
   sql_proxy_ = &sql_proxy;
+  ai_endpoint_admin_ = &ai_endpoint_admin;
+  resource_limit_calculator_ = &resource_limit_calculator;
   OZ (build_lock_.first.init(1024));
   OZ (build_lock_.second.init(1024));
   OZ (interface_service_.init());
@@ -95,6 +100,9 @@ ObPLCtx::~ObPLCtx()
 
 void ObPL::destory()
 {
+  sql_proxy_ = NULL;
+  ai_endpoint_admin_ = NULL;
+  resource_limit_calculator_ = NULL;
 }
 
 int ObPL::execute_proc(ObPLExecCtx &ctx,
@@ -1099,6 +1107,11 @@ int ObPL::execute(ObExecContext &ctx, ParamStore &params, const ObStmtNodeTree *
     if (OB_SUCC(ret)) {
       ObPLBuilder builder(mem_context->get_arena_allocator(),
                           *(ctx.get_my_session()),
+                          *ctx.get_plan_cache(),
+                          ctx.get_pl_sql_runtime(),
+                          ctx.get_pl_engine(),
+                          ctx.get_srs_provider(),
+                          ctx.get_lob_read_service(),
                           *(ctx.get_sql_ctx()->schema_guard_),
                           *(ctx.get_package_guard()),
                           *(ctx.get_sql_proxy()));
@@ -1474,7 +1487,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
     uint64_t database_id = OB_INVALID_ID;
     ctx.get_my_session()->get_database_id(database_id);
 
-    ObPLCacheCtx pc_ctx;
+    ObPLCacheCtx pc_ctx(*ctx.get_plan_cache());
     pc_ctx.session_info_ = ctx.get_my_session();
     pc_ctx.schema_guard_ = ctx.get_sql_ctx()->schema_guard_;
     pc_ctx.cache_params_ = &params;
@@ -1497,7 +1510,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
       pc_ctx.key_.name_ = sql;
       LOG_DEBUG("find plan by stmt_id failed, start to find plan by sql",
                  K(ret), K(sql), K(stmt_id), K(pc_ctx.key_));
-      if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_my_session()->get_plan_cache(), cacheobj_guard, pc_ctx))) {
+      if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_plan_cache(), cacheobj_guard, pc_ctx))) {
         LOG_INFO("get pl function by sql failed, will ignore this error",
                  K(ret), K(pc_ctx.key_), K(stmt_id), K(sql), K(params));
         HANDLE_PL_CACHE_RET_VALUE(ret);
@@ -1527,7 +1540,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
         LOG_WARN("query or session is killed after get PL build lock", K(ret));
 
         // check cache again after get lock
-      } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_my_session()->get_plan_cache(), cacheobj_guard, pc_ctx))) {
+      } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_plan_cache(), cacheobj_guard, pc_ctx))) {
         LOG_INFO("get pl function by sql failed, will ignore this error",
                  K(ret), K(pc_ctx.key_), K(stmt_id), K(sql), K(params));
         HANDLE_PL_CACHE_RET_VALUE(ret);
@@ -1587,6 +1600,11 @@ int ObPL::get_pl_function(ObExecContext &ctx,
                           package_guard,
                           *ctx.get_sql_proxy(),
                           false /*PS MODE*/);
+      pl_ctx.params_.plan_cache_ = ctx.get_plan_cache();
+      pl_ctx.params_.pl_sql_runtime_ = ctx.get_pl_sql_runtime();
+      pl_ctx.params_.pl_engine_ = ctx.get_pl_engine();
+      pl_ctx.params_.srs_provider_ = ctx.get_srs_provider();
+      pl_ctx.params_.lob_read_service_ = ctx.get_lob_read_service();
       OZ (package_manager_.get_package_routine(pl_ctx,
                                                ctx,
                                                package_id,
@@ -1599,7 +1617,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
     uint64_t database_id = OB_INVALID_ID;
     ctx.get_my_session()->get_database_id(database_id);
 
-    ObPLCacheCtx pc_ctx;
+    ObPLCacheCtx pc_ctx(*ctx.get_plan_cache());
     pc_ctx.session_info_ = ctx.get_my_session();
     pc_ctx.schema_guard_ = ctx.get_sql_ctx()->schema_guard_;
     pc_ctx.raw_sql_ = PLSQL;
@@ -1608,7 +1626,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
     pc_ctx.key_.db_id_ = database_id;
     pc_ctx.key_.key_id_ = routine_id;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_my_session()->get_plan_cache(), cacheobj_guard, pc_ctx))) {
+    } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_plan_cache(), cacheobj_guard, pc_ctx))) {
       LOG_INFO("get pl function from plan cache failed",
                K(ret), K(pc_ctx.key_), K(package_id), K(routine_id));
       HANDLE_PL_CACHE_RET_VALUE(ret);
@@ -1625,7 +1643,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
           LOG_WARN("query or session is killed after get PL build lock", K(ret));
 
           // check pl cache again after get lock.
-        } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_my_session()->get_plan_cache(), cacheobj_guard, pc_ctx))) {
+        } else if (OB_FAIL(ObPLCacheMgr::get_pl_cache(ctx.get_plan_cache(), cacheobj_guard, pc_ctx))) {
           LOG_INFO("get pl function from plan cache failed",
                    K(ret), K(pc_ctx.key_), K(package_id), K(routine_id));
           HANDLE_PL_CACHE_RET_VALUE(ret);
@@ -1676,14 +1694,11 @@ int ObPL::get_pl_function(ObExecContext &ctx,
 int ObPL::add_pl_lib_cache(ObPLFunction *pl_func, ObPLCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
-  ObPlanCache *plan_cache = NULL;
+  ObPlanCache *plan_cache = &pc_ctx.plan_cache_;
   ObSQLSessionInfo *session = pc_ctx.session_info_;
   if (OB_ISNULL(session) || OB_ISNULL(pl_func)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(session), K(pl_func));
-  } else if (OB_ISNULL(plan_cache = session->get_plan_cache())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("plan cache is null");
   } else if (OB_FAIL(ObPLCacheMgr::add_pl_cache(plan_cache, pl_func, pc_ctx))) {
     if (OB_SQL_PC_PLAN_DUPLICATE == ret) {
       ret = OB_SUCCESS;
@@ -1727,7 +1742,7 @@ int ObPL::generate_pl_function(ObExecContext &ctx,
   int64_t compile_start = ObTimeUtility::current_time();
 
   OZ (ObPLContext::valid_execute_context(ctx));
-  OX (plan_cache = ctx.get_my_session()->get_plan_cache());
+  OX (plan_cache = ctx.get_plan_cache());
   CK (OB_NOT_NULL(plan_cache));
 
   // Anonymous block will be come a ObPLFunction object
@@ -1774,6 +1789,11 @@ int ObPL::generate_pl_function(ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     ObPLBuilder builder(compile_alloc,
                           *(ctx.get_my_session()),
+                          *ctx.get_plan_cache(),
+                          ctx.get_pl_sql_runtime(),
+                          ctx.get_pl_engine(),
+                          ctx.get_srs_provider(),
+                          ctx.get_lob_read_service(),
                           *(ctx.get_sql_ctx()->schema_guard_),
                           *(ctx.get_package_guard()),
                           *(ctx.get_sql_proxy()));
@@ -1798,7 +1818,7 @@ int ObPL::generate_pl_function(
 
   int64_t compile_start = ObTimeUtility::current_time();
   OZ (ObPLContext::valid_execute_context(ctx));
-  OX (plan_cache = ctx.get_my_session()->get_plan_cache());
+  OX (plan_cache = ctx.get_plan_cache());
   CK (OB_NOT_NULL(plan_cache));
   OZ (ObCacheObjectFactory::alloc(*plan_cache, cacheobj_guard,
                                   ObLibCacheNameSpace::NS_PRCR));
@@ -1809,6 +1829,11 @@ int ObPL::generate_pl_function(
     // ObPLFunctionAST tree survives for the tree-walking interpreter.
     ObPLBuilder builder(routine->get_allocator(),
                           *(ctx.get_my_session()),
+                          *ctx.get_plan_cache(),
+                          ctx.get_pl_sql_runtime(),
+                          ctx.get_pl_engine(),
+                          ctx.get_srs_provider(),
+                          ctx.get_lob_read_service(),
                           *(ctx.get_sql_ctx()->schema_guard_),
                           *(ctx.get_package_guard()),
                           *(ctx.get_sql_proxy()));
@@ -2017,6 +2042,11 @@ int ObPLExecCtx::get_user_type(uint64_t type_id,
                                     *(guard_),
                                     *(exec_ctx_->get_sql_proxy()),
                                     false);
+    resolve_ctx.params_.plan_cache_ = exec_ctx_->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx_->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx_->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx_->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx_->get_lob_read_service();
     OZ (resolve_ctx.get_user_type(type_id, user_type));
   }
   return ret;
@@ -2215,6 +2245,11 @@ int ObPLExecState::init_complex_obj(ObIAllocator &allocator,
                       *package_guard,
                       *sql_proxy,
                       false);
+      ns.params_.plan_cache_ = get_exec_ctx().exec_ctx_->get_plan_cache();
+      ns.params_.pl_sql_runtime_ = get_exec_ctx().exec_ctx_->get_pl_sql_runtime();
+      ns.params_.pl_engine_ = get_exec_ctx().exec_ctx_->get_pl_engine();
+      ns.params_.srs_provider_ = get_exec_ctx().exec_ctx_->get_srs_provider();
+      ns.params_.lob_read_service_ = get_exec_ctx().exec_ctx_->get_lob_read_service();
       OZ (ns.get_user_type(composite->get_id(), user_type));
       CK (OB_NOT_NULL(user_type));
     }
@@ -2234,6 +2269,11 @@ int ObPLExecState::init_complex_obj(ObIAllocator &allocator,
                       *package_guard,
                       *sql_proxy,
                       false);
+    ns.params_.plan_cache_ = get_exec_ctx().exec_ctx_->get_plan_cache();
+    ns.params_.pl_sql_runtime_ = get_exec_ctx().exec_ctx_->get_pl_sql_runtime();
+    ns.params_.pl_engine_ = get_exec_ctx().exec_ctx_->get_pl_engine();
+    ns.params_.srs_provider_ = get_exec_ctx().exec_ctx_->get_srs_provider();
+    ns.params_.lob_read_service_ = get_exec_ctx().exec_ctx_->get_lob_read_service();
     OZ (ns.init_complex_obj(allocator, *get_exec_ctx().get_top_expr_allocator(), *real_pl_type, obj, false, set_null));
   }
   OX (obj.set_udt_id(real_pl_type->get_user_type_id()));
@@ -2407,6 +2447,11 @@ int ObPLExecState::convert_composite(ObObjParam &param, const ObPLDataType &dest
     ObObj *src_ptr = &param;
     ObPLResolveCtx resolve_ctx(
       *get_allocator(), *session, *schema_guard, *package_guard, *sql_proxy, false);
+    resolve_ctx.params_.plan_cache_ = ctx_.exec_ctx_->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = ctx_.exec_ctx_->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = ctx_.exec_ctx_->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = ctx_.exec_ctx_->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = ctx_.exec_ctx_->get_lob_read_service();
     OZ (pl_user_type->init_obj(*(schema_guard), ctx_.exec_ctx_->get_allocator(), dst, dst_size));
     OZ (pl_user_type->convert(resolve_ctx, src_ptr, dst_ptr));
     CK (OB_NOT_NULL(ctx_.exec_ctx_->get_pl_ctx()));
@@ -2652,6 +2697,10 @@ do {                                                                  \
                                &dtc_params,
                                cast_mode,
                                get_params().at(i).get_collation_type());
+            ctx_.exec_ctx_->get_my_session()->configure_obj_cast(
+                cast_ctx,
+                ctx_.exec_ctx_->get_srs_provider(),
+                ctx_.exec_ctx_->get_lob_read_service());
             result_type.reset();
             result_type.set_meta(func_.get_variables().at(i).get_data_type()->get_meta_type());
             result_type.set_accuracy(func_.get_variables().at(i).get_data_type()->get_accuracy());

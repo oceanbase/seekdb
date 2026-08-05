@@ -61,15 +61,12 @@ ObString extract_user_name(const ObString &in)
 }  // namespace observer
 }  // namespace oceanbase
 
-ObMPConnect::ObMPConnect(
-    const oceanbase::share::ObGlobalContext &gctx,
-    ObVTIterCreator &vt_iter_creator)
+ObMPConnect::ObMPConnect(const oceanbase::share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       user_name_(),
       client_ip_(),
       db_name_(),
       deser_ret_(OB_SUCCESS),
-      vt_iter_creator_(vt_iter_creator),
       allocator_(ObModIds::OB_SQL_REQUEST),
       asr_mem_pool_(&allocator_)
 {
@@ -130,7 +127,6 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   const ObString &sql = multi_stmt_item.get_sql();
-  ObVirtualTableIteratorFactory vt_iter_factory(vt_iter_creator_);
   ObSchemaGetterGuard schema_guard;
   // init_connect can execute query and dml statements, must add req_timeinfo_guard
   observer::ObReqTimeGuard req_timeinfo_guard;
@@ -151,7 +147,8 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     ctx.retry_times_ = 0; // This is the initialization SQL execution when establishing a connection, no retry
     ctx.schema_guard_ = &schema_guard;
-    HEAP_VAR(ObMySQLResultSet, result, session, allocator) {
+    HEAP_VAR(ObMySQLResultSet, result, session, allocator,
+             ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
       result.set_has_more_result(has_more_result);
       if (OB_FAIL(result.init())) {
         LOG_WARN("result set init failed");

@@ -71,13 +71,15 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
     // Failing to do so means that different SQL queries could access the same plan cache, resulting
     // in identical ObP2PDhKey values. Consequently, these queries would receive the same TOP-N
     // pushdown runtime filter message from a single SQL query, which is a hazardous behavior.
-    px_seq_id = ::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->get_px_sequence_id();
+    CK (OB_NOT_NULL(exec_ctx->get_sql_execution_id_provider()));
+    OX (px_seq_id = exec_ctx->get_sql_execution_id_provider()->get_px_sequence_id());
   } else {
     ObPxSqcMeta &sqc = sqc_handler->get_sqc_init_arg().sqc_;
     px_seq_id = sqc.get_interrupt_id().px_interrupt_id_.first_;
   }
 
-  if (OB_FAIL(PX_P2P_DH.alloc_msg(mem_context_->get_malloc_allocator(),
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(PX_P2P_DH.alloc_msg(mem_context_->get_malloc_allocator(),
                                   pd_topn_filter_info_->dh_msg_type_, p2p_msg))) {
     LOG_WARN("fail to alloc msg", K(ret));
   } else if (FALSE_IT(pd_topn_filter_msg = static_cast<ObPushDownTopNFilterMsg *>(p2p_msg))) {

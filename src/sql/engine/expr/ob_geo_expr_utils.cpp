@@ -41,9 +41,7 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
                                  const ObSrsItem *&srs)
 {
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  common::ObISrsProvider *srs_provider =
-      OB_ISNULL(session) ? nullptr : session->get_srs_provider();
+  common::ObISrsProvider *srs_provider = ctx.exec_ctx_.get_srs_provider();
 
   if (!ObGeoTypeUtil::need_get_srs(srid)) {
     // do nothing

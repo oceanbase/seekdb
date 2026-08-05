@@ -905,37 +905,42 @@ int ObDDLScheduler::activate()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K_(is_inited));
-  } else if (OB_FAIL(rootserver::ObServerThreadHelper::switch_to_leader())) {
-    LOG_WARN("new ddl scheduler start thread failed", KR(ret));
-  } else if (OB_FAIL(ddl_builder_.start())) {
-    LOG_WARN("fail to start new ddl builder", KR(ret));
   } else {
-    // try schedule ddl scan task
-    if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(scan_timer_task_exist = scan_task_.task_exist())) {
-    } else if (scan_timer_task_exist) {
-      FLOG_INFO("scan task already exist, no need to push again", K(scan_timer_task_exist));
-    } else if (OB_FAIL(scan_task_.schedule())) {
-      LOG_WARN("fail to scheduler ddl scan task", KR(ret));
+    // The workers may run as soon as switch_to_leader() publishes them.  Make
+    // the queue runnable first; otherwise they repeatedly leave do_work()
+    // while the remaining activation steps are still in progress.
+    task_queue_.set_stop(false);
+    is_stop_ = false;
+    if (OB_FAIL(rootserver::ObServerThreadHelper::switch_to_leader())) {
+      LOG_WARN("new ddl scheduler start thread failed", KR(ret));
+    } else if (OB_FAIL(ddl_builder_.start())) {
+      LOG_WARN("fail to start new ddl builder", KR(ret));
     } else {
-      FLOG_INFO("[DDLScanTask] scan task scheduled successfully", KR(ret));
-    }
+      // try schedule ddl scan task
+      if (FALSE_IT(scan_timer_task_exist = scan_task_.task_exist())) {
+      } else if (scan_timer_task_exist) {
+        FLOG_INFO("scan task already exist, no need to push again", K(scan_timer_task_exist));
+      } else if (OB_FAIL(scan_task_.schedule())) {
+        LOG_WARN("fail to scheduler ddl scan task", KR(ret));
+      } else {
+        FLOG_INFO("[DDLScanTask] scan task scheduled successfully", KR(ret));
+      }
 
-    // try schedule heart beat check task
-    if (OB_FAIL(ret)) {
-    } else if (FALSE_IT(heart_beat_check_timer_task_exist = heart_beat_check_task_.task_exist())) {
-    } else if (heart_beat_check_timer_task_exist) {
-      LOG_INFO("scan task already exist, no need to push again", K(heart_beat_check_timer_task_exist));
-    } else if (OB_FAIL(heart_beat_check_task_.schedule())) {
-      LOG_WARN("fail to scheduler heartbeat check task", KR(ret));
-    } else {
-      FLOG_INFO("[HeartBeatCheckTask] heart beat check task scheduled successfully", KR(ret));
+      // try schedule heart beat check task
+      if (OB_FAIL(ret)) {
+      } else if (FALSE_IT(heart_beat_check_timer_task_exist = heart_beat_check_task_.task_exist())) {
+      } else if (heart_beat_check_timer_task_exist) {
+        LOG_INFO("scan task already exist, no need to push again", K(heart_beat_check_timer_task_exist));
+      } else if (OB_FAIL(heart_beat_check_task_.schedule())) {
+        LOG_WARN("fail to scheduler heartbeat check task", KR(ret));
+      } else {
+        FLOG_INFO("[HeartBeatCheckTask] heart beat check task scheduled successfully", KR(ret));
+      }
     }
-
     if (OB_FAIL(ret)) {
-    } else {
-      task_queue_.set_stop(false);
-      is_stop_ = false;
+      task_queue_.set_stop(true);
+      is_stop_ = true;
+      ObServerThreadHelper::stop();
     }
   }
   FLOG_INFO("[SYS_DDL_SCHEDULER] ObDDLScheduler switch leader finish",
@@ -985,9 +990,9 @@ int ObDDLScheduler::init()
     LOG_WARN("fail to create ddl scan task", KR(ret));
   } else if (OB_FAIL(heart_beat_check_task_.init())) {
     LOG_WARN("fail to create heartbeat check task", KR(ret));
-  } else if (OB_FAIL(rootserver::ObServerThreadHelper::start())) {
-    LOG_WARN("new ddl scheduler start thread failed", KR(ret), KP(this));
   } else {
+    // create() has already created dormant reentrant threads.  Activation
+    // starts them after the task queue is made runnable.
     is_inited_ = true;
     is_stop_ = true;
   }

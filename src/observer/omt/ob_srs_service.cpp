@@ -244,7 +244,9 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
             LOG_WARN("failed to parse srs item from sys_table", K(ret));
             result->print_info();
           } else if (OB_FAIL(snapshot->get_srs_item(srs_item->get_srid(), tmp))) {
-            if (ret == OB_HASH_NOT_EXIST) {
+            // ObISrsSnapshot exposes the domain-level OB_ERR_SRS_NOT_FOUND
+            // instead of leaking the backing hash map's OB_HASH_NOT_EXIST.
+            if (ret == OB_ERR_SRS_NOT_FOUND) {
               if (OB_FAIL(snapshot->add_srs_item(srs_item->get_srid(), srs_item))) {
                 LOG_WARN("failed to add srs item to snapshot", K(ret), K(srs_item->get_srid()));
               }

@@ -32,9 +32,12 @@ Usage:
   ./build.sh clean
   ./build.sh release [--init] [--android] [-DName=Value ...]
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh rpm [--init] [-DName=Value ...]
+  ./build.sh rpm [--init] [-DName=Value ...] --make [MakeOptions]
 
 Supported compatibility build:
-  Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary.
+  Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary,
+  and the Linux RPM packaging profile derived from that Release build.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
   Windows x64 uses build.ps1.
 
@@ -42,6 +45,9 @@ Examples:
   source ~/.bashrc && ./build.sh release --init
   cd build_release && make -j80
   source ~/.bashrc && ./build.sh release --make -j80
+  source ~/.bashrc && ./build.sh rpm --init
+  cd build_rpm && make -j80
+  source ~/.bashrc && ./build.sh rpm --make -j80 rpm
   ./build.sh release --android --init --make -j16
 
 Bazel remains the authoritative modular build graph. Use ./bazel.py directly
@@ -51,8 +57,10 @@ EOF
 
 function print_command
 {
-  printf '[build.sh] command:'
-  printf ' %q' "$0" "${ALL_ARGS[@]}"
+  printf '[build.sh] command: %q' "$0"
+  if (( ${#ALL_ARGS[@]} > 0 )); then
+    printf ' %q' "${ALL_ARGS[@]}"
+  fi
   printf '\n'
 }
 
@@ -130,7 +138,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_release"|"${TOPDIR}/build_android_release")
+    "${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -223,6 +231,11 @@ function do_release
         fi
         cmake_args+=("$1")
         ;;
+      release)
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        fi
+        ;;
       *)
         if [[ "${collecting_make_args}" == true ]]; then
           make_args+=("$1")
@@ -240,7 +253,11 @@ function do_release
   fi
 
   build_dir="$(release_build_dir "${android_build}")"
-  configure_release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
+  if (( ${#cmake_args[@]} > 0 )); then
+    configure_release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
+  else
+    configure_release "${android_build}" "${build_dir}" || exit $?
+  fi
 
   if [[ "${need_make}" == true ]]; then
     if (( ${#make_args[@]} == 0 )); then
@@ -250,12 +267,87 @@ function do_release
   fi
 }
 
+function do_rpm
+{
+  local need_init=false
+  local need_make=false
+  local collecting_make_args=false
+  local build_dir="${TOPDIR}/build_rpm"
+  local -a cmake_args=()
+  local -a make_args=()
+  local -a rpm_cmake_args=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --init)
+        need_init=true
+        ;;
+      --make)
+        if [[ "${need_make}" == true ]]; then
+          fail "--make may only be specified once"
+        fi
+        need_make=true
+        collecting_make_args=true
+        ;;
+      --android|--coverage|--ob-make)
+        fail "$1 is outside the CMake RPM compatibility boundary"
+        ;;
+      -D*)
+        if [[ "${collecting_make_args}" == true ]]; then
+          fail "CMake options must appear before --make: $1"
+        fi
+        cmake_args+=("$1")
+        ;;
+      *)
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        else
+          fail "unexpected rpm argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  require_host
+  [[ "$(uname -s)" == "Linux" ]] || fail "RPM packaging is supported only on Linux"
+  if [[ "${need_init}" == true ]]; then
+    do_init false || exit $?
+  fi
+
+  rpm_cmake_args=(
+    -DOB_BUILD_PACKAGE=ON
+    -DOB_BUILD_RPM=ON
+    -DENABLE_AUTO_FDO=ON
+    -DENABLE_THIN_LTO=ON
+    -DENABLE_HOTFUNC=ON
+    -DOB_STATIC_LINK_LGPL_DEPS=ON
+    -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN
+    -DDEFAULT_LOG_FILE_SIZE_MB=16
+  )
+  if (( ${#cmake_args[@]} > 0 )); then
+    rpm_cmake_args=("${cmake_args[@]}" "${rpm_cmake_args[@]}")
+  fi
+  configure_release false "${build_dir}" "${rpm_cmake_args[@]}" || exit $?
+
+  if [[ "${need_make}" == true ]]; then
+    if (( ${#make_args[@]} > 0 )); then
+      make -C "${build_dir}" -j"$(cpu_count)" "${make_args[@]}"
+    else
+      make -C "${build_dir}" -j"$(cpu_count)"
+    fi
+  fi
+}
+
 function do_clean
 {
   local build_dir
   local found=false
 
-  for build_dir in "${TOPDIR}/build_release" "${TOPDIR}/build_android_release"; do
+  for build_dir in \
+      "${TOPDIR}/build_release" \
+      "${TOPDIR}/build_android_release" \
+      "${TOPDIR}/build_rpm"; do
     if [[ -d "${build_dir}" ]]; then
       remove_managed_build_dir "${build_dir}"
       echo_log "removed ${build_dir}"
@@ -301,12 +393,15 @@ function main
     release)
       do_release "${@:2}"
       ;;
+    rpm)
+      do_rpm "${@:2}"
+      ;;
     "")
       usage
       exit 2
       ;;
     *)
-      fail "unsupported build type or command: $1 (only release is maintained)"
+      fail "unsupported build type or command: $1 (maintained modes: release, rpm)"
       ;;
   esac
 }

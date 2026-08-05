@@ -44,7 +44,11 @@ public:
   ~ObAggRow();
   void reset();
   void reuse();
-  int init(const ObTableAccessParam &param, const ObTableAccessContext &context, const int64_t batch_size);
+  int init(
+      const ObTableAccessParam &param,
+      const ObTableAccessContext &context,
+      const int64_t batch_size,
+      sql::ObEvalCtx &eval_ctx);
   OB_INLINE int64_t get_agg_count() const { return agg_cells_.count(); }
   OB_INLINE int64_t get_dummy_agg_count() const { return dummy_agg_cells_.count(); }
   OB_INLINE bool has_lob_column_out() const { return has_lob_column_out_; }
@@ -93,7 +97,8 @@ public:
   int check_agg_in_row_mode(const ObTableIterParam &iter_param);
   bool has_data();
   INHERIT_TO_STRING_KV("ObBlockBatchedRowStore", ObBlockBatchedRowStore,
-                       K_(agg_row), K_(agg_flat_row_mode), KP_(aggregate_program));
+                       K_(agg_row), K_(agg_flat_row_mode),
+                       KP_(aggregate_plan), KP_(aggregate_program));
 
 protected:
   int on_scan_start() override;
@@ -102,6 +107,7 @@ private:
   ObAggRow agg_row_;
   bool agg_flat_row_mode_;
   blocksstable::ObDatumRow row_buf_;
+  share::aggregate::ObIPushdownAggregatePlan *aggregate_plan_;
   share::aggregate::ObIPushdownAggregateProgram *aggregate_program_;
 };
 

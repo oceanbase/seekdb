@@ -430,7 +430,8 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
   parallel_degree = MIN(MAX(dag_worker_limit, PARALLEL_MERGE_TARGET_TASK_CNT), origin_degree);
   if (parallel_degree <= 2) {
     // do nothing
-  } else if (share::g_mp->tablet_scheduler()->enable_adaptive_compaction()) {
+  } else if (share::server_service<compaction::ObTabletScheduler>()
+                 ->enable_adaptive_compaction()) {
     const int64_t compaction_memory_limit = lib::get_compaction_memory_limit();
     const int64_t mem_allow_max_thread_cnt =
         compaction_memory_limit / MAX(mem_per_thread, 1);

@@ -40,7 +40,7 @@ namespace share
 {
 namespace aggregate
 {
-class ObIPushdownAggregateProgram;
+class ObIPushdownAggregatePlan;
 }
 namespace schema
 {
@@ -1416,8 +1416,8 @@ public:
 
   int init_pushdown_storage_filter();
   OB_INLINE ObEvalCtx &get_eval_ctx() { return eval_ctx_; }
-  OB_INLINE share::aggregate::ObIPushdownAggregateProgram *get_pushdown_aggregate_program()
-  { return pd_aggregate_program_; }
+  OB_INLINE share::aggregate::ObIPushdownAggregatePlan *get_pushdown_aggregate_plan()
+  { return pd_aggregate_plan_; }
   OB_INLINE bool is_vectorized() const { return 0 != expr_spec_.max_batch_size_; }
   OB_INLINE int64_t get_batch_size() const { return expr_spec_.max_batch_size_; }
   // filter row for storage callback.
@@ -1434,9 +1434,10 @@ public:
   int write_trans_info_datum(blocksstable::ObDatumRow &out_row);
 public:
   ObPushdownFilterExecutor *pd_storage_filters_;
-  share::aggregate::ObIPushdownAggregateProgram *pd_aggregate_program_;
+  share::aggregate::ObIPushdownAggregatePlan *pd_aggregate_plan_;
   // Transitional quarantine for legacy rich aggregates.  Storage borrows the
-  // opaque interface; SQL owns every aggregate implementation and row layout.
+  // immutable plan and owns one opaque mutable program per logical scan store;
+  // SQL owns every concrete implementation and row layout.
   ObEvalCtx &eval_ctx_;
   const ObPushdownExprSpec &expr_spec_;
 private:

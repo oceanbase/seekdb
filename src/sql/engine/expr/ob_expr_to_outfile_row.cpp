@@ -158,14 +158,17 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
+    LOG_WARN("evaluate parameters values failed", K(ret));
   } else {
     ObExprOutFileInfo *out_info = NULL;
     auto rt_ctx_id = static_cast<uint64_t>(expr.expr_ctx_id_);
     if (NULL == (out_info = static_cast<ObExprOutFileInfo *>
                  (ctx.exec_ctx_.get_expr_op_ctx(rt_ctx_id)))) {
       if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(rt_ctx_id, out_info))) {
+        LOG_WARN("failed to create operator ctx", K(ret));
       } else if (OB_FAIL(calc_outfile_info(expr, ctx,
                                            ctx.exec_ctx_.get_allocator(), *out_info))) {
+        LOG_WARN("fail calc outfile info", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -293,6 +296,7 @@ int ObExprToOutfileRow::print_wchar_to_buf(char *buf, const int64_t buf_len, int
   int ret = OB_SUCCESS;
   int result_len = 0;
   if (OB_FAIL(ObCharset::wc_mb(coll_type, wchar, buf + pos, buf_len - pos, result_len))) {
+    LOG_WARN("failed to convert wc to mb");
   } else {
     pos += result_len;
   }

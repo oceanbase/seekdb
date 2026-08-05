@@ -210,7 +210,7 @@ public:
     ~Item(){}
     uint32_t MAGIC_CODE_;
     ObBlockSlicer* host_;
-  } __attribute__((aligned (16)));;
+  } __attribute__((aligned (16)));
 public:
   ObDLink dlink_ CACHE_ALIGNED;
 public:

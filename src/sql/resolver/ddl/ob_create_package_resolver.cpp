@@ -63,6 +63,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
                             *(params_.schema_checker_->get_schema_mgr()),
                             package_guard,
                             *params_.sql_proxy_,
+                            params_.plan_cache_,
+                            params_.pl_sql_runtime_,
+                            params_.pl_engine_,
+                            params_.srs_provider_,
+                            params_.lob_read_service_,
                             *params_.expr_factory_,
                             NULL,
                             false) {
@@ -208,6 +213,11 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
           ObPLBuilder builder(*params_.allocator_,
                                 *params_.session_info_,
+                                *params_.plan_cache_,
+                                params_.pl_sql_runtime_,
+                                params_.pl_engine_,
+                                params_.srs_provider_,
+                                params_.lob_read_service_,
                                 *schema_guard,
                                 package_guard,
                                 *params_.sql_proxy_);
@@ -521,6 +531,11 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
           ObPLBuilder builder(tmp_allocator,
                                 *params_.session_info_,
+                                *params_.plan_cache_,
+                                params_.pl_sql_runtime_,
+                                params_.pl_engine_,
+                                params_.srs_provider_,
+                                params_.lob_read_service_,
                                 *schema_guard,
                                 package_guard,
                                 *params_.sql_proxy_);

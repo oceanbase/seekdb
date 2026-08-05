@@ -40,6 +40,7 @@
 #include "query/engine/expr/ob_expr_cmp_func.h"
 #include "query/engine/expr/ob_expr_extra_info_factory.h"
 #include "query/engine/expr/ob_i_expr_extra_info.h"
+#include "query/engine/ob_exec_context_access.h"
 #include "lib/hash/ob_hashset.h"
 #include "common/udt/ob_array_utils.h"
 #include "query/session/ob_local_session_var.h"
@@ -2177,7 +2178,12 @@ private:
                      cast_coll_type,                                       \
                      (zf_info));                                           \
   if (NULL != (expr_ctx).my_session_) {                                    \
-    (expr_ctx).my_session_->configure_obj_cast(cast_ctx);                   \
+    if (NULL != (expr_ctx).exec_ctx_) {                                     \
+      query::ObExecContextAccess::configure_obj_cast(                       \
+          *(expr_ctx).exec_ctx_, cast_ctx);                                 \
+    } else {                                                                \
+      (expr_ctx).my_session_->configure_obj_cast(cast_ctx, NULL, NULL);      \
+    }                                                                       \
   }
 
 // external variables: ret, cast_ctx.

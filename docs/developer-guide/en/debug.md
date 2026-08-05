@@ -182,11 +182,11 @@ Let's run the debug command again and we can get detailed information.
 (gdb) bt
 #0  0x00007fb6e9c36d62 in pthread_cond_timedwait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
 #1  0x00007fb6f9f44862 in ob_pthread_cond_timedwait (__cond=0x7fb6fb1d5340, __mutex=0x7fb6fb1d5318, __abstime=0x7fb6b3ed41d0)
-    at src/oblib/lib/thread/ob_tenant_hook.cpp:124
+    at deps/oblib/src/lib/thread/ob_tenant_hook.cpp:124
 #2  0x00007fb6eee8d206 in oceanbase::common::ObThreadCond::wait_us (this=<optimized out>, time_us=140422679606016)
-    at src/oblib/lib/lock/ob_thread_cond.cpp:106
+    at deps/oblib/src/lib/lock/ob_thread_cond.cpp:106
 #3  0x00007fb6f34b21c8 in oceanbase::common::ObThreadCond::wait (this=0x7fb6fb1d5310, time_ms=200)
-    at src/oblib/lib/lock/ob_thread_cond.h:69
+    at deps/oblib/src/lib/lock/ob_thread_cond.h:69
 #4  oceanbase::observer::ObUniqTaskQueue<oceanbase::observer::ObServerSchemaTask, oceanbase::observer::ObServerSchemaUpdater>::run1 (
     this=<optimized out>) at src/observer/ob_uniq_task_queue.h:417
 ```
@@ -261,13 +261,13 @@ addr2line -pCfe ./bin/seekdb 0x14371609 0xe4ce783 0x54fd9b6 0x54ebb1b 0x905e62e 
 
 I got this:
 ```txt
-oceanbase::common::lbt() at /home/distcc/tmp/./src/oblib/lib/utility/ob_backtrace.cpp:130 (discriminator 2)
+oceanbase::common::lbt() at /home/distcc/tmp/./deps/oblib/src/lib/utility/ob_backtrace.cpp:130 (discriminator 2)
 operator() at /home/distcc/tmp/./src/sql/session/ob_basic_session_info.cpp:599 (discriminator 2)
 oceanbase::sql::ObBasicSessionInfo::switch_tenant(unsigned long) at /home/distcc/tmp/./src/sql/session/ob_basic_session_info.cpp:604
 oceanbase::observer::ObInnerSQLConnection::switch_tenant(unsigned long) at /home/distcc/tmp/./src/observer/ob_inner_sql_connection.cpp:1813 (discriminator 2)
 ...
-oceanbase::lib::Thread::run() at /home/distcc/tmp/./src/oblib/lib/thread/thread.cpp:162
-oceanbase::lib::Thread::__th_start(void*) at /home/distcc/tmp/./src/oblib/lib/thread/thread.cpp:312
+oceanbase::lib::Thread::run() at /home/distcc/tmp/./deps/oblib/src/lib/thread/thread.cpp:162
+oceanbase::lib::Thread::__th_start(void*) at /home/distcc/tmp/./deps/oblib/src/lib/thread/thread.cpp:312
 ?? ??:0
 ?? ??:0
 ```

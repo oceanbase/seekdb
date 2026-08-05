@@ -38,7 +38,9 @@ public:
 
   virtual bool is_valid() const override
   {
-    return iter_count_ >= 1 && nullptr != tr_merge_iters_;
+    return ObDASIterParam::is_valid()
+        && iter_count_ >= 1
+        && nullptr != tr_merge_iters_;
   }
 public:
   ObDASIter **tr_merge_iters_;

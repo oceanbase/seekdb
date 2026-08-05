@@ -761,6 +761,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                           session_info_->get_sql_mode(),
                                           session_info_,
                                           schema_checker_,
+                                          params_.srs_provider_,
+                                          params_.lob_read_service_,
                                           NULL == element->children_[1]))) {
             SQL_RESV_LOG(WARN, "failed to cast default value!", K(ret));
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {

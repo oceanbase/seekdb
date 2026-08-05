@@ -102,6 +102,35 @@ static int read_real_lob_data(ObObjCastParams &params,
 
 static const int64_t MAX_DOUBLE_STRICT_PRINT_SIZE = 512;
 
+// ObObjType values intentionally match the parser's literal type tags.  Keep
+// the historical user-error text here without introducing a Share -> Query
+// dependency on sql/parser/type_name.c.
+static const char *legacy_cast_error_type_name(const ObObjType type)
+{
+  static const char *TYPE_NAMES[] = {
+    "T_NULL", "T_TINYINT", "T_SMALLINT", "T_MEDIUMINT", "T_INT32", "T_INT",
+    "T_UTINYINT", "T_USMALLINT", "T_UMEDIUMINT", "T_UINT32", "T_UINT64",
+    "T_FLOAT", "T_DOUBLE", "T_UFLOAT", "T_UDOUBLE", "T_NUMBER", "T_UNUMBER",
+    "T_DATETIME", "T_TIMESTAMP", "T_DATE", "T_TIME", "T_YEAR", "T_VARCHAR",
+    "T_CHAR", "T_HEX_STRING", "T_EXTEND", "T_QUESTIONMARK", "T_TINYTEXT",
+    "T_TEXT", "T_MEDIUMTEXT", "T_LONGTEXT", "T_BIT", "T_ENUM", "T_SET"
+  };
+  const int64_t type_idx = static_cast<int64_t>(type);
+  const char *type_name = "Unknown";
+  if (type_idx >= 0 && type_idx < ARRAYSIZEOF(TYPE_NAMES)) {
+    type_name = TYPE_NAMES[type_idx];
+  } else if (ObJsonType == type) {
+    type_name = "T_JSON";
+  } else if (ObGeometryType == type) {
+    type_name = "T_GEOMETRY";
+  } else if (ObUserDefinedSQLType == type) {
+    type_name = "T_RESERVED_TYPE_38";
+  } else if (ObCollectionSQLType == type) {
+    type_name = "T_COLLECTION";
+  }
+  return type_name;
+}
+
 static ObDateSqlMode get_date_sql_mode(const ObCastMode cast_mode) {
   ObDateSqlMode date_sql_mode;
   date_sql_mode.allow_invalid_dates_ =
@@ -135,7 +164,9 @@ static int cast_not_support(const ObObjType expect_type,
 {
   UNUSED(params);
   char err_msg[number::ObNumber::MAX_PRINTABLE_SIZE] = {0};
-  (void)snprintf(err_msg, sizeof(err_msg), "%s cast to %s", ob_obj_type_str(in.get_type()), ob_obj_type_str(expect_type));
+  (void)snprintf(err_msg, sizeof(err_msg), "%s cast to %s",
+                 legacy_cast_error_type_name(in.get_type()),
+                 legacy_cast_error_type_name(expect_type));
   LOG_USER_ERROR(OB_NOT_SUPPORTED, err_msg);
   LOG_WARN_RET(OB_NOT_SUPPORTED, "not supported obj type convert",
             K(expect_type), K(in), K(out), K(cast_mode));
@@ -12264,7 +12295,10 @@ int bit_length_check_only(const ObAccuracy &accuracy, const ObObj &obj)
   return ret;
 }
 
-int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type, ObObj &obj)
+int obj_collation_check(ObCastCtx &cast_ctx,
+                        const bool is_strict_mode,
+                        const ObCollationType cs_type,
+                        ObObj &obj)
 {
   int ret = OB_SUCCESS;
   if (!ob_is_string_type(obj.get_type())) {
@@ -12275,14 +12309,12 @@ int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type
   } else {
     ObString str;
     int64_t well_formed_len = 0;
-    common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
 
     if (!obj.has_lob_header()) {
       if (OB_FAIL(obj.get_string(str))) {
         LOG_WARN("Failed to get payload from string", K(ret), K(obj));
       }
-    } else if (OB_FAIL(common::lob_helper::read_real_string_data(
-        &allocator, obj, str, nullptr))) {
+    } else if (OB_FAIL(read_real_lob_data(cast_ctx, obj, str))) {
       LOG_WARN("read_real_string_data fail", K(ret), K(obj));
     }
 

@@ -43,7 +43,7 @@ public:
     uint32_t MAGIC_CODE_;
     Host* host_;
     int64_t size_;
-  } __attribute__((aligned (16)));;
+  } __attribute__((aligned (16)));
   ObBlockVSlicer(ObVSliceAlloc* vslice_alloc, int64_t blk_size)
     : vslice_alloc_(vslice_alloc), arena_(nullptr), blk_size_(blk_size), ref_(K), pos_(0) {}
   ~ObBlockVSlicer() {}

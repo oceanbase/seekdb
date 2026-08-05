@@ -333,9 +333,6 @@ private:
                         sql::TypeInfo *type_info,
                         ObObjParam &param);
   int decode_type_info(const char*& buf, sql::TypeInfo &type_info);
-  int get_package_type_by_name(ObIAllocator &allocator,
-                        const sql::TypeInfo *type_info,
-                        const pl::ObUserDefinedType *&pl_type);
   int get_pl_type_by_type_info(ObIAllocator &allocator,
                         const sql::TypeInfo *type_info,
                         const pl::ObUserDefinedType *&pl_type);

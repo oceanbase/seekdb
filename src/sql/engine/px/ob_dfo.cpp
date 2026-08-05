@@ -892,6 +892,7 @@ int ObPxInitTaskArgs::deep_copy_assign(ObPxInitTaskArgs &src,
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   }
   if (OB_SUCC(ret)) {
+    exec_ctx_->set_runtime_services(src.exec_ctx_->get_runtime_services());
     if (sqc_handler_->get_sqc_init_arg().sqc_.is_fulltree()
         && nullptr != src.exec_ctx_->get_group_pwj_map()) {
       exec_ctx_->deep_copy_group_pwj_map(src.exec_ctx_->get_group_pwj_map());

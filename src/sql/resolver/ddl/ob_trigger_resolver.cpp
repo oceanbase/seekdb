@@ -581,6 +581,9 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
 
 int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                        ObSQLSessionInfo *session_info,
+                                       ObPlanCache &plan_cache,
+                                       ObIPLSqlRuntime *pl_sql_runtime,
+                                       pl::ObPL *pl_engine,
                                        ObMySQLProxy *sql_proxy,
                                        ObIAllocator &allocator,
                                        const ObTriggerInfo &trigger_info,
@@ -596,7 +599,9 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
       ObPLPackageGuard package_guard{};
       const ObString &pkg_name = trigger_info.get_package_body_info().get_package_name();
       ObString source;
-      ObPLBuilder builder(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
+      ObPLBuilder builder(
+          allocator, *session_info, plan_cache, pl_sql_runtime, pl_engine, nullptr, nullptr,
+          schema_guard, package_guard, *sql_proxy);
       const ObPackageInfo &package_spec_info = trigger_info.get_package_spec_info();
       OZ (package_spec_ast.init(db_name,
                                 package_spec_info.get_package_name(),

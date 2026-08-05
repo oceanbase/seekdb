@@ -859,25 +859,10 @@ public:
     resource_limit_calculator_(NULL) {}
   virtual ~ObPL() {}
 
-  int init(common::ObMySQLProxy &sql_proxy);
-  void bind_runtime_services(
+  int init(
+      common::ObMySQLProxy &sql_proxy,
       query::ObIAiEndpointAdmin &ai_endpoint_admin,
-      share::ObResourceLimitCalculator &resource_limit_calculator)
-  {
-    ai_endpoint_admin_ = &ai_endpoint_admin;
-    resource_limit_calculator_ = &resource_limit_calculator;
-  }
-  void unbind_runtime_services(
-      query::ObIAiEndpointAdmin &ai_endpoint_admin,
-      share::ObResourceLimitCalculator &resource_limit_calculator)
-  {
-    if (ai_endpoint_admin_ == &ai_endpoint_admin) {
-      ai_endpoint_admin_ = NULL;
-    }
-    if (resource_limit_calculator_ == &resource_limit_calculator) {
-      resource_limit_calculator_ = NULL;
-    }
-  }
+      share::ObResourceLimitCalculator &resource_limit_calculator);
   void destory();
 
 public:

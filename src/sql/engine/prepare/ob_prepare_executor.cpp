@@ -49,9 +49,12 @@ int ObPrepareExecutor::multiple_query_check(
 int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())) {
+  if (OB_ISNULL(ctx.get_sql_ctx()) || OB_ISNULL(ctx.get_my_session())
+      || OB_ISNULL(ctx.get_plan_cache_access_service())
+      || OB_ISNULL(ctx.get_prepared_statement_runtime())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql ctx or session is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()), K(ret));
+    LOG_WARN("required execution dependency is NULL", K(ctx.get_sql_ctx()), K(ctx.get_my_session()),
+        KP(ctx.get_plan_cache_access_service()), K(ret));
   } else {
     ObObj result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
@@ -79,7 +82,11 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
         } else if(!is_in_use) {
           if (OB_FAIL(ctx.get_my_session()->remove_prepare(stmt_name))) {
             LOG_WARN("failed to remove old prepare stmt", K(stmt_name), K(ret));
-          } else if (OB_FAIL(ctx.get_my_session()->close_ps_stmt(ps_id))) {
+          } else if (OB_ISNULL(ctx.get_ps_cache())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("PS cache is not available in execution context", K(ret));
+          } else if (OB_FAIL(ctx.get_my_session()->close_ps_stmt(
+                         *ctx.get_ps_cache(), ps_id))) {
             LOG_WARN("fail to deallocate old prepare stmt", K(ret), K(ps_id));
           }
         } else {
@@ -91,12 +98,13 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
       } else if (OB_FAIL(multiple_query_check(*ctx.get_my_session(), sql_string, ctx.get_allocator()))) {
         LOG_WARN("failed to check multiple query", K(ret), K(sql_string));
       } else {
-        SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator()) {
+        SMART_VAR(ObResultSet, result_set, *ctx.get_my_session(), ctx.get_allocator(),
+            *ctx.get_plan_cache_access_service()) {
           ctx.get_sql_ctx()->is_prepare_protocol_ = true; //set to prepare protocol
           ctx.get_sql_ctx()->is_prepare_stage_ = true;
           const bool is_inner_sql = false;
-          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->stmt_prepare(sql_string, *ctx.get_sql_ctx(),
-                                                            result_set, is_inner_sql))) {
+          if (OB_FAIL(ctx.get_prepared_statement_runtime()->stmt_prepare(
+              sql_string, *ctx.get_sql_ctx(), result_set, is_inner_sql))) {
             LOG_WARN("failed to prepare stmt", K(sql_string), K(ret));
           } else if (OB_FAIL(ctx.get_my_session()->add_prepare(stmt_name,
                                                                result_set.get_statement_id()))) {
@@ -112,4 +120,3 @@ int ObPrepareExecutor::execute(ObExecContext &ctx, ObPrepareStmt &stmt)
 
 }
 }
-

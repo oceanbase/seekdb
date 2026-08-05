@@ -678,6 +678,8 @@ int ObVectorIndexRefresher::do_rebuild() {
         if (OB_FAIL(query::ObDDLExecution::wait_ddl_finish(rebuild_index_res.task_id_,
                                                        false/*do not retry at executor*/,
                                                        session_info,
+                                                       *ctx_->get_query_runtime_environment(),
+                                                       ctx_->local_command_service(),
                                                        is_support_cancel))) {
           LOG_WARN("fail wait rebuild vec index finish", K(ret));
         } else {

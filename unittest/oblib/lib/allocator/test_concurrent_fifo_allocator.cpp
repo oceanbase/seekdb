@@ -147,7 +147,7 @@ void *th_direct_alloc_func(void *arg)
   static const int64_t MALLOC_TIMES_PER_THREAD = 1024;
   void *ptr_buffer[MALLOC_TIMES_PER_THREAD];
   for (int64_t i = 0; i < MALLOC_TIMES_PER_THREAD; ++i) {
-    ptr_buffer[i] = NULL;;
+    ptr_buffer[i] = NULL;
   }
   pthread_barrier_wait(&barrier1);
   for (int64_t times = 0; times < MALLOC_TIMES_PER_THREAD; ++times) {

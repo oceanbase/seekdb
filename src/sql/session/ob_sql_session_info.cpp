@@ -124,17 +124,6 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       trans_type_(transaction::ObTxClass::USER),
       version_provider_(NULL),
       config_provider_(NULL),
-      srs_provider_(NULL),
-      lob_read_service_(NULL),
-      plan_cache_(NULL),
-      ps_cache_(NULL),
-      plan_cache_access_service_(NULL),
-      query_runtime_environment_(NULL),
-      root_command_service_(NULL),
-      local_command_service_(NULL),
-      change_stream_service_(NULL),
-      ddl_execution_limiter_(NULL),
-      virtual_table_factory_provider_(NULL),
       found_rows_(1),
       affected_rows_(-1),
       global_sessid_(0),
@@ -179,22 +168,16 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
-  plan_cache_ = NULL;
-  plan_cache_access_service_ = NULL;
-  query_runtime_environment_ = NULL;
-  root_command_service_ = NULL;
-  local_command_service_ = NULL;
-  change_stream_service_ = NULL;
-  ddl_execution_limiter_ = NULL;
-  virtual_table_factory_provider_ = NULL;
   destroy(false);
 }
 
 void ObSQLSessionInfo::configure_obj_cast(
-    common::ObObjCastParams &params) const
+    common::ObObjCastParams &params,
+    common::ObISrsProvider *srs_provider,
+    common::ObILobReadService *lob_read_service) const
 {
-  params.srs_provider_ = srs_provider_;
-  params.lob_read_service_ = lob_read_service_;
+  params.srs_provider_ = srs_provider;
+  params.lob_read_service_ = lob_read_service;
   const int32_t max_depth = GCONF.json_document_max_depth;
   params.json_max_depth_ =
       max_depth < 100 || max_depth > 1024 ? 100 : max_depth;
@@ -258,9 +241,6 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     trans_type_ = transaction::ObTxClass::USER;
     version_provider_ = NULL;
     config_provider_ = NULL;
-    srs_provider_ = NULL;
-    lob_read_service_ = NULL;
-    ps_cache_ = NULL;
     found_rows_ = 1;
     affected_rows_ = -1;
     global_sessid_ = 0;
@@ -295,14 +275,10 @@ void ObSQLSessionInfo::reset(bool skip_sys_var)
     prelock_ = false;
     ddl_info_.reset();
     cur_exec_ctx_ = nullptr;
-    plan_cache_ = NULL;
-    plan_cache_access_service_ = NULL;
-    query_runtime_environment_ = NULL;
-    root_command_service_ = NULL;
-    local_command_service_ = NULL;
-    change_stream_service_ = NULL;
-    ddl_execution_limiter_ = NULL;
-    virtual_table_factory_provider_ = NULL;
+    // Process-lifetime dependencies are construction state, not connection
+    // state. COM_RESET_CONNECTION must not silently detach them. These
+    // compatibility fields are removed as their consumers move to the
+    // resolver/execution contexts owned by ObSql.
     client_app_info_.reset();
     int temp_ret = OB_SUCCESS;
     optimizer_tracer_.reset();
@@ -536,11 +512,14 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
         LOG_WARN("fail to drop temp tables", K(temp_ret));
       }
     }
-    // slave session ps_session_info_map_ is empty, calling close will have no side effects
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(close_all_ps_stmt())) {
-        LOG_WARN("failed to close all stmt", K(ret));
-      }
+    // Cache references must be released explicitly by the lifecycle owner
+    // before session destruction. Do not recover a process service here.
+    if (OB_UNLIKELY(ps_session_info_map_.created()
+                    && ps_session_info_map_.size() > 0)) {
+      LOG_ERROR("prepared statements were not closed before session destruction",
+                "session_id", get_server_sid(),
+                "statement_count", ps_session_info_map_.size());
+      release_all_ps_session_info();
     }
 
     //close all cursor
@@ -571,7 +550,9 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
   }
 }
 
-int ObSQLSessionInfo::close_ps_stmt(ObPsStmtId client_stmt_id)
+int ObSQLSessionInfo::close_ps_stmt(
+    ObPsCache &ps_cache,
+    ObPsStmtId client_stmt_id)
 {
   int ret = OB_SUCCESS;
   ObPsSessionInfo *ps_sess_info = NULL;
@@ -584,10 +565,7 @@ int ObSQLSessionInfo::close_ps_stmt(ObPsStmtId client_stmt_id)
     ObPsStmtId inner_stmt_id = ps_sess_info->get_inner_stmt_id();
     ps_sess_info->dec_ref_count();
     if (ps_sess_info->need_erase()) {
-      if (OB_ISNULL(ps_cache_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("ps cache is null", K(ret));
-      } else if (OB_FAIL(ps_cache_->deref_ps_stmt(inner_stmt_id))) {
+      if (OB_FAIL(ps_cache.deref_ps_stmt(inner_stmt_id))) {
         LOG_WARN("close ps stmt failed", K(ret), "session_id", get_server_sid(), K(ret));
       }
       // Regardless of whether the above was successful, the session info resource needs to be released
@@ -603,12 +581,10 @@ int ObSQLSessionInfo::close_ps_stmt(ObPsStmtId client_stmt_id)
   return ret;
 }
 
-int ObSQLSessionInfo::close_all_ps_stmt()
+int ObSQLSessionInfo::close_all_ps_stmt(ObPsCache &ps_cache)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(ps_cache_)) {
-    // do nothing, session no ps
-  } else if (!ps_session_info_map_.created()) {
+  if (!ps_session_info_map_.created()) {
     // do nothing, no ps added to map
   } else {
     PsSessionInfoMap::iterator iter = ps_session_info_map_.begin();
@@ -617,7 +593,7 @@ int ObSQLSessionInfo::close_all_ps_stmt()
       const ObPsStmtId client_stmt_id = iter->first;
       if (OB_FAIL(get_inner_ps_stmt_id(client_stmt_id, inner_stmt_id))) {
         LOG_WARN("get_inner_ps_stmt_id failed", K(ret), K(client_stmt_id), K(inner_stmt_id));
-      } else if (OB_FAIL(ps_cache_->deref_ps_stmt(inner_stmt_id))) {
+      } else if (OB_FAIL(ps_cache.deref_ps_stmt(inner_stmt_id))) {
         LOG_WARN("close ps stmt failed", K(ret), K(client_stmt_id), K(inner_stmt_id));
       } else if (OB_ISNULL(iter->second)) {
         // do nothing
@@ -631,6 +607,23 @@ int ObSQLSessionInfo::close_all_ps_stmt()
     ps_session_info_map_.reuse();
   }
   return ret;
+}
+
+void ObSQLSessionInfo::release_all_ps_session_info()
+{
+  if (ps_session_info_map_.created()) {
+    for (PsSessionInfoMap::iterator iter = ps_session_info_map_.begin();
+         iter != ps_session_info_map_.end();
+         ++iter) {
+      if (OB_NOT_NULL(iter->second)) {
+        iter->second->~ObPsSessionInfo();
+        ps_session_info_allocator_.free(iter->second);
+        iter->second = NULL;
+      }
+    }
+    ps_session_info_allocator_.reset();
+    ps_session_info_map_.reuse();
+  }
 }
 // If the session created temporary tables in direct connection mode, drop them when
 // the session disconnects. Commit-time cleanup only clears transaction-level
@@ -727,27 +720,6 @@ int ObSQLSessionInfo::get_session_priv_info(share::schema::ObSessionPrivInfo &se
   session_priv.db_priv_set_ = db_priv_set_;
   return ret;
 }
-
-ObPlanCache *ObSQLSessionInfo::get_plan_cache()
-{
-  if (OB_ISNULL(plan_cache_)) {
-    LOG_WARN_RET(
-        OB_NOT_INIT,
-        "plan cache is not bound to SQL session");
-  }
-  return plan_cache_;
-}
-
-ObPsCache *ObSQLSessionInfo::get_ps_cache()
-{
-  if (OB_ISNULL(ps_cache_)) {
-    LOG_WARN_RET(
-        OB_NOT_INIT,
-        "PS cache is not bound to SQL session");
-  }
-  return ps_cache_;
-}
-
 
 //whether the user has the super privilege
 bool ObSQLSessionInfo::has_user_super_privilege() const

@@ -36,9 +36,7 @@ using namespace sql;
 namespace observer
 {
 
-ObMPStmtSendLongData::ObMPStmtSendLongData(
-    const share::ObGlobalContext &gctx,
-    ObVTIterCreator &vt_iter_creator)
+ObMPStmtSendLongData::ObMPStmtSendLongData(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
@@ -47,8 +45,7 @@ ObMPStmtSendLongData::ObMPStmtSendLongData(
       param_id_(OB_MAX_PARAM_ID),
       buffer_len_(0),
       buffer_(),
-      need_disconnect_(false),
-      vt_iter_creator_(vt_iter_creator)
+      need_disconnect_(false)
 {
   ctx_.exec_type_ = MpQuery;
 }
@@ -192,7 +189,6 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
   bool need_response_error = true;
   setup_wb(session);
 
-  ObVirtualTableIteratorFactory vt_iter_factory(vt_iter_creator_);
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
@@ -220,7 +216,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_start_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_is_in_retry(session.get_is_in_retry());
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
@@ -255,7 +251,7 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
   }
   if (enable_sqlstat) {
     sqlstat_record.record_sqlstat_end_value(
-        *session.get_query_runtime_environment());
+        ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
   }
 
   // store the warning message from the most recent statement in the current session

@@ -808,12 +808,21 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       const ObDatumAccessContext *access_ctx = nullptr;
       if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
         LOG_WARN("get datum access context failed", K(ret));
-      } else if (OB_FAIL(str_iter.init(
-                     0, access_ctx->lob_read_options_, &calc_alloc))) {
-        LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
-      } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type, pattern, pattern_len_in_char, 
-                                    cs_type, pattern_byte_num,  pattern_byte_offset))) {
-        LOG_WARN("text_trim2 failed", K(ret));
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        // TRIM may open independent scans for one LOB.  Keep their cursors
+        // isolated, as the legacy path did, while retaining the explicit
+        // read service and deadline required by the Share interface.
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(str_iter.init(0, &trim_options, &calc_alloc))) {
+          LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
+        } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type,
+                                     pattern, pattern_len_in_char, cs_type,
+                                     pattern_byte_num, pattern_byte_offset))) {
+          LOG_WARN("text_trim2 failed", K(ret));
+        }
       }
     }
   } else {
@@ -834,14 +843,20 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       const ObDatumAccessContext *access_ctx = nullptr;
       if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
         LOG_WARN("get datum access context failed", K(ret));
-      } else if (OB_FAIL(text_trim(str_forward_iter,
-              str_backward_iter,
-              calc_alloc,
-              output_result,
-              trim_type,
-              pattern,
-              *access_ctx->lob_read_options_))) {
-        LOG_WARN("text_trim failed", K(ret));
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(text_trim(str_forward_iter,
+                str_backward_iter,
+                calc_alloc,
+                output_result,
+                trim_type,
+                pattern,
+                trim_options))) {
+          LOG_WARN("text_trim failed", K(ret));
+        }
       }
     }
   }

@@ -59,6 +59,7 @@ int ObPLPackageAST::init(const ObString &db_name,
     user_type_table_.set_type_start_gen_id(parent_user_type_table->get_type_start_gen_id());
   }
   if (OB_FAIL(routine_table_.init(parent_routine_table))) {
+    LOG_WARN("routine info table init failed", K(ret));
   }
   if (OB_NOT_NULL(parent_condition_table)) {
     OZ (condition_table_.init(*parent_condition_table));
@@ -73,6 +74,7 @@ int ObPLPackageAST::init(const ObString &db_name,
     obj_version.version_ = parent_package_ast->get_version();
     obj_version.object_type_ = DEPENDENCY_PACKAGE;
     if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(dependency_table_, obj_version))) {
+      LOG_WARN("add dependency table failed", K(ret));
     }
   }
 
@@ -87,6 +89,7 @@ int ObPLPackageAST::init(const ObString &db_name,
     }
     obj_version.version_ = package_version;
     if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(dependency_table_, obj_version))) {
+      LOG_WARN("add dependency table failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -157,7 +160,9 @@ int ObPLPackage::init(const ObPLPackageAST &package_ast)
   version_ = package_ast.get_version();
   package_type_ = package_ast.get_package_type();
   if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_db_name()), db_name_))) {
+    LOG_WARN("copy db name failed", "db name", package_ast.get_db_name(), K(ret));
   } else if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_name()), name_))) {
+    LOG_WARN("copy package name failed", "package name", package_ast.get_name(), K(ret));
   } else {
     inited_ = true;
   }
@@ -193,6 +198,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                                  (var->is_formal_param()) ? NULL : get_default_expr(var->get_default()),
                                                  var->is_default_construct(),
                                                  value))) {
+      LOG_WARN("init sesssion var failed", K(ret));
     } else if (value.is_null_or_empty_string() && var_type.is_not_null()) {
       ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
       LOG_WARN("cannot assign null to var with not null attribution", K(ret));
@@ -212,6 +218,7 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(execute_init_routine(resolve_ctx.allocator_, exec_ctx))) {
+      LOG_WARN("execute init routine failed", K(ret));
     }
   }
   return ret;

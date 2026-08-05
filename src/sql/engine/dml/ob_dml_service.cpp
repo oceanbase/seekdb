@@ -230,12 +230,11 @@ int ObDMLService::check_geometry_type(
       LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, input_srid))) {
       LOG_WARN("get srid by wkb failed", K(ret), K(wkb));
-    } else if (OB_ISNULL(eval_ctx.exec_ctx_.get_my_session())
-               || OB_ISNULL(eval_ctx.exec_ctx_.get_my_session()->get_srs_provider())) {
+    } else if (OB_ISNULL(eval_ctx.exec_ctx_.get_srs_provider())) {
       ret = OB_NOT_INIT;
       LOG_WARN("SRS provider is not configured", K(ret));
     } else if (OB_FAIL(ObSqlGeoUtils::check_srid(
-                   *eval_ctx.exec_ctx_.get_my_session()->get_srs_provider(),
+                   *eval_ctx.exec_ctx_.get_srs_provider(),
                    column_srid,
                    input_srid))) {
       ret = OB_ERR_WRONG_SRID_FOR_COLUMN;
@@ -1910,6 +1909,23 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
     } else {
       dml_op->set_das_ctdef(static_cast<const CtDefType*>(&ctdef));
       dml_op->set_das_rtdef(static_cast<RtDefType*>(&rtdef));
+    }
+    bool has_domain_index = ctdef.table_param_.get_data_table().is_domain_index();
+    if (!has_domain_index && OB_NOT_NULL(rtdef.related_ctdefs_)) {
+      for (int64_t i = 0; !has_domain_index && i < rtdef.related_ctdefs_->count(); ++i) {
+        const ObDASDMLBaseCtDef *related_ctdef = rtdef.related_ctdefs_->at(i);
+        has_domain_index = OB_NOT_NULL(related_ctdef)
+            && related_ctdef->table_param_.get_data_table().is_domain_index();
+      }
+    }
+    if (OB_SUCC(ret) && has_domain_index) {
+      const common::ObLobReadOptions *lob_read_options = nullptr;
+      if (OB_FAIL(dml_rtctx.get_exec_ctx().get_lob_read_options(lob_read_options))) {
+        LOG_WARN("get LOB read options for domain index DML failed", K(ret));
+      } else {
+        dml_op->set_srs_provider(dml_rtctx.get_exec_ctx().get_srs_provider());
+        dml_op->set_lob_read_options(lob_read_options);
+      }
     }
     if (OB_SUCC(ret) &&
         rtdef.related_ctdefs_ != nullptr && !rtdef.related_ctdefs_->empty()) {

@@ -29,6 +29,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
 #include "observer/omt/ob_ai_service.h"
+#include "observer/ai_service/ob_ai_service_executor.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
@@ -79,6 +80,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "common/ob_data_version_mgr.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/composition/retrieval/ob_das_legacy_tr_merge_iter.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
@@ -195,6 +197,29 @@ share::ObITabletAutoincrementService *ObServer::tablet_autoincrement_service()
 share::ObITabletAutoincrementAdmin *ObServer::tablet_autoincrement_admin()
 {
   return &share::ObTabletAutoincrementService::get_instance();
+}
+
+int ObServer::create_endpoint(
+    common::ObArenaAllocator &allocator,
+    const common::ObString &endpoint_name,
+    const common::ObIJsonBase &definition)
+{
+  return share::ObAiServiceExecutor::create_ai_model_endpoint(
+      allocator, endpoint_name, definition);
+}
+
+int ObServer::alter_endpoint(
+    common::ObArenaAllocator &allocator,
+    const common::ObString &endpoint_name,
+    const common::ObIJsonBase &definition)
+{
+  return share::ObAiServiceExecutor::alter_ai_model_endpoint(
+      allocator, endpoint_name, definition);
+}
+
+int ObServer::drop_endpoint(const common::ObString &endpoint_name)
+{
+  return share::ObAiServiceExecutor::drop_ai_model_endpoint(endpoint_name);
 }
 
 int ObServer::resolve_by_model_name(
@@ -502,6 +527,7 @@ ObServer::ObServer()
     cpu_frequency_(DEFAULT_CPU_FREQUENCY),
     session_mgr_(),
     ob_service_(gctx_, *this),
+    debug_sync_broadcaster_(ob_service_),
     server_runtime_controller_(), vt_data_service_(local_management_service_, self_addr_, &config_),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
@@ -1874,7 +1900,7 @@ int ObServer::init_io()
 
   if (OB_SUCC(ret)) {
     static const double IO_MEMORY_RATIO = 0.2;
-    const ObIORuntimeOptions io_runtime_options(GMEMCONF.get_server_memory_limit());
+    const ObIORuntimeOptions io_runtime_options(GMEMCONF.get_server_memory_budget());
     if (OB_FAIL(ObIOManager::get_instance().init(
         io_runtime_options, GMEMCONF.get_reserved_server_memory() * IO_MEMORY_RATIO))) {
       LOG_ERROR("init io manager fail, ", KR(ret));
@@ -1975,8 +2001,10 @@ int ObServer::init_interrupt()
 
 int ObServer::init_fts()
 {
-  int ret = ObFTParseData::init_global();
+  int ret = sql::install_legacy_das_text_retrieval_engine();
   if (OB_FAIL(ret)) {
+    LOG_ERROR("failed to install text retrieval composition provider", KR(ret));
+  } else if (OB_FAIL(ObFTParseData::init_global())) {
     LOG_ERROR("failed to initialize fulltext parser data", KR(ret));
   } else {
     LOG_INFO("fulltext parser data initialized");
@@ -2168,17 +2196,6 @@ int ObServer::init_sql()
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(sql_engine_.init(
-                    &ObOptStatManager::get_instance(),
-                    &vt_data_service_,
-                    self_addr_))) {
-      LOG_ERROR("init sql engine failed", KR(ret));
-    } else {
-      LOG_INFO("init sql engine done");
-    }
-  }
-
-  if (OB_SUCC(ret)) {
     if (nullptr == dtl::ObDtl::instance()) {
       ret = OB_INIT_FAIL;
       LOG_ERROR("allocate DTL service fail", KR(ret));
@@ -2221,14 +2238,9 @@ int ObServer::init_sql_runner()
 
 int ObServer::init_pl()
 {
-  int ret = OB_SUCCESS;
-  LOG_INFO("init pl");
-  if (OB_FAIL(pl_engine_.init(sql_proxy_))) {
-    LOG_ERROR("init pl engine failed", KR(ret));
-  } else {
-    LOG_INFO("init pl engine done");
-  }
-  return ret;
+  // PL requires runtime-owned adapters and is initialized atomically from
+  // obs_init_modules() after those dependencies are ready.
+  return OB_SUCCESS;
 }
 
 int ObServer::init_global_context()

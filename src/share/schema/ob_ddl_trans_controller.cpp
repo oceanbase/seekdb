@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include <algorithm>
 #include "ob_ddl_trans_controller.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
@@ -40,6 +41,8 @@ int ObDDLTransController::init(
     } else if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("schema_service is null", KR(ret));
+    } else if (OB_FAIL(lib::ThreadPool::start())) {
+      LOG_WARN("thread start fail", KR(ret));
     } else {
       schema_service_ = schema_service;
       inited_ = true;
@@ -50,18 +53,26 @@ int ObDDLTransController::init(
 
 void ObDDLTransController::stop()
 {
+  lib::ThreadPool::stop();
+  wait_cond_.signal();
 }
 
 void ObDDLTransController::wait()
 {
+  wait_cond_.signal();
+  lib::ThreadPool::wait();
 }
 
 void ObDDLTransController::destroy()
 {
   if (inited_) {
     inited_ = false;
+    stop();
+    wait();
+    lib::ThreadPool::destroy();
     tasks_.destroy();
     schema_service_ = NULL;
+    pending_refresh_version_ = 0;
   }
 }
 
@@ -234,6 +245,9 @@ int ObDDLTransController::remove_task(const int64_t task_id)
       LOG_INFO("remove parallel ddl task", K(tasks_.at(i)));
       if (OB_FAIL(tasks_.remove(i))) {
         LOG_WARN("remove_task fail", KR(ret), K(task_id));
+      } else {
+        pending_refresh_version_ = std::max(pending_refresh_version_, task_id);
+        wait_cond_.signal();
       }
       break;
     }
@@ -254,6 +268,37 @@ int ObDDLTransController::remove_task(const int64_t task_id)
     }
   }
   return ret;
+}
+
+void ObDDLTransController::run1()
+{
+  ObDIActionGuard ag("DDLService", "DDLTransCtr", "refresh schema");
+  lib::set_thread_name("DDLTransCtr");
+  while (!has_set_stop()) {
+    int64_t refresh_version = 0;
+    {
+      SpinWLockGuard guard(lock_);
+      refresh_version = pending_refresh_version_;
+      pending_refresh_version_ = 0;
+    }
+    if (refresh_version > 0) {
+      int ret = OB_SUCCESS;
+      if (OB_ISNULL(schema_service_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("schema service is null", KR(ret), K(refresh_version));
+      } else if (OB_FAIL(schema_service_->async_refresh_schema(refresh_version))) {
+        LOG_WARN("fail to refresh schema after parallel DDL commit",
+                 KR(ret), K(refresh_version));
+        if (!has_set_stop()) {
+          SpinWLockGuard guard(lock_);
+          pending_refresh_version_ =
+              std::max(pending_refresh_version_, refresh_version);
+        }
+      }
+    } else {
+      wait_cond_.wait();
+    }
+  }
 }
 
 } // end schema

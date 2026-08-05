@@ -162,6 +162,8 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
+  } else if (OB_FAIL(local_check_ai_model_exists(new_endpoint.get_ai_model_name()))) {
+    LOG_WARN("invalid ai model name", KR(ret), K(new_endpoint));
   } else {
     // if change ai model name, check if the ai model endpoint has the same ai model name is already exists
     // if not exists, continue

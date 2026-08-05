@@ -30,9 +30,8 @@ thread_local int64_t ObTxDataOpAllocator::local_alloc_size_ = 0;
 
 int64_t ObTxDataAllocator::hold() const
 {
-  ObSharedMemAllocMgr *manager = nullptr != share::g_mp
-      ? share::g_mp->shared_mem_alloc_mgr()
-      : nullptr;
+  ObSharedMemAllocMgr *manager =
+      ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   return nullptr != manager ? manager->tx_data_quota_used() : slice_backing();
 }
 

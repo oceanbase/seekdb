@@ -208,7 +208,7 @@ bool ObMemstoreFreezer::memstore_remain_memory_is_exhausting()
     } else {
       const int64_t MEMORY_IS_EXHAUSTING_PERCENTAGE = 10;
       ObMemstoreAllocator &memstore_allocator =
-          share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+          share::server_service<share::ObSharedMemAllocMgr>()->memstore_allocator();
       const int64_t memstore_limit = memstore_info_.get_memstore_limit();
       const int64_t memstore_used = memstore_allocator.get_memstore_quota_used();
       const int64_t memstore_remain = memstore_limit - memstore_used;
@@ -877,7 +877,8 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
                  "memstore_freeze_trigger_limit", ctx.memstore_freeze_trigger_,
                  "memory_budget", lib::get_memory_budget(),
                  "memstore_quota_used",
-                 share::g_mp->shared_mem_alloc_mgr()->memstore_allocator().get_memstore_quota_used());
+                 share::server_service<share::ObSharedMemAllocMgr>()
+                     ->memstore_allocator().get_memstore_quota_used());
       }
     }
   }

@@ -682,6 +682,11 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
   if (OB_SUCC(ret)) {
     ObPLBuilder builder(resolve_ctx.allocator_,
                           resolve_ctx.session_info_,
+                          *resolve_ctx.params_.plan_cache_,
+                          resolve_ctx.params_.pl_sql_runtime_,
+                          resolve_ctx.params_.pl_engine_,
+                          resolve_ctx.params_.srs_provider_,
+                          resolve_ctx.params_.lob_read_service_,
                           resolve_ctx.schema_guard_,
                           resolve_ctx.package_guard_,
                           resolve_ctx.sql_proxy_);
@@ -938,7 +943,7 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
   uint64_t package_id = package_spec_info.get_package_id();
   ObPLBlockNS *null_parent_ns = NULL;
   const ObDatabaseSchema *db_schema = NULL;
-  ObPlanCache *plan_cache = resolve_ctx.session_info_.get_plan_cache();
+  ObPlanCache *plan_cache = resolve_ctx.params_.plan_cache_;
   OZ (resolve_ctx.schema_guard_.get_database_schema(db_id, db_schema));
   CK (OB_NOT_NULL(db_schema));
   CK (OB_NOT_NULL(plan_cache));
@@ -962,6 +967,11 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
       ObPLPackageAST *package_spec_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
       ObPLBuilder builder(pkg_alloc,
                             resolve_ctx.session_info_,
+                            *resolve_ctx.params_.plan_cache_,
+                            resolve_ctx.params_.pl_sql_runtime_,
+                            resolve_ctx.params_.pl_engine_,
+                            resolve_ctx.params_.srs_provider_,
+                            resolve_ctx.params_.lob_read_service_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
                             resolve_ctx.sql_proxy_);
@@ -1013,7 +1023,7 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
   uint64_t package_body_id = package_body_info.get_package_id();
   ObPLBlockNS *null_parent_ns = NULL;
   const ObDatabaseSchema *db_schema = NULL;
-  ObPlanCache *plan_cache = resolve_ctx.session_info_.get_plan_cache();
+  ObPlanCache *plan_cache = resolve_ctx.params_.plan_cache_;
   OZ (resolve_ctx.schema_guard_.get_database_schema(db_id, db_schema));
   CK (OB_NOT_NULL(db_schema));
   CK (OB_NOT_NULL(plan_cache));
@@ -1037,6 +1047,11 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       common::ObIAllocator &pkg_alloc = package_body->get_allocator();
       ObPLBuilder builder(pkg_alloc,
                             resolve_ctx.session_info_,
+                            *resolve_ctx.params_.plan_cache_,
+                            resolve_ctx.params_.pl_sql_runtime_,
+                            resolve_ctx.params_.pl_engine_,
+                            resolve_ctx.params_.srs_provider_,
+                            resolve_ctx.params_.lob_read_service_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
                             resolve_ctx.sql_proxy_);
@@ -1448,7 +1463,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
   if (OB_ISNULL(package)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cached package is null", K(package));
-  } else if (OB_ISNULL(plan_cache = resolve_ctx.session_info_.get_plan_cache())) {
+  } else if (OB_ISNULL(plan_cache = resolve_ctx.params_.plan_cache_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("plan cache is null");
   } else {
@@ -1458,7 +1473,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
 
     //HEAP_VAR(ObExecContext, exec_ctx, allocator) {
 
-      ObPLCacheCtx pc_ctx;
+      ObPLCacheCtx pc_ctx(*plan_cache);
       uint64_t database_id = OB_INVALID_ID;
       resolve_ctx.session_info_.get_database_id(database_id);
 
@@ -1472,7 +1487,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
         LOG_WARN("Failed to asseble format routine name!", K(ret));
       } else if (OB_FAIL(ObSQLUtils::md5(sql, pc_ctx.sql_id_, (int32_t)sizeof(pc_ctx.sql_id_)))){
         LOG_WARN("Failed to get sql_id for pl obj!", K(ret));
-      } else if (OB_FAIL(ObPLCacheMgr::add_pl_cache(resolve_ctx.session_info_.get_plan_cache(), package, pc_ctx))) {
+      } else if (OB_FAIL(ObPLCacheMgr::add_pl_cache(plan_cache, package, pc_ctx))) {
         if (OB_SQL_PC_PLAN_DUPLICATE == ret) {
           LOG_INFO("package has been added by others, need not add again", K(package_id), K(ret));
           ret = OB_SUCCESS;
@@ -1518,7 +1533,9 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
       uint64_t database_id = OB_INVALID_ID;
       resolve_ctx.session_info_.get_database_id(database_id);
 
-      ObPLCacheCtx pc_ctx;
+      ObPlanCache *plan_cache = resolve_ctx.params_.plan_cache_;
+      CK (OB_NOT_NULL(plan_cache));
+      ObPLCacheCtx pc_ctx(*plan_cache);
       pc_ctx.session_info_ = &resolve_ctx.session_info_;
       pc_ctx.schema_guard_ = &resolve_ctx.schema_guard_;
       pc_ctx.key_.namespace_ = ObLibCacheNameSpace::NS_PKG;
@@ -1534,7 +1551,7 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
         LOG_WARN("failed to allocate memory.", K(ret));
       } else {
         cacheobj_guard = new (buf)ObCacheObjGuard();
-        if (OB_FAIL(ObPLCacheMgr::get_pl_cache(resolve_ctx.session_info_.get_plan_cache(), *cacheobj_guard, pc_ctx))) {
+        if (OB_FAIL(ObPLCacheMgr::get_pl_cache(plan_cache, *cacheobj_guard, pc_ctx))) {
           LOG_INFO("get pl package from plan cache failed", K(ret), K(package_id));
           HANDLE_PL_CACHE_RET_VALUE(ret);
         } else {

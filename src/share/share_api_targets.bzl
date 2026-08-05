@@ -77,7 +77,6 @@ _EXISTING_SEMANTIC_API_TARGETS = [
     "tablet_autoincrement_types",
     "tablet_replica_types",
     "task_control",
-    "tenant_mem_limit_interface",
     "tenant_module_init",
     "tenant_runtime",
     "text_analysis",

@@ -192,7 +192,8 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
     const int64_t max_accuracy_len = static_cast<int64_t>(res_type.
                                                           get_accuracy().get_length());
     const int64_t str_len_byte = static_cast<int64_t>(result.get_string_len());
-    if (OB_FAIL(obj_collation_check(is_strict, collation_type, *const_cast<ObObj*>(res_obj)))) {
+    if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                    *const_cast<ObObj*>(res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), KPC(res_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *res_obj, result, res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(res_obj));

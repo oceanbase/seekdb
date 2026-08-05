@@ -29,27 +29,15 @@ namespace oceanbase
 namespace common
 {
 class ObIDebugSyncBroadcaster;
-class ObISrsProvider;
-class ObILobReadService;
 }
 namespace observer
 {
 struct ObSMConnection;
 }
-namespace query
-{
-class ObIChangeStreamService;
-class ObIDdlExecutionLimiter;
-class ObILocalCommandService;
-class ObIRootCommandService;
-class ObIQueryRuntimeEnvironment;
-class ObIPlanCacheAccessService;
-}
 namespace sql
 {
 
 class ObConnectResourceMgr;
-class ObIVirtualTableFactoryProvider;
 class ObPlanCache;
 class ObPsCache;
 
@@ -66,31 +54,13 @@ public:
   virtual ~ObSQLSessionMgr();
 
   int init();
-  void bind_runtime_services(
-      ObPlanCache &plan_cache,
+  void bind_lifecycle_services(
       ObPsCache &ps_cache,
-      query::ObIPlanCacheAccessService &plan_cache_access_service,
-      query::ObIQueryRuntimeEnvironment &query_runtime_environment,
-      query::ObIRootCommandService &root_command_service,
-      query::ObILocalCommandService &local_command_service,
-      query::ObIChangeStreamService &change_stream_service,
-      query::ObIDdlExecutionLimiter &ddl_execution_limiter,
-      ObIVirtualTableFactoryProvider &virtual_table_factory_provider,
-      common::ObISrsProvider &srs_provider,
-      common::ObILobReadService &lob_read_service,
+      common::ObIDebugSyncBroadcaster &debug_sync_broadcaster,
       ObConnectResourceMgr &connect_resource_manager)
   {
-    plan_cache_ = &plan_cache;
     ps_cache_ = &ps_cache;
-    plan_cache_access_service_ = &plan_cache_access_service;
-    query_runtime_environment_ = &query_runtime_environment;
-    root_command_service_ = &root_command_service;
-    local_command_service_ = &local_command_service;
-    change_stream_service_ = &change_stream_service;
-    ddl_execution_limiter_ = &ddl_execution_limiter;
-    virtual_table_factory_provider_ = &virtual_table_factory_provider;
-    srs_provider_ = &srs_provider;
-    lob_read_service_ = &lob_read_service;
+    debug_sync_broadcaster_ = &debug_sync_broadcaster;
     connect_resource_manager_ = &connect_resource_manager;
   }
 
@@ -241,17 +211,8 @@ private:
   HashMap sessinfo_map_;
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
-  common::ObISrsProvider *srs_provider_;
-  common::ObILobReadService *lob_read_service_;
-  ObPlanCache *plan_cache_;
+  common::ObIDebugSyncBroadcaster *debug_sync_broadcaster_;
   ObPsCache *ps_cache_;
-  query::ObIPlanCacheAccessService *plan_cache_access_service_;
-  query::ObIQueryRuntimeEnvironment *query_runtime_environment_;
-  query::ObIRootCommandService *root_command_service_;
-  query::ObILocalCommandService *local_command_service_;
-  query::ObIChangeStreamService *change_stream_service_;
-  query::ObIDdlExecutionLimiter *ddl_execution_limiter_;
-  ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
   ObConnectResourceMgr *connect_resource_manager_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
 }; // end of class ObSQLSessionMgr

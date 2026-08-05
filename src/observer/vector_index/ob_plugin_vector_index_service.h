@@ -322,10 +322,13 @@ public:
   {}
   virtual ~ObPluginVectorIndexService();
   int init(schema::ObMultiVersionSchemaService *schema_service,
-           storage::ObLSService *ls_service);
+           storage::ObLSService *ls_service,
+           common::ObILobReadService *lob_read_service);
   bool is_inited() { return is_inited_; }
   // Server module interfaces.
-  static int server_module_init(ObPluginVectorIndexService *&service);
+  static int server_module_init(
+      ObPluginVectorIndexService *&service,
+      common::ObILobReadService *lob_read_service);
   int start();
   void stop();
   void wait();

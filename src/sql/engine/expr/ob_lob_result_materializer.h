@@ -22,6 +22,7 @@ namespace oceanbase
 namespace common
 {
 class ObIAllocator;
+class ObILobReadService;
 class ObObj;
 }
 namespace sql
@@ -33,7 +34,8 @@ class ObSQLSessionInfo;
 // driver to PL. The implementation remains inside SQL's expression runtime.
 int materialize_lob_result(common::ObObj &value,
                            common::ObIAllocator *allocator,
-                           const ObSQLSessionInfo &session_info);
+                           const ObSQLSessionInfo &session_info,
+                           common::ObILobReadService *lob_read_service);
 
 } // namespace sql
 } // namespace oceanbase

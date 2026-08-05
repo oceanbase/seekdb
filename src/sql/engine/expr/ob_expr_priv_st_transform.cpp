@@ -81,7 +81,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
   ObGeometry *src_geo = NULL;
   ObGeometry *dest_geo = NULL;
   common::ObSrsCacheGuard srs_guard;
-  ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -145,7 +144,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
                 res.set_string(res_wkb);
                 need_eval = false;
               }
-            } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+            } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                           ctx, srs_guard, dest_srid, dest_srs_item))) {
               LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
               LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
@@ -191,7 +191,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             if (dest_srid == 0) {
               ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
               LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
-            } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+            } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                           ctx, srs_guard, dest_srid, dest_srs_item))) {
               LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
               LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));

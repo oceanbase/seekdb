@@ -752,14 +752,6 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service_ is null");
   } else if (OB_ISNULL(ctx.get_my_session())) {
-  } else if (var_node.is_set_default_
-             && var_node.variable_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
-    const ObObj &def_val = sys_var.get_global_default_value();
-    DEFINE_CAST_CTX();
-    if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
-      LOG_ERROR("failed to cast fixed storage engine default", K(ret),
-                K(var_node.variable_name_), K(def_val), K(sys_var.get_data_type()));
-    }
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("my session is null");
   } else if (var_node.is_set_default_

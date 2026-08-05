@@ -262,6 +262,8 @@ public:
       ObIArray<ObString> &gen_col_expr_arr,
       const ObSQLMode sql_mode,
       ObSchemaChecker *schema_checker,
+      common::ObISrsProvider *srs_provider,
+      common::ObILobReadService *lob_read_service,
       share::schema::ObColumnSchemaV2 *hidden_col = NULL);
   static int check_default_value(
       common::ObObj &default_value,
@@ -274,7 +276,9 @@ public:
       ObIArray<ObString> &gen_col_expr_arr,
       const ObSQLMode sql_mode,
       ObSQLSessionInfo *session_info,
-      ObSchemaChecker *schema_checker = NULL,
+      ObSchemaChecker *schema_checker,
+      common::ObISrsProvider *srs_provider,
+      common::ObILobReadService *lob_read_service,
       bool coltype_not_defined = false);
   static int check_default_value(
       common::ObObj &default_value,
@@ -287,6 +291,8 @@ public:
       const ObSQLMode sql_mode,
       ObSQLSessionInfo *session_info,
       ObSchemaChecker *schema_checker,
+      common::ObISrsProvider *srs_provider,
+      common::ObILobReadService *lob_read_service,
       bool coltype_not_defined = false);
   static int calc_default_value(
       share::schema::ObColumnSchemaV2 &column_schema,
@@ -301,6 +307,8 @@ public:
                                      const ObSQLMode sql_mode,
                                      ObSQLSessionInfo *session_info,
                                      ObSchemaChecker *schema_checker,
+                                     common::ObISrsProvider *srs_provider,
+                                     common::ObILobReadService *lob_read_service,
                                      obcall::ObDDLArg &ddl_arg);
   static int get_udt_column_default_values(const ObObj &default_value,
                                            const common::ObTimeZoneInfoWrap &tz_info_wrap,
@@ -309,6 +317,8 @@ public:
                                            const ObSQLMode sql_mode,
                                            ObSQLSessionInfo *session_info,
                                            ObSchemaChecker *schema_checker,
+                                           common::ObISrsProvider *srs_provider,
+                                           common::ObILobReadService *lob_read_service,
                                            ObObj &extend_result,
                                            obcall::ObDDLArg &ddl_arg);
   static int ob_add_ddl_dependency(const uint64_t schema_id,

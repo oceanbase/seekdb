@@ -9,8 +9,3 @@ exports_files(
         "//src/sql/parser:__pkg__",
     ],
 )
-
-exports_files(
-    ["header_input_report.py"],
-    visibility = ["//visibility:public"],
-)

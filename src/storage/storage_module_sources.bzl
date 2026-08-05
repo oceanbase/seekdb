@@ -67,8 +67,8 @@ def storage_validate_source_inventory(
         fail("Storage inventory must contain 44 regular Unity groups, got %s" % len(unity_groups))
     if len(simd_unity_groups) != 1:
         fail("Storage inventory must contain 1 SIMD Unity group, got %s" % len(simd_unity_groups))
-    if len(unity_paths) != 689:
-        fail("Storage inventory must contain 689 Unity sources, got %s" % len(unity_paths))
+    if len(unity_paths) != 688:
+        fail("Storage inventory must contain 688 Unity sources, got %s" % len(unity_paths))
     if len(standalone_paths) != 0:
         fail("Storage inventory must contain 0 standalone sources, got %s" % len(standalone_paths))
 

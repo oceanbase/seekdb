@@ -343,14 +343,15 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator()) {
+  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator(),
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
     {
       {
         audit_record.exec_record_.record_start();
       }
       if (enable_sqlstat) {
         sqlstat_record.record_sqlstat_start_value(
-            *session.get_query_runtime_environment());
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -430,11 +431,13 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
     }
     if (enable_sqlstat) {
       sqlstat_record.record_sqlstat_end_value(
-          *session.get_query_runtime_environment());
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }

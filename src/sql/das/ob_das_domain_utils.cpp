@@ -968,7 +968,7 @@ int ObFTDMLIterator::rewind()
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
       if (OB_ISNULL(ft_doc_word_iter_)
           && OB_FAIL(data_plane::create_ft_doc_word_iterator(
-                 allocator_, ft_doc_word_iter_))) {
+                 ft_doc_word_allocator_, ft_doc_word_iter_))) {
         LOG_WARN("fail to create doc word iterator", K(ret));
       } else if (OB_ISNULL(doc_word_info_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1000,7 +1000,7 @@ int ObFTDMLIterator::init(
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
   } else if (OB_ISNULL(ft_doc_word_iter_)
              && OB_FAIL(data_plane::create_ft_doc_word_iterator(
-                    allocator_, ft_doc_word_iter_))) {
+                    ft_doc_word_allocator_, ft_doc_word_iter_))) {
     LOG_WARN("fail to create doc word iterator", K(ret));
   } else {
     switch (mode_) {
@@ -1013,7 +1013,7 @@ int ObFTDMLIterator::init(
       case ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN: {
         if (OB_ISNULL(ft_doc_word_iter_)
             && OB_FAIL(data_plane::create_ft_doc_word_iterator(
-                   allocator_, ft_doc_word_iter_))) {
+                   ft_doc_word_allocator_, ft_doc_word_iter_))) {
           LOG_WARN("fail to create doc word iterator", K(ret));
         } else if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;

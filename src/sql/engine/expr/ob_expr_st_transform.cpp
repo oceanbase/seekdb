@@ -132,7 +132,8 @@ int ObExprSTTransform::eval_st_transform(const ObExpr &expr, ObEvalCtx &ctx, ObD
         } else if (dest_srid == 0) { // valid only when src srid is also 0
           ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
-        } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+        } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                       ctx, srs_guard, dest_srid, dest_srs_item))) {
           LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
         } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
           LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));

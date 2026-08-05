@@ -63,6 +63,7 @@ int ObMPStmtClose::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt_id is invalid", K(ret));
   } else if (OB_FAIL(get_session(session))) {
+    LOG_WARN("get session failed");
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
@@ -71,6 +72,7 @@ int ObMPStmtClose::process()
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
+        LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
@@ -82,6 +84,8 @@ int ObMPStmtClose::process()
       }
       if (OB_FAIL(session->close_ps_stmt(
               get_observer_sql_engine()->get_ps_cache(), stmt_id_))) {
+        // overwrite ret, low priority, will be overridden
+        LOG_WARN("fail to close ps stmt", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
       if (OB_SUCCESS != tmp_ret) {
         // close_cursor failure error code priority is higher than close_ps_stmt, here we override

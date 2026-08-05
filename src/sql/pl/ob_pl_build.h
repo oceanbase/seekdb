@@ -52,11 +52,21 @@ class ObPLBuilder
 public:
   ObPLBuilder(common::ObIAllocator &allocator,
                sql::ObSQLSessionInfo &session_info,
+               sql::ObPlanCache &plan_cache,
+               sql::ObIPLSqlRuntime *pl_sql_runtime,
+               pl::ObPL *pl_engine,
+               common::ObISrsProvider *srs_provider,
+               common::ObILobReadService *lob_read_service,
                share::schema::ObSchemaGetterGuard &schema_guard,
                ObPLPackageGuard &package_guard,
                common::ObMySQLProxy &sql_proxy) :
     allocator_(allocator),
     session_info_(session_info),
+    plan_cache_(plan_cache),
+    pl_sql_runtime_(pl_sql_runtime),
+    pl_engine_(pl_engine),
+    srs_provider_(srs_provider),
+    lob_read_service_(lob_read_service),
     schema_guard_(schema_guard),
     package_guard_(package_guard),
     sql_proxy_(sql_proxy) {}
@@ -88,6 +98,9 @@ public:
   static int init_anonymous_ast(ObPLFunctionAST &func_ast,
                                 common::ObIAllocator &allocator,
                                 sql::ObSQLSessionInfo &session_info,
+                                sql::ObPlanCache &plan_cache,
+                                common::ObISrsProvider *srs_provider,
+                                common::ObILobReadService *lob_read_service,
                                 ObMySQLProxy &sql_proxy,
                                 share::schema::ObSchemaGetterGuard &schema_guard,
                                 pl::ObPLPackageGuard &package_guard,
@@ -133,6 +146,11 @@ public:
 private:
   common::ObIAllocator &allocator_;
   sql::ObSQLSessionInfo &session_info_;
+  sql::ObPlanCache &plan_cache_;
+  sql::ObIPLSqlRuntime *pl_sql_runtime_;
+  pl::ObPL *pl_engine_;
+  common::ObISrsProvider *srs_provider_;
+  common::ObILobReadService *lob_read_service_;
   share::schema::ObSchemaGetterGuard &schema_guard_;
   ObPLPackageGuard &package_guard_;
   common::ObMySQLProxy &sql_proxy_;

@@ -26,11 +26,17 @@ ob_add_new_object_target(ob_malloc_object ob_malloc_object)
 target_link_libraries(ob_malloc_object oblib_base_without_pass)
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
+if(OB_HAVE_BUNDLED_JEMALLOC)
+  target_link_libraries(ob_malloc bundled_jemalloc)
+endif()
 
 # malloc_hook is only part of the Linux production runtime.
 if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
   add_library(malloc_hook STATIC ${SEEKDB_OBLIB_MALLOC_HOOK_STANDALONE})
   target_link_libraries(malloc_hook oblib_base)
+  if(OB_HAVE_BUNDLED_JEMALLOC)
+    target_link_libraries(malloc_hook bundled_jemalloc)
+  endif()
 endif()
 
 if(WIN32)

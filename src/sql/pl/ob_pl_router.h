@@ -20,6 +20,9 @@
 #include "ob_pl_stmt.h"
 
 namespace oceanbase {
+namespace sql {
+class ObIPLSqlRuntime;
+}
 namespace pl {
 
 class ObPLRouter
@@ -28,11 +31,15 @@ public:
   ObPLRouter(const share::schema::ObRoutineInfo &routine_info,
              sql::ObSQLSessionInfo &session_info,
              share::schema::ObSchemaGetterGuard &schema_guard,
-             common::ObMySQLProxy &sql_proxy)
+             common::ObMySQLProxy &sql_proxy,
+             sql::ObIPLSqlRuntime *pl_sql_runtime,
+             pl::ObPL *pl_engine)
     : routine_info_(routine_info),
       session_info_(session_info),
       schema_guard_(schema_guard),
       sql_proxy_(sql_proxy),
+      pl_sql_runtime_(pl_sql_runtime),
+      pl_engine_(pl_engine),
       inner_allocator_(ObModIds::OB_PL_TEMP, OB_MALLOC_NORMAL_BLOCK_SIZE),
       expr_factory_(inner_allocator_) {}
   virtual ~ObPLRouter() {}
@@ -49,6 +56,8 @@ private:
   sql::ObSQLSessionInfo &session_info_;
   share::schema::ObSchemaGetterGuard &schema_guard_;
   common::ObMySQLProxy &sql_proxy_;
+  sql::ObIPLSqlRuntime *pl_sql_runtime_;
+  pl::ObPL *pl_engine_;
   ObArenaAllocator inner_allocator_;
   sql::ObRawExprFactory expr_factory_;
 };

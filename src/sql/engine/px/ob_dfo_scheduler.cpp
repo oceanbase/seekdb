@@ -447,8 +447,11 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf.get(), ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
-            (void)ex_rpc::async_call([ser_buf, ser_pos]() {
-              return launch_sqc_fast_local(ser_buf.get(), ser_pos); });
+            const ObExecContext::RuntimeServices runtime_services =
+                exec_ctx.get_runtime_services();
+            (void)ex_rpc::async_call([ser_buf, ser_pos, runtime_services]() {
+              return launch_sqc_fast_local(
+                  ser_buf.get(), ser_pos, runtime_services); });
           }
         }
       }
@@ -1094,10 +1097,13 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
+            const ObExecContext::RuntimeServices runtime_services =
+                exec_ctx.get_runtime_services();
             ex_rpc::HandleRef<ObPxInitSqcResponse> handle =
                 ex_rpc::async_call<ObPxInitSqcResponse>(
-                    [ser_buf, ser_pos](ObPxInitSqcResponse &resp) -> int {
-                      return launch_sqc_async_local(ser_buf, ser_pos, resp); });
+                    [ser_buf, ser_pos, runtime_services](ObPxInitSqcResponse &resp) -> int {
+                      return launch_sqc_async_local(
+                          ser_buf, ser_pos, runtime_services, resp); });
             if (!handle) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to dispatch in-proc sqc", K(ret), K(sqc));

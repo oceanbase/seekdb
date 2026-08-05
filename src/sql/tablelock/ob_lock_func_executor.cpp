@@ -47,7 +47,7 @@ int ObGetLockExecutor::execute(ObExecContext &ctx,
   uint64_t lock_id = 0;
   bool is_rollback = false;
   ObTxParam tx_param;
-  query::ObSessionInnerSql session_io(sess, ctx.get_sql_proxy());
+  query::ObSessionInnerSql session_io(sess);
   const data_plane::ObSessionLockOwner owner(session_id, session_create_ts);
 
   OZ (ObLockContext::valid_execute_context(ctx));
@@ -185,7 +185,7 @@ int ObReleaseLockExecutor::execute(ObExecContext &ctx,
       if (OB_SUCC(ret)) {
         ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
         ObTxParam tx_param;
-        query::ObSessionInnerSql session_io(session, ctx.get_sql_proxy());
+        query::ObSessionInnerSql session_io(session);
         const data_plane::ObSessionLockOwner owner(session_id,
                                                     session_create_ts);
         // 1. get lock id from inner table
@@ -234,7 +234,7 @@ int ObISFreeLockExecutor::execute(ObExecContext &ctx,
   uint64_t lock_id = 0;
   ObSQLSessionInfo *sess = ctx.get_my_session();
   bool exist = false;
-  query::ObSessionInnerSql session_io(sess, ctx.get_sql_proxy());
+  query::ObSessionInnerSql session_io(sess);
   OZ (query_lock_id_(*ctx.get_sql_proxy(), lock_name, lock_id));
   OZ (data_plane::named_lock_exists(session_io, lock_id, exist));
 

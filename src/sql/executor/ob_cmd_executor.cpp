@@ -176,7 +176,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   } else {
   }
   query::ObDdlExecutionGuard ddl_guard(
-      OB_ISNULL(my_session) ? nullptr : my_session->get_ddl_execution_limiter());
+      ctx.get_ddl_execution_limiter());
   if (OB_SUCC(ret)) {
     if (true && GCONF._enable_ddl_worker_isolation
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {

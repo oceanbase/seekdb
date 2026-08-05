@@ -203,19 +203,17 @@ DEF_TO_STRING(ObUserResourceCalculateArg)
 }
 
 int ObResourceLimitCalculator::init(
-    ObIResourceLimitCalculatorHandler *ls_handler,
     ObIResourceLimitCalculatorHandler *tablet_handler)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("resource limit calculator already initialized", K(ret));
-  } else if (OB_ISNULL(ls_handler) || OB_ISNULL(tablet_handler)) {
+  } else if (OB_ISNULL(tablet_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resource limit handlers", K(ret), KP(ls_handler), KP(tablet_handler));
+    LOG_WARN("invalid resource limit handler", K(ret), KP(tablet_handler));
   } else {
     WLockGuard guard(lock_);
-    handlers_[LOGIC_RESOURCE_LS] = ls_handler;
     handlers_[LOGIC_RESOURCE_TABLET] = tablet_handler;
     is_inited_ = true;
   }

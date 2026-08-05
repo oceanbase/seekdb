@@ -311,12 +311,9 @@ int ObOptimizerStatsGatheringOp::get_col_stat_by_key(ObOptColumnStat::Key &key, 
       LOG_WARN("failed to find in hashmap", K(ret));
     } else {
       ret = OB_SUCCESS;
-      if (OB_ISNULL(datum_access_ctx_)) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("datum access context is not initialized", K(ret));
-      } else if (OB_ISNULL(osg_col_stat =
+      if (OB_ISNULL(osg_col_stat =
                      ObOptOSGColumnStat::create_new_osg_col_stat(
-                         arena_, *datum_access_ctx_)) ||
+                         arena_, datum_access_ctx_)) ||
                 OB_ISNULL(osg_col_stat->col_stat_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to create new col stat");
@@ -491,12 +488,9 @@ int ObOptimizerStatsGatheringOp::merge_col_stat(ObOptColumnStat *src_col_stat)
         LOG_WARN("failed to find in hashmap", K(ret));
       } else {
         ret = OB_SUCCESS;
-        if (OB_ISNULL(datum_access_ctx_)) {
-          ret = OB_NOT_INIT;
-          LOG_WARN("datum access context is not initialized", K(ret));
-        } else if (OB_ISNULL(osg_col_stat =
+        if (OB_ISNULL(osg_col_stat =
                        ObOptOSGColumnStat::create_new_osg_col_stat(
-                           arena_, *datum_access_ctx_)) ||
+                           arena_, datum_access_ctx_)) ||
             OB_ISNULL(osg_col_stat->col_stat_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to create osg col stat");

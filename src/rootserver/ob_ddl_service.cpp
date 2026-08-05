@@ -8769,7 +8769,7 @@ int ObDDLService::add_new_column_to_table_schema(
                 alter_column_schema,
                 gen_col_expr_arr,
                 alter_table_schema.get_sql_mode(),
-                &schema_checker))) {
+                &schema_checker, nullptr, nullptr))) {
       LOG_WARN("fail to check default value", K(alter_column_schema), K(ret));
     } else if (OB_FAIL(resolve_orig_default_value(alter_column_schema,
                                                   tz_info_wrap,
@@ -9100,7 +9100,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                                                                         new_column_schema,
                                                                         gen_col_expr_arr,
                                                                         alter_table_schema.get_sql_mode(),
-                                                                        &schema_checker))) {
+                                                                        &schema_checker, nullptr, nullptr))) {
                     LOG_WARN("fail to check default value", KPC(alter_column_schema),K(ret));
                   }
                 }
@@ -9498,7 +9498,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                                     *alter_column_schema,
                                                                     gen_col_expr_arr,
                                                                     alter_table_schema.get_sql_mode(),
-                                                                    &schema_checker))) {
+                                                                    &schema_checker, nullptr, nullptr))) {
               LOG_WARN("fail to check default value", KPC(alter_column_schema), K(ret));
             } else if (alter_column_schema->is_primary_key_) {
               if (new_table_schema.get_rowkey_column_num() > 0) {
@@ -9640,7 +9640,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                                         new_column_schema,
                                                                         gen_col_expr_arr,
                                                                         alter_table_schema.get_sql_mode(),
-                                                                        &schema_checker))) {
+                                                                        &schema_checker, nullptr, nullptr))) {
                     LOG_WARN("fail to check default value", K(new_column_schema),K(ret));
                   }
                 }
@@ -25695,7 +25695,7 @@ int ObDDLService::prepare_change_modify_column_online(AlterColumnSchema &alter_c
         alter_column_schema.get_cur_default_value(), tz_info_wrap,
         orig_column_schema->is_generated_column() ? &orig_column_schema->get_local_session_var() : NULL, allocator,
         new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
-        &schema_checker))) {
+        &schema_checker, nullptr, nullptr))) {
     LOG_WARN("failed to check default value", K(ret), K(alter_column_schema));
   } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
                                                   update_column_name_set))) {
@@ -25947,7 +25947,7 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
     if (OB_FAIL(ObDDLResolver::check_default_value(
           alter_column_schema.get_cur_default_value(), tz_info_wrap, &alter_table_arg.local_session_var_,
           allocator, new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
-          &schema_checker))) {
+          &schema_checker, nullptr, nullptr))) {
       LOG_WARN("fail to check default value", K(alter_column_schema), K(ret));
     }
   }

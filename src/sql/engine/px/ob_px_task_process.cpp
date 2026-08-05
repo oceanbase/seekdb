@@ -28,6 +28,7 @@
 #include "sql/engine/join/ob_join_filter_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/monitor/ob_process_malloc_callback.h"
+#include "sql/ob_sql.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "lib/signal/ob_signal_struct.h"
 
@@ -147,7 +148,7 @@ int ObPxTaskProcess::process()
       }
       if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
         sqlstat_record.record_sqlstat_start_value(
-            *session->get_query_runtime_environment());
+            *arg_.exec_ctx_->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session->get_is_in_retry());
         session->sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -173,10 +174,15 @@ int ObPxTaskProcess::process()
     }
     if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
       sqlstat_record.record_sqlstat_end_value(
-          *session->get_query_runtime_environment());
+          *arg_.exec_ctx_->get_query_runtime_environment());
       ObString sql = ObString::make_string("PX DFO EXECUTING");
       sqlstat_record.set_is_plan_cache_hit(arg_.exec_ctx_->get_sql_ctx()->plan_cache_hit_);
-      sqlstat_record.move_to_sqlstat_cache(*session, sql, NULL);
+      sqlstat_record.move_to_sqlstat_cache(
+          *session,
+          *arg_.exec_ctx_->get_plan_cache(),
+          *arg_.exec_ctx_->get_plan_cache_access_service(),
+          sql,
+          NULL);
     }
 
     if (OB_ISNULL(arg_.sqc_task_ptr_)){
@@ -189,11 +195,16 @@ int ObPxTaskProcess::process()
 
     if (enable_sqlstat && OB_NOT_NULL(arg_.exec_ctx_->get_sql_ctx())) {
       sqlstat_record.record_sqlstat_end_value(
-          *session->get_query_runtime_environment());
+          *arg_.exec_ctx_->get_query_runtime_environment());
       const ObPhysicalPlan *phy_plan = arg_.des_phy_plan_;
       ObString sql = ObString::make_string("");
       sqlstat_record.set_is_plan_cache_hit(arg_.exec_ctx_->get_sql_ctx()->plan_cache_hit_);
-      sqlstat_record.move_to_sqlstat_cache(*session, sql, phy_plan);
+      sqlstat_record.move_to_sqlstat_cache(
+          *session,
+          *arg_.exec_ctx_->get_plan_cache(),
+          *arg_.exec_ctx_->get_plan_cache_access_service(),
+          sql,
+          phy_plan);
     }
 
     {
@@ -209,7 +220,9 @@ int ObPxTaskProcess::process()
         session->get_cur_sql_id(audit_record.sql_id_, OB_MAX_SQL_ID_LENGTH + 1);
         audit_record.db_id_ = session->get_database_id();
         audit_record.user_group_ = 0;
-        audit_record.execution_id_ = ::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->get_execution_id();
+        CK (OB_NOT_NULL(arg_.exec_ctx_->get_sql_execution_id_provider()));
+        OX (audit_record.execution_id_ =
+            arg_.exec_ctx_->get_sql_execution_id_provider()->get_execution_id());
         audit_record.client_addr_ = session->get_client_addr();
         audit_record.user_client_addr_ = session->get_user_client_addr();
         audit_record.qc_id_ = get_qc_id();

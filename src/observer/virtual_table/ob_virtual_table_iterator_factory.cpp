@@ -19,6 +19,7 @@
 #include "ob_virtual_table_iterator_factory.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server.h"
+#include "observer/ob_server_runtime_access.h"
 #include "observer/virtual_table/ob_show_table_status.h"
 #include "observer/virtual_table/ob_show_tables.h"
 #include "observer/virtual_table/ob_virtual_warning.h"
@@ -370,7 +371,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
       } else if (OB_ISNULL(params.op_)
                  || OB_ISNULL(params.op_->get_eval_ctx().exec_ctx_.get_my_session())
                  || OB_ISNULL(index_schema)
-                 || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSql>())
+                 || OB_ISNULL(get_observer_sql_engine())
                  || OB_ISNULL(GCTX.schema_service_)
                  || OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -379,7 +380,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    K(ret),
                    KP(params.op_),
                    KP(index_schema),
-                   KP(::oceanbase::share::server_service<::oceanbase::sql::ObSql>()),
+                   KP(get_observer_sql_engine()),
                    KP(GCTX.schema_service_),
                    KP(GCTX.sql_proxy_));
       } else if (is_extended_sys_view_table(pure_tid)
@@ -736,7 +737,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(WARN, "fail to allocate vtable iterator", K(ret));
             } else {
               px->set_allocator(&allocator);
-              // px->set_plan_cache_manager(::oceanbase::share::server_service<::oceanbase::sql::ObSql>()->get_plan_cache_manager());
               vt_iter = static_cast<ObVirtualTableIterator *>(px);
             }
           } break;
