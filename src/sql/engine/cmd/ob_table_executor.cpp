@@ -1954,20 +1954,6 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     uint64_t data_version = 0;
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.session_id_ = my_session->get_sessid_for_table();
-#ifdef OB_BUILD_EMBED_MODE
-    if (OB_ISNULL(GCTX.local_management_service_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local management service is null in embed mode", K(ret));
-    } else if (OB_FAIL(GCTX.local_management_service_->fork_table(fork_table_arg, res))) {
-      LOG_WARN("local root service fork table failed", K(ret), K(res), K(fork_table_arg));
-    } else if (0 != res.task_id_
-               && OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
-                      res.task_id_, false /* ddl_need_retry_at_executor */, my_session))) {
-      LOG_WARN("wait fork ddl finish failed", K(ret), K(res));
-    } else {
-      LOG_INFO("fork table executor finished (embed local)", K(fork_table_arg), K(res));
-    }
-#else
     ObSqlExecutorCtx *task_exec_ctx = NULL;
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
@@ -1977,7 +1963,6 @@ int ObForkTableExecutor::execute(ObExecContext &ctx, ObForkTableStmt &stmt)
     } else {
       LOG_INFO("fork table executor finished", K(fork_table_arg));
     }
-#endif
   }
   return ret;
 }

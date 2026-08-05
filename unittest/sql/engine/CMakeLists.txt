@@ -4,6 +4,7 @@ sql_unittest(test_sql_fixed_array)
 sql_unittest(test_bit_vector)
 
 add_subdirectory(aggregate)
+add_subdirectory(cmd)
 add_subdirectory(expr)
 add_subdirectory(px)
 add_subdirectory(basic)
