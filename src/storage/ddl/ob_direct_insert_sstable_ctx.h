@@ -73,69 +73,11 @@ public:
       ObDirectLoadMgr *&direct_load_mgr);
   int init();
 
-  int alloc_execution_context_id(int64_t &context_id);
-
-  int alloc_slice_id(int64_t &slice_id);
-  int get_agent_exec_context(
-      const int64_t context_id,
-      const ObTabletID &tablet_id,
-      const ObDirectLoadType &type,
-      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-      share::SCN &start_scn,
-      int64_t &execution_id);
-
-  // create tablet direct lob manager for data tablet, and
-  // create lob meta tablet manager inner on need.
-  // Actually,
-  // 1. lob meta direct load mgr will be created when creating data tablet direct load mgr.
-  // 2. lob meta direct load mgr will be created by itself when it is recovered from checkpoint.
-  // @param [in] param, to init or update tablet direct load mgr.
-  // @param [in] checkpoint_scn, to decide when to create the lob meta tablet direct load mgr.
-  int create_tablet_direct_load(
-      const int64_t context_id,
-      const int64_t execution_id,
-      const ObTabletDirectLoadInsertParam &param,
-      const share::SCN checkpoint_scn = share::SCN::min_scn(),
-      const bool only_persisted_ddl_data = false);
-
   int replay_create_tablet_direct_load(
       const ObTablet *tablet,
       const int64_t execution_id,
       const ObTabletDirectLoadInsertParam &param);
 
-  // to start the direct load, write start log in actually.
-  // @param [in] type.
-  // @param [in] tablet_id, the commit version for the full direct load,
-  int open_tablet_direct_load(
-      const ObDirectLoadType &type,
-      const ObTabletID &tablet_id,
-      const int64_t context_id);
-
-  // end direct load due to commit or abort.
-  // @param [in] type.
-  // @param [in] tablet_id.
-  // @param [in] need_commit, to decide whether to create sstable.
-  //             need_commit = true when commit, and need_commit = false when abort.
-  // @param [in] emergent_finish, to decide whether to create sstable immediately or later(batch create).
-  // @param [in] task_id, table_id, execution_id, for ddl report checksum.
-  int close_tablet_direct_load(
-      const int64_t context_id,
-      const ObDirectLoadType &type,
-      const ObTabletID &tablet_id,
-      const bool need_commit,
-      const bool emergent_finish = true,
-      const int64_t task_id = 0,
-      const int64_t table_id = common::OB_INVALID_ID,
-      const int64_t execution_id = -1);
-
-  // some utils functions below.
-  // to get online stats result,
-  // and to avoid empty result, the caller should set need_online_opt_stat_gather_ when create tablet manager.
-  // fetch hidden pk value, for ddl only.
-  int get_tablet_cache_interval(
-      const int64_t context_id,
-      const ObTabletID &tablet_id,
-      share::ObTabletCacheInterval &interval);
   int get_tablet_mgr(
       const ObTabletDirectLoadMgrKey &key,
       ObTabletDirectLoadMgrHandle &direct_load_mgr_handle);
@@ -145,27 +87,10 @@ public:
       ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
       bool &is_major_sstable_exist);
   int gc_tablet_direct_load();
-  // remove tablet direct load mgr from hashmap,
-  // for full direct load, it will be called when physical major generates,
-  // for incremental direct load, it will be called in close_tablet_direct_load
-  // @param [in] context_id to match ObTabletDirectLoadMgr, avoid an old task remove a new ObTabletDirectLoadMgr
-  //             only take effect when !mgr_key.is_full_direct_load_ and context_id > 0
+  // Remove a legacy tablet direct-load manager after physical major generation
+  // or tablet deletion.
   int remove_tablet_direct_load(const ObTabletDirectLoadMgrKey &mgr_key);
   ObIAllocator &get_allocator() { return allocator_; }
-private:
-  int check_and_process_finished_tablet(
-      const ObTabletID &tablet_id,
-      const int64_t task_id = 0,
-      const int64_t table_id = common::OB_INVALID_ID,
-      const int64_t execution_id = -1);
-  int close_tablet_direct_load_for_sn(
-      const int64_t context_id,
-      const ObDirectLoadType &type,
-      const ObTabletID &tablet_id,
-      const bool need_commit,
-      const int64_t task_id = 0,
-      const int64_t table_id = common::OB_INVALID_ID,
-      const int64_t execution_id = -1);
 private:
   struct GetGcCandidateOp final {
   public:
@@ -190,32 +115,18 @@ private:
   int get_tablet_mgr_no_lock(
       const ObTabletDirectLoadMgrKey &mgr_key,
       ObTabletDirectLoadMgrHandle &direct_load_mgr_handle);
-  int get_tablet_exec_context_with_rlock(
-      const ObTabletDirectLoadExecContextId &exec_id,
-      ObTabletDirectLoadExecContext &exec_context);
   int remove_tablet_direct_load_nolock(
       const ObTabletDirectLoadMgrKey &mgr_key);
-  // to generate unique slice id for slice writer, putting here is just to
-  // simplify the logic of the tablet_direct_load_mgr.
-  int64_t generate_slice_id();
-  int64_t generate_context_id();
 
 private:
   typedef common::hash::ObHashMap<
     ObTabletDirectLoadMgrKey,
     ObBaseTabletDirectLoadMgr*,
     common::hash::NoPthreadDefendMode> TABLET_MGR_MAP;
-  typedef common::hash::ObHashMap<
-    ObTabletDirectLoadExecContextId, // context_id
-    ObTabletDirectLoadExecContext,
-    common::hash::NoPthreadDefendMode> TABLET_EXEC_CONTEXT_MAP;
   bool is_inited_;
   common::ObBucketLock bucket_lock_; // to avoid concurrent execution on the TabletDirectLoadMgr.
   common::ObConcurrentFIFOAllocator allocator_;
   TABLET_MGR_MAP tablet_mgr_map_;
-  TABLET_EXEC_CONTEXT_MAP tablet_exec_context_map_;
-  int64_t slice_id_generator_;
-  int64_t context_id_generator_;
   volatile int64_t last_gc_time_;
 DISALLOW_COPY_AND_ASSIGN(ObDirectLoadMgr);
 };

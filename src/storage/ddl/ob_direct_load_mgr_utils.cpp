@@ -18,35 +18,12 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 namespace oceanbase
 {
 namespace storage
 {
 
-int ObDirectLoadMgrUtil::get_lob_tablet_id(const ObTabletID &tablet_id, ObTabletID &lob_tablet_id)
-{
-  int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
-  ObTabletHandle tablet_handle;
-  ObTabletBindingMdsUserData ddl_data;
-
-  if (!tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-  } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), ddl_data))) {
-  } else {
-    lob_tablet_id = ddl_data.lob_piece_tablet_id_;
-  }
-  return ret;
-}
 
 /* use to check ddl need to do major merge,
 *  notice don't use it to judge whether major exist 
@@ -76,155 +53,12 @@ int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
 }
 
 
-int ObDirectLoadMgrUtil::check_tablet_major_exist(const ObTabletID &tablet_id, bool &is_major_sstable_exist)
-{
-  int ret = OB_SUCCESS;
-  ObLSService *ls_service = nullptr;
-  ObLS *ls = nullptr;
-  ObTabletHandle tablet_handle;
-  ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
-  if (!tablet_id.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-  } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
-  } else {
-    is_major_sstable_exist = nullptr != table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/);
-  }
-  return ret;
-}
-
-int ObDirectLoadMgrUtil::alloc_direct_load_mgr(
-    ObIAllocator &allocator,
-    const ObDirectLoadType &direct_load_type,
-    ObBaseTabletDirectLoadMgr *&direct_load_mgr)
-{
-  int ret = OB_SUCCESS;
-  direct_load_mgr = nullptr;
-  switch (direct_load_type) {
-    case ObDirectLoadType::IDEM_DIRECT_LOAD_DDL :
-      if (OB_ISNULL(direct_load_mgr = OB_NEWx(ObSNTabletDirectLoadMgr, &allocator))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc direct load mgr", K(ret), K(direct_load_type));
-      }
-      break;
-    default:
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported direct load type", K(ret), K(direct_load_type));
-      break;
-  }
-  return ret;
-}
-
-
-/*
- * create a tablet direct load mgr in handle， which should be a temp param
- * !!!note don't return eagin
- * otherwise, direct load mgr may lead to px retry again and again
-*/
-int ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr(const int64_t execution_id,
-                                                            ObIAllocator &allocator,
-                                                            const ObTabletDirectLoadInsertParam &build_param,
-                                                            bool &is_major_sstable_exist,
-                                                            ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-                                                            ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle)
-{
-  int ret = OB_SUCCESS;
-  const ObTabletID &tablet_id = build_param.common_param_.tablet_id_;
-  ObTabletID lob_tablet_id;
-  /* reset param*/
-  is_major_sstable_exist = false;
-  direct_load_mgr_handle.reset();
-  lob_direct_load_mgr_handle.reset();
-  /* get lob tablet_id*/
-  if (!build_param.is_valid() || 0 > execution_id) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(build_param), K(execution_id));
-  } else if (OB_FAIL(get_lob_tablet_id(build_param.common_param_.tablet_id_, lob_tablet_id))) {
-  } else if (OB_FAIL(check_tablet_major_exist(tablet_id, is_major_sstable_exist))) {
-  } else  {
-    ObBaseTabletDirectLoadMgr* direct_load_mgr = nullptr;
-    ObBaseTabletDirectLoadMgr* lob_direct_load_mgr = nullptr;
-    /* prepare lob direct load mgr*/
-    ObTabletDirectLoadInsertParam lob_direct_load_param;
-    if (OB_FAIL(ObTabletDirectLoadMgrV3::prepare_lob_param(build_param, lob_direct_load_param))) {
-    } else if (!lob_direct_load_param.common_param_.tablet_id_.is_valid()) {
-      FLOG_INFO("invalid lob tablet id, do not need to create lob tablet direct load mgr", K(ret), K(build_param));
-    } else if (OB_FAIL(alloc_direct_load_mgr(allocator, lob_direct_load_param.common_param_.direct_load_type_, lob_direct_load_mgr))) {
-    } else if (OB_FAIL(lob_direct_load_mgr->init_v2(lob_direct_load_param, execution_id, ObDirectLoadMgrRole::LOB_TABLET_TYPE))) {
-    } else if (FALSE_IT(lob_direct_load_mgr_handle.set_obj(lob_direct_load_mgr))) {
-    } else {
-      FLOG_INFO("[DIRECT LOAD MGR UTILS] success to create direct load mgr", K(ret), K(lob_direct_load_param.common_param_.tablet_id_));
-    }
-
-    /* prepare direct load mgr for main table */
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(alloc_direct_load_mgr(allocator, build_param.common_param_.direct_load_type_, direct_load_mgr))) {
-    } else if (OB_FAIL(direct_load_mgr->init_v2(build_param, execution_id, ObDirectLoadMgrRole::DATA_TABLET_TYPE))) {
-    } else if (FALSE_IT(direct_load_mgr_handle.set_obj(direct_load_mgr))) {
-    } else {
-      FLOG_INFO("[DIRECT LOAD MGR UTILS] success to create direct load mgr", K(ret), K(build_param.common_param_.tablet_id_));
-    }
-  }
-  return ret;
-}
 
 ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type()
 {
   return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL;
 }
 
-/*
- * tablet direct load mgr craetor, used for both previous and idme direct_load_mgr
- *    - Older versions obtained the handle from a per-runtime direct-load manager.
- *    - for idem version,     mgr handle are local param, get from the return param
-*/
-int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_id,
-                                                       const int64_t context_id,
-                                                       const ObTabletDirectLoadInsertParam &build_param,
-                                                       ObIAllocator &allocator,
-                                                       bool &is_major_eixst,
-                                                       ObTabletDirectLoadMgrHandle &data_mgr_handle,
-                                                       ObTabletDirectLoadMgrHandle &lob_mgr_handle)
-{
-  int ret = OB_SUCCESS;
-  is_major_eixst = false;
-  data_mgr_handle.reset();
-  lob_mgr_handle.reset();
-  if (execution_id < 0 || !build_param.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(execution_id), K(build_param));
-  } else if (!is_idem_type(build_param.common_param_.direct_load_type_)) {
-    ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
-    ObLS *ls = nullptr;
-    ObTabletHandle tablet_handle;
-    if (OB_ISNULL(direct_load_mgr)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected err", K(ret));
-    } else if (OB_FAIL(direct_load_mgr->create_tablet_direct_load(context_id, execution_id, build_param))) {
-    } 
-
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected err", K(ret));
-    } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, build_param.common_param_.tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
-    }
-  } else if (is_idem_type(build_param.common_param_.direct_load_type_)) {
-    if (OB_FAIL(ObDirectLoadMgrUtil::create_idem_tablet_direct_load_mgr( execution_id, allocator, build_param, is_major_eixst, data_mgr_handle, lob_mgr_handle))) {
-    }
-  }
-  return ret;
-}
 int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param)
 {
   int ret = OB_SUCCESS;

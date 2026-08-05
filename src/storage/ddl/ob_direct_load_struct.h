@@ -563,44 +563,6 @@ private:
   ObSEArray<int64_t, 256> rowkey_lengths_;
 };
 
-struct ObTabletDirectLoadExecContextId final
-{
-public:
-  ObTabletDirectLoadExecContextId()
-    : tablet_id_(), context_id_(OB_INVALID_ID)
-  {}
-  ~ObTabletDirectLoadExecContextId() = default;
-  uint64_t hash() const {
-    return tablet_id_.hash() + murmurhash(&context_id_, sizeof(context_id_), 0);
-  }
-  int hash(uint64_t &hash_val) const {hash_val = hash(); return OB_SUCCESS;}
-  bool is_valid() const { return tablet_id_.is_valid() && context_id_ >= 0; }
-  bool operator == (const ObTabletDirectLoadExecContextId &other) const {
-        return tablet_id_ == other.tablet_id_ && context_id_ == other.context_id_; }
-  TO_STRING_KV(K_(tablet_id), K_(context_id));
-public:
-  common::ObTabletID tablet_id_;
-  int64_t context_id_;
-};
-
-struct ObTabletDirectLoadExecContext final
-{
-public:
-  ObTabletDirectLoadExecContext()
-    : start_scn_(), execution_id_(0), seq_interval_task_id_(0)
-  {}
-  ~ObTabletDirectLoadExecContext() { reset(); }
-  void reset() {
-    start_scn_.reset();
-    execution_id_ = 0;
-    seq_interval_task_id_ = 0;
-  }
-  TO_STRING_KV(K_(start_scn), K_(execution_id), K_(seq_interval_task_id));
-public:
-  share::SCN start_scn_;
-  int64_t execution_id_;
-  int64_t seq_interval_task_id_;
-};
 
 struct ObTabletDirectLoadBatchSliceKey final
 {
