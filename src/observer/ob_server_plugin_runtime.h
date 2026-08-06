@@ -26,10 +26,7 @@ typedef int32_t seekdb_plugin_extension_kind_t;
 
 namespace oceanbase
 {
-namespace share
-{
-class ObSQLiteConnectionPool;
-}
+namespace common { class ObISQLClient; }
 
 namespace observer
 {
@@ -51,7 +48,7 @@ public:
   ObServerPluginRuntime(const ObServerPluginRuntime &) = delete;
   ObServerPluginRuntime &operator=(const ObServerPluginRuntime &) = delete;
 
-  int init(share::ObSQLiteConnectionPool *meta_db_pool,
+  int init(common::ObISQLClient *sql_client,
            const std::string &trusted_directory = std::string());
   int recover_before_server_ready(std::string &error);
   int execute_function(const char *service_id,

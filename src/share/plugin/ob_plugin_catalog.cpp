@@ -31,9 +31,7 @@
 
 #include "lib/ob_errno.h"
 #include "lib/time/ob_time_utility.h"
-#include "share/storage/ob_sqlite_connection.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
-#include "share/storage/ob_sqlite_table_schema.h"
+#include "share/plugin/ob_plugin_sql_catalog.h"
 
 namespace oceanbase
 {
@@ -404,12 +402,12 @@ bool valid_disable_runtime_result(const ObPluginRuntimeDisableResult &result)
          (stopped || safe_abort || drain_failure || unsafe_stop_failure);
 }
 
-int bind_string(ObSQLiteBinder &binder, const std::string &value)
+int bind_string(ObPluginSqlBinder &binder, const std::string &value)
 {
   return binder.bind_text(value.c_str(), static_cast<int>(value.size()));
 }
 
-std::string read_string(ObSQLiteRowReader &reader, const int column)
+std::string read_string(ObPluginSqlRowReader &reader, const int column)
 {
   int length = 0;
   const char *value = reader.get_text(column, &length);
@@ -423,21 +421,21 @@ std::string bounded_error(const std::string &error)
              : error.substr(0, MAX_CATALOG_ERROR_BYTES);
 }
 
-int query_count(ObSQLiteConnection &connection,
+int query_count(ObPluginSqlConnection &connection,
                 const char *sql,
-                const std::function<int(ObSQLiteBinder &)> &binder,
+                const std::function<int(ObPluginSqlBinder &)> &binder,
                 int64_t &count)
 {
   count = 0;
   return connection.query(
       sql, binder,
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
         count = reader.get_int64(0);
         return OB_ITER_END;
       });
 }
 
-int insert_service(ObSQLiteConnection &connection,
+int insert_service(ObPluginSqlConnection &connection,
                    const std::string &plugin_id,
                    const uint64_t generation,
                    const ObPluginServiceInfo &service)
@@ -446,7 +444,7 @@ int insert_service(ObSQLiteConnection &connection,
       "INSERT INTO __all_plugin_service("
       "plugin_id,generation,service_id,abi_major,abi_minor,abi_patch,"
       "capabilities) VALUES(?,?,?,?,?,?,?)",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int ret = bind_string(binder, plugin_id);
         if (OB_SUCCESS == ret)
           ret = binder.bind_int64(static_cast<int64_t>(generation));
@@ -461,7 +459,7 @@ int insert_service(ObSQLiteConnection &connection,
       });
 }
 
-int insert_extension(ObSQLiteConnection &connection,
+int insert_extension(ObPluginSqlConnection &connection,
                      const std::string &plugin_id,
                      const uint64_t generation,
                      const ObPluginExtensionInfo &extension)
@@ -481,7 +479,7 @@ int insert_extension(ObSQLiteConnection &connection,
       "?,?,?,?,?,?,?,?)";
   return connection.execute(
       SQL,
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int ret = bind_string(binder, plugin_id);
         if (OB_SUCCESS == ret)
           ret = binder.bind_int64(static_cast<int64_t>(generation));
@@ -539,7 +537,7 @@ int insert_extension(ObSQLiteConnection &connection,
 }
 
 int insert_runtime_dependency(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &consumer_plugin_id,
     const uint64_t consumer_generation,
     const ObPluginRuntimeServiceDependency &dependency)
@@ -556,7 +554,7 @@ int insert_runtime_dependency(
       "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   return connection.execute(
       SQL,
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int ret = binder.bind_int(static_cast<int32_t>(
             ObPluginDependencyConsumerKind::PLUGIN));
         if (OB_SUCCESS == ret)
@@ -786,7 +784,7 @@ bool candidate_resolves_requirement(
 }
 
 int durable_provider_resolves_requirement(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &provider_plugin_id,
     const uint64_t provider_generation,
     const CatalogDependencyRequirement &requirement,
@@ -801,7 +799,7 @@ int durable_provider_resolves_requirement(
     ret = connection.query(
         "SELECT abi_minor,abi_patch,capabilities FROM __all_plugin_service "
         "WHERE plugin_id=? AND generation=? AND service_id=? AND abi_major=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, provider_plugin_id);
           if (OB_SUCCESS == bind_ret)
             bind_ret = binder.bind_int64(
@@ -812,7 +810,7 @@ int durable_provider_resolves_requirement(
             bind_ret = binder.bind_int64(requirement.service_abi_major_);
           return bind_ret;
         },
-        [&](ObSQLiteRowReader &reader) {
+        [&](ObPluginSqlRowReader &reader) {
           const seekdb_plugin_semantic_version_t version = {
               requirement.service_abi_major_,
               static_cast<uint32_t>(reader.get_int64(0)),
@@ -834,7 +832,7 @@ int durable_provider_resolves_requirement(
         connection,
         "SELECT COUNT(*) FROM __all_plugin_extension WHERE plugin_id=? "
         "AND generation=? AND object_id=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, provider_plugin_id);
           if (OB_SUCCESS == bind_ret)
             bind_ret = binder.bind_int64(
@@ -850,7 +848,7 @@ int durable_provider_resolves_requirement(
         "SELECT physical_format_version FROM __all_plugin_extension "
         "WHERE plugin_id=? AND generation=? AND kind=? AND "
         "physical_format_id=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, provider_plugin_id);
           if (OB_SUCCESS == bind_ret)
             bind_ret = binder.bind_int64(
@@ -861,7 +859,7 @@ int durable_provider_resolves_requirement(
             bind_ret = bind_string(binder, requirement.dependency_id_);
           return bind_ret;
         },
-        [&](ObSQLiteRowReader &reader) {
+        [&](ObPluginSqlRowReader &reader) {
           const seekdb_plugin_semantic_version_t version = {
               static_cast<uint32_t>(reader.get_int64(0)), 0, 0};
           if (catalog_version_in_range(version,
@@ -879,7 +877,7 @@ int durable_provider_resolves_requirement(
   return ret;
 }
 
-int load_durable_services(ObSQLiteConnection &connection,
+int load_durable_services(ObPluginSqlConnection &connection,
                           const std::string &plugin_id,
                           const uint64_t generation,
                           std::vector<ObPluginServiceInfo> &services)
@@ -888,13 +886,13 @@ int load_durable_services(ObSQLiteConnection &connection,
   int ret = connection.query(
       "SELECT service_id,abi_major,abi_minor,abi_patch,capabilities "
       "FROM __all_plugin_service WHERE plugin_id=? AND generation=?",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int bind_ret = bind_string(binder, plugin_id);
         if (OB_SUCCESS == bind_ret)
           bind_ret = binder.bind_int64(static_cast<int64_t>(generation));
         return bind_ret;
       },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
         ObPluginServiceInfo service;
         service.name_ = read_string(reader, 0);
         service.abi_major_ = static_cast<uint32_t>(reader.get_int64(1));
@@ -910,7 +908,7 @@ int load_durable_services(ObSQLiteConnection &connection,
   return OB_ENTRY_NOT_EXIST == ret ? OB_SUCCESS : ret;
 }
 
-int load_durable_extensions(ObSQLiteConnection &connection,
+int load_durable_extensions(ObPluginSqlConnection &connection,
                             const std::string &plugin_id,
                             const uint64_t generation,
                             std::vector<ObPluginExtensionInfo> &extensions)
@@ -926,13 +924,13 @@ int load_durable_extensions(ObSQLiteConnection &connection,
       "implementation_max_version_minor,implementation_max_version_patch,"
       "required_capabilities FROM __all_plugin_extension WHERE plugin_id=? "
       "AND generation=?",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int bind_ret = bind_string(binder, plugin_id);
         if (OB_SUCCESS == bind_ret)
           bind_ret = binder.bind_int64(static_cast<int64_t>(generation));
         return bind_ret;
       },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
         ObPluginExtensionInfo extension;
         ObPluginExtensionSpec &spec = extension.spec_;
         spec.kind_ = static_cast<seekdb_plugin_extension_kind_t>(
@@ -976,7 +974,7 @@ int load_durable_extensions(ObSQLiteConnection &connection,
 }
 
 int load_durable_runtime_dependencies(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &consumer_plugin_id,
     const uint64_t consumer_generation,
     std::vector<CatalogDurableRuntimeDependency> &dependencies)
@@ -992,7 +990,7 @@ int load_durable_runtime_dependencies(
       "provider_version_major,provider_version_minor,provider_version_patch "
       "FROM __all_plugin_dependency WHERE consumer_kind=? AND "
       "consumer_plugin_id=? AND consumer_generation=?",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int bind_ret = binder.bind_int(static_cast<int32_t>(
             ObPluginDependencyConsumerKind::PLUGIN));
         if (OB_SUCCESS == bind_ret)
@@ -1002,7 +1000,7 @@ int load_durable_runtime_dependencies(
               static_cast<int64_t>(consumer_generation));
         return bind_ret;
       },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
         if (read_string(reader, 0) != consumer_plugin_id ||
             reader.get_int(1) != static_cast<int32_t>(
                                      ObPluginDependencyKind::SERVICE)) {
@@ -1073,7 +1071,7 @@ bool catalog_same_unordered_set(const std::vector<Durable> &durable,
 }
 
 int validate_and_rebind_stable_dependencies(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &provider_plugin_id,
     const uint64_t new_provider_generation,
     const ObPluginRuntimeActivationResult &candidate,
@@ -1091,14 +1089,14 @@ int validate_and_rebind_stable_dependencies(
       "requested_max_version_patch,required_capabilities,optional "
       "FROM __all_plugin_dependency WHERE provider_plugin_id=? AND "
       "consumer_kind<>?",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         int bind_ret = bind_string(binder, provider_plugin_id);
         if (OB_SUCCESS == bind_ret)
           bind_ret = binder.bind_int(static_cast<int32_t>(
               ObPluginDependencyConsumerKind::PLUGIN));
         return bind_ret;
       },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
         CatalogStableDependency dependency;
         const int32_t consumer_kind = reader.get_int(0);
         const int64_t consumer_generation = reader.get_int64(3);
@@ -1171,7 +1169,7 @@ int validate_and_rebind_stable_dependencies(
         "AND consumer_plugin_id=? AND consumer_generation=? AND "
         "provider_plugin_id=? AND provider_generation=? AND dependency_kind=? "
         "AND dependency_id=? AND service_abi_major=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int64(
               static_cast<int64_t>(new_provider_generation));
           if (OB_SUCCESS == bind_ret)
@@ -1218,7 +1216,7 @@ int validate_and_rebind_stable_dependencies(
 }
 
 int validate_and_rebind_exact_replay(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &consumer_plugin_id,
     const uint64_t consumer_generation,
     const ObPluginRuntimeActivationResult &candidate,
@@ -1298,7 +1296,7 @@ int validate_and_rebind_exact_replay(
             "consumer_generation=? AND "
             "provider_plugin_id=? AND provider_generation=? AND "
             "dependency_kind=? AND dependency_id=? AND service_abi_major=?",
-            [&](ObSQLiteBinder &binder) {
+            [&](ObPluginSqlBinder &binder) {
               int bind_ret = binder.bind_int64(static_cast<int64_t>(
                   replacement.provider_generation_));
               if (OB_SUCCESS == bind_ret)
@@ -1348,15 +1346,15 @@ int validate_and_rebind_exact_replay(
   return ret;
 }
 
-int begin_write(ObSQLiteConnection &connection)
+int begin_write(ObPluginSqlConnection &connection)
 {
-  // The generic wrapper exposes deferred BEGIN.  Plugin identity assignment
-  // requires the SQLite writer reservation before reading counters/state, so
-  // use IMMEDIATE explicitly while the process-local catalog mutex is held.
-  return connection.execute("BEGIN IMMEDIATE", nullptr);
+  // ObMySQLTransaction starts a WAL-backed seekdb transaction on the regular
+  // SQL catalog connection.  Writer serialization is provided by seekdb;
+  // there is no file-backed database-specific BEGIN variant here.
+  return connection.begin_transaction();
 }
 
-void rollback_noexcept(ObSQLiteConnection &connection) noexcept
+void rollback_noexcept(ObPluginSqlConnection &connection) noexcept
 {
   if (connection.is_in_transaction()) {
     (void)connection.rollback();
@@ -1420,7 +1418,7 @@ struct ObPluginCatalog::Impl
   class DisablePermit;
 
   Impl()
-      : mutex_(), pool_(nullptr), initialized_(false),
+      : mutex_(), sql_client_(nullptr), initialized_(false),
         startup_prepared_(false), startup_plan_()
   {}
 
@@ -1428,14 +1426,14 @@ struct ObPluginCatalog::Impl
   int install(const ObPluginPackageInstallSpec &spec, std::string &error);
   int get(const std::string &plugin_id, ObPluginCatalogRecord &record) const;
   int list(std::vector<ObPluginCatalogRecord> &records) const;
-  int next_operation_id(ObSQLiteConnection &connection,
+  int next_operation_id(ObPluginSqlConnection &connection,
                         uint64_t &sequence,
                         std::string &operation_id,
                         std::string &runtime_incarnation);
-  int load_record(ObSQLiteConnection &connection,
+  int load_record(ObPluginSqlConnection &connection,
                   const std::string &plugin_id,
                   ObPluginCatalogRecord &record) const;
-  int has_unfinished_operation(ObSQLiteConnection &connection,
+  int has_unfinished_operation(ObPluginSqlConnection &connection,
                                const std::string &plugin_id,
                                bool &has_unfinished) const;
   int begin_activation(const ObPluginActivationRequest &request,
@@ -1461,11 +1459,11 @@ struct ObPluginCatalog::Impl
   int finish_disable(DisablePermit &permit,
                      const ObPluginRuntimeDisableResult &result,
                      std::string &error) noexcept;
-  int mutate_dependency(ObSQLiteConnection &connection,
+  int mutate_dependency(ObPluginSqlConnection &connection,
                         const ObPluginDependencySpec &dependency,
                         bool add,
                         std::string &error);
-  int list_blockers(ObSQLiteConnection &connection,
+  int list_blockers(ObPluginSqlConnection &connection,
                     const std::string &plugin_id,
                     std::vector<ObPluginRestrictBlocker> &blockers) const;
   int uninstall(const std::string &plugin_id,
@@ -1499,7 +1497,7 @@ struct ObPluginCatalog::Impl
   }
 
   mutable std::mutex mutex_;
-  ObSQLiteConnectionPool *pool_;
+  common::ObISQLClient *sql_client_;
   std::atomic<bool> initialized_;
   bool startup_prepared_;
   std::vector<ObPluginStartupEntry> startup_plan_;
@@ -1660,53 +1658,14 @@ public:
 
 int ObPluginCatalog::Impl::initialize_schema()
 {
-  int ret = OB_SUCCESS;
-  ObSQLiteConnectionGuard guard(pool_);
-  if (!guard) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(begin_write(*guard.get_connection()))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_SEQUENCE))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_PACKAGE))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_OPERATION))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_SERVICE))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_EXTENSION))) {
-  } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_PLUGIN_DEPENDENCY))) {
-  } else if (OB_FAIL(guard->execute(
-                 "CREATE INDEX IF NOT EXISTS idx_plugin_operation_owner "
-                 "ON __all_plugin_operation(plugin_id, state, kind)"))) {
-  } else if (OB_FAIL(guard->execute(
-                 "CREATE UNIQUE INDEX IF NOT EXISTS "
-                 "idx_plugin_activation_generation ON "
-                 "__all_plugin_operation(plugin_id, generation) WHERE kind=0"))) {
-  } else if (OB_FAIL(guard->execute(
-                 "CREATE UNIQUE INDEX IF NOT EXISTS "
-                 "idx_plugin_activation_incarnation ON "
-                 "__all_plugin_operation(runtime_incarnation) WHERE kind=0"))) {
-  } else if (OB_FAIL(guard->execute(
-                 "CREATE INDEX IF NOT EXISTS idx_plugin_dependency_provider "
-                 "ON __all_plugin_dependency(provider_plugin_id)"))) {
-  } else if (OB_FAIL(guard->execute(
-                 "CREATE INDEX IF NOT EXISTS idx_plugin_dependency_consumer "
-                 "ON __all_plugin_dependency(consumer_plugin_id, "
-                 "consumer_generation)"))) {
-  } else if (OB_FAIL(guard->execute(
-                 "INSERT OR IGNORE INTO __all_plugin_sequence"
-                 "(sequence_name, next_value) VALUES(?, ?)",
-                 [&](ObSQLiteBinder &binder) {
-                   int bind_ret = bind_string(binder,
-                                              PLUGIN_OPERATION_SEQUENCE);
-                   if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(1);
-                   return bind_ret;
-                 }))) {
-  } else if (OB_FAIL(guard->commit())) {
-    ret = OB_TRANS_UNKNOWN;
-  }
-  if (OB_SUCCESS != ret && guard) rollback_noexcept(*guard.get_connection());
-  return ret;
+  // The plugin catalog is provisioned as ordinary seekdb system tables by
+  // bootstrap.  This method intentionally performs no DDL and never opens a
+  // side database: the SQL proxy is the sole persistence boundary.
+  return nullptr == sql_client_ ? OB_NOT_INIT : OB_SUCCESS;
 }
 
 int ObPluginCatalog::Impl::load_record(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &plugin_id,
     ObPluginCatalogRecord &record) const
 {
@@ -1717,10 +1676,12 @@ int ObPluginCatalog::Impl::load_record(
       "generation,runtime_incarnation,operation_id,last_phase,last_status,"
       "last_error,operator_id,audit_id,gmt_create,gmt_modified "
       "FROM __all_plugin_package WHERE plugin_id=?";
-  return connection.query(
+  bool found = false;
+  int ret = connection.query(
       SQL,
-      [&](ObSQLiteBinder &binder) { return bind_string(binder, plugin_id); },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
+      [&](ObPluginSqlRowReader &reader) {
+        found = true;
         record.plugin_id_ = read_string(reader, 0);
         record.relative_path_ = read_string(reader, 1);
         record.build_id_ = read_string(reader, 2);
@@ -1751,10 +1712,14 @@ int ObPluginCatalog::Impl::load_record(
         record.modified_at_us_ = reader.get_int64(21);
         return OB_ITER_END;
       });
+  if (OB_SUCCESS == ret && !found) {
+    ret = OB_ENTRY_NOT_EXIST;
+  }
+  return ret;
 }
 
 int ObPluginCatalog::Impl::has_unfinished_operation(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &plugin_id,
     bool &has_unfinished) const
 {
@@ -1764,8 +1729,8 @@ int ObPluginCatalog::Impl::has_unfinished_operation(
       "ORDER BY gmt_create DESC";
   int ret = connection.query(
       SQL,
-      [&](ObSQLiteBinder &binder) { return bind_string(binder, plugin_id); },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
+      [&](ObPluginSqlRowReader &reader) {
         if (unfinished_operation_state(reader.get_int(0))) {
           has_unfinished = true;
           return OB_ITER_END;
@@ -1776,30 +1741,51 @@ int ObPluginCatalog::Impl::has_unfinished_operation(
 }
 
 int ObPluginCatalog::Impl::next_operation_id(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     uint64_t &sequence,
     std::string &operation_id,
     std::string &runtime_incarnation)
 {
   int64_t next = 0;
+  bool found = false;
   int ret = connection.query(
       "SELECT next_value FROM __all_plugin_sequence WHERE sequence_name=?",
-      [&](ObSQLiteBinder &binder) {
+      [&](ObPluginSqlBinder &binder) {
         return bind_string(binder, PLUGIN_OPERATION_SEQUENCE);
       },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlRowReader &reader) {
+        found = true;
         next = reader.get_int64(0);
         return OB_ITER_END;
       });
+  if (OB_SUCCESS == ret && !found) {
+    // The sequence row is data, not schema.  Older/newly bootstrapped
+    // installations may have the system table but no seed row yet.  Seed it
+    // inside the caller's writer transaction so the first operation gets the
+    // same durable identity semantics as subsequent operations.
+    int64_t affected_rows = 0;
+    ret = connection.execute(
+        "INSERT INTO __all_plugin_sequence(sequence_name,next_value) "
+        "VALUES(?,?) ON DUPLICATE KEY UPDATE sequence_name=VALUES(sequence_name)",
+        [&](ObPluginSqlBinder &binder) {
+          int bind_ret = bind_string(binder, PLUGIN_OPERATION_SEQUENCE);
+          if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(2);
+          return bind_ret;
+        },
+        &affected_rows);
+    if (OB_SUCCESS == ret) {
+      next = 1;
+    }
+  }
   if (OB_SUCCESS == ret && (next <= 0 || next == std::numeric_limits<int64_t>::max())) {
     ret = OB_SIZE_OVERFLOW;
   }
-  if (OB_SUCCESS == ret) {
+  if (OB_SUCCESS == ret && found) {
     int64_t affected_rows = 0;
     ret = connection.execute(
         "UPDATE __all_plugin_sequence SET next_value=? "
         "WHERE sequence_name=? AND next_value=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int64(next + 1);
           if (OB_SUCCESS == bind_ret)
             bind_ret = bind_string(binder, PLUGIN_OPERATION_SEQUENCE);
@@ -1828,7 +1814,7 @@ int ObPluginCatalog::Impl::begin_activation(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     ObPluginCatalogRecord record;
     uint64_t generation = 0;
     uint64_t operation_sequence = 0;
@@ -1883,7 +1869,7 @@ int ObPluginCatalog::Impl::begin_activation(
           "SELECT kind,state,relative_path,package_digest,candidate_prepared "
           "FROM __all_plugin_operation WHERE operation_id=? AND plugin_id=? "
           "AND generation=? AND runtime_incarnation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 bind_string(binder, request.expected_operation_id_);
             if (OB_SUCCESS == bind_ret)
@@ -1896,7 +1882,7 @@ int ObPluginCatalog::Impl::begin_activation(
                   binder, request.expected_runtime_incarnation_);
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             operation_path = read_string(reader, 2);
@@ -1960,9 +1946,9 @@ int ObPluginCatalog::Impl::begin_activation(
             "INSERT INTO __all_plugin_operation("
             "operation_id,plugin_id,generation,runtime_incarnation,kind,state,"
             "relative_path,package_digest,phase,status,actual_state,"
-            "start_entered,candidate_prepared,error,operator_id,audit_id,"
-            "gmt_create,gmt_modified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [&](ObSQLiteBinder &binder) {
+            "start_entered,candidate_prepared,stop_entered,error,operator_id,"
+            "audit_id,gmt_create,gmt_modified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [&](ObPluginSqlBinder &binder) {
               int bind_ret = bind_string(binder, operation_id);
               if (OB_SUCCESS == bind_ret)
                 bind_ret = bind_string(binder, request.plugin_id_);
@@ -1991,6 +1977,7 @@ int ObPluginCatalog::Impl::begin_activation(
                     static_cast<int32_t>(ObPluginState::DISCOVERED));
               if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(0);
               if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(0);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(0);
               if (OB_SUCCESS == bind_ret)
                 bind_ret = binder.bind_text("", 0);
               if (OB_SUCCESS == bind_ret)
@@ -2006,7 +1993,7 @@ int ObPluginCatalog::Impl::begin_activation(
               "UPDATE __all_plugin_package SET actual_state=?,generation=?,"
               "runtime_incarnation=?,operation_id=?,last_phase=?,last_status=0,"
               "last_error='',gmt_modified=? WHERE plugin_id=?",
-              [&](ObSQLiteBinder &binder) {
+              [&](ObPluginSqlBinder &binder) {
                 int bind_ret = binder.bind_int(
                     static_cast<int32_t>(ObPluginState::DISCOVERED));
                 if (OB_SUCCESS == bind_ret)
@@ -2082,7 +2069,7 @@ int ObPluginCatalog::Impl::commit_activation(
   try {
     std::lock_guard<std::mutex> lock(mutex_);
     std::unique_ptr<ActivationCommit> prepared;
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     int32_t operation_state = -1;
     int32_t operation_kind = -1;
     bool durable_candidate_prepared = false;
@@ -2135,7 +2122,7 @@ int ObPluginCatalog::Impl::commit_activation(
           "SELECT kind,state,candidate_prepared FROM __all_plugin_operation "
           "WHERE operation_id=? AND plugin_id=? AND generation=? "
           "AND runtime_incarnation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 bind_string(binder, activation_permit.operation_id_);
             if (OB_SUCCESS == bind_ret)
@@ -2148,7 +2135,7 @@ int ObPluginCatalog::Impl::commit_activation(
                   binder, activation_permit.runtime_incarnation_);
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             durable_candidate_prepared = 0 != reader.get_int(2);
@@ -2206,7 +2193,7 @@ int ObPluginCatalog::Impl::commit_activation(
           "AND p.generation=s.generation "
           "WHERE s.service_id=? AND s.abi_major=? AND "
           "NOT(s.plugin_id=? AND s.generation=?) AND p.desired_state=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = bind_string(binder, service.name_);
             if (OB_SUCCESS == bind_ret)
               bind_ret = binder.bind_int64(service.abi_major_);
@@ -2237,7 +2224,7 @@ int ObPluginCatalog::Impl::commit_activation(
           "AND p.generation=e.generation "
           "WHERE e.kind=? AND e.object_id=? AND "
           "NOT(e.plugin_id=? AND e.generation=?) AND p.desired_state=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(spec.kind_);
             if (OB_SUCCESS == bind_ret)
               bind_ret = bind_string(binder, spec.object_id_);
@@ -2291,7 +2278,7 @@ int ObPluginCatalog::Impl::commit_activation(
                      "plugin_id=? AND generation=? AND service_id=? AND "
                      "abi_major=? AND abi_minor=? AND abi_patch=? AND "
                      "(capabilities & ?)=?",
-                     [&](ObSQLiteBinder &binder) {
+                     [&](ObPluginSqlBinder &binder) {
                        int bind_ret = bind_string(
                            binder, dependency.provider_plugin_id_);
                        if (OB_SUCCESS == bind_ret)
@@ -2348,7 +2335,7 @@ int ObPluginCatalog::Impl::commit_activation(
     if (OB_SUCCESS == ret && !durable_decision) {
       ret = guard->execute(
           "DELETE FROM __all_plugin_service WHERE plugin_id=? AND generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 bind_string(binder, activation_permit.plugin_id_);
             if (OB_SUCCESS == bind_ret)
@@ -2360,7 +2347,7 @@ int ObPluginCatalog::Impl::commit_activation(
     if (OB_SUCCESS == ret && !durable_decision) {
       ret = guard->execute(
           "DELETE FROM __all_plugin_extension WHERE plugin_id=? AND generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 bind_string(binder, activation_permit.plugin_id_);
             if (OB_SUCCESS == bind_ret)
@@ -2373,7 +2360,7 @@ int ObPluginCatalog::Impl::commit_activation(
       ret = guard->execute(
           "DELETE FROM __all_plugin_dependency WHERE consumer_kind=? "
           "AND consumer_plugin_id=? AND consumer_generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginDependencyConsumerKind::PLUGIN));
             if (OB_SUCCESS == bind_ret)
@@ -2415,7 +2402,7 @@ int ObPluginCatalog::Impl::commit_activation(
           "UPDATE __all_plugin_operation SET state=?,phase=?,status=?,"
           "actual_state=?,start_entered=?,candidate_prepared=?,error=?,"
           "gmt_modified=? WHERE operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginCatalogOperationState::PROMOTE_PENDING));
             if (OB_SUCCESS == bind_ret)
@@ -2443,7 +2430,7 @@ int ObPluginCatalog::Impl::commit_activation(
           "UPDATE __all_plugin_package SET actual_state=?,last_phase=?,"
           "last_status=?,last_error=?,gmt_modified=? WHERE plugin_id=? "
           "AND generation=? AND operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(
                 static_cast<int32_t>(candidate.actual_state_));
             if (OB_SUCCESS == bind_ret)
@@ -2533,7 +2520,7 @@ int ObPluginCatalog::Impl::complete_activation(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     int32_t operation_kind = -1;
     int32_t operation_state = -1;
     const int64_t now = ObTimeUtility::current_time();
@@ -2559,7 +2546,7 @@ int ObPluginCatalog::Impl::complete_activation(
       ret = guard->query(
           "SELECT kind,state FROM __all_plugin_operation WHERE operation_id=? "
           "AND plugin_id=? AND generation=? AND runtime_incarnation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = bind_string(binder, activation_commit.operation_id_);
             if (OB_SUCCESS == bind_ret)
               bind_ret = bind_string(binder, activation_commit.plugin_id_);
@@ -2571,7 +2558,7 @@ int ObPluginCatalog::Impl::complete_activation(
                   binder, activation_commit.runtime_incarnation_);
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             return OB_ITER_END;
@@ -2593,7 +2580,7 @@ int ObPluginCatalog::Impl::complete_activation(
       ret = guard->execute(
           "UPDATE __all_plugin_operation SET state=?,phase=?,status=?,"
           "actual_state=?,error='',gmt_modified=? WHERE operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginCatalogOperationState::COMPLETED));
             if (OB_SUCCESS == bind_ret)
@@ -2614,7 +2601,7 @@ int ObPluginCatalog::Impl::complete_activation(
           "UPDATE __all_plugin_package SET actual_state=?,last_phase=?,"
           "last_status=0,last_error='',gmt_modified=? WHERE plugin_id=? "
           "AND generation=? AND runtime_incarnation=? AND operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 binder.bind_int(static_cast<int32_t>(ObPluginState::ACTIVE));
             if (OB_SUCCESS == bind_ret)
@@ -2668,7 +2655,7 @@ int ObPluginCatalog::Impl::abort_activation(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     int32_t operation_kind = -1;
     int32_t operation_state = -1;
     const int64_t now = ObTimeUtility::current_time();
@@ -2694,7 +2681,7 @@ int ObPluginCatalog::Impl::abort_activation(
       ret = guard->query(
           "SELECT kind,state FROM __all_plugin_operation WHERE operation_id=? "
           "AND plugin_id=? AND generation=? AND runtime_incarnation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 bind_string(binder, activation_permit.operation_id_);
             if (OB_SUCCESS == bind_ret)
@@ -2707,7 +2694,7 @@ int ObPluginCatalog::Impl::abort_activation(
                   binder, activation_permit.runtime_incarnation_);
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             return OB_ITER_END;
@@ -2728,7 +2715,7 @@ int ObPluginCatalog::Impl::abort_activation(
           "UPDATE __all_plugin_operation SET state=?,phase=?,status=?,"
           "actual_state=?,start_entered=?,candidate_prepared=?,error=?,"
           "gmt_modified=? WHERE operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginCatalogOperationState::ABORTED));
             if (OB_SUCCESS == bind_ret)
@@ -2755,7 +2742,7 @@ int ObPluginCatalog::Impl::abort_activation(
           "UPDATE __all_plugin_package SET actual_state=?,last_phase=?,"
           "last_status=?,last_error=?,gmt_modified=? WHERE plugin_id=? "
           "AND generation=? AND operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 binder.bind_int(static_cast<int32_t>(result.actual_state_));
             if (OB_SUCCESS == bind_ret)
@@ -2808,7 +2795,7 @@ int ObPluginCatalog::Impl::mark_recovery_required(
   int ret = OB_SUCCESS;
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     const std::string stored_reason = bounded_error(reason);
     const int64_t now = ObTimeUtility::current_time();
     int64_t affected_rows = 0;
@@ -2821,7 +2808,7 @@ int ObPluginCatalog::Impl::mark_recovery_required(
                    "UPDATE __all_plugin_operation SET state=?,status=?,"
                    "error=?,gmt_modified=? WHERE operation_id=? AND "
                    "state IN(?,?,?,?)",
-                   [&](ObSQLiteBinder &binder) {
+                   [&](ObPluginSqlBinder &binder) {
                      int bind_ret = binder.bind_int(static_cast<int32_t>(
                          ObPluginCatalogOperationState::RECOVERY_REQUIRED));
                      if (OB_SUCCESS == bind_ret)
@@ -2871,7 +2858,7 @@ int ObPluginCatalog::Impl::mark_disable_recovery_required(
   int ret = OB_SUCCESS;
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     const std::string stored_reason = bounded_error(
         reason.empty() ? "disable catalog finalization was unresolved" :
                          reason);
@@ -2905,7 +2892,7 @@ int ObPluginCatalog::Impl::mark_disable_recovery_required(
                    "status=?,actual_state=?,stop_entered=?,error=?,"
                    "gmt_modified=? WHERE operation_id=? AND kind=? AND "
                    "state IN(?,?,?)",
-                   [&](ObSQLiteBinder &binder) {
+                   [&](ObPluginSqlBinder &binder) {
                      int bind_ret = binder.bind_int(
                          static_cast<int32_t>(final_operation_state));
                      if (OB_SUCCESS == bind_ret)
@@ -2948,7 +2935,7 @@ int ObPluginCatalog::Impl::mark_disable_recovery_required(
                    "UPDATE __all_plugin_package SET desired_state=?,"
                    "actual_state=?,last_phase=?,last_status=?,last_error=?,"
                    "gmt_modified=? WHERE operation_id=?",
-                   [&](ObSQLiteBinder &binder) {
+                   [&](ObPluginSqlBinder &binder) {
                      int bind_ret = binder.bind_int(
                          static_cast<int32_t>(final_desired_state));
                      if (OB_SUCCESS == bind_ret)
@@ -2982,7 +2969,7 @@ int ObPluginCatalog::Impl::mark_disable_recovery_required(
 }
 
 int ObPluginCatalog::Impl::list_blockers(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const std::string &plugin_id,
     std::vector<ObPluginRestrictBlocker> &blockers) const
 {
@@ -2994,8 +2981,8 @@ int ObPluginCatalog::Impl::list_blockers(
       "consumer_generation,dependency_kind,dependency_id,service_abi_major "
       "FROM __all_plugin_dependency WHERE provider_plugin_id=? "
       "ORDER BY consumer_kind,consumer_id,consumer_plugin_id",
-      [&](ObSQLiteBinder &binder) { return bind_string(binder, plugin_id); },
-      [&](ObSQLiteRowReader &reader) {
+      [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
+      [&](ObPluginSqlRowReader &reader) {
         ObPluginRestrictBlocker blocker;
         blocker.consumer_kind_ =
             static_cast<ObPluginDependencyConsumerKind>(reader.get_int(0));
@@ -3042,7 +3029,7 @@ int ObPluginCatalog::Impl::list_blockers(
 }
 
 int ObPluginCatalog::Impl::mutate_dependency(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const ObPluginDependencySpec &dependency,
     const bool add,
     std::string &error)
@@ -3051,7 +3038,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
   seekdb_plugin_semantic_version_t resolved_provider_version = {0, 0, 0};
   if (!connection.is_in_transaction()) {
     ret = OB_STATE_NOT_MATCH;
-    error = "dependency mutation requires an active SQLite transaction";
+    error = "dependency mutation requires an active SQL catalog transaction";
   } else if (!valid_dependency(dependency)) {
     ret = OB_INVALID_ARGUMENT;
     error = "plugin dependency identity is invalid";
@@ -3114,7 +3101,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
   int64_t affected_rows = 0;
   if (OB_SUCCESS == ret && add) {
     static const char INSERT_SQL[] =
-        "INSERT OR IGNORE INTO __all_plugin_dependency("
+        "INSERT INTO __all_plugin_dependency("
         "consumer_kind,consumer_id,consumer_plugin_id,consumer_generation,"
         "provider_plugin_id,provider_generation,dependency_kind,dependency_id,"
         "service_abi_major,requested_min_version_major,requested_min_version_minor,"
@@ -3122,10 +3109,14 @@ int ObPluginCatalog::Impl::mutate_dependency(
         "requested_max_version_minor,requested_max_version_patch,"
         "required_capabilities,optional,provider_version_major,"
         "provider_version_minor,provider_version_patch) "
-        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "ON DUPLICATE KEY UPDATE provider_generation=VALUES(provider_generation),"
+        "provider_version_major=VALUES(provider_version_major),"
+        "provider_version_minor=VALUES(provider_version_minor),"
+        "provider_version_patch=VALUES(provider_version_patch)";
     ret = connection.execute(
         INSERT_SQL,
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int(
               static_cast<int32_t>(dependency.consumer_kind_));
           if (OB_SUCCESS == bind_ret)
@@ -3188,7 +3179,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
         "AND consumer_id=? AND consumer_plugin_id=? AND consumer_generation=? "
         "AND provider_plugin_id=? AND provider_generation=? "
         "AND dependency_kind=? AND dependency_id=? AND service_abi_major=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int(
               static_cast<int32_t>(dependency.consumer_kind_));
           if (OB_SUCCESS == bind_ret)
@@ -3232,7 +3223,7 @@ int ObPluginCatalog::Impl::begin_disable(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     ObPluginCatalogRecord record;
     std::vector<ObPluginRestrictBlocker> blockers;
     bool unfinished = false;
@@ -3286,7 +3277,7 @@ int ObPluginCatalog::Impl::begin_disable(
           "start_entered,candidate_prepared,stop_entered,error,operator_id,"
           "audit_id,gmt_create,gmt_modified) "
           "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = bind_string(binder, operation_id);
             if (OB_SUCCESS == bind_ret)
               bind_ret = bind_string(binder, plugin_id);
@@ -3330,7 +3321,7 @@ int ObPluginCatalog::Impl::begin_disable(
           "UPDATE __all_plugin_package SET desired_state=?,operation_id=?,"
           "last_phase=?,last_status=0,last_error='',gmt_modified=? "
           "WHERE plugin_id=? AND generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(
                 static_cast<int32_t>(ObPluginDesiredState::DISABLED));
             if (OB_SUCCESS == bind_ret)
@@ -3391,7 +3382,7 @@ int ObPluginCatalog::Impl::checkpoint_disable_stop(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     int32_t operation_kind = -1;
     int32_t operation_state = -1;
     int32_t persisted_phase = -1;
@@ -3420,7 +3411,7 @@ int ObPluginCatalog::Impl::checkpoint_disable_stop(
           "SELECT kind,state,phase,actual_state,stop_entered FROM "
           "__all_plugin_operation WHERE operation_id=? AND plugin_id=? "
           "AND generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = bind_string(binder, disable_permit.operation_id_);
             if (OB_SUCCESS == bind_ret)
               bind_ret = bind_string(binder, disable_permit.plugin_id_);
@@ -3429,7 +3420,7 @@ int ObPluginCatalog::Impl::checkpoint_disable_stop(
                   disable_permit.generation_));
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             persisted_phase = reader.get_int(2);
@@ -3471,7 +3462,7 @@ int ObPluginCatalog::Impl::checkpoint_disable_stop(
           "UPDATE __all_plugin_operation SET phase=?,status=?,actual_state=?,"
           "stop_entered=1,error=?,gmt_modified=? WHERE operation_id=? AND "
           "stop_entered=0",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(
                 static_cast<int32_t>(ObPluginDisablePhase::STOP));
             if (OB_SUCCESS == bind_ret)
@@ -3499,7 +3490,7 @@ int ObPluginCatalog::Impl::checkpoint_disable_stop(
           "UPDATE __all_plugin_package SET actual_state=?,last_phase=?,"
           "last_status=?,last_error=?,gmt_modified=? WHERE plugin_id=? AND "
           "generation=? AND operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(
                 static_cast<int32_t>(ObPluginState::QUIESCING));
             if (OB_SUCCESS == bind_ret)
@@ -3561,7 +3552,7 @@ int ObPluginCatalog::Impl::finish_disable(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(mutex_);
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     int32_t operation_kind = -1;
     int32_t operation_state = -1;
     int32_t persisted_phase = -1;
@@ -3622,7 +3613,7 @@ int ObPluginCatalog::Impl::finish_disable(
           "SELECT kind,state,phase,status,actual_state,stop_entered,error "
           "FROM __all_plugin_operation WHERE operation_id=? "
           "AND plugin_id=? AND generation=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = bind_string(binder, disable_permit.operation_id_);
             if (OB_SUCCESS == bind_ret)
               bind_ret = bind_string(binder, disable_permit.plugin_id_);
@@ -3631,7 +3622,7 @@ int ObPluginCatalog::Impl::finish_disable(
                   static_cast<int64_t>(disable_permit.generation_));
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             operation_kind = reader.get_int(0);
             operation_state = reader.get_int(1);
             persisted_phase = reader.get_int(2);
@@ -3699,7 +3690,7 @@ int ObPluginCatalog::Impl::finish_disable(
           "UPDATE __all_plugin_operation SET state=?,phase=?,status=?,"
           "actual_state=?,stop_entered=?,error=?,gmt_modified=? "
           "WHERE operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 binder.bind_int(static_cast<int32_t>(final_operation_state));
             if (OB_SUCCESS == bind_ret)
@@ -3729,7 +3720,7 @@ int ObPluginCatalog::Impl::finish_disable(
           "UPDATE __all_plugin_package SET desired_state=?,actual_state=?,"
           "last_phase=?,last_status=?,last_error=?,gmt_modified=? "
           "WHERE plugin_id=? AND generation=? AND operation_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret =
                 binder.bind_int(static_cast<int32_t>(final_desired_state));
             if (OB_SUCCESS == bind_ret)
@@ -3792,7 +3783,7 @@ int ObPluginCatalog::Impl::uninstall(
 {
   int ret = OB_SUCCESS;
   blockers.clear();
-  ObSQLiteConnectionGuard guard(pool_);
+  ObPluginSqlConnectionGuard guard(sql_client_);
   ObPluginCatalogRecord record;
   bool unfinished = false;
   uint64_t operation_sequence = 0;
@@ -3838,7 +3829,7 @@ int ObPluginCatalog::Impl::uninstall(
         "relative_path,package_digest,phase,status,actual_state,start_entered,"
         "candidate_prepared,stop_entered,error,operator_id,audit_id,"
         "gmt_create,gmt_modified) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, operation_id);
           if (OB_SUCCESS == bind_ret)
             bind_ret = bind_string(binder, plugin_id);
@@ -3879,7 +3870,7 @@ int ObPluginCatalog::Impl::uninstall(
     ret = guard->execute(
         "DELETE FROM __all_plugin_dependency WHERE consumer_kind=? "
         "AND consumer_plugin_id=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int(static_cast<int32_t>(
               ObPluginDependencyConsumerKind::PLUGIN));
           if (OB_SUCCESS == bind_ret)
@@ -3892,7 +3883,7 @@ int ObPluginCatalog::Impl::uninstall(
         "UPDATE __all_plugin_package SET desired_state=?,actual_state=?,"
         "operation_id=?,last_phase=0,last_status=0,last_error='',"
         "operator_id=?,audit_id=?,gmt_modified=? WHERE plugin_id=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int(
               static_cast<int32_t>(ObPluginDesiredState::UNINSTALLED));
           if (OB_SUCCESS == bind_ret)
@@ -3949,7 +3940,7 @@ int ObPluginCatalog::Impl::prepare_startup(
 
   int ret = OB_SUCCESS;
   entries.clear();
-  ObSQLiteConnectionGuard guard(pool_);
+  ObPluginSqlConnectionGuard guard(sql_client_);
   std::vector<std::string> plugin_ids;
   std::map<std::string, ObPluginCatalogRecord> records;
   std::map<std::string, ObPluginStartupEntry> unordered_entries;
@@ -3966,7 +3957,7 @@ int ObPluginCatalog::Impl::prepare_startup(
     ret = guard->query(
         "SELECT plugin_id FROM __all_plugin_package ORDER BY plugin_id",
         nullptr,
-        [&](ObSQLiteRowReader &reader) {
+        [&](ObPluginSqlRowReader &reader) {
           plugin_ids.push_back(read_string(reader, 0));
           return OB_SUCCESS;
         });
@@ -3990,10 +3981,10 @@ int ObPluginCatalog::Impl::prepare_startup(
         "relative_path,package_digest,phase,status,actual_state,"
         "candidate_prepared,stop_entered FROM __all_plugin_operation "
         "WHERE plugin_id=? ORDER BY gmt_create",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           return bind_string(binder, record.plugin_id_);
         },
-        [&](ObSQLiteRowReader &reader) {
+        [&](ObPluginSqlRowReader &reader) {
           const int32_t state = reader.get_int(1);
           if (unfinished_operation_state(state)) {
             UnfinishedOperation operation;
@@ -4062,7 +4053,7 @@ int ObPluginCatalog::Impl::prepare_startup(
             ret = guard->execute(
                 "UPDATE __all_plugin_operation SET state=?,status=?,"
                 "actual_state=?,error=?,gmt_modified=? WHERE operation_id=?",
-                [&](ObSQLiteBinder &binder) {
+                [&](ObPluginSqlBinder &binder) {
                   int bind_ret = binder.bind_int(static_cast<int32_t>(
                       ObPluginCatalogOperationState::ABORTED));
                   if (OB_SUCCESS == bind_ret)
@@ -4099,7 +4090,7 @@ int ObPluginCatalog::Impl::prepare_startup(
           ret = guard->execute(
               "UPDATE __all_plugin_package SET actual_state=?,last_phase=0,"
               "last_status=0,last_error='',gmt_modified=? WHERE plugin_id=?",
-              [&](ObSQLiteBinder &binder) {
+              [&](ObPluginSqlBinder &binder) {
                 int bind_ret = binder.bind_int(
                     static_cast<int32_t>(ObPluginState::DISCOVERED));
                 if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(now);
@@ -4175,7 +4166,7 @@ int ObPluginCatalog::Impl::prepare_startup(
               "UPDATE __all_plugin_operation SET state=?,status=0,"
               "actual_state=?,phase=?,error='',gmt_modified=? "
               "WHERE operation_id=?",
-              [&](ObSQLiteBinder &binder) {
+              [&](ObPluginSqlBinder &binder) {
                 int bind_ret = binder.bind_int(static_cast<int32_t>(
                     ObPluginCatalogOperationState::COMPLETED));
                 if (OB_SUCCESS == bind_ret)
@@ -4194,7 +4185,7 @@ int ObPluginCatalog::Impl::prepare_startup(
           ret = guard->execute(
               "UPDATE __all_plugin_package SET actual_state=?,last_phase=?,"
               "last_status=0,last_error='',gmt_modified=? WHERE plugin_id=?",
-              [&](ObSQLiteBinder &binder) {
+              [&](ObPluginSqlBinder &binder) {
                 int bind_ret = binder.bind_int(
                     static_cast<int32_t>(ObPluginState::STOPPED));
                 if (OB_SUCCESS == bind_ret)
@@ -4216,7 +4207,7 @@ int ObPluginCatalog::Impl::prepare_startup(
         ret = guard->execute(
             "UPDATE __all_plugin_package SET actual_state=?,gmt_modified=? "
             "WHERE plugin_id=?",
-            [&](ObSQLiteBinder &binder) {
+            [&](ObPluginSqlBinder &binder) {
               int bind_ret = binder.bind_int(
                   static_cast<int32_t>(ObPluginState::STOPPED));
               if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(now);
@@ -4238,11 +4229,11 @@ int ObPluginCatalog::Impl::prepare_startup(
     ret = guard->query(
         "SELECT consumer_plugin_id,consumer_generation,provider_plugin_id "
         "FROM __all_plugin_dependency WHERE consumer_kind=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           return binder.bind_int(static_cast<int32_t>(
               ObPluginDependencyConsumerKind::PLUGIN));
         },
-        [&](ObSQLiteRowReader &reader) {
+        [&](ObPluginSqlRowReader &reader) {
           const std::string consumer = read_string(reader, 0);
           const uint64_t consumer_generation =
               static_cast<uint64_t>(reader.get_int64(1));
@@ -4324,7 +4315,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
 {
   int ret = OB_SUCCESS;
   std::lock_guard<std::mutex> lock(mutex_);
-  ObSQLiteConnectionGuard guard(pool_);
+  ObPluginSqlConnectionGuard guard(sql_client_);
   if (!initialized_) {
     ret = OB_NOT_INIT;
     error = "plugin catalog is not initialized";
@@ -4340,7 +4331,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
         *guard.get_connection(),
         "SELECT COUNT(*) FROM __all_plugin_package WHERE "
         "(desired_state=? AND actual_state<>?) OR actual_state=?",
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = binder.bind_int(
               static_cast<int32_t>(ObPluginDesiredState::ACTIVE));
           if (OB_SUCCESS == bind_ret)
@@ -4360,7 +4351,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
       ret = query_count(
           *guard.get_connection(),
           "SELECT COUNT(*) FROM __all_plugin_operation WHERE state IN(?,?,?,?)",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginCatalogOperationState::CATALOG_BEGIN));
             if (OB_SUCCESS == bind_ret)
@@ -4393,7 +4384,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
           "c.generation=d.consumer_generation)) AND "
           "(p.plugin_id IS NULL OR p.desired_state<>? OR p.actual_state<>? "
           "OR p.generation<>d.provider_generation))",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginDependencyConsumerKind::PLUGIN));
             if (OB_SUCCESS == bind_ret)
@@ -4430,7 +4421,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
           "ON c.plugin_id=d.consumer_plugin_id WHERE d.consumer_kind<>? OR "
           "(c.plugin_id IS NOT NULL AND c.desired_state<>? AND "
           "c.generation=d.consumer_generation)",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(static_cast<int32_t>(
                 ObPluginDependencyConsumerKind::PLUGIN));
             if (OB_SUCCESS == bind_ret)
@@ -4438,7 +4429,7 @@ int ObPluginCatalog::Impl::ready(std::string &error) const
                   ObPluginDesiredState::UNINSTALLED));
             return bind_ret;
           },
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             CatalogReadyDependency dependency;
             dependency.provider_plugin_id_ = read_string(reader, 0);
             dependency.provider_generation_ =
@@ -4497,7 +4488,7 @@ int ObPluginCatalog::Impl::install(const ObPluginPackageInstallSpec &spec,
                                    std::string &error)
 {
   int ret = OB_SUCCESS;
-  ObSQLiteConnectionGuard guard(pool_);
+  ObPluginSqlConnectionGuard guard(sql_client_);
   ObPluginCatalogRecord existing;
   bool exists = false;
   const int64_t now = ObTimeUtility::current_time();
@@ -4537,7 +4528,7 @@ int ObPluginCatalog::Impl::install(const ObPluginPackageInstallSpec &spec,
           "desired_state=?,actual_state=?,runtime_incarnation='',"
           "operation_id='',last_phase=0,last_status=0,last_error='',"
           "operator_id=?,audit_id=?,gmt_modified=? WHERE plugin_id=?",
-          [&](ObSQLiteBinder &binder) {
+          [&](ObPluginSqlBinder &binder) {
             int bind_ret = binder.bind_int(
                 static_cast<int32_t>(spec.verification_level_));
             if (OB_SUCCESS == bind_ret)
@@ -4567,7 +4558,7 @@ int ObPluginCatalog::Impl::install(const ObPluginPackageInstallSpec &spec,
         "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'','',0,0,'',?,?,?,?)";
     ret = guard->execute(
         INSERT_SQL,
-        [&](ObSQLiteBinder &binder) {
+        [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, spec.artifact_.plugin_id_);
           if (OB_SUCCESS == bind_ret)
             bind_ret = bind_string(binder, spec.relative_path_);
@@ -4626,7 +4617,7 @@ int ObPluginCatalog::Impl::get(const std::string &plugin_id,
   } else if (!catalog_valid_identifier(plugin_id)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     ret = guard ? load_record(*guard.get_connection(), plugin_id, record)
                 : OB_NOT_INIT;
   }
@@ -4642,14 +4633,14 @@ int ObPluginCatalog::Impl::list(
   if (!initialized_) {
     ret = OB_NOT_INIT;
   } else {
-    ObSQLiteConnectionGuard guard(pool_);
+    ObPluginSqlConnectionGuard guard(sql_client_);
     if (!guard) {
       ret = OB_NOT_INIT;
     } else {
       ret = guard->query(
           "SELECT plugin_id FROM __all_plugin_package ORDER BY plugin_id",
           nullptr,
-          [&](ObSQLiteRowReader &reader) {
+          [&](ObPluginSqlRowReader &reader) {
             ObPluginCatalogRecord record;
             record.plugin_id_ = read_string(reader, 0);
             records.push_back(record);
@@ -4670,7 +4661,7 @@ ObPluginCatalog::ObPluginCatalog() : impl_(new (std::nothrow) Impl())
 
 ObPluginCatalog::~ObPluginCatalog() = default;
 
-int ObPluginCatalog::init(ObSQLiteConnectionPool *pool)
+int ObPluginCatalog::init(common::ObISQLClient *sql_client)
 {
   if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
   int ret = OB_SUCCESS;
@@ -4678,23 +4669,23 @@ int ObPluginCatalog::init(ObSQLiteConnectionPool *pool)
     std::lock_guard<std::mutex> lock(impl_->mutex_);
     if (impl_->initialized_) {
       ret = OB_INIT_TWICE;
-    } else if (nullptr == pool || !pool->is_inited()) {
+    } else if (nullptr == sql_client) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      impl_->pool_ = pool;
+      impl_->sql_client_ = sql_client;
       try {
         ret = impl_->initialize_schema();
       } catch (...) {
         // Keep cleanup under the same mutex as initialization.  A concurrent
-        // init must never observe or overwrite a partially initialized pool
-        // binding.
-        impl_->pool_ = nullptr;
+        // init must never observe or overwrite a partially initialized SQL
+        // client binding.
+        impl_->sql_client_ = nullptr;
         throw;
       }
       if (OB_SUCCESS == ret) {
         impl_->initialized_ = true;
       } else {
-        impl_->pool_ = nullptr;
+        impl_->sql_client_ = nullptr;
       }
     }
   } catch (const std::bad_alloc &) {
@@ -4810,7 +4801,7 @@ int ObPluginCatalog::add_dependency(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(impl_->mutex_);
-    ObSQLiteConnectionGuard guard(impl_->pool_);
+    ObPluginSqlConnectionGuard guard(impl_->sql_client_);
     if (!impl_->initialized_) {
       ret = OB_NOT_INIT;
       error = "plugin catalog is not initialized";
@@ -4846,7 +4837,7 @@ int ObPluginCatalog::remove_dependency(
   error.clear();
   try {
     std::lock_guard<std::mutex> lock(impl_->mutex_);
-    ObSQLiteConnectionGuard guard(impl_->pool_);
+    ObPluginSqlConnectionGuard guard(impl_->sql_client_);
     if (!impl_->initialized_) {
       ret = OB_NOT_INIT;
       error = "plugin catalog is not initialized";
@@ -4874,7 +4865,7 @@ int ObPluginCatalog::remove_dependency(
 }
 
 int ObPluginCatalog::add_dependency(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const ObPluginDependencySpec &dependency,
     std::string &error)
 {
@@ -4882,9 +4873,9 @@ int ObPluginCatalog::add_dependency(
   int ret = OB_SUCCESS;
   error.clear();
   try {
-    // The caller already owns SQLite's writer transaction.  Never acquire the
+    // The caller already owns the SQL writer transaction.  Never acquire the
     // catalog mutex here: the ordinary catalog path takes mutex -> writer, so
-    // doing writer -> mutex would deadlock with restricted disable.  SQLite's
+    // doing writer -> mutex would deadlock with restricted disable.  SQL
     // writer exclusion is the serialization authority for this overload.
     if (!impl_->initialized_.load(std::memory_order_acquire)) {
       ret = OB_NOT_INIT;
@@ -4903,7 +4894,7 @@ int ObPluginCatalog::add_dependency(
 }
 
 int ObPluginCatalog::remove_dependency(
-    ObSQLiteConnection &connection,
+    ObPluginSqlConnection &connection,
     const ObPluginDependencySpec &dependency,
     std::string &error)
 {
@@ -4937,7 +4928,7 @@ int ObPluginCatalog::list_restrict_blockers(
   blockers.clear();
   try {
     std::lock_guard<std::mutex> lock(impl_->mutex_);
-    ObSQLiteConnectionGuard guard(impl_->pool_);
+    ObPluginSqlConnectionGuard guard(impl_->sql_client_);
     if (!impl_->initialized_) {
       ret = OB_NOT_INIT;
     } else if (!catalog_valid_identifier(plugin_id)) {

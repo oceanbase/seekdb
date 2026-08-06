@@ -23,14 +23,14 @@
 #include <vector>
 
 #include "share/plugin/ob_plugin_loader.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {
 namespace share
 {
 
-class ObSQLiteConnectionPool;
-class ObSQLiteConnection;
+class ObPluginSqlConnection;
 
 namespace plugin
 {
@@ -128,7 +128,7 @@ struct ObPluginCatalogRecord
 
 // Generic durable edge used both by activation (plugin -> provider service)
 // and by core catalog/schema adapters (user object/data/job -> plugin).  Core
-// DDL code must add/remove its edge in the same SQLite metadata transaction as
+// DDL code must add/remove its edge in the same SQL catalog transaction as
 // the corresponding local schema mutation; the convenience methods below own
 // their own transaction and are intended for callers without a wider one.
 struct ObPluginDependencySpec
@@ -182,7 +182,7 @@ struct ObPluginStartupReport
   std::string failed_plugin_id_;
 };
 
-// Single-node durable plugin catalog backed by seekdb's WAL-enabled meta.db.
+// Single-node durable plugin catalog backed by seekdb's WAL-backed SQL system catalog.
 // It implements the loader guard contracts and is the only component allowed
 // to assign generation/runtime/operation fencing identities.  The class never
 // holds its catalog mutex while invoking loader or plugin code.
@@ -196,7 +196,7 @@ public:
   ObPluginCatalog(const ObPluginCatalog &) = delete;
   ObPluginCatalog &operator=(const ObPluginCatalog &) = delete;
 
-  int init(ObSQLiteConnectionPool *pool);
+  int init(common::ObISQLClient *sql_client);
   bool is_initialized() const;
 
   int install_package(const ObPluginPackageInstallSpec &spec,
@@ -212,18 +212,18 @@ public:
   int remove_dependency(const ObPluginDependencySpec &dependency,
                         std::string &error);
   // Transaction-scoped variants for schema/DDL integration.  connection must
-  // already be in a write transaction.  The INSERT/DELETE obtains SQLite's
+  // already be in a write transaction.  The INSERT/DELETE participates in the
   // writer exclusion before returning, so a concurrent restricted disable
   // cannot pass its dependency check until the caller commits or rolls back.
   // These overloads never acquire the catalog mutex.  While holding that
   // external writer transaction, the caller MUST NOT call any other catalog
   // API which acquires the mutex; it must commit/rollback first.  This single
   // writer -> no catalog-mutex rule prevents inversion with management paths,
-  // whose order is catalog mutex -> SQLite writer.
-  int add_dependency(ObSQLiteConnection &connection,
+  // whose order is catalog mutex -> SQL writer.
+  int add_dependency(ObPluginSqlConnection &connection,
                      const ObPluginDependencySpec &dependency,
                      std::string &error);
-  int remove_dependency(ObSQLiteConnection &connection,
+  int remove_dependency(ObPluginSqlConnection &connection,
                         const ObPluginDependencySpec &dependency,
                         std::string &error);
   int list_restrict_blockers(
@@ -234,7 +234,7 @@ public:
                  ObPluginCatalogRecord &record) const;
   int list_records(std::vector<ObPluginCatalogRecord> &records) const;
 
-  // Called once after core schema/meta.db are usable and before business
+  // Called once after core schema and SQL catalog are usable and before business
   // ready.  It turns completed ACTIVE rows from the previous process into new
   // activation attempts, preserves unfinished intent tuples for exact replay,
   // topologically orders persistent plugin dependencies, and fails closed.

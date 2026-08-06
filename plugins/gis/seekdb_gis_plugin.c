@@ -1820,7 +1820,8 @@ static const seekdb_plugin_manifest_v1_t gis_manifest = {
     "gis-execution-spi-v1",
     1,
     1,
-    SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
+    SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE |
+        SEEKDB_PLUGIN_CAPABILITY_PERSISTENT_DATA,
     gis_services,
     sizeof(gis_services) / sizeof(gis_services[0]),
     NULL,

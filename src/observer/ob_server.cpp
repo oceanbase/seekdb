@@ -1221,7 +1221,7 @@ int ObServer::init_plugin_runtime(const ObServerOptions &opts)
         plugin_root.assign(opts.base_dir_.ptr(), opts.base_dir_.length());
         plugin_root.append("/plugins");
       }
-      if (OB_FAIL(runtime->init(&meta_db_pool_, plugin_root))) {
+      if (OB_FAIL(runtime->init(&sql_proxy_, plugin_root))) {
       }
     }
     if (OB_SUCC(ret)) {

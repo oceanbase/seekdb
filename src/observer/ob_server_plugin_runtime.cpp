@@ -14,12 +14,18 @@
  * limitations under the License.
  */
 
+#define USING_LOG_PREFIX SERVER
+
 #include "observer/ob_server_plugin_runtime.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <new>
+#include <sstream>
 #ifdef _WIN32
 #include <windows.h>
 #include <sys/stat.h>
@@ -31,8 +37,9 @@
 
 #include "lib/ob_errno.h"
 #include "lib/file/file_directory_utils.h"
+#include "lib/oblog/ob_log.h"
 #include "lib/string/ob_sql_string.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include "common/mysqlclient/ob_isql_client.h"
 
 #if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
 #include "seekdb/plugin/execution_spi.h"
@@ -146,6 +153,204 @@ private:
   std::string trusted_directory_;
 };
 
+std::string trim_copy(const std::string &value)
+{
+  size_t begin = 0;
+  while (begin < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[begin]))) {
+    ++begin;
+  }
+  size_t end = value.size();
+  while (end > begin &&
+         std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+    --end;
+  }
+  return value.substr(begin, end - begin);
+}
+
+bool parse_manifest_value(const std::string &line,
+                          const char *key,
+                          std::string &value)
+{
+  const std::string trimmed = trim_copy(line);
+  const size_t separator = trimmed.find('=');
+  if (separator == std::string::npos ||
+      trim_copy(trimmed.substr(0, separator)) != key) {
+    return false;
+  }
+  std::string parsed = trim_copy(trimmed.substr(separator + 1));
+  if (parsed.size() >= 2 && parsed.front() == '"' && parsed.back() == '"') {
+    parsed = parsed.substr(1, parsed.size() - 2);
+  }
+  value = parsed;
+  return true;
+}
+
+bool parse_uint32_value(const std::string &text, uint32_t &value)
+{
+  try {
+    size_t consumed = 0;
+    const unsigned long parsed = std::stoul(text, &consumed, 10);
+    if (consumed != text.size() || parsed > UINT32_MAX) return false;
+    value = static_cast<uint32_t>(parsed);
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool parse_semantic_version(const std::string &text,
+                            seekdb_plugin_semantic_version_t &version)
+{
+  std::stringstream stream(text);
+  std::string component;
+  uint32_t values[3] = {0, 0, 0};
+  for (size_t i = 0; i < 3; ++i) {
+    if (!std::getline(stream, component, '.') ||
+        !parse_uint32_value(component, values[i])) {
+      return false;
+    }
+  }
+  if (std::getline(stream, component, '.')) return false;
+  version.major = values[0];
+  version.minor = values[1];
+  version.patch = values[2];
+  return version.major != 0;
+}
+
+int discover_plugin_packages(share::plugin::ObPluginCatalog &catalog,
+                             const std::string &trusted_directory,
+                             std::string &error)
+{
+  namespace fs = std::filesystem;
+  int ret = OB_SUCCESS;
+  error.clear();
+  try {
+    LOG_INFO("plugin startup discovery begin", K(trusted_directory.c_str()));
+    std::error_code iterator_error;
+    const fs::path root(trusted_directory);
+    for (const fs::directory_entry &package_dir_entry :
+         fs::directory_iterator(root, iterator_error)) {
+      if (iterator_error) {
+        ret = OB_IO_ERROR;
+        error = "failed to enumerate plugin directory";
+        break;
+      }
+      if (!package_dir_entry.is_directory(iterator_error) || iterator_error) {
+        iterator_error.clear();
+        continue;
+      }
+
+      const fs::path package_dir = package_dir_entry.path();
+      const fs::path manifest_path = package_dir / "plugin.toml";
+      if (!fs::is_regular_file(manifest_path, iterator_error) || iterator_error) {
+        iterator_error.clear();
+        continue;
+      }
+
+      std::ifstream manifest(manifest_path);
+      if (!manifest.is_open()) {
+        ret = OB_IO_ERROR;
+        error = "failed to open plugin manifest '" + manifest_path.string() + "'";
+        break;
+      }
+
+      std::string plugin_id;
+      std::string package_version;
+      std::string build_id;
+      std::string entrypoint;
+      std::string catalog_version;
+      std::string data_format_version;
+      std::string line;
+      while (std::getline(manifest, line)) {
+        const size_t comment = line.find('#');
+        if (comment != std::string::npos) line.resize(comment);
+        (void)parse_manifest_value(line, "plugin_id", plugin_id);
+        (void)parse_manifest_value(line, "package_version", package_version);
+        (void)parse_manifest_value(line, "build_id", build_id);
+        (void)parse_manifest_value(line, "entrypoint", entrypoint);
+        (void)parse_manifest_value(line, "catalog_schema_version", catalog_version);
+        (void)parse_manifest_value(line, "data_format_version", data_format_version);
+      }
+      if (manifest.bad() || plugin_id.empty() || package_version.empty() ||
+          build_id.empty() || entrypoint.empty() || catalog_version.empty() ||
+          data_format_version.empty()) {
+        ret = OB_INVALID_ARGUMENT;
+        error = "plugin manifest is missing required identity fields '" +
+                manifest_path.string() + "'";
+        break;
+      }
+
+      share::plugin::ObPluginPackageInstallSpec spec;
+      spec.artifact_.plugin_id_ = plugin_id;
+      spec.artifact_.build_id_ = build_id;
+      if (!parse_semantic_version(package_version, spec.artifact_.package_version_) ||
+          !parse_uint32_value(catalog_version, spec.artifact_.catalog_version_) ||
+          !parse_uint32_value(data_format_version,
+                              spec.artifact_.data_format_version_)) {
+        ret = OB_INVALID_ARGUMENT;
+        error = "plugin manifest has invalid identity fields '" +
+                manifest_path.string() + "'";
+        break;
+      }
+
+      const fs::path entrypoint_relative(entrypoint);
+      const fs::path entrypoint_path = package_dir / entrypoint_relative;
+      const fs::path relative_entrypoint = entrypoint_path.lexically_relative(root);
+      const std::string relative_path = relative_entrypoint.generic_string();
+      std::error_code entrypoint_error;
+      const bool entrypoint_exists =
+          fs::is_regular_file(entrypoint_path, entrypoint_error);
+      if (entrypoint_relative.is_absolute() || relative_path.empty() ||
+          relative_path == ".." || relative_path.rfind("../", 0) == 0 ||
+          !entrypoint_exists || entrypoint_error) {
+        ret = OB_INVALID_ARGUMENT;
+        error = "plugin manifest entrypoint is outside the plugin directory or missing '" +
+                manifest_path.string() + "'";
+        break;
+      }
+
+      spec.relative_path_ = relative_path;
+      // R0 deliberately has no signature/content-hash trust.  The digest is
+      // still required as a catalog identity field and is replaced by the
+      // production package verifier in a later phase.
+      spec.artifact_.package_digest_ =
+          "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+      spec.verification_level_ = share::plugin::ObPluginVerificationLevel::IDENTITY_PINNED;
+      spec.operator_id_ = "startup.autodiscovery";
+      spec.audit_id_ = "startup." + plugin_id;
+
+      LOG_INFO("plugin startup discovery found package",
+               K(plugin_id.c_str()), K(manifest_path.string().c_str()));
+
+      share::plugin::ObPluginCatalogRecord existing;
+      const int get_ret = catalog.get_record(plugin_id, existing);
+      if (OB_ENTRY_NOT_EXIST == get_ret) {
+        if (OB_FAIL(catalog.install_package(spec, error))) {
+          break;
+        }
+        LOG_INFO("plugin startup discovery installed package",
+                 K(plugin_id.c_str()));
+      } else if (OB_SUCCESS != get_ret) {
+        ret = get_ret;
+        error = "failed to inspect discovered plugin '" + plugin_id + "'";
+        break;
+      }
+    }
+    if (OB_SUCCESS == ret && iterator_error) {
+      ret = OB_IO_ERROR;
+      error = "failed to enumerate plugin directory";
+    }
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    error = "plugin discovery allocation failed";
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+    error = "unexpected plugin discovery failure";
+  }
+  return ret;
+}
+
 bool regular_file_exists(const std::string &path)
 {
 #ifdef _WIN32
@@ -219,7 +424,7 @@ ObServerPluginRuntime::~ObServerPluginRuntime()
   destroy();
 }
 
-int ObServerPluginRuntime::init(share::ObSQLiteConnectionPool *meta_db_pool,
+int ObServerPluginRuntime::init(common::ObISQLClient *sql_client,
                                 const std::string &trusted_directory)
 {
   int ret = OB_SUCCESS;
@@ -228,7 +433,7 @@ int ObServerPluginRuntime::init(share::ObSQLiteConnectionPool *meta_db_pool,
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (impl_->initialized_) {
       ret = OB_INIT_TWICE;
-    } else if (nullptr == meta_db_pool || !meta_db_pool->is_inited()) {
+    } else if (nullptr == sql_client) {
       ret = OB_INVALID_ARGUMENT;
     }
 
@@ -248,30 +453,35 @@ int ObServerPluginRuntime::init(share::ObSQLiteConnectionPool *meta_db_pool,
           new (std::nothrow) share::plugin::ObPluginCatalog());
       if (!catalog) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(catalog->init(meta_db_pool))) {
+      } else if (OB_FAIL(catalog->init(sql_client))) {
       } else {
-        std::shared_ptr<share::plugin::ObPluginServiceRegistry> registry(
-            new (std::nothrow) share::plugin::ObPluginServiceRegistry());
-        std::shared_ptr<const share::plugin::ObPluginVerifier> verifier(
-            new (std::nothrow) CatalogIdentityVerifier(
-                catalog.get(), impl_->trusted_directory_));
-        std::shared_ptr<const share::plugin::ObPluginActivationGuard> activation_guard(
-            catalog.get(), [](const share::plugin::ObPluginActivationGuard *) {});
-        std::shared_ptr<const share::plugin::ObPluginDisableGuard> disable_guard(
-            catalog.get(), [](const share::plugin::ObPluginDisableGuard *) {});
-        std::unique_ptr<share::plugin::ObPluginLoader> loader(
-            new (std::nothrow) share::plugin::ObPluginLoader());
-        if (!registry || !verifier || !loader) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_FAIL(loader->init(impl_->trusted_directory_, verifier,
-                                         activation_guard, disable_guard,
-                                         registry))) {
-        } else {
-          impl_->registry_ = std::move(registry);
-          impl_->verifier_ = std::move(verifier);
-          impl_->loader_ = std::move(loader);
-          impl_->catalog_ = std::move(catalog);
-          impl_->initialized_ = true;
+        // Discovery is deferred until the server-ready gate. At this point
+        // init_sql_proxy/schema bootstrap has completed and catalog writes can
+        // safely use the normal seekdb system-catalog transaction.
+        if (OB_SUCC(ret)) {
+          std::shared_ptr<share::plugin::ObPluginServiceRegistry> registry(
+              new (std::nothrow) share::plugin::ObPluginServiceRegistry());
+          std::shared_ptr<const share::plugin::ObPluginVerifier> verifier(
+              new (std::nothrow) CatalogIdentityVerifier(
+                  catalog.get(), impl_->trusted_directory_));
+          std::shared_ptr<const share::plugin::ObPluginActivationGuard> activation_guard(
+              catalog.get(), [](const share::plugin::ObPluginActivationGuard *) {});
+          std::shared_ptr<const share::plugin::ObPluginDisableGuard> disable_guard(
+              catalog.get(), [](const share::plugin::ObPluginDisableGuard *) {});
+          std::unique_ptr<share::plugin::ObPluginLoader> loader(
+              new (std::nothrow) share::plugin::ObPluginLoader());
+          if (!registry || !verifier || !loader) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+          } else if (OB_FAIL(loader->init(impl_->trusted_directory_, verifier,
+                                           activation_guard, disable_guard,
+                                           registry))) {
+          } else {
+            impl_->registry_ = std::move(registry);
+            impl_->verifier_ = std::move(verifier);
+            impl_->loader_ = std::move(loader);
+            impl_->catalog_ = std::move(catalog);
+            impl_->initialized_ = true;
+          }
         }
       }
     }
@@ -313,6 +523,19 @@ int ObServerPluginRuntime::recover_before_server_ready(std::string &error)
     if (OB_SUCC(ret) && !impl_->catalog_) {
       ret = OB_NOT_INIT;
       error = "plugin catalog is not initialized";
+    }
+
+    if (OB_SUCC(ret)) {
+      std::string discovery_error;
+      if (OB_FAIL(discover_plugin_packages(*impl_->catalog_,
+                                           impl_->trusted_directory_,
+                                           discovery_error))) {
+        if (discovery_error.empty()) {
+          error = "failed to discover plugin packages";
+        } else {
+          error = discovery_error;
+        }
+      }
     }
 
     // Keep blocked and missing-artifact failures read-only. This preserves the

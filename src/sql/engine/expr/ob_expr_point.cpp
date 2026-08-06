@@ -42,6 +42,38 @@ struct PointPluginSink
   ObDatum *result_;
 };
 
+#if !SEEKDB_ENABLE_CORE_GIS
+struct PointObjPluginSink
+{
+  ObIAllocator *allocator_;
+  ObObj *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_point_obj_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *plugin_result)
+{
+  if (nullptr == host || nullptr == plugin_result ||
+      plugin_result->struct_size != sizeof(*plugin_result) ||
+      plugin_result->is_null != 0 || nullptr == plugin_result->data ||
+      plugin_result->data_size == 0 || nullptr == plugin_result->type_id ||
+      0 != strcmp(plugin_result->type_id, "org.seekdb.gis.geometry")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  PointObjPluginSink *sink = reinterpret_cast<PointObjPluginSink *>(host);
+  if (nullptr == sink->allocator_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  char *buf = reinterpret_cast<char *>(sink->allocator_->alloc(plugin_result->data_size));
+  if (nullptr == buf) return SEEKDB_PLUGIN_STATUS_NO_MEMORY;
+  MEMMOVE(buf, plugin_result->data, plugin_result->data_size);
+  sink->result_->set_string(ObGeometryType, buf,
+                            static_cast<int32_t>(plugin_result->data_size));
+  sink->result_->set_collation_level(CS_LEVEL_IMPLICIT);
+  return SEEKDB_PLUGIN_STATUS_OK;
+}
+#endif
+
 seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_point_plugin_result(
     seekdb_plugin_host_handle_t *host,
     const seekdb_plugin_execution_result_v1_t *result)
@@ -118,11 +150,43 @@ int ObExprPoint::calc_result2(common::ObObj &result,
                               common::ObExprCtx &expr_ctx) const
 {
 #if !SEEKDB_ENABLE_CORE_GIS
-  UNUSED(result);
-  UNUSED(obj1);
-  UNUSED(obj2);
-  UNUSED(expr_ctx);
-  return OB_NOT_SUPPORTED;
+  int ret = OB_SUCCESS;
+  ObIAllocator *allocator = expr_ctx.calc_buf_;
+  if (OB_ISNULL(allocator)) {
+    ret = OB_NOT_INIT;
+  } else if (obj1.is_null() || obj2.is_null() ||
+             ob_is_null(obj1.get_type()) || ob_is_null(obj2.get_type())) {
+    result.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const double x = obj1.get_double();
+    const double y = obj2.get_double();
+    seekdb_plugin_execution_value_v1_t arguments[2] = {};
+    for (int i = 0; i < 2; ++i) {
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = "org.seekdb.gis.scalar.float64";
+      arguments[i].data_size = sizeof(double);
+    }
+    arguments[0].data = reinterpret_cast<const uint8_t *>(&x);
+    arguments[1].data = reinterpret_cast<const uint8_t *>(&y);
+    PointObjPluginSink sink{allocator, &result};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_point_obj_plugin_result;
+    ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_point", &plugin_ctx, arguments, 2);
+    // Keep the old row engine usable while an extension catalog is being
+    // reconciled on an already initialized data directory.  The service is
+    // the executable SPI identity; the extension path remains preferred.
+    if (OB_SUCCESS != ret) {
+      ret = share::g_mp->execute_plugin_function(
+          "org.seekdb.gis.function", SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR,
+          SEEKDB_PLUGIN_EXECUTION_SPI_MINOR, &plugin_ctx, arguments, 2);
+    }
+  }
+  return ret;
 #else
   int ret = OB_SUCCESS;
   bool is_null_result = false;
@@ -201,9 +265,9 @@ int ObExprPoint::eval_point(const ObExpr &expr,
   if (ob_is_null(type_x) || ob_is_null(type_y)) {
     is_null_result = true;
   } else if (OB_FAIL(arg_x->eval(ctx, datum_x))) {
-    LOG_WARN("fail to eval point x arg", K(ret), K(type_x));
+	  LOG_WARN("fail to eval point x arg", K(ret), K(type_x));
   } else if (OB_FAIL(arg_y->eval(ctx, datum_y))) {
-    LOG_WARN("fail to eval point y arg", K(ret), K(type_y));
+	  LOG_WARN("fail to eval point y arg", K(ret), K(type_y));
   } else if (datum_x->is_null() || datum_y->is_null()) {
     is_null_result = true;
   } else {
@@ -228,11 +292,18 @@ int ObExprPoint::eval_point(const ObExpr &expr,
     arguments[1] = arguments[0];
     arguments[1].data = reinterpret_cast<const uint8_t *>(&y);
     if (nullptr != share::g_mp) {
-      const int plugin_ret = share::g_mp->execute_plugin_extension(
+      int plugin_ret = share::g_mp->execute_plugin_extension(
           SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_point", &plugin_ctx, arguments, 2);
+      if (OB_SUCCESS != plugin_ret) {
+        plugin_ret = share::g_mp->execute_plugin_function(
+            "org.seekdb.gis.function", SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR,
+            SEEKDB_PLUGIN_EXECUTION_SPI_MINOR, &plugin_ctx, arguments, 2);
+      }
       if (OB_SUCCESS == plugin_ret) {
         return OB_SUCCESS;
       }
+    } else {
+      LOG_WARN("GIS module provider is null in POINT evaluation", K(ret));
     }
 
 #if SEEKDB_ENABLE_CORE_GIS
