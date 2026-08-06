@@ -116,7 +116,6 @@ private:
 };
 
 class ObTablet;
-class ObTabletDirectLoadMgrHandle;
 class ObDDLKVPendingGuard final
 {
 public:
@@ -125,7 +124,6 @@ public:
     const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
 public:
   ObDDLKVPendingGuard(
@@ -134,7 +132,6 @@ public:
     const share::SCN &start_scn,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type);
   ~ObDDLKVPendingGuard();
   int get_ret() const { return ret_; }

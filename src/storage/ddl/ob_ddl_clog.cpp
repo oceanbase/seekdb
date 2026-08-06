@@ -244,30 +244,11 @@ void ObDDLMacroBlockClogCb::try_release()
 int ObDDLMacroBlockClogCb::on_success()
 {
   int ret = OB_SUCCESS;
-  bool is_major_sstable_exist = false;
   ObTablet *tablet = nullptr;
-
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-  
-  /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;
-  if (OB_ISNULL(direct_load_mgr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret));
-  } else if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
+  if (OB_ISNULL(tablet = tablet_handle_.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet is nullptr", K(ret));
-  } else if (ObDDLUtil::use_idempotent_mode()) {
-    /* Do not fetch direct load mgr. */
-  } else if (OB_FAIL(direct_load_mgr->get_tablet_mgr_and_check_major(
-        tablet->get_tablet_meta().tablet_id_, true/*is_full_direct_load*/, direct_load_mgr_handle, is_major_sstable_exist))) {
-    if (OB_ENTRY_NOT_EXIST == ret && is_major_sstable_exist) {
-      ret = OB_TASK_EXPIRED;
-      LOG_INFO("major sstable already exist", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
-    } else {
-      LOG_WARN("get tablet mgr failed", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
-    }
   }
 
   if (OB_FAIL(ret)) {
@@ -275,8 +256,7 @@ int ObDDLMacroBlockClogCb::on_success()
     /* do nothing skip relay it*/
   } else if (FALSE_IT(ddl_macro_block_.scn_ = __get_scn())) {
   } else if (OB_FAIL(ObDDLKVPendingGuard::set_macro_block(
-      tablet, ddl_macro_block_, snapshot_version_, 
-      data_format_version_, direct_load_mgr_handle, direct_load_type_))) {
+      tablet, ddl_macro_block_, snapshot_version_, data_format_version_, direct_load_type_))) {
     if (OB_ENTRY_EXIST == ret && is_idem_type(direct_load_type_)) {
       ret = OB_SUCCESS;
       LOG_INFO("receive repeat macro block, skip", K(ret), K(ddl_macro_block_));

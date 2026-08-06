@@ -439,18 +439,10 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       macro_block.ddl_start_scn_ = redo_info.start_scn_;
       macro_block.table_key_ = redo_info.table_key_;
       const int64_t snapshot_version = redo_info.table_key_.get_snapshot_version();
-      const ObITable::TableKey &table_key = redo_info.table_key_;
-      bool is_major_sstable_exist = false;
-      uint64_t data_format_version = redo_info.data_format_version_;
-      ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-      ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-      if (OB_ISNULL(direct_load_mgr)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected err", K(ret));
-      }
-      if (OB_SUCC(ret) && need_replay) {
+      const uint64_t data_format_version = redo_info.data_format_version_;
+      if (need_replay) {
         if (OB_FAIL(ObDDLKVPendingGuard::set_macro_block(tablet_handle.get_obj(), macro_block,
-            snapshot_version, data_format_version, direct_load_mgr_handle, ObDirectLoadType::DIRECT_LOAD_DDL))) {
+            snapshot_version, data_format_version, ObDirectLoadType::DIRECT_LOAD_DDL))) {
            if (OB_ENTRY_EXIST == ret && is_idem_type(redo_info.type_))  {
             ret = OB_SUCCESS;
             need_replay = false;

@@ -188,13 +188,13 @@ ObDDLKVPendingGuard::ObDDLKVPendingGuard(
     const SCN &start_scn,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type)
   : tablet_(tablet), scn_(scn), kv_handle_(), ret_(OB_SUCCESS), can_freeze_(false)
 {
   int ret = OB_SUCCESS;
   ObDDLKV *curr_kv = nullptr;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
+  // Current DDL direct load always uses the idempotent DDL KV path.
   if (OB_UNLIKELY(nullptr == tablet
       || !scn.is_valid_and_not_min()
       || !start_scn.is_valid_and_not_min()
@@ -205,16 +205,10 @@ ObDDLKVPendingGuard::ObDDLKVPendingGuard(
   } else if (OB_UNLIKELY(!is_full_direct_load(direct_load_type))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only support DDL direct load type", KR(ret), K(direct_load_type));
-  } else if (ObDDLUtil::use_idempotent_mode()) {
-    if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true/*try_create*/))) {
-    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_idem_ddl_kv(
-        scn, start_scn, snapshot_version, data_format_version, kv_handle_))) {
-    }
-  } else {
-    if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create*/))) {
-    } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_local_ddl_kv(
-        scn, start_scn, direct_load_mgr_handle, kv_handle_))) {
-    }
+  } else if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true/*try_create*/))) {
+    LOG_WARN("get ddl kv mgr failed", K(ret));
+  } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_or_create_idem_ddl_kv(
+      scn, start_scn, snapshot_version, data_format_version, kv_handle_))) {
   }
 
   if (OB_FAIL(ret)) {
@@ -261,7 +255,6 @@ int ObDDLKVPendingGuard::set_macro_block(
     const ObDDLMacroBlock &macro_block,
     const int64_t snapshot_version,
     const uint64_t data_format_version,
-    ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
     const ObDirectLoadType direct_load_type)
 {
   int ret = OB_SUCCESS;
@@ -277,8 +270,7 @@ int ObDDLKVPendingGuard::set_macro_block(
     while ((OB_SUCCESS == ret || OB_EAGAIN == ret) && try_count < MAX_RETRY_COUNT) {
       ObDDLKV *ddl_kv = nullptr;
       ObDDLKVPendingGuard guard(tablet, macro_block.scn_, macro_block.ddl_start_scn_,
-          snapshot_version, data_format_version, direct_load_mgr_handle,
-          direct_load_type);
+          snapshot_version, data_format_version, direct_load_type);
       if (OB_FAIL(guard.get_ddl_kv(ddl_kv))) {
       } else if (OB_ISNULL(ddl_kv)) {
         ret = OB_ERR_UNEXPECTED;
