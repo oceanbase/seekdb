@@ -1823,15 +1823,14 @@ int ObSQLSessionInfo::on_user_disconnect()
   transaction::tablelock::ObTableLockOwnerID owner_id;
   transaction::tablelock::ObTableLockService *lock_service = share::g_mp->table_lock_service();
   if (OB_ISNULL(lock_service)) {
-    LOG_WARN("table lock service is null when releasing named locks");
+    tmp_ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table lock service is null when releasing named locks", K(tmp_ret));
   } else if (OB_TMP_FAIL(owner_id.convert_from_session_id(get_server_sid(), get_sess_create_time()))) {
     LOG_WARN("failed to build named lock owner on disconnect", K(tmp_ret), K(get_server_sid()));
   } else if (OB_TMP_FAIL(lock_service->get_named_lock_manager().release_all(owner_id, release_count))) {
     LOG_WARN("failed to release named locks on disconnect", K(tmp_ret), K(owner_id));
   }
-  if (OB_SUCC(ret) && OB_SUCCESS != tmp_ret) {
-    ret = tmp_ret;
-  }
+  ret = COVER_SUCC(tmp_ret);
   return ret;
 }
 
