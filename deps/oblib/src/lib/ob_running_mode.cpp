@@ -20,7 +20,7 @@
 namespace oceanbase {
 namespace lib {
 const int64_t ObRunningModeConfig::MINI_MEM_LOWER = 1L << 30;
-const int64_t ObRunningModeConfig::MINI_MEM_UPPER = 12L << 30;
+const int64_t ObRunningModeConfig::MINI_MEM_UPPER = 6L << 30;
 const int64_t ObRunningModeConfig::MINI_CPU_UPPER = 8;
 
 } //end of namespace lib

@@ -40,7 +40,6 @@ using namespace common;
 using namespace share;
 using namespace storage;
 using namespace blocksstable;
-static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
@@ -74,7 +73,7 @@ private:
 };
 
 TestBlockManager::TestBlockManager()
-  : TestDataFilePrepare(&getter, "TestBlockManager", OB_DEFAULT_MACRO_BLOCK_SIZE, 200)
+  : TestDataFilePrepare("TestBlockManager", OB_DEFAULT_MACRO_BLOCK_SIZE, 200)
 {
 }
 
@@ -158,7 +157,7 @@ TEST_F(TestBlockManager, test_mark_and_sweep)
     ObTimerService::get_instance().destroy();
   });
 
-  ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
+  ret = ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
     ret = common::OB_SUCCESS;
   } else {
@@ -241,7 +240,7 @@ TEST_F(TestBlockManager, test_mark_and_sweep_skip_mark)
   const int64_t max_cache_size = 1024 * 1024 * 1024;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
 
-  ret = ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
+  ret = ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size, block_size);
   if (OB_INIT_TWICE == ret) {
     ret = common::OB_SUCCESS;
   } else {

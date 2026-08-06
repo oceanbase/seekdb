@@ -35,13 +35,8 @@ private:
   void update_runtime_settings();
 
 private:
-  // Update work-area settings.
-  int update_wa_percentage();
   // Apply context-memory limits from the runtime configuration.
   int update_ctx_memory_throttle();
-  // Read the work-area memory setting.
-  int read_wa_percentage(int64_t &pctg);
-private:
   common::ObArenaAllocator allocator_;
 };
 

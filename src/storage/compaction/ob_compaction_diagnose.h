@@ -358,7 +358,7 @@ public:
   int add_suspect_info(const int64_t key_value, ObScheduleSuspectInfo &info);
 
 public:
-  static constexpr double MEMORY_PERCENTAGE = 0.5;   // max size = runtime memory size * MEMORY_PERCENTAGE / 100
+  static constexpr double MEMORY_PERCENTAGE = 1;   // max size = logical memory budget * MEMORY_PERCENTAGE / 100
   static const int64_t POOL_MAX_SIZE = 48LL * 1024LL * 1024LL; // 48MB
 };
 

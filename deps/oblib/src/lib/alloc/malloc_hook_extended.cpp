@@ -95,6 +95,42 @@ cfree(void* ptr)
   free(ptr);
 }
 
+MALLOC_EXPORT
+char MALLOC_NOTHROW *
+MALLOC_ATTR(malloc)
+strdup(const char *str)
+{
+  char *ptr = nullptr;
+  if (nullptr != str) {
+    const size_t len = strlen(str) + 1;
+    ptr = static_cast<char *>(malloc(len));
+    if (LIKELY(nullptr != ptr)) {
+      memcpy(ptr, str, len);
+    }
+  }
+  return ptr;
+}
+
+MALLOC_EXPORT
+char MALLOC_NOTHROW *
+MALLOC_ATTR(malloc)
+strndup(const char *str, size_t n)
+{
+  char *ptr = nullptr;
+  if (nullptr != str) {
+    size_t len = 0;
+    while (len < n && '\0' != str[len]) {
+      ++len;
+    }
+    ptr = static_cast<char *>(malloc(len + 1));
+    if (LIKELY(nullptr != ptr)) {
+      memcpy(ptr, str, len);
+      ptr[len] = '\0';
+    }
+  }
+  return ptr;
+}
+
 MALLOC_EXPORT void MALLOC_NOTHROW
 free_sized(void* ptr, size_t size)
 {

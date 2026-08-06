@@ -28,6 +28,7 @@ ObFIFOAllocator::ObFIFOAllocator( /*= OB_SERVER_RUNTIME_ID */)
       allocator_(nullptr),
       page_size_(0),
       attr_(ObModIds::OB_FIFO_ALLOC),
+      page_allocator_(),
       idle_size_(0),
       max_size_(0),
       current_using_(nullptr),
@@ -76,6 +77,8 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
     }
     page_size_ = page_size;
     attr_ = attr;
+    page_allocator_.configure(
+        *allocator_, resolve_memory_usage_tracker(attr_.ctx_id_), attr_);
     // reserve
     if (init_size > 0) {
       if (OB_FAIL(sync_idle(init_size, max_size))) {
@@ -126,7 +129,7 @@ int ObFIFOAllocator::sync_idle(const int64_t idle_size, const int64_t max_size)
     // 1. Apply for n pages
     // 2. If current_using_ is empty, split 1 page to current_using
     for (int64_t i = 0; i < n; i++) {
-      void *ptr = allocator_->alloc(page_size_, attr_);
+      void *ptr = page_allocator_.alloc(page_size_, attr_);
       if (nullptr == ptr) {
         // ignore ret
         LOG_WARN("alloc failed", K(page_size_));
@@ -147,7 +150,7 @@ int ObFIFOAllocator::sync_idle(const int64_t idle_size, const int64_t max_size)
     int64_t n = upper_align(normal_total() - std::min(idle_size, max_size), page_size_) / page_size_;
     DLIST_FOREACH_REMOVESAFE_X(iter, free_page_list_, n > 0) {
       free_page_list_.remove(iter);
-      allocator_->free(iter->get_data());
+      page_allocator_.free(iter->get_data());
       n--;
     }
     // Do not release current_using (even if no one uses current_using)
@@ -172,7 +175,7 @@ int ObFIFOAllocator::set_max(const int64_t max_size, const bool sync)
         int64_t n = upper_align(total() - max_size, page_size_) / page_size_;
         DLIST_FOREACH_REMOVESAFE_X(iter, free_page_list_, n > 0) {
           free_page_list_.remove(iter);
-          allocator_->free(iter->get_data());
+          page_allocator_.free(iter->get_data());
           n--;
         }
       }
@@ -191,14 +194,14 @@ void ObFIFOAllocator::reset()
     DLIST_FOREACH_REMOVESAFE_NORET(iter, free_page_list_) {
       auto *page = iter->get_data();
       free_page_list_.remove(iter);
-      allocator_->free(page);
+      page_allocator_.free(page);
     }
 
     // check if there is some pages using ?
     if (OB_ISNULL(current_using_)) {
       // reset already.
     } else if (OB_LIKELY(1 == current_using_->ref_count_)) {
-      allocator_->free(current_using_);
+      page_allocator_.free(current_using_);
     } else {
       LOG_ERROR_RET(OB_ERROR, "current_using_ is still used now",
                 "ref_count", current_using_->ref_count_, KP(current_using_));
@@ -318,7 +321,7 @@ void ObFIFOAllocator::alloc_new_normal_page()
     }
     if (nullptr == new_page) {
       if (total() + page_size_ <= max_size_) {
-        void *ptr = allocator_->alloc(page_size_, attr_);
+        void *ptr = page_allocator_.alloc(page_size_, attr_);
         if (OB_NOT_NULL(ptr)) {
           new_page = new (ptr) NormalPageHeader();
         } else {
@@ -410,7 +413,7 @@ void *ObFIFOAllocator::alloc_normal(int64_t size, int64_t align)
   } else {
     if (nullptr == current_using_) {
       if (total() + page_size_ <= max_size_) {
-        new_space = allocator_->alloc(page_size_, attr_);
+        new_space = page_allocator_.alloc(page_size_, attr_);
       }
       if (nullptr == new_space) {
         LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "can not allocate new page", K(page_size_));
@@ -449,7 +452,7 @@ void ObFIFOAllocator::free_normal(NormalPageHeader *page, int64_t size)
     using_page_list_.remove(&page->node_);
     // move this page from page_using_list to page_free_list
     if (normal_total_size > idle_size_ || total_size > max_size_) {
-      allocator_->free(page);
+      page_allocator_.free(page);
       page = nullptr;
     } else {
       free_page_list_.add_first(&page->node_);
@@ -484,7 +487,7 @@ void *ObFIFOAllocator::alloc_special(int64_t size, int64_t align)
     // these bytes may be before (align 1) AND after user data (align 2).
     // one of them can be zero.
     int64_t real_size = size + sizeof(SpecialPageHeader) + sizeof(AllocHeader) + align - 1;
-    void *new_space = allocator_->alloc(real_size, attr_);
+    void *new_space = page_allocator_.alloc(real_size, attr_);
     if (NULL == new_space) {
       LOG_WARN_RET(OB_ALLOCATE_MEMORY_FAILED, "can not alloc a page from underlying allocator", K(real_size));
     } else {
@@ -513,7 +516,7 @@ void ObFIFOAllocator::free_special(SpecialPageHeader *special_page)
 {
   special_page_list_.remove(&special_page->node_);
   special_total_ -= special_page->real_size_;
-  allocator_->free(special_page);
+  page_allocator_.free(special_page);
 }
 
 } // end of namespace common

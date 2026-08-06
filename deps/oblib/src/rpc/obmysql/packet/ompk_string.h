@@ -33,28 +33,15 @@ public:
       : str_(str)
   {}
 
-  virtual int64_t get_serialize_size() const { return str_.length(); }
   virtual ~OMPKString() {};
-  virtual int serialize(char *buffer, const int64_t length, int64_t &pos) const
-  {
-    int ret = OB_SUCCESS;
-    if (OB_ISNULL(buffer) || length < pos) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (str_.length() > length - pos) {
-      ret = OB_SIZE_OVERFLOW;
-    } else if (!str_.empty()) {
-      MEMCPY(buffer + pos, str_.ptr(), str_.length());
-      pos += str_.length();
-    }
-    return ret;
-  }
+  inline const common::ObString &get_string() const { return str_; }
   inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_STR; }
 
-  VIRTUAL_TO_STRING_KV("header", hdr_, K_(str));
+  VIRTUAL_TO_STRING_KV(K_(str));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(OMPKString);
-  const common::ObString &str_;
+  common::ObString str_;
 }; // end of class OMPKString
 
 } // end of namespace obmysql

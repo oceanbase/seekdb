@@ -36,7 +36,6 @@
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "mtlenv/mock_server_runtime_env.h"
 #include "storage/test_dml_common.h"
-#include "share/ob_simple_mem_limit_getter.h"
 #include "../mockcontainer/mock_ob_iterator.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "unittest/storage/mock_ob_table_read_info.h"
@@ -51,8 +50,6 @@ using namespace common;
 using namespace blocksstable;
 using namespace share::schema;
 using namespace compaction;
-static ObSimpleMemLimitGetter getter;
-
 namespace storage
 {
 
@@ -74,7 +71,7 @@ int init_io_device(const char *test_name,
   const int64_t max_cache_size = 1024L * 1024L * 512;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   const int64_t mem_limit = 10LL * 1024 * 1024 * 1024;
-  lib::set_memory_limit(mem_limit);
+  lib::set_memory_budget(mem_limit);
 
   if (NULL == getcwd(cur_dir,  OB_MAX_FILE_NAME_LENGTH)) {
     ret = OB_BUF_NOT_ENOUGH;

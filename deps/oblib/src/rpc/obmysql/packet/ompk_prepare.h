@@ -42,17 +42,12 @@ class OMPKPrepare: public ObMySQLPacket
 {
 public:
   OMPKPrepare() :
-    status_(0),
     statement_id_(0),
     column_num_(0),
     param_num_(0),
-    reserved_(0),
     warning_count_(0)
   {}
   virtual ~OMPKPrepare() {}
-
-  virtual int serialize(char* buffer, int64_t length, int64_t& pos) const;
-  virtual int64_t get_serialize_size() const;
 
   inline void set_statement_id(const uint32_t id) { statement_id_ = id; }
 
@@ -61,14 +56,16 @@ public:
   inline void set_param_num(const uint16_t num) { param_num_ = num; }
 
   inline void set_warning_count(const uint16_t count) { warning_count_ = count; }
+  inline uint32_t get_statement_id() const { return statement_id_; }
+  inline uint16_t get_column_num() const { return column_num_; }
+  inline uint16_t get_param_num() const { return param_num_; }
+  inline uint16_t get_warning_count() const { return warning_count_; }
   inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_PREPARE; }
 
 private:
-  uint8_t  status_;
   uint32_t statement_id_;
   uint16_t column_num_;
   uint16_t param_num_;
-  uint8_t  reserved_;
   uint16_t warning_count_;
   DISALLOW_COPY_AND_ASSIGN(OMPKPrepare);
 };

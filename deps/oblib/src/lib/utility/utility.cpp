@@ -2166,12 +2166,12 @@ int read_one_int(const char *file_name, int64_t &value)
 
 int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value)
 {
-  int64_t mem_limit = get_memory_limit();
-  static const int64_t CALC_MEM_UPPER_BOUND = 128 * (1L << 30);  // 128GB
-  static const int64_t CALC_MEM_LOWER_BOUND = 1L << 30;           // 1GB
+  int64_t memory_budget = get_memory_budget();
+  static const int64_t CALC_MEM_UPPER_BOUND = 64 * (1L << 30);  // 64GB
+  static const int64_t CALC_MEM_LOWER_BOUND = 1L << 29;         // 512MB
 
   // 0.0 <= memory_ratio <= 1.0
-  int64_t clamped_memory = MIN(MAX(mem_limit, CALC_MEM_LOWER_BOUND), CALC_MEM_UPPER_BOUND);
+  int64_t clamped_memory = MIN(MAX(memory_budget, CALC_MEM_LOWER_BOUND), CALC_MEM_UPPER_BOUND);
   double memory_ratio = static_cast<double>(clamped_memory - CALC_MEM_LOWER_BOUND) /
                        (CALC_MEM_UPPER_BOUND - CALC_MEM_LOWER_BOUND);
 

@@ -47,7 +47,7 @@ public:
     periodic_cnt_(1024), origin_max_mem_size_(0), default_available_mem_size_(0),
     is_auto_mgr_(false), dir_id_(0),
     dummy_ptr_(nullptr), dummy_alloc_(nullptr) {}
-  virtual ~ObSqlMemMgrProcessor() {}
+  virtual ~ObSqlMemMgrProcessor() { release_memory_accounting(); }
 
   void set_sql_mem_mgr(ObSqlMemoryManager *sql_mem_mgr)
   {
@@ -75,11 +75,11 @@ public:
 
   void destroy()
   {
-    if (0 < profile_.mem_used_ && OB_NOT_NULL(mem_callback_)) {
-      mem_callback_->free(profile_.mem_used_);
+    if (0 == profile_.get_profile_data_used()
+        && 0 == profile_.get_profile_total_used()) {
+      mem_callback_ = nullptr;
+      sql_mem_mgr_ = nullptr;
     }
-    mem_callback_ = nullptr;
-    sql_mem_mgr_ = nullptr;
     profile_.mem_used_ = 0;
   }
   void reset()
@@ -113,12 +113,26 @@ public:
 
   void alloc(int64_t size)
   {
+    if (size > 0) {
+      ATOMIC_FAA(&profile_.profile_data_used_, size);
+      adjust_profile_total(size);
+      if (OB_NOT_NULL(mem_callback_)) {
+        mem_callback_->alloc(size);
+      }
+    }
     profile_.delta_size_ += size;
     update_memory_delta_size(profile_.delta_size_);
   }
 
   void free(int64_t size)
   {
+    if (size > 0) {
+      ATOMIC_SAF(&profile_.profile_data_used_, size);
+      adjust_profile_total(-size);
+      if (OB_NOT_NULL(mem_callback_)) {
+        mem_callback_->free(size);
+      }
+    }
     profile_.delta_size_ -= size;
     update_memory_delta_size(profile_.delta_size_);
   }
@@ -144,9 +158,6 @@ public:
   void update_memory_delta_size(int64_t delta_size)
   {
     if (delta_size > 0 && delta_size >= UPDATED_DELTA_SIZE) {
-      if (OB_NOT_NULL(mem_callback_)) {
-        mem_callback_->alloc(delta_size);
-      }
       profile_.mem_used_ += delta_size;
       if (OB_NOT_NULL(op_monitor_info_)) {
         op_monitor_info_->update_memory(delta_size);
@@ -157,9 +168,6 @@ public:
       profile_.delta_size_ = 0;
       profile_.data_size_ += delta_size;
     } else if (delta_size < 0 && -delta_size >= UPDATED_DELTA_SIZE) {
-      if (OB_NOT_NULL(mem_callback_)) {
-        mem_callback_->free(-delta_size);
-      }
       profile_.mem_used_ += delta_size;
       if (OB_NOT_NULL(op_monitor_info_)) {
         op_monitor_info_->update_memory(delta_size);
@@ -184,6 +192,28 @@ public:
   void unregister_profile_if_necessary();
 private:
   int try_upgrade_auto_mgr(ObIAllocator *allocator, int64_t mem_used);
+  void adjust_profile_total(const int64_t delta)
+  {
+    if (0 != delta) {
+      ATOMIC_FAA(&profile_.profile_total_used_, delta);
+      if (OB_NOT_NULL(sql_mem_mgr_) && profile_.is_registered()) {
+        sql_mem_mgr_->adjust_active_profile_used(delta);
+      }
+    }
+  }
+  void release_memory_accounting()
+  {
+    const int64_t data_used = ATOMIC_TAS(&profile_.profile_data_used_, 0);
+    const int64_t total_used = ATOMIC_TAS(&profile_.profile_total_used_, 0);
+    if (data_used > 0 && OB_NOT_NULL(mem_callback_)) {
+      mem_callback_->free(data_used);
+    }
+    if (0 != total_used && OB_NOT_NULL(sql_mem_mgr_) && profile_.is_registered()) {
+      sql_mem_mgr_->adjust_active_profile_used(-total_used);
+    }
+    mem_callback_ = nullptr;
+    sql_mem_mgr_ = nullptr;
+  }
 private:
   static const int64_t MAX_SQL_MEM_SIZE = 2 * 1024 * 1024; // 2M
   static const int64_t UPDATED_DELTA_SIZE = 1 * 1024 * 1024;

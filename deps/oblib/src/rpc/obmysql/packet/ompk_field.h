@@ -29,15 +29,14 @@ class OMPKField
     : public ObMySQLPacket
 {
 public:
-  explicit OMPKField(ObMySQLField &field);
+  explicit OMPKField(const ObMySQLField &field) : field_(field) {}
   virtual ~OMPKField() { }
   inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_FIELD; }
-
-  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const;
+  inline const ObMySQLField &get_field() const { return field_; }
 private:
   DISALLOW_COPY_AND_ASSIGN(OMPKField);
 
-  ObMySQLField &field_;
+  const ObMySQLField &field_;
 };
 
 } // end of namespace obmysql

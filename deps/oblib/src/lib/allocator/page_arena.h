@@ -94,13 +94,14 @@ struct ModulePageAllocator: public ObIAllocator
                       int64_t ctx_id = 0)
     : ModulePageAllocator(ObMemAttr(label, ctx_id)) {}
   ModulePageAllocator(const lib::ObMemAttr &attr)
-    : allocator_(NULL) { attr_ = attr; }
+    : allocator_(NULL), attr_(attr) {}
+  ModulePageAllocator(const ModulePageAllocator &that)
+    : allocator_(that.allocator_), attr_(that.attr_) {}
   explicit ModulePageAllocator(ObIAllocator &allocator,
                                const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR)
-      : allocator_(&allocator)
+      : allocator_(&allocator), attr_()
    {
      attr_.label_ = label;
-     
      attr_.ctx_id_ = 0;
    }
   virtual ~ModulePageAllocator() {}
@@ -113,16 +114,33 @@ struct ModulePageAllocator: public ObIAllocator
   lib::ObLabel get_label() const { return attr_.label_; }
   void *alloc(const int64_t sz)
   {
-    return (nullptr != allocator_
+    MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr_.ctx_id_);
+    return nullptr != tracker
+        ? tracked_alloc(sz, attr_, tracker)
+        : ((nullptr != allocator_
             && !attr_.label_.is_valid()
             && 0 == attr_.ctx_id_)
-                ? allocator_->alloc(sz) : alloc(sz, attr_);
+                ? allocator_->alloc(sz) : alloc(sz, attr_));
   }
   void *alloc(const int64_t size, const ObMemAttr &attr)
   {
-    return (NULL == allocator_) ? ob_malloc(size, attr) : allocator_->alloc(size, attr);
+    MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr_.ctx_id_);
+    return nullptr != tracker
+        ? tracked_alloc(size, attr, tracker)
+        : ((NULL == allocator_) ? ob_malloc(size, attr) : allocator_->alloc(size, attr));
   }
-  void free(void *p) { (NULL == allocator_) ? ob_free(p) : allocator_->free(p); p = NULL; }
+  void free(void *p)
+  {
+    MemoryUsageTracker *tracker = resolve_memory_usage_tracker(attr_.ctx_id_);
+    if (nullptr != tracker) {
+      tracked_free(p, tracker);
+    } else if (NULL == allocator_) {
+      ob_free(p);
+    } else {
+      allocator_->free(p);
+    }
+    p = NULL;
+  }
   void freed(const int64_t sz) {UNUSED(sz); /* mostly for effcient bulk stat reporting */ }
   void set_allocator(ObIAllocator *allocator) { allocator_ = allocator; }
   ModulePageAllocator &operator=(const ModulePageAllocator &that) {
@@ -133,6 +151,34 @@ struct ModulePageAllocator: public ObIAllocator
     return *this;
   }
 protected:
+  void *tracked_alloc(const int64_t size,
+                      const ObMemAttr &attr,
+                      MemoryUsageTracker *tracker)
+  {
+    void *ptr = nullptr;
+    if (NULL == allocator_) {
+      ObMalloc fallback_allocator(attr);
+      TrackedAllocator tracked_allocator(fallback_allocator, tracker, attr);
+      ptr = tracked_allocator.alloc(size, attr);
+    } else {
+      TrackedAllocator tracked_allocator(*allocator_, tracker, attr);
+      ptr = tracked_allocator.alloc(size, attr);
+    }
+    return ptr;
+  }
+
+  void tracked_free(void *ptr, MemoryUsageTracker *tracker)
+  {
+    if (NULL == allocator_) {
+      ObMalloc fallback_allocator(attr_);
+      TrackedAllocator tracked_allocator(fallback_allocator, tracker, attr_);
+      tracked_allocator.free(ptr);
+    } else {
+      TrackedAllocator tracked_allocator(*allocator_, tracker, attr_);
+      tracked_allocator.free(ptr);
+    }
+  }
+
   ObIAllocator *allocator_;
   lib::ObMemAttr attr_;
 };
@@ -942,37 +988,81 @@ public:
   ObArenaAllocator(const lib::ObLabel &label = ObModIds::OB_MODULE_PAGE_ALLOCATOR,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE,
                    int64_t ctx_id = 0)
-    : arena_(page_size, ModulePageAllocator(label, ctx_id)) {}
+    : arena_(page_size, ModulePageAllocator(label, ctx_id)), tracker_(nullptr) {}
   ObArenaAllocator(ObIAllocator &allocator, const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(allocator)) {};
+    : arena_(page_size, ModulePageAllocator(allocator)), tracker_(nullptr) {};
   ObArenaAllocator(const lib::ObMemAttr &attr,
                    const int64_t page_size = OB_MALLOC_NORMAL_BLOCK_SIZE)
-    : arena_(page_size, ModulePageAllocator(attr)) {}
-  virtual ~ObArenaAllocator() {};
+    : arena_(page_size, ModulePageAllocator(attr)), tracker_(nullptr) {}
+  virtual ~ObArenaAllocator()
+  {
+    update_tracker(-arena_.total());
+  };
 public:
-  virtual void *alloc(const int64_t sz) { return arena_.alloc_aligned(sz); }
+  virtual void *alloc(const int64_t sz)
+  {
+    const int64_t old_total = arena_.total();
+    void *ptr = arena_.alloc_aligned(sz);
+    update_tracker(arena_.total() - old_total);
+    return ptr;
+  }
   void *alloc(const int64_t size, const ObMemAttr &attr)
   {
     UNUSED(attr);
     return alloc(size);
   }
   virtual void *alloc_aligned(const int64_t sz, const int64_t align)
-  { return arena_.alloc_aligned(sz, align); }
-  virtual void *realloc(void *ptr, const int64_t oldsz, const int64_t newsz) { return arena_.realloc(reinterpret_cast<char*>(ptr), oldsz, newsz); }
+  {
+    const int64_t old_total = arena_.total();
+    void *ptr = arena_.alloc_aligned(sz, align);
+    update_tracker(arena_.total() - old_total);
+    return ptr;
+  }
+  virtual void *realloc(void *ptr, const int64_t oldsz, const int64_t newsz)
+  {
+    const int64_t old_total = arena_.total();
+    void *new_ptr = arena_.realloc(reinterpret_cast<char*>(ptr), oldsz, newsz);
+    update_tracker(arena_.total() - old_total);
+    return new_ptr;
+  }
   //[[deprecated("Arena is not allowed to call free(ptr), use clear() instead")]]
   virtual void free(void *ptr) { UNUSED(ptr); }
-  virtual void clear() { arena_.free(); }
+  virtual void clear()
+  {
+    const int64_t old_total = arena_.total();
+    arena_.free();
+    update_tracker(arena_.total() - old_total);
+  }
   int64_t used() const { return arena_.used(); }
   int64_t total() const { return arena_.total(); }
-  void reset() { arena_.free(); }
-  void reset_remain_one_page() { arena_.free_remain_one_page(); }
+  void reset() { clear(); }
+  void reset_remain_one_page()
+  {
+    const int64_t old_total = arena_.total();
+    arena_.free_remain_one_page();
+    update_tracker(arena_.total() - old_total);
+  }
   void reuse() override { arena_.reuse(); }
   virtual void set_label(const lib::ObLabel &label) { arena_.set_label(label); }
   virtual lib::ObLabel get_label() const { return arena_.get_label(); }
   
   bool set_tracer() { return arena_.set_tracer(); }
-  bool revert_tracer() { return arena_.revert_tracer(); }
+  bool revert_tracer()
+  {
+    const int64_t old_total = arena_.total();
+    const bool reverted = arena_.revert_tracer();
+    update_tracker(arena_.total() - old_total);
+    return reverted;
+  }
   void set_ctx_id(int64_t ctx_id) { arena_.set_ctx_id(ctx_id); }
+  void set_memory_tracker(MemoryUsageTracker *tracker)
+  {
+    if (tracker_ != tracker) {
+      update_tracker(-arena_.total());
+      tracker_ = tracker;
+      update_tracker(arena_.total());
+    }
+  }
   void set_attr(const ObMemAttr &attr) override
   {
     arena_.set_attr(attr);
@@ -986,7 +1076,15 @@ public:
   }
   int mprotect_arena_allocator(int prot) { return arena_.mprotect_page_arena(prot); }
 private:
+  void update_tracker(const int64_t delta)
+  {
+    if (nullptr != tracker_ && 0 != delta) {
+      tracker_->adjust(delta);
+    }
+  }
+
   ModuleArena arena_;
+  MemoryUsageTracker *tracker_;
 };
 
 class ObSafeArenaAllocator : public ObIAllocator

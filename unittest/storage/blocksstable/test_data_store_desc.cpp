@@ -31,12 +31,11 @@ using namespace compaction;
 
 namespace unittest
 {
-static ObSimpleMemLimitGetter getter;
 class TestObDataStoreDesc : public blocksstable::TestDataFilePrepare
 {
 public:
   TestObDataStoreDesc()
-    : blocksstable::TestDataFilePrepare(&getter, "test_data_store_desc"),
+    : blocksstable::TestDataFilePrepare("test_data_store_desc"),
       mock_tablet_id_(1)
   {}
   ~TestObDataStoreDesc() = default;

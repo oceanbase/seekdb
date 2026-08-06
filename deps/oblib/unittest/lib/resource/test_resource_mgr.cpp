@@ -180,7 +180,7 @@ TEST(TestMemoryMgr, sync_wash)
 {
   int ret = OB_SUCCESS;
   const int64_t limit = 2L * 1024L * 1024L * 1024L;
-  oceanbase::lib::set_memory_limit(limit);
+  oceanbase::lib::set_memory_budget(limit);
   FakeCacheWasher washer(ACHUNK_SIZE);
   ObMemoryMgr memory_mgr;
   ObArray<void *> chunks;
@@ -238,7 +238,7 @@ TEST(TestMemoryMgr, DISABLED_large_sync_wash)
   int ret = OB_SUCCESS;
   const int64_t limit = 1L * 1024L * 1024L * 1024L;
   const int64_t aligned_size = CHUNK_MGR.aligned(ACHUNK_SIZE);
-  oceanbase::lib::set_memory_limit(limit);
+  oceanbase::lib::set_memory_budget(limit);
   FakeCacheWasher washer(ACHUNK_SIZE);
   ObMemoryMgr memory_mgr;
   ObArray<void *> chunks;

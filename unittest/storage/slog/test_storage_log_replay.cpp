@@ -23,7 +23,6 @@
 namespace oceanbase
 {
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 namespace storage
 {
@@ -32,7 +31,7 @@ class TestStorageLogReplay : public blocksstable::TestDataFilePrepare
 {
 public:
   TestStorageLogReplay()
-    : blocksstable::TestDataFilePrepare(&getter, "TestStorageLogReplay")
+    : blocksstable::TestDataFilePrepare("TestStorageLogReplay")
   {
   }
   virtual ~TestStorageLogReplay() = default;

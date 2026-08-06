@@ -16,9 +16,13 @@
 
 #ifndef OCEANBASE_MYSQL_OBMP_PACKET_SENDER_H_
 #define OCEANBASE_MYSQL_OBMP_PACKET_SENDER_H_
+#include "lib/container/ob_iarray.h"
 #include "observer/ob_server_struct.h"
-#include "rpc/obmysql/obsm_struct.h"
 #include "rpc/obmysql/ob_i_cs_mem_pool.h"
+#include "rpc/obmysql/ob_mysql_field.h"
+#include "rpc/obmysql/obsm_struct.h"
+
+struct nio_connection_handle;
 
 namespace oceanbase
 {
@@ -26,11 +30,6 @@ namespace sql
 {
 class ObSQLSessionInfo;
 }
-namespace obmysql
-{
-class obmysqlpacket;
-} // end of namespace obmysql
-
 namespace observer
 {
 class ObMySQLResultSet;
@@ -84,20 +83,15 @@ public:
   virtual void disconnect() = 0;
   virtual void force_disconnect() = 0;
 
-  /**
-   * read a mysql packet from the socket channel
-   *
-   * Error returned if no message. You need to determine the exact cause of the error to decide
-   * whether to continue to wait for the message or interrupt the service.
-   *
-   * @param mem_pool  The memory manager to hold the `pkt`
-   * @param pkt       The mysql packet received or nullptr if not message came in
-   * @return OB_SUCCESS The socket channel is OK. The `pk` returned may be null is no data came in.
-   *         OB_IO_ERROR Something wrong with the channel, such as it was closed.
-   */
-  virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket *&pkt) = 0;
+  virtual int wait_packet(obmysql::ObICSMemPool& mem_pool,
+                          int64_t timeout_us,
+                          obmysql::ObMySQLPacket *&pkt) = 0;
   virtual int release_packet(obmysql::ObMySQLPacket* pkt) = 0;
-  virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session) = 0;
+  virtual int response_packet(obmysql::ObMySQLPacket &pkt) = 0;
+  virtual int response_resultset_metadata(
+      const common::ObIArray<obmysql::ObMySQLField> &fields,
+      bool include_result_header, uint8_t eof_field_count, uint16_t warnings,
+      uint16_t status_flags) = 0;
   virtual int send_error_packet(int err,
                                 const char* errmsg,
                                 void *extra_err_info = NULL) = 0;
@@ -109,18 +103,24 @@ public:
   virtual ObSMConnection* get_conn() const = 0;
 };
 
-class ObMPPacketSender : public ObIMPPacketSender
+class ObMPPacketSender final : public ObIMPPacketSender
 {
 public:
   ObMPPacketSender();
-  virtual ~ObMPPacketSender();
+  virtual ~ObMPPacketSender() override;
 
   void reset();
   virtual void disconnect() override;
   virtual void force_disconnect() override;
-  virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket *&pkt) override;
+  virtual int wait_packet(obmysql::ObICSMemPool& mem_pool,
+                          int64_t timeout_us,
+                          obmysql::ObMySQLPacket *&pkt) override;
   virtual int release_packet(obmysql::ObMySQLPacket* pkt) override;
-  virtual int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session) override;
+  virtual int response_packet(obmysql::ObMySQLPacket &pkt) override;
+  virtual int response_resultset_metadata(
+      const common::ObIArray<obmysql::ObMySQLField> &fields,
+      bool include_result_header, uint8_t eof_field_count, uint16_t warnings,
+      uint16_t status_flags) override;
   virtual int send_error_packet(int err,
                                 const char* errmsg,
                                 void *extra_err_info = NULL) override;
@@ -128,52 +128,68 @@ public:
   virtual int send_eof_packet(const sql::ObSQLSessionInfo &session,
                               const ObMySQLResultSet &result,
                               ObOKPParam *ok_param = NULL) override;
-  virtual int flush_buffer(const bool is_last);
-  int clone_from(ObMPPacketSender& that, int64_t com_offset = 0);
-  int init(rpc::ObRequest* req);
-  int do_init(rpc::ObRequest *req,
-           uint8_t packet_seq,
-           uint8_t comp_seq,
-           bool conn_status,
-           bool req_has_wokenup,
-           int64_t query_receive_ts);
-  bool is_conn_valid() const { return conn_valid_; }
-  void finish_sql_request();
+  virtual int flush_buffer(const bool is_last) override;
+  int snapshot_from(ObMPPacketSender &that);
+  int handoff_request_to(ObMPPacketSender &target);
+  int init(rpc::ObRequest *req);
+  int do_init(rpc::ObRequest *req, bool owns_request, int64_t query_receive_ts);
+  bool is_conn_valid() const {
+    return RequestOwnership::OWNED == request_ownership_ && NULL != conn_ &&
+           NULL != nio_connection_handle_;
+  }
+  int finish_sql_request();
+  // Packet retry keeps the Rust request generation active and transfers the
+  // same ObRequest to a later processor. Make that exceptional non-finish
+  // transition explicit so ordinary reset/destruction can fail closed.
+  int detach_for_retry();
   int get_conn_id(uint32_t &sessid) const;
-  ObSMConnection* get_conn() const;
+  ObSMConnection *get_conn() const override;
   int get_session(sql::ObSQLSessionInfo *&sess_info);
   int revert_session(sql::ObSQLSessionInfo *sess_info);
-  void disable_response() { req_has_wokenup_ = true; }
-  bool is_disable_response() const { return req_has_wokenup_; }
-  int clean_buffer();
+  // Suppress any further response bytes while retaining responsibility for
+  // finishing the request (for example, a connect-time auth-switch failure).
+  void disable_response() { response_disabled_ = true; }
+  bool is_disable_response() const {
+    return response_disabled_ || RequestOwnership::OWNED != request_ownership_;
+  }
   bool has_pl();
-  int alloc_ezbuf();
-  int64_t get_comp_seq() { return comp_context_.seq_; }
 
 private:
-  int init_read_handle();
-  int release_read_handle();
+  enum class RequestOwnership : uint8_t {
+    RELEASED,
+    SNAPSHOT,
+    OWNED,
+    DETACHED_FOR_RETRY,
+  };
+
+  int release_read_packet_lease();
+  void clear_request_identity(RequestOwnership next_state);
 
 private:
-  static const int64_t MAX_TRY_STEPS = 8;
-  static int64_t TRY_EZ_BUF_SIZES[MAX_TRY_STEPS];
+  int append_response(obmysql::ObMySQLPacket &pkt, int64_t &seri_size);
 
-  int try_encode_with(obmysql::ObMySQLPacket &pkt,
-                      int64_t current_size,
-                      int64_t &seri_size,
-                      int64_t try_steps,
-                      bool is_composed_ok_pkt = false);
-  bool need_flush_buffer() const;
-  int resize_ezbuf(const int64_t size);
 protected:
   rpc::ObRequest *req_;
-  uint8_t seq_;
-  void * read_handle_;
-  obmysql::ObCompressionContext comp_context_;
-  easy_buf_t *ez_buf_;
-  bool conn_valid_;
-  uint32_t sessid_;
-  bool req_has_wokenup_;
+  // Immutable copy made before the embedded ObRequest can be placement-newed
+  // for a later request on this connection.
+  uint64_t request_generation_;
+  // Non-owning connection-scoped Rust response identity. The session owns the
+  // handle. Only an OWNED sender may dereference it; a SNAPSHOT merely carries
+  // the identity until a successful handoff transfers REQUEST_BUSY ownership.
+  nio_connection_handle *nio_connection_handle_;
+  // Set once this sender has performed a mid-request read on the connection.
+  // The stream cursor has then moved even after the packet lease is released,
+  // so packet retry must stay closed. Replaces the removed read_handle_, whose
+  // non-null state carried exactly this fact.
+  bool mid_request_read_started_;
+  // At most one synchronous Rust packet body may be exposed to C++ at once.
+  uint64_t read_packet_lease_;
+  RequestOwnership request_ownership_;
+  // Packet retry is legal only before the first response append attempt.
+  // A snapshot copies this bit, and handoff refreshes it because the original
+  // sender may append after the snapshot was created.
+  bool response_started_;
+  bool response_disabled_;
   int64_t query_receive_ts_;
   ObSMConnection *conn_;
 private:

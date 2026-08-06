@@ -20,6 +20,7 @@
 #include "lib/oblog/ob_warning_buffer.h"
 #include "rpc/frame/ob_req_translator.h"
 #include "rpc/frame/ob_req_processor.h"
+#include "rpc/ob_sql_request_operator.h"
 #include "observer/omt/ob_th_worker.h"
 
 using namespace oceanbase::common;

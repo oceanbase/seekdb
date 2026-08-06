@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "ob_sql_session_mgr.h"
+#include "rpc/ob_sql_request_operator.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
@@ -265,6 +266,12 @@ int ObSQLSessionMgr::kill_query(ObSQLSessionInfo &session,
   } else {
     LOG_WARN("unexpected status", K(status));
     ret = OB_ERR_UNEXPECTED;
+  }
+
+  if (OB_SUCC(ret)) {
+    // LOAD DATA may be sleeping in Rust waiting for the next packet. Rust
+    // captures the currently active generation when processing this wakeup.
+    SQL_REQ_OP.interrupt_read_by_sql_sock_desc(session.get_sock_desc());
   }
 
   return ret;

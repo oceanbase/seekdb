@@ -59,7 +59,7 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                int64_t& total_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_LOG_DISK_SIZE = MAX(2LL << 30, lib::get_memory_limit() / 2);
+  const int64_t DEFAULT_LOG_DISK_SIZE = MAX(2LL << 30, lib::get_memory_budget());
   int64_t suggested_clog_disk_size = 0 == GCONF.log_disk_size ? DEFAULT_LOG_DISK_SIZE : GCONF.log_disk_size;
   int64_t suggested_clog_disk_percentage = GCONF.log_disk_percentage;
   int64_t data_default_disk_percentage = 0;

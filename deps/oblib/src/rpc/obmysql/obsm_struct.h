@@ -17,8 +17,9 @@
 #ifndef OCEANBASE_OBSERVER_MYSQL_OBSM_STRUCT_H_
 #define OCEANBASE_OBSERVER_MYSQL_OBSM_STRUCT_H_
 
+#include <atomic>
 #include <stdint.h>
-#include "rpc/obmysql/ob_mysql_request_utils.h"
+#include "rpc/obmysql/ob_mysql_packet.h"
 #include "rpc/ob_packet.h"
 #include "lib/lock/ob_latch.h"
 
@@ -45,8 +46,8 @@ public:
   {
     cap_flags_.capability_ = 0;
     autocommit_snapshot_ = 0;
-    is_sess_alloc_ = false;
-    is_sess_free_ = false;
+    is_sess_alloc_.store(false, std::memory_order_relaxed);
+    is_sess_free_.store(false, std::memory_order_relaxed);
     has_inc_active_num_ = false;
     is_need_clear_sessid_ = true;
     is_runtime_locked_ = false;
@@ -60,17 +61,6 @@ public:
     client_cs_type_ = 0;
     client_version_ = 0;
     logined_ = false;
-  }
-
-  obmysql::ObCompressType get_compress_type() {
-    obmysql::ObCompressType type_ret = obmysql::ObCompressType::NO_COMPRESS;
-    //unauthed connection, treat it do not use compress
-    //if during change user(is logined) and need compress, need return COMPRESS here
-    if ((is_in_authed_phase() || (is_in_auth_switch_phase() && is_logined())) &&
-        (1 == cap_flags_.cap_flags_.OB_CLIENT_COMPRESS)) {
-      type_ret = obmysql::ObCompressType::DEFAULT_COMPRESS;
-    }
-    return type_ret;
   }
 
   common::ObCSProtocolType get_cs_protocol_type() const
@@ -92,11 +82,9 @@ public:
   }
 
   inline bool is_in_connected_phase() { return rpc::ConnectionPhaseEnum::CPE_CONNECTED == connection_phase_; }
-  inline bool is_in_ssl_connect_phase() { return rpc::ConnectionPhaseEnum::CPE_SSL_CONNECT == connection_phase_; }
   inline bool is_in_authed_phase() { return rpc::ConnectionPhaseEnum::CPE_AUTHED == connection_phase_; }
   inline bool is_in_auth_switch_phase() const { return rpc::ConnectionPhaseEnum::CPE_AUTH_SWITCH == connection_phase_; }
   inline void set_auth_switch_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_AUTH_SWITCH; }
-  inline void set_ssl_connect_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_SSL_CONNECT; }
   inline void set_auth_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_AUTHED; }
   inline void set_connect_phase() { connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED; }
   inline bool is_logined() const { return logined_; }
@@ -104,8 +92,8 @@ public:
 public:
   obmysql::ObMySQLCapabilityFlags cap_flags_;
   int64_t autocommit_snapshot_; // global value advertised by the initial handshake
-  bool is_sess_alloc_;
-  bool is_sess_free_;
+  std::atomic<bool> is_sess_alloc_;
+  std::atomic<bool> is_sess_free_;
   bool has_inc_active_num_;
   bool is_need_clear_sessid_;
   bool is_runtime_locked_;
@@ -120,8 +108,6 @@ public:
   int ret_;
   omt::ObServerRuntime *runtime_;
   int64_t connect_in_bytes_;
-  obmysql::ObMysqlPktContext mysql_pkt_context_;
-  obmysql::ObCompressedPktContext compressed_pkt_context_;
   char scramble_buf_[SCRAMBLE_BUF_SIZE + 1];
   int32_t group_id_;
   int32_t client_cs_type_;

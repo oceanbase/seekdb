@@ -200,7 +200,6 @@ ob_set_subtarget(oblib_lib utility
 )
 
 ob_set_subtarget(oblib_lib ssl
-  ssl/ob_ssl_config.cpp
 )
 
 ob_set_subtarget(oblib_lib ob_vector_util
@@ -250,6 +249,9 @@ ob_add_new_object_target(ob_malloc_object ob_malloc_object_list)
 target_link_libraries(ob_malloc_object oblib_base_without_pass)
 add_library(ob_malloc STATIC)
 target_link_libraries(ob_malloc ob_malloc_object)
+if(OB_HAVE_BUNDLED_JEMALLOC)
+  target_link_libraries(ob_malloc bundled_jemalloc)
+endif()
 
 # malloc_hook is only available on Linux (uses Linux-specific syscall and weak alias)
 if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
@@ -258,6 +260,9 @@ if(NOT APPLE AND NOT WIN32 AND NOT ANDROID)
       alloc/malloc_hook.h
       alloc/malloc_hook_extended.cpp)
   target_link_libraries(malloc_hook oblib_base)
+  if(OB_HAVE_BUNDLED_JEMALLOC)
+    target_link_libraries(malloc_hook bundled_jemalloc)
+  endif()
 endif()
 
 if(WIN32)

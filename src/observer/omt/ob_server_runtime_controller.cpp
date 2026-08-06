@@ -157,10 +157,6 @@ int ObServerRuntimeController::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    ObMallocAllocator *allocator = ObMallocAllocator::get_instance();
-    if (OB_NOT_NULL(allocator)) {
-      allocator->set_allocator_limit(INT64_MAX);
-    }
     if (!timer_.inited()
         && OB_FAIL(timer_.init("ServerRuntimeTimer", ObMemAttr("RuntimeTimer")))) {
       LOG_ERROR("create multi runtime timer failed", K(ret));
@@ -227,10 +223,7 @@ void ObServerRuntimeController::destroy()
     ob_delete(runtime_);
     runtime_ = nullptr;
   }
-  int tmp_ret = ObKVGlobalCache::get_instance().sync_flush();
-  if (OB_SUCCESS != tmp_ret) {
-    LOG_WARN_RET(tmp_ret, "fail to flush runtime cache during shutdown", K(tmp_ret));
-  }
+  int tmp_ret = OB_SUCCESS;
   if (OB_NOT_NULL(GCTX.disk_reporter_)) {
     tmp_ret = GCTX.disk_reporter_->delete_usage_stat();
     if (OB_SUCCESS != tmp_ret) {
@@ -357,14 +350,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
     ret = OB_SUCCESS;
   }
 
-  int64_t memory_size = GMEMCONF.get_server_memory_limit();
-  int64_t hard_memory_size = GMEMCONF.get_server_hard_memory_limit();
-  if (OB_SUCC(ret)) {
-    lib::set_memory_limit(memory_size);
-    if (OB_FAIL(update_server_memory(hard_memory_size))) {
-      LOG_WARN("fail to update runtime memory", K(ret));
-    }
-  }
   if (OB_SUCC(ret)) {
     create_step = ObRuntimeCreateStep::STEP_CTX_MEM_CONFIG_SETTED; // step1
   }
@@ -395,7 +380,8 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
-    if (OB_FAIL(share::g_mp->memstore_freezer()->set_memory_limit(meta.runtime_config_.resource_config_.memory_size(), memory_size))) {
+    const int64_t memory_budget = lib::get_memory_budget();
+    if (OB_FAIL(share::g_mp->memstore_freezer()->set_memory_limit(memory_budget, memory_budget))) {
       LOG_WARN("fail to set_memory_limit", K(ret));
     }
   }
@@ -456,13 +442,6 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
       if (OB_SUCCESS != (tmp_ret = SERVER_STORAGE_META_PERSISTER.abort_create_runtime())) {
         LOG_ERROR("fail to write create runtime abort slog", K(tmp_ret));
       }
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    auto& cache_washer = ObKVGlobalCache::get_instance();
-    if (OB_TMP_FAIL(cache_washer.sync_flush())) {
-      LOG_WARN("Fail to sync flush runtime cache", K(tmp_ret));
     }
   }
 
@@ -530,8 +509,7 @@ int ObServerRuntimeController::update_server_memory(const ObServerRuntimeConfig 
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = nullptr;
 
-  int64_t memory_size = GMEMCONF.get_server_memory_limit();
-  int64_t hard_memory_size = GMEMCONF.get_server_hard_memory_limit();
+  const int64_t memory_budget = GMEMCONF.get_server_memory_budget();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -540,15 +518,11 @@ int ObServerRuntimeController::update_server_memory(const ObServerRuntimeConfig 
   } else if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime is nullptr");
-  } else if (FALSE_IT(lib::set_memory_limit(memory_size))) {
-    // unreachable
-  } else if (OB_FAIL(update_server_memory(hard_memory_size))) {
-    LOG_WARN("fail to update runtime memory", K(ret));
-  } else if (OB_FAIL(update_freezer_mem_limit( memory_size, memory_size))) {
+  } else if (OB_FAIL(update_freezer_mem_limit(memory_budget, memory_budget))) {
     LOG_WARN("fail to update_freezer_mem_limit", K(ret));
   } else if (OB_FAIL(update_throttle_config_())) {
     LOG_WARN("update throttle config failed", K(ret));
-  } else if (FALSE_IT(runtime->set_memory_size(memory_size))) {
+  } else if (FALSE_IT(runtime->set_memory_size(memory_budget))) {
     // unreachable
   }
   return ret;
@@ -597,42 +571,6 @@ int ObServerRuntimeController::update_server_resources(const ObServerRuntimeConf
   }
 
   LOG_INFO("finished updating runtime config", K(ret), K(runtime_config));
-
-  return ret;
-}
-
-// hard memory limit need be safely scaled down
-int ObServerRuntimeController::update_server_memory(const int64_t mem_limit)
-{
-  int ret = OB_SUCCESS;
-  ObMallocAllocator *malloc_allocator = ObMallocAllocator::get_instance();
-
-  int64_t allowed_mem_limit = mem_limit;
-  const int64_t pre_mem_limit = malloc_allocator->get_allocator_hard_limit();
-  const int64_t mem_hold = malloc_allocator->get_total_hold();
-  const int64_t target_mem_limit = mem_limit;
-
-  if (OB_SUCC(ret)) {
-    // make sure half reserve memory available
-    if (target_mem_limit < pre_mem_limit) {
-      allowed_mem_limit = mem_hold + static_cast<int64_t>(
-          static_cast<double>(target_mem_limit) * SERVER_RESERVE_MEM_RATIO / 2.0);
-      if (allowed_mem_limit < target_mem_limit) {
-        allowed_mem_limit = target_mem_limit;
-      }
-      if (allowed_mem_limit < pre_mem_limit) {
-        LOG_INFO("reduce memory quota", K(mem_limit), K(pre_mem_limit), K(target_mem_limit), K(mem_hold));
-      } else {
-        allowed_mem_limit = pre_mem_limit;
-        LOG_WARN("try to reduce memory quota, but free memory not enough",
-                 K(allowed_mem_limit), K(pre_mem_limit), K(target_mem_limit), K(mem_hold));
-      }
-    }
-
-    if (allowed_mem_limit != pre_mem_limit) {
-      lib::set_hard_memory_limit(allowed_mem_limit);
-    }
-  }
 
   return ret;
 }
@@ -994,7 +932,7 @@ int ObServerRuntimeController::refresh_server_config_()
 
   FLOG_INFO("refresh runtime resource config", K(runtime_config), KR(ret));
 
-  // Keep the log allocator aligned with the current runtime memory limit.
+  // Keep the log allocator sizing aligned with the current runtime memory budget.
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit(runtime_config))) {
     LOG_WARN("LOG_ALLOCATOR_MGR_INSTANCE.update_memory_limit failed", K(tmp_ret));

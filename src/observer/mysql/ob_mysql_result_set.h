@@ -18,7 +18,6 @@
 #define _OB_MYSQL_RESULT_SET_H_
 
 #include "rpc/obmysql/ob_mysql_field.h"
-#include "rpc/obmysql/ob_mysql_row.h"
 #include "sql/ob_result_set.h"
 
 using namespace oceanbase::sql;
@@ -35,8 +34,6 @@ namespace observer
 {
 
 using obmysql::ObMySQLField;
-using obmysql::ObMySQLRow;
-
 class ObMySQLResultSet
   : public ObResultSet, public common::ObDLinkBase<ObMySQLResultSet>
 {

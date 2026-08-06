@@ -216,7 +216,6 @@ int64_t ObILibCacheNode::dec_ref_count()
       LOG_ERROR("invalid null lib cache");
     } else {
       ObLCNodeFactory &ln_factory = lib_cache_->get_cache_node_factory();
-      lib_cache_->dec_mem_used(get_added_mem_size());
       ln_factory.destroy_cache_node(this);
     }
   } else {

@@ -61,7 +61,6 @@ public:
 
   int get_server_resources(share::ObServerRuntimeConfig &runtime_config);
   int get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist);
-  int update_server_memory(const int64_t mem_limit);
   int update_server_memory(const share::ObServerRuntimeConfig &runtime_config);
   int update_server_log_disk_size(const int64_t old_log_disk_size,
                                   const int64_t new_log_disk_size,

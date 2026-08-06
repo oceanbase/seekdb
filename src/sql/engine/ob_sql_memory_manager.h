@@ -90,7 +90,7 @@ public:
     min_size_(0), row_count_(0), input_size_(0), bucket_size_(0),
     chunk_size_(0), cache_size_(-1), one_pass_size_(0), expect_size_(OB_INVALID_ID),
     global_bound_size_(INT64_MAX), max_bound_(INT64_MAX), delta_size_(0), data_size_(0),
-    max_mem_used_(0), mem_used_(0),
+    max_mem_used_(0), mem_used_(0), profile_data_used_(0), profile_total_used_(0),
     pre_mem_used_(0), dumped_size_(0), max_dumped_size_(0), data_ratio_(0.5),
     active_time_(0), number_pass_(0),
     calc_count_(0), disable_auto_mem_mgr_(false)
@@ -181,6 +181,8 @@ public:
   int64_t get_data_size() const { return data_size_; }
   int64_t get_max_mem_used() const { return max_mem_used_; }
   int64_t get_mem_used() const { return mem_used_; }
+  int64_t get_profile_data_used() const { return ATOMIC_LOAD(&profile_data_used_); }
+  int64_t get_profile_total_used() const { return ATOMIC_LOAD(&profile_total_used_); }
   int64_t get_dumped_size() const { return dumped_size_; }
   int64_t get_max_dumped_size() const { return max_dumped_size_; }
   int64_t get_data_ratio() const { return data_ratio_; }
@@ -236,6 +238,8 @@ public:
   int64_t data_size_;
   int64_t max_mem_used_;
   int64_t mem_used_;
+  int64_t profile_data_used_;
+  int64_t profile_total_used_;
   int64_t pre_mem_used_;
   int64_t dumped_size_;
   int64_t max_dumped_size_;
@@ -633,7 +637,7 @@ public:
     enable_auto_memory_mgr_(false), mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
     drift_size_(0), profile_cnt_(0), pre_profile_cnt_(0), global_bound_size_(0),
     mem_target_(0), max_workarea_size_(0), workarea_hold_size_(0), max_auto_workarea_size_(0),
-    max_memory_size_(0),
+    workarea_managed_tracker_(), active_profile_used_(0),
     manual_calc_cnt_(0), wa_start_(0), wa_end_(0), wa_cnt_(0),
     lock_(), global_bound_update_lock_()
   {}
@@ -676,7 +680,13 @@ public:
   int64_t get_drift_size() const { return drift_size_; }
   int64_t get_workarea_count() const { return profile_cnt_; }
   int64_t get_manual_calc_count() const { return manual_calc_cnt_; }
-  int64_t get_total_mem_used() const { return sql_mem_callback_.get_total_alloc_size(); }
+  int64_t get_total_mem_used() const { return workarea_managed_tracker_.used(); }
+  common::MemoryUsageTracker &get_workarea_managed_tracker()
+  { return workarea_managed_tracker_; }
+  int64_t get_workarea_managed_used() const { return workarea_managed_tracker_.used(); }
+  void adjust_active_profile_used(const int64_t delta)
+  { ATOMIC_FAA(&active_profile_used_, delta); }
+  int64_t get_active_profile_used() const { return ATOMIC_LOAD(&active_profile_used_); }
 private:
   OB_INLINE bool need_manual_calc_bound();
   OB_INLINE bool need_manual_by_drift();
@@ -773,7 +783,8 @@ private:
   int64_t max_workarea_size_;
   int64_t workarea_hold_size_;
   int64_t max_auto_workarea_size_;
-  int64_t max_memory_size_;
+  common::MemoryUsageTracker workarea_managed_tracker_;
+  int64_t active_profile_used_;
 
   // statistics
   int64_t manual_calc_cnt_;

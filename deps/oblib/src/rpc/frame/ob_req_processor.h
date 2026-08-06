@@ -69,8 +69,6 @@ public:
   virtual void set_ob_request(ObRequest &req);
   const ObRequest *get_ob_request() const { return req_; }
   int get_req_type() const { return req_type_; }
-  bool get_need_retry() const { return need_retry_; }
-  bool get_async_resp_used() const { return async_resp_used_; }
   virtual int run() = 0;
 
   int64_t get_receive_timestamp() const;
@@ -106,8 +104,6 @@ private:
 
 protected:
   int req_type_;
-  bool need_retry_;
-  bool async_resp_used_;
   ObRequest *req_;
 
 protected:
@@ -118,8 +114,6 @@ protected:
 
 inline ObReqProcessor::ObReqProcessor()
     : req_type_(-1),
-      need_retry_(false),
-      async_resp_used_(false),
       req_(NULL),
       receive_timestamp_(0),
       run_timestamp_(0),

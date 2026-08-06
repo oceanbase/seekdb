@@ -29,7 +29,6 @@ using namespace storage;
 using namespace blocksstable;
 using namespace common;
 using namespace share::schema;
-static ObSimpleMemLimitGetter getter;
 
 // Route the test's process-wide temporary-file manager through share::g_mp.
 class FakeModuleProvider : public share::ObIModuleProvider
@@ -157,8 +156,8 @@ class TestParallelExternalSort : public blocksstable::TestDataFilePrepare
 public:
   TestParallelExternalSort();
   virtual ~TestParallelExternalSort() {}
-  int init_memory_limit();
-  void reset_memory_limit();
+  int init_memory_budget();
+  void reset_memory_budget();
   int generate_random_str(char *&buf, int32_t &buf_len);
   int generate_items(const int64_t item_nums, const bool is_sorted, ObVector<TestItem *> &items);
   int generate_items_dup(const int64_t item_nums, const bool is_sorted, ObVector<TestItem *> &items);
@@ -196,7 +195,7 @@ private:
 };
 
 TestParallelExternalSort::TestParallelExternalSort()
-  : TestDataFilePrepare(&getter, "TestParallelExternalSort", MACRO_BLOCK_SIZE, MACRO_BLOCK_COUNT),
+  : TestDataFilePrepare("TestParallelExternalSort", MACRO_BLOCK_SIZE, MACRO_BLOCK_COUNT),
     allocator_(ObModIds::TEST),
     provider_(),
     tmp_file_mgr_(nullptr),
@@ -207,7 +206,7 @@ TestParallelExternalSort::TestParallelExternalSort()
 void TestParallelExternalSort::SetUp()
 {
   TestDataFilePrepare::SetUp();
-  ASSERT_EQ(OB_SUCCESS, init_memory_limit());
+  ASSERT_EQ(OB_SUCCESS, init_memory_budget());
   ASSERT_EQ(OB_SUCCESS, common::ObClockGenerator::init());
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpBlockCache::get_instance().init("tmp_block_cache"));
   ASSERT_EQ(OB_SUCCESS, tmp_file::ObTmpPageCache::get_instance().init("sn_tmp_page_cache"));
@@ -239,28 +238,20 @@ void TestParallelExternalSort::TearDown()
   tmp_file::ObTmpPageCache::get_instance().destroy();
   TestDataFilePrepare::TearDown();
   common::ObClockGenerator::destroy();
-  reset_memory_limit();
+  reset_memory_budget();
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
 }
 
-int TestParallelExternalSort::init_memory_limit()
+int TestParallelExternalSort::init_memory_budget()
 {
-  int ret = OB_SUCCESS;
-  ObAddr self;
-  self.set_ip_addr("127.0.0.1", 8086);
-  const int64_t ulmt = 128LL << 30;
-  const int64_t llmt = 128LL << 30;
-  ret = getter.set_memory_limit(llmt, ulmt);
-  EXPECT_EQ(OB_SUCCESS, ret);
-  lib::set_memory_limit(128LL << 32);
-  return ret;
+  lib::set_memory_budget(128LL << 32);
+  return OB_SUCCESS;
 }
 
-void TestParallelExternalSort::reset_memory_limit()
+void TestParallelExternalSort::reset_memory_budget()
 {
-  getter.reset();
 }
 
 int TestParallelExternalSort::generate_random_str(char *&buf, int32_t &buf_len)

@@ -110,7 +110,7 @@ public:
       co_list_lock_(common::ObLatchIds::PLAN_SET_LOCK),
       co_list_(allocator_),
       is_invalid_(false),
-      added_mem_size_(0)
+      accounted_size_(0)
   {}
   virtual ~ObILibCacheNode();
   /**
@@ -164,8 +164,11 @@ public:
   lib::MemoryContext &get_mem_context() { return mem_context_; }
   int64_t get_mem_size();
   int64_t get_cache_obj_mem_size();
-  int64_t get_added_mem_size() const { return ATOMIC_LOAD(&added_mem_size_); }
-  void inc_added_mem_size(int64_t delta) { ATOMIC_FAA(&added_mem_size_, delta); }
+  int64_t get_own_mem_size() const { return allocator_.total(); }
+  int64_t exchange_accounted_size(const int64_t size)
+  {
+    return ATOMIC_TAS(&accounted_size_, size);
+  }
   ObPlanCache *get_lib_cache() const { return lib_cache_; }
   bool is_invalid() const { return is_invalid_; }
 
@@ -215,7 +218,7 @@ protected:
   common::SpinRWLock co_list_lock_;
   CacheObjList co_list_;
   bool is_invalid_;
-  int64_t added_mem_size_;
+  int64_t accounted_size_;
 };
 
 } // namespace common

@@ -37,39 +37,47 @@ ObSMRow::ObSMRow(MYSQL_PROTOCOL_TYPE type,
 {
 }
 
-int ObSMRow::encode_cell(
-    int64_t idx, char *buf,
-    int64_t len, int64_t &pos, char *bitmap) const
-{
+int ObSMRow::build_cell_value(int64_t idx, ObIAllocator &scratch_allocator,
+                              ObMySQLCellValue &out) const {
   int ret = OB_SUCCESS;
-  if (idx > get_cells_cnt() || idx < 0) {
+  if (OB_UNLIKELY(is_packed_)) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_UNLIKELY(idx < 0 || idx >= get_cells_cnt())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (is_packed_) {
-    const ObObj *cell = &obrow_.cells_[idx];
-    //to check is overflow
-    if (OB_UNLIKELY(cell->get_string_len() < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(ERROR, "invalid obj len", K(ret), K(common::lbt()), K(cell->get_string_len()));
-    } else if (OB_UNLIKELY((len - pos) < cell->get_string_len())) {
-      ret = OB_SIZE_OVERFLOW;
-    } else {
-      MEMCPY(buf + pos, cell->get_string_ptr(), cell->get_string_len());
-      pos += cell->get_string_len();
-    }
   } else {
-    int64_t cell_idx = OB_LIKELY(NULL != obrow_.projector_)
-        ? obrow_.projector_[idx]
-        : idx;
-    const ObObj *cell = &obrow_.cells_[cell_idx];
+    const int64_t cell_idx =
+        NULL == obrow_.projector_ ? idx : obrow_.projector_[idx];
+    const ObObj &cell = obrow_.cells_[cell_idx];
+    const ObField *field = NULL == fields_ ? NULL : &fields_->at(idx);
+    ret = ObSMUtils::build_cell_value(cell, type_, scratch_allocator, out,
+                                      dtc_params_, field, session_,
+                                      schema_guard_);
+  }
+  return ret;
+}
 
-    if (NULL == fields_) {
-      ret = ObSMUtils::cell_str(
-          buf, len, *cell, type_, pos, idx, bitmap, dtc_params_, NULL, session_, NULL);
-    } else {
-      ret = ObSMUtils::cell_str(
-          buf, len, *cell, type_, pos, idx, bitmap, dtc_params_, &fields_->at(idx), session_, schema_guard_);
+int ObSMRow::get_packed_row_blob(const char *&data, int64_t &len) const {
+  int ret = OB_SUCCESS;
+  data = NULL;
+  len = 0;
+  if (OB_UNLIKELY(!is_packed_)) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_UNLIKELY(1 != get_cells_cnt())) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_ENG_LOG(ERROR, "packed row must contain exactly one cell", K(ret),
+                K(get_cells_cnt()));
+  } else {
+    const int64_t cell_idx =
+        NULL == obrow_.projector_ ? 0 : obrow_.projector_[0];
+    const ObObj &cell = obrow_.cells_[cell_idx];
+    len = cell.get_string_len();
+    data = cell.get_string_ptr();
+    if (OB_UNLIKELY(len < 0 || (len > 0 && NULL == data))) {
+      ret = OB_ERR_UNEXPECTED;
+      data = NULL;
+      len = 0;
+      SQL_ENG_LOG(ERROR, "invalid packed row blob", K(ret), K(common::lbt()));
     }
   }
-
   return ret;
 }

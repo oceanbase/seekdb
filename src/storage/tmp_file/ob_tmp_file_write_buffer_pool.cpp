@@ -1046,9 +1046,9 @@ int64_t ObTmpWriteBufferPool::get_memory_limit()
     if (0 == GCONF._temporary_file_io_area_size) {
       memory_limit = WBP_BLOCK_SIZE;
     } else {
-      int64_t config_memory_limit =
-        lib::get_allocator_memory_limit() * GCONF._temporary_file_io_area_size / 100;
-      memory_limit = config_memory_limit;
+      int64_t config_memory_budget =
+        lib::get_memory_budget() / 50 * GCONF._temporary_file_io_area_size;
+      memory_limit = config_memory_budget;
     }
     memory_limit = ((memory_limit + WBP_BLOCK_SIZE - 1) / WBP_BLOCK_SIZE) * WBP_BLOCK_SIZE;
     ATOMIC_STORE(&wbp_memory_limit_, memory_limit);

@@ -202,7 +202,8 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(0);
           break;
         case MEMORY_LIMIT:
-          cur_row_.cells_[i].set_int(GMEMCONF.get_server_memory_limit());
+          // Keep the legacy column name for virtual-table compatibility.
+          cur_row_.cells_[i].set_int(GMEMCONF.get_server_memory_budget());
           break;
         case START_SERVICE_TIME:
           cur_row_.cells_[i].set_int(GCTX.start_service_time_);

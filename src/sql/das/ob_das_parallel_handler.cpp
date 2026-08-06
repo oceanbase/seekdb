@@ -212,7 +212,7 @@ int ObDASParallelHandler::run()
   return ret;
 }
 
-int ObDASParallelTask::init(ObDasAggregatedTask *agg_task, int64_t timeout_ts, int32_t group_id)
+int ObDASParallelTask::init(ObDasAggregatedTask *agg_task, int64_t timeout_ts)
 {
   int ret = OB_SUCCESS;
   if (NULL == agg_task) {
@@ -221,7 +221,6 @@ int ObDASParallelTask::init(ObDasAggregatedTask *agg_task, int64_t timeout_ts, i
   } else if (OB_FAIL(handler_.init(this))) {
     LOG_WARN("init handler failed", K(ret));
   } else {
-    set_group_id(group_id);
     agg_task_ = agg_task;
     timeout_ts_ = timeout_ts;
     trace_id_.set(*ObCurTraceId::get_trace_id());

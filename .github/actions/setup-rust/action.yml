@@ -1,0 +1,103 @@
+# Copyright (c) 2025 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Setup Rust
+description: Install the Rust toolchain required by the seekdb build
+
+inputs:
+  crates-mirror:
+    description: >-
+      Route crates.io downloads through the rsproxy.cn mirror. Set to 'true'
+      on runners that already need the rsproxy rustup mirror (RUSTUP_DIST_SERVER
+      etc.); without this, `cargo build` still fetches crates from
+      static.crates.io over the unmirrored path.
+    required: false
+    default: 'false'
+  cache:
+    description: Cache the cargo registry (and installed cargo tools) keyed on Cargo.lock.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      shell: bash
+      working-directory: ${{ github.workspace }}/rust
+      run: |
+        set -euo pipefail
+
+        if ! command -v rustup >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+          install_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/seekdb-rust"
+          export CARGO_HOME="${CARGO_HOME:-$install_root/cargo}"
+          export RUSTUP_HOME="${RUSTUP_HOME:-$install_root/rustup}"
+          export PATH="$CARGO_HOME/bin:$PATH"
+          mkdir -p "$install_root" "$CARGO_HOME" "$RUSTUP_HOME"
+
+          rustup_init="$install_root/rustup-init.sh"
+          rustup_init_url="${RUSTUP_INIT_URL:-https://sh.rustup.rs}"
+          if command -v curl >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 --retry 3 --fail --silent \
+              --show-error --location "$rustup_init_url" --output "$rustup_init"
+          elif command -v wget >/dev/null 2>&1; then
+            wget --tries=3 --quiet -O "$rustup_init" "$rustup_init_url"
+          else
+            echo "setup-rust: curl or wget is required" >&2
+            exit 1
+          fi
+          sh "$rustup_init" -y --profile minimal --default-toolchain none \
+            --no-modify-path
+
+        fi
+
+        # Export the homes unconditionally so later steps (mirror config,
+        # registry cache) can rely on them even when rustup pre-existed.
+        export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+        export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+        {
+          echo "CARGO_HOME=$CARGO_HOME"
+          echo "RUSTUP_HOME=$RUSTUP_HOME"
+        } >> "$GITHUB_ENV"
+
+        rustup_bin_dir="$(dirname "$(command -v rustup)")"
+        export PATH="$rustup_bin_dir:$PATH"
+        echo "$rustup_bin_dir" >> "$GITHUB_PATH"
+        RUSTUP_AUTO_INSTALL=1 cargo --version
+        rustc --version
+
+    - name: Route cargo through the rsproxy crates mirror
+      if: inputs.crates-mirror == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$CARGO_HOME"
+        cat >> "$CARGO_HOME/config.toml" <<'EOF'
+        [source.crates-io]
+        replace-with = "rsproxy-sparse"
+        [source.rsproxy-sparse]
+        registry = "sparse+https://rsproxy.cn/index/"
+        EOF
+
+    # NOTE: needs a node20-capable runner (same constraint as the ccache action
+    # pin in buildbase); disable via `cache: 'false'` on runners that cannot.
+    - name: Cache cargo registry
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ env.CARGO_HOME }}/registry/index
+          ${{ env.CARGO_HOME }}/registry/cache
+          ${{ env.CARGO_HOME }}/bin
+        key: cargo-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'rust/rust-toolchain.toml') }}
+        restore-keys: cargo-${{ runner.os }}-

@@ -24,7 +24,7 @@ param(
 
     [int]$Port = 0,
 
-    [string]$MemoryLimit = "",
+    [string]$MemoryBudget = "",
 
     [int]$CpuCount = 0
 )
@@ -106,7 +106,7 @@ function Do-Install {
     # Build install args: pass through all original args except install action
     $installArgs = @("--install-service", $ServiceName, "--base-dir=$BaseDir")
     if ($Port -gt 0)      { $installArgs += "--port=$Port" }
-    if ($MemoryLimit)      { $installArgs += "--parameter"; $installArgs += "memory_limit=$MemoryLimit" }
+    if ($MemoryBudget)     { $installArgs += "--parameter"; $installArgs += "memory_budget=$MemoryBudget" }
     if ($CpuCount -gt 0)  { $installArgs += "--parameter"; $installArgs += "cpu_count=$CpuCount" }
 
     # Check if already initialized
@@ -118,7 +118,7 @@ function Do-Install {
         Write-Log "Initializing database (first run)..."
         $initArgs = @("--base-dir=$BaseDir", "--nodaemon")
         if ($Port -gt 0)      { $initArgs += "--port=$Port" }
-        if ($MemoryLimit)      { $initArgs += "--parameter"; $initArgs += "memory_limit=$MemoryLimit" }
+        if ($MemoryBudget)     { $initArgs += "--parameter"; $initArgs += "memory_budget=$MemoryBudget" }
         if ($CpuCount -gt 0)  { $initArgs += "--parameter"; $initArgs += "cpu_count=$CpuCount" }
 
         Write-Log "  $SeekdbExe $($initArgs -join ' ')"
@@ -256,7 +256,7 @@ Options:
     -BaseDir <path>         Base data directory (default: C:\ProgramData\seekdb)
     -ConfigFile <path>      Path to seekdb.cnf config file
     -Port <port>            MySQL port (default: 2881)
-    -MemoryLimit <size>     Memory limit (e.g. 2G, 4G)
+    -MemoryBudget <size>    Logical memory budget (e.g. 2G, 4G)
     -CpuCount <n>           CPU count
 
 Examples:
@@ -264,7 +264,7 @@ Examples:
     .\seekdb_manage.ps1 install
 
     # Install with custom settings
-    .\seekdb_manage.ps1 install -BaseDir D:\seekdb -Port 3306 -MemoryLimit 4G
+    .\seekdb_manage.ps1 install -BaseDir D:\seekdb -Port 3306 -MemoryBudget 4G
 
     # Service management
     .\seekdb_manage.ps1 start

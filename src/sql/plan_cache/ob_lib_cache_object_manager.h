@@ -34,8 +34,8 @@ class ObLCObjectManager
 public:
   typedef common::hash::ObHashMap<ObCacheObjID, ObILibCacheObject*> IdCacheObjectMap;
 
-  ObLCObjectManager() : object_id_(0) {}
-  int init(int64_t hash_bucket);
+  ObLCObjectManager() : object_id_(0), lib_cache_(nullptr) {}
+  int init(int64_t hash_bucket, ObPlanCache *lib_cache);
   int alloc(ObCacheObjGuard& guard,
             ObLibCacheNameSpace ns,
             lib::MemoryContext &parent_context);
@@ -71,6 +71,7 @@ private:
 private:
   // used for generate cache obj ids
   volatile ObCacheObjID object_id_;
+  ObPlanCache *lib_cache_;
   /**
    *                                 library cache
    *                                       |key

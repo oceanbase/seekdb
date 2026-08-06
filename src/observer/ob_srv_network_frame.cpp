@@ -30,9 +30,7 @@ ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
     : gctx_(gctx),
       xlator_(gctx),
       request_qhandler_(xlator_),
-      deliver_(request_qhandler_),
-      last_ssl_info_hash_(UINT64_MAX),
-      lock_()
+      deliver_(request_qhandler_)
 {}
 
 ObSrvNetworkFrame::~ObSrvNetworkFrame()
@@ -43,10 +41,20 @@ ObSrvNetworkFrame::~ObSrvNetworkFrame()
 static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_enabled, int64_t tcp_keepidle, int64_t tcp_keepintvl, int64_t tcp_keepcnt)
 {
   int ret = OB_SUCCESS;
-  if (NULL != global_sql_nio_server) {
-    tcp_keepidle = max(tcp_keepidle/1000000, 1);
-    tcp_keepintvl = max(tcp_keepintvl/1000000, 1);
-    global_sql_nio_server->update_tcp_keepalive_params(tcp_keepalive_enabled, tcp_keepidle, tcp_keepintvl, tcp_keepcnt);
+  tcp_keepidle = max(tcp_keepidle / 1000000L, 1L);
+  tcp_keepintvl = max(tcp_keepintvl / 1000000L, 1L);
+  if (tcp_keepidle > static_cast<int64_t>(UINT32_MAX)
+      || tcp_keepintvl > static_cast<int64_t>(UINT32_MAX)
+      || tcp_keepcnt <= 0
+      || tcp_keepcnt > static_cast<int64_t>(UINT32_MAX)) {
+    ret = OB_INVALID_CONFIG;
+    LOG_WARN("TCP keepalive configuration exceeds the SQL-NIO ABI range",
+             K(ret), K(tcp_keepidle), K(tcp_keepintvl), K(tcp_keepcnt));
+  } else if (NULL != global_sql_nio_server) {
+    global_sql_nio_server->update_tcp_keepalive_params(
+        tcp_keepalive_enabled, static_cast<uint32_t>(tcp_keepidle),
+        static_cast<uint32_t>(tcp_keepintvl),
+        static_cast<uint32_t>(tcp_keepcnt));
   }
   return ret;
 }
@@ -61,11 +69,8 @@ int ObSrvNetworkFrame::init()
   } else if (OB_FAIL(deliver_.init())) {
     LOG_ERROR("init request deliverer fail", K(ret));
 
-  } else if (OB_FAIL(reload_ssl_config())) {
-    LOG_ERROR("load_ssl_config fail", K(ret));
   } else {
-    LOG_INFO("init network frame successfully",
-             "ssl_client_authentication", GCONF.ssl_client_authentication.str());
+    LOG_INFO("init network frame successfully");
   }
   return ret;
 }
@@ -88,7 +93,6 @@ int ObSrvNetworkFrame::start()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocate memory for global_sql_nio_server failed", K(ret));
   } else {
-    SQL_REQ_OP.set_sql_sock_processor(obmysql::global_sql_nio_server->get_sql_sock_processor());
     int sql_net_thread_count = (int)GCONF.sql_net_thread_count;
     if (sql_net_thread_count == 0) {
       if (GCONF.net_thread_count == 0) {
@@ -98,8 +102,11 @@ int ObSrvNetworkFrame::start()
       }
     }
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
-            GCONF.mysql_port, &deliver_, sql_net_thread_count, disable_tcp))) {
+            GCONF.mysql_port, &deliver_, sql_net_thread_count,
+            disable_tcp, GCONF.ssl_client_authentication))) {
       LOG_ERROR("sql nio server start failed", K(ret));
+    } else if (OB_FAIL(reload_config())) {
+      LOG_ERROR("apply initial sql nio configuration failed", K(ret));
     }
   }
   return ret;
@@ -110,9 +117,9 @@ int ObSrvNetworkFrame::reload_config()
 {
   int ret = common::OB_SUCCESS;
   int enable_tcp_keepalive  = 0;
-  int32_t tcp_keepidle      = static_cast<int>(GCONF.tcp_keepidle);
-  int32_t tcp_keepintvl     = static_cast<int>(GCONF.tcp_keepintvl);
-  int32_t tcp_keepcnt       = static_cast<int>(GCONF.tcp_keepcnt);
+  int64_t tcp_keepidle      = GCONF.tcp_keepidle;
+  int64_t tcp_keepintvl     = GCONF.tcp_keepintvl;
+  int64_t tcp_keepcnt       = GCONF.tcp_keepcnt;
 
   if (GCONF.enable_tcp_keepalive) {
     enable_tcp_keepalive = 1;
@@ -129,191 +136,6 @@ int ObSrvNetworkFrame::reload_config()
   return ret;
 }
 
-int ObSrvNetworkFrame::extract_expired_time(const char *const cert_file, int64_t &expired_time)
-{
-  int ret = OB_SUCCESS;
-  X509 *cert = NULL;
-  BIO *b = NULL;
-  if (OB_ISNULL(b = BIO_new_file(cert_file, "r"))) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "BIO_new_file failed", K(ret), K(cert_file));
-  } else if (OB_ISNULL(cert = PEM_read_bio_X509(b, NULL, 0, NULL))) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "PEM_read_bio_X509 failed", K(ret), K(cert_file));
-  } else {
-    ASN1_TIME *notAfter = X509_get_notAfter(cert);
-    struct tm tm1;
-    memset (&tm1, 0, sizeof (tm1));
-    tm1.tm_year = (notAfter->data[ 0] - '0') * 10 + (notAfter->data[ 1] - '0') + 100;
-    tm1.tm_mon  = (notAfter->data[ 2] - '0') * 10 + (notAfter->data[ 3] - '0') - 1;
-    tm1.tm_mday = (notAfter->data[ 4] - '0') * 10 + (notAfter->data[ 5] - '0');
-    tm1.tm_hour = (notAfter->data[ 6] - '0') * 10 + (notAfter->data[ 7] - '0');
-    tm1.tm_min  = (notAfter->data[ 8] - '0') * 10 + (notAfter->data[ 9] - '0');
-    tm1.tm_sec  = (notAfter->data[10] - '0') * 10 + (notAfter->data[11] - '0');
-    expired_time = mktime(&tm1) * 1000000;//us
-  }
-
-  if (NULL != cert) {
-    X509_free(cert);
-  }
-  if (NULL != b) {
-    BIO_free(b);
-  }
-  return ret;
-}
-
-uint64_t ObSrvNetworkFrame::get_ssl_file_hash(const char *intl_file[3], const char *sm_file[5], bool &file_exist)
-{
-  file_exist = false;
-  uint64_t hash_value = 0;
-  struct stat tmp_buf[5];
-
-  if (0 == stat(intl_file[0], tmp_buf + 0)
-      && 0 == stat(intl_file[1], tmp_buf + 1)
-      && 0 == stat(intl_file[2], tmp_buf + 2)) {
-    file_exist = true;
-    hash_value = murmurhash(&(tmp_buf[0].st_mtime), sizeof(tmp_buf[0].st_mtime), hash_value);
-    hash_value = murmurhash(&(tmp_buf[1].st_mtime), sizeof(tmp_buf[1].st_mtime), hash_value);
-    hash_value = murmurhash(&(tmp_buf[2].st_mtime), sizeof(tmp_buf[2].st_mtime), hash_value);
-  }
-
-  if (!file_exist) {
-    if (0 == stat(sm_file[0], tmp_buf + 0)
-      && 0 == stat(sm_file[1], tmp_buf + 1)
-      && 0 == stat(sm_file[2], tmp_buf + 2)
-      && 0 == stat(sm_file[3], tmp_buf + 3)
-      && 0 == stat(sm_file[4], tmp_buf + 4)) {
-      file_exist = true;
-      hash_value = murmurhash(&(tmp_buf[0].st_mtime), sizeof(tmp_buf[0].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[1].st_mtime), sizeof(tmp_buf[1].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[2].st_mtime), sizeof(tmp_buf[2].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[3].st_mtime), sizeof(tmp_buf[3].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[4].st_mtime), sizeof(tmp_buf[4].st_mtime), hash_value);
-    }
-  } else {
-    if (0 == stat(sm_file[0], tmp_buf + 0)
-      && 0 == stat(sm_file[1], tmp_buf + 1)
-      && 0 == stat(sm_file[2], tmp_buf + 2)
-      && 0 == stat(sm_file[3], tmp_buf + 3)
-      && 0 == stat(sm_file[4], tmp_buf + 4)) {
-      file_exist = true;
-      hash_value = murmurhash(&(tmp_buf[0].st_mtime), sizeof(tmp_buf[0].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[1].st_mtime), sizeof(tmp_buf[1].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[2].st_mtime), sizeof(tmp_buf[2].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[3].st_mtime), sizeof(tmp_buf[3].st_mtime), hash_value);
-      hash_value = murmurhash(&(tmp_buf[4].st_mtime), sizeof(tmp_buf[4].st_mtime), hash_value);
-    }
-  }
-
-  return hash_value;
-}
-
-namespace oceanbase {
-static int ob_add_client_CA_list(SSL_CTX *ctx, const char *cert, int cert_length)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(ctx) || OB_ISNULL(cert)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid argument", KP(ctx), KP(cert));
-  } else {
-    STACK_OF(X509_INFO) *chain = NULL;
-    X509_STORE *ca_store = NULL;
-    X509_INFO *x509_info = NULL;
-    BIO *cbio = NULL;
-    if (OB_ISNULL(cbio = BIO_new_mem_buf((void*)cert, cert_length))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_ERROR("BIO_new_mem_buf failed", K(ret));
-    } else if (OB_ISNULL(chain = PEM_X509_INFO_read_bio(cbio, NULL, NULL, NULL))) {
-      ret = OB_ERR_UNEXPECTED;
-      int len = strlen(cert);
-      common::ObString err_reason = common::ObString::make_string(ERR_reason_error_string(ERR_get_error()));
-      LOG_ERROR("PEM_X509_INFO_read_bio failed", K(ret), K(cert), K(len), K(err_reason));
-    } else if (OB_ISNULL(ca_store = SSL_CTX_get_cert_store(ctx))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("SSL_CTX_get_cert_store failed", K(ret));
-    } else {
-      for (int64_t i = 0; i < sk_X509_INFO_num(chain) && OB_SUCC(ret); i++) {
-        x509_info = sk_X509_INFO_value(chain, i);
-        if (OB_ISNULL(x509_info)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("x509_info is NULL", K(i), K(ret));
-        } else if (!SSL_CTX_add_client_CA(ctx, x509_info->x509)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("SSL_CTX_add_client_CA failed", K(ret), K(i));
-        } else if (!X509_STORE_add_cert(ca_store, x509_info->x509)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("X509_STORE_add_cert failed", K(ret), K(i));
-        }
-      }
-    }
-    if (NULL != cbio) {
-      BIO_free(cbio);
-    }
-    if (NULL != chain) {
-      sk_X509_INFO_pop_free(chain, X509_INFO_free);
-    }
-  }
-  return ret;
-}
-
-}
-
-int ObSrvNetworkFrame::reload_ssl_config()
-{
-  int ret = common::OB_SUCCESS;
-  if (GCONF.ssl_client_authentication) {
-    bool file_exist = false;
-    const char *intl_file[3] = {OB_SSL_CA_FILE, OB_SSL_CERT_FILE, OB_SSL_KEY_FILE};
-    const char *sm_file[5] = {OB_SSL_CA_FILE, OB_SSL_SM_SIGN_CERT_FILE, OB_SSL_SM_SIGN_KEY_FILE, OB_SSL_SM_ENC_CERT_FILE,
-    OB_SSL_SM_ENC_KEY_FILE};
-    const uint64_t new_hash_value = get_ssl_file_hash(intl_file, sm_file, file_exist);
-
-    if (!file_exist) {
-      ret = OB_INVALID_CONFIG;
-      LOG_WARN("ssl file not available", K(new_hash_value));
-      LOG_USER_ERROR(OB_INVALID_CONFIG, "ssl file not available");
-    } else if (last_ssl_info_hash_ == new_hash_value) {
-      LOG_INFO("no need reload_ssl_config", K(new_hash_value));
-    } else {
-      bool use_sm = false;
-      const char *ca_cert = NULL;
-      const char *public_cert = NULL;
-      const char *private_key = NULL;
-      const char *enc_cert  = NULL;
-      const char *enc_private_key = NULL;
-
-
-      ca_cert = OB_SSL_CA_FILE;
-      public_cert = OB_SSL_CERT_FILE;
-      private_key = OB_SSL_KEY_FILE;
-
-      if (OB_SUCC(ret)) {
-        int64_t ssl_key_expired_time = 0;
-        if (OB_FAIL(extract_expired_time(OB_SSL_CERT_FILE, ssl_key_expired_time))) {
-          OB_LOG(WARN, "extract_expired_time intl failed", K(ret));
-        } else {
-          GCTX.ssl_key_expired_time_ =  ssl_key_expired_time;
-          last_ssl_info_hash_ = new_hash_value;
-          LOG_INFO("finish reload_ssl_config", K(use_sm),
-                   "ssl_key_expired_time", GCTX.ssl_key_expired_time_, K(new_hash_value));
-          if (OB_SUCC(ret)) {
-            common::ObSSLConfig ssl_config(true, use_sm, ca_cert, public_cert, private_key, NULL, NULL);
-            if (OB_FAIL(ob_ssl_load_config(OB_SSL_CTX_ID_SQL_NIO, ssl_config))) {
-              LOG_WARN("create ssl ctx failed!", K(ret));
-            } else {
-              LOG_INFO("create ssl ctx success!", K(use_sm));
-            }
-          }
-        }
-      }
-    }
-  } else {
-    last_ssl_info_hash_ = UINT64_MAX;
-    GCTX.ssl_key_expired_time_ =  0;
-    LOG_INFO("finish reload_ssl_config, close ssl");
-  }
-  return ret;
-}
 void ObSrvNetworkFrame::wait()
 {
   obmysql::global_sql_nio_server->wait();
@@ -332,10 +154,4 @@ void ObSrvNetworkFrame::sql_nio_stop()
   if (NULL != obmysql::global_sql_nio_server) {
     obmysql::global_sql_nio_server->stop();
   }
-}
-
-int ObSrvNetworkFrame::reload_rpc_auth_method()
-{
-  int ret = OB_SUCCESS;
-  return ret;
 }

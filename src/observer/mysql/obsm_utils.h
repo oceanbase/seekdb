@@ -17,14 +17,15 @@
 #ifndef _OBSM_UTILS_H_
 #define _OBSM_UTILS_H_
 
+#include "common/mysqlclient/ob_mysql_global.h"
+#include "common/ob_accuracy.h"
+#include "common/object/ob_object.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "lib/string/ob_string.h"
+#include "rpc/obmysql/ob_mysql_row.h"
+#include "rpc/obmysql/ob_mysql_util.h"
 #include <inttypes.h>
 #include <stdint.h>
-#include "lib/string/ob_string.h"
-#include "common/timezone/ob_timezone_info.h"
-#include "common/mysqlclient/ob_mysql_global.h"
-#include "rpc/obmysql/ob_mysql_util.h"
-#include "common/object/ob_object.h"
-#include "common/ob_accuracy.h"
 
 namespace oceanbase
 {
@@ -38,28 +39,16 @@ class ObSchemaGetterGuard;
 namespace common
 {
 class ObField;
+class ObIAllocator;
 class ObSMUtils {
 public:
-  /**
-   * Serialize a cell to the position of buf + pos.
-   *
-   * @param [in] obj The cell to be serialized
-   * @param [in] buf The output buffer
-   * @param [in] len The size of the buffer
-   * @param [in,out] pos The position in the buffer to write
-   * @param [in] cell index for binary protocol
-   *
-   * @return Returns OB_SUCCESS on success, or an oceanbase error code on failure
-   */
-  static int cell_str(
-      char *buf, const int64_t len,
-      const ObObj &obj,
-      obmysql::MYSQL_PROTOCOL_TYPE type, int64_t &pos,
-      int64_t cell_idx, char *bitmap,
-      const ObDataTypeCastParams &dtc_params,
-      const ObField *field,
-      const sql::ObSQLSessionInfo &session,
-      share::schema::ObSchemaGetterGuard *schema_guard = NULL);
+  static int
+  build_cell_value(const ObObj &obj, obmysql::MYSQL_PROTOCOL_TYPE type,
+                   ObIAllocator &scratch_allocator,
+                   obmysql::ObMySQLCellValue &out,
+                   const ObDataTypeCastParams &dtc_params, const ObField *field,
+                   const sql::ObSQLSessionInfo &session,
+                   share::schema::ObSchemaGetterGuard *schema_guard = NULL);
 
   static bool update_from_bitmap(ObObj &param, const char *bitmap, int64_t field_index);
 

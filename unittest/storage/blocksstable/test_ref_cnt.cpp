@@ -26,7 +26,6 @@ namespace oceanbase
 using namespace blocksstable;
 using namespace storage;
 using namespace common;
-static ObSimpleMemLimitGetter getter;
 
 namespace unittest
 {
@@ -51,7 +50,7 @@ public:
 };
 
 TestRefCnt::TestRefCnt()
-  : TestDataFilePrepare(&getter, "TestRefCnt", 64 * 1024, 10240)
+  : TestDataFilePrepare("TestRefCnt", 64 * 1024, 10240)
 {
 }
 
@@ -61,9 +60,6 @@ TestRefCnt::~TestRefCnt()
 
 void TestRefCnt::SetUp()
 {
-  int ret = OB_SUCCESS;
-  ret = getter.set_memory_limit(2 * 1024L * 1024L, 4 * 1024L * 1024L);
-  ASSERT_EQ(OB_SUCCESS, ret);
   TestDataFilePrepare::SetUp();
 }
 

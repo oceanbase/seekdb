@@ -182,18 +182,11 @@ int ObSqlMemMgrProcessor::update_used_mem_size(int64_t used_size)
 {
   int ret = OB_SUCCESS;
   int64_t delta_size = used_size - profile_.mem_used_;
+  const int64_t total_delta = used_size - profile_.get_profile_total_used();
   if (OB_NOT_NULL(op_monitor_info_)) {
     op_monitor_info_->update_memory(delta_size);
   }
-  if (delta_size > 0) {
-    if (OB_NOT_NULL(sql_mem_mgr_) && OB_NOT_NULL(mem_callback_)) {
-      mem_callback_->alloc(delta_size);
-    }
-  } else {
-    if (OB_NOT_NULL(sql_mem_mgr_) && OB_NOT_NULL(mem_callback_)) {
-      mem_callback_->free(-delta_size);
-    }
-  }
+  adjust_profile_total(total_delta);
   profile_.mem_used_ = used_size;
   if (profile_.max_mem_used_ < profile_.mem_used_) {
     profile_.max_mem_used_ = used_size;
@@ -299,9 +292,10 @@ int ObSqlMemMgrProcessor::extend_max_memory_size(
 void ObSqlMemMgrProcessor::unregister_profile()
 {
   if (OB_NOT_NULL(sql_mem_mgr_)) {
-    sql_mem_mgr_->unregister_work_area_profile(profile_);
-    destroy();
-    LOG_DEBUG("trace unregister work area profile", K(profile_));
+    if (OB_SUCCESS == sql_mem_mgr_->unregister_work_area_profile(profile_)) {
+      sql_mem_mgr_ = nullptr;
+      LOG_DEBUG("trace unregister work area profile", K(profile_));
+    }
   }
   if (OB_NOT_NULL(dummy_ptr_)) {
     dummy_alloc_->free(dummy_ptr_);

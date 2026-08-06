@@ -48,12 +48,8 @@ public:
   int stop();
 
   int reload_config();
-  int reload_ssl_config();
-  static int extract_expired_time(const char *const cert_file, int64_t &expired_time);
-  static uint64_t get_ssl_file_hash(const char *intl_file[3], const char *sm_file[5], bool &file_exist);
   ObSrvDeliver& get_deliver() { return deliver_; }
   inline rpc::frame::ObReqTranslator &get_xlator();
-  static int reload_rpc_auth_method();
 
 private:
   ObGlobalContext &gctx_;
@@ -63,9 +59,6 @@ private:
 
   // generic deliver
   ObSrvDeliver deliver_;
-
-  uint64_t last_ssl_info_hash_;
-  ObSpinLock lock_;
 
   DISALLOW_COPY_AND_ASSIGN(ObSrvNetworkFrame);
 }; // end of class ObSrvNetworkFrame

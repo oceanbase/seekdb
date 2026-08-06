@@ -22,7 +22,6 @@
 #include "lib/literals/ob_literals.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/task/ob_timer.h"
-#include "share/ob_occam_timer.h"
 #include "storage/multi_data_source/runtime_utility/mds_factory.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/ls/ob_freezer_define.h"
@@ -105,7 +104,6 @@ public:
 class ObMemstoreFreezer
 {
 friend ObTxDataFreezeGuard;
-friend class ObFreezer;
 struct PeriodicalUpdateValueCache {
   PeriodicalUpdateValueCache() : value_(false), update_ts_(0) {}
   void reset()
@@ -121,7 +119,6 @@ public:
   const static int64_t TIME_WHEEL_PRECISION = 100_ms;
   const static int64_t SLOW_FREEZE_INTERVAL = 30_s;
   const static int FREEZE_TRIGGER_THREAD_NUM= 1;
-  const static int FREEZE_THREAD_NUM= 1;
   const static int64_t FREEZE_TRIGGER_INTERVAL = 2_s;
   const static int64_t UPDATE_INTERVAL = 100_ms;
   const static int64_t MAX_FREEZE_TIMEOUT_US = 1800 * 1000 * 1000; // 30 min
@@ -129,8 +126,6 @@ public:
   const static int64_t REPLAY_RESERVE_MEMSTORE_BYTES = 100 * 1024 * 1024; // 100 MB
   const static int64_t MEMSTORE_USED_CACHE_REFRESH_INTERVAL = 100_ms;
   const static int64_t FREEZE_RETRY_TIME_US = 600LL * 1000LL * 1000LL; // 10 minutes
-  static double MDS_TABLE_FREEZE_TRIGGER_PERCENTAGE;
-
 public:
   ObMemstoreFreezer();
   ~ObMemstoreFreezer();
@@ -328,8 +323,6 @@ ObAddr self_;
 
   common::ObTimer freeze_trigger_timer_;
   TimerTask freeze_trigger_timer_task_;
-  common::ObOccamThreadPool freeze_thread_pool_;
-  ObSpinLock freeze_thread_pool_lock_;
 
   // diagnose only, we capture the freeze stats every 30 minutes
   ObMemstoreFreezerStat freezer_stat_;

@@ -956,7 +956,6 @@ public:
   inline common::ObIAllocator &get_allocator() { return changed_var_pool_; }
   // TODO: piece cache use this allocator for now, not property, need remove later.
   inline common::ObIAllocator &get_session_allocator() { return block_allocator_; }
-  inline common::ObIAllocator &get_extra_info_alloc() { return extra_info_allocator_; }
 
   inline common::ObIAllocator &get_cursor_allocator() { return cursor_info_allocator_; }
   inline common::ObIAllocator &get_package_allocator() { return package_info_allocator_; }
@@ -1755,7 +1754,6 @@ private:
   common::ObSEArray<ChangedVar, 8> changed_sys_vars_;
   common::ObSEArray<common::ObString, 16> changed_user_vars_;
   common::ObArenaAllocator changed_var_pool_;  // reuse for each statement
-  common::ObReserveArenaAllocator<256> extra_info_allocator_; // use for extra_info in 20 protocol
   bool is_database_changed_;  // is schema changed
   // debug sync actions stored in session
   common::ObDSSessionActions debug_sync_actions_;

@@ -133,13 +133,6 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
 
   int64_t removed_cnt = 0;
 
-  const int64_t runtime_memory_limit = ::oceanbase::lib::get_allocator_memory_limit();
-
-  common::ObLabelItem item;
-  ObLabel mem_label("TxLogCbPool");
-  (void)::oceanbase::lib::get_label_memory(mem_label, item);
-  const int64_t log_cb_pool_mem_used = item.hold_;
-
   if (OB_SUCC(ret)) {
     SpinRLockGuard guard(pool_list_rw_lock_);
     pool_list_size = pool_list_.get_size();
@@ -179,8 +172,7 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
       TRANS_LOG(WARN, "check sync_size increased failed", K(ret), K(expand_cnt),
                 K(sync_size_increased_cnt));
     } else {
-      if ((expand_cnt > 0 && sync_size_increased_cnt < expand_cnt)
-          || (log_cb_pool_mem_used >= runtime_memory_limit / 10)) {
+      if (expand_cnt > 0 && sync_size_increased_cnt < expand_cnt) {
         ATOMIC_STORE(&allow_expand_, false);
       } else {
         ATOMIC_STORE(&allow_expand_, true);
@@ -282,8 +274,8 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
 
   TRANS_LOG(INFO, "[LogCbPool Adjust] adjust log cb pools", K(ret), K(estimated_ret),
             K(removed_cnt), K(sync_size_increased_cnt), K(expand_cnt), K(pool_list_size),
-            K(runtime_memory_limit), K(log_cb_pool_mem_used), K(expected_pool_cnt),
-            K(limit_pool_cnt), K(start_estimated_time), K(total_synced_size), K(total_synced_time),
+            K(expected_pool_cnt), K(limit_pool_cnt), K(start_estimated_time),
+            K(total_synced_size), K(total_synced_time),
             K(total_occupied_count), K(total_occupied_time), K(total_syncing_size),
             K(total_occpying_size), K(aver_adjust_interval), K(sync_his_flag), KPC(this));
   (void)print_sync_size_history_();

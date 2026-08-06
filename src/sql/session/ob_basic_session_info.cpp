@@ -117,7 +117,6 @@ ObBasicSessionInfo::ObBasicSessionInfo()
       changed_sys_vars_(),
       changed_user_vars_(),
       changed_var_pool_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
-      extra_info_allocator_(ObMemAttr(ObModIds::OB_SQL_SESSION), OB_MALLOC_NORMAL_BLOCK_SIZE),
       is_database_changed_(false),
       debug_sync_actions_(),
       magic_num_(0x13572468),
@@ -377,7 +376,6 @@ void ObBasicSessionInfo::reset()
   plan_hash_ = 0;
   capability_.capability_ = 0;
   reset_session_changed_info();
-  extra_info_allocator_.reset();
   debug_sync_actions_.reset();
 //magic_num_ = 0x86427531;
   current_execution_id_ = -1;
@@ -1722,43 +1720,41 @@ int ObBasicSessionInfo::gen_configs_in_pc_str()
 {
   int ret = OB_SUCCESS;
 
-  if (GCONF.is_valid()) {
-    int64_t cluster_config_version = GCONF.get_current_version();
-    if (!config_in_pc_str_.empty() &&
-          !inf_pc_configs_.is_out_of_date(cluster_config_version, cached_runtime_config_version_)) {
-      // unupdated configs do nothing
+  const int64_t cluster_config_version = GCONF.get_current_version();
+  if (!config_in_pc_str_.empty() &&
+      !inf_pc_configs_.is_out_of_date(cluster_config_version, cached_runtime_config_version_)) {
+    // unupdated configs do nothing
+  } else {
+    const int64_t MAX_CONFIG_STR_SIZE = 512;
+    char *buf = NULL;
+    int64_t pos = 0;
+    // update out-dated cached configs
+    // first time to generate configuaration strings, init allocator
+    if (is_first_gen_config_) {
+      inf_pc_configs_.init();
+      if (NULL == (buf = (char *)sess_level_name_pool_.alloc(MAX_CONFIG_STR_SIZE))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("fail to allocate memory", K(ret), K(MAX_CONFIG_STR_SIZE));
+      }
+      is_first_gen_config_ = false;
     } else {
-      const int64_t MAX_CONFIG_STR_SIZE = 512;
-      char *buf = NULL;
-      int64_t pos = 0;
-      // update out-dated cached configs
-      // first time to generate configuaration strings, init allocator
-      if (is_first_gen_config_) {
-        inf_pc_configs_.init();
-        if (NULL == (buf = (char *)sess_level_name_pool_.alloc(MAX_CONFIG_STR_SIZE))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to allocate memory", K(ret), K(MAX_CONFIG_STR_SIZE));
-        }
-        is_first_gen_config_ = false;
-      } else {
-        // reuse memory
-        buf = config_in_pc_str_.ptr();
-        MEMSET(buf, 0, config_in_pc_str_.length());
-        config_in_pc_str_.reset();
-      }
-
-      // update configs
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(inf_pc_configs_.load_influence_plan_config())) {
-        LOG_WARN("failed to load configurations that will influence executions plan.", K(ret));
-      } else if (OB_FAIL(inf_pc_configs_.serialize_configs(buf, MAX_CONFIG_STR_SIZE, pos))) {
-        LOG_WARN("failed to serialize configs", K(ret));
-      } else {
-        (void)config_in_pc_str_.assign(buf, int32_t(pos));
-        inf_pc_configs_.update_version(cluster_config_version, cached_runtime_config_version_);
-      }
-      OX (eval_sys_var_config_hash_val());
+      // reuse memory
+      buf = config_in_pc_str_.ptr();
+      MEMSET(buf, 0, config_in_pc_str_.length());
+      config_in_pc_str_.reset();
     }
+
+    // update configs
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(inf_pc_configs_.load_influence_plan_config())) {
+      LOG_WARN("failed to load configurations that will influence executions plan.", K(ret));
+    } else if (OB_FAIL(inf_pc_configs_.serialize_configs(buf, MAX_CONFIG_STR_SIZE, pos))) {
+      LOG_WARN("failed to serialize configs", K(ret));
+    } else {
+      (void)config_in_pc_str_.assign(buf, int32_t(pos));
+      inf_pc_configs_.update_version(cluster_config_version, cached_runtime_config_version_);
+    }
+    OX (eval_sys_var_config_hash_val());
   }
   return ret;
 }
@@ -5286,11 +5282,10 @@ observer::ObSMConnection *ObBasicSessionInfo::get_sm_connection()
 {
   observer::ObSMConnection *conn = nullptr;
   rpc::ObSqlSockDesc &sock_desc = thread_data_.sock_desc_;
-  obmysql::ObSqlSockSession *sess = nullptr;
-  if (OB_ISNULL(sess = static_cast<obmysql::ObSqlSockSession *>(sock_desc.sock_desc_))) {
+  if (OB_ISNULL(sock_desc.sock_desc_)) {
     LOG_ERROR_RET(OB_ERR_UNEXPECTED, "sql nio sock_desc is null");
   } else {
-    conn = &sess->conn_;
+    conn = &sock_desc.sock_desc_->conn_;
   }
   return conn;
 }

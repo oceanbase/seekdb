@@ -102,8 +102,8 @@ public:
   void *alloc(const int64_t size);
   void *alloc(const int64_t size, const ObMemAttr &attr);
   void free(void *p);
-  void set_label(const lib::ObLabel &label) { attr_.label_ = label; }
-  void set_attr(const ObMemAttr &attr) { attr_ = attr; }
+  void set_label(const lib::ObLabel &label) { attr_.label_ = label; page_allocator_.set_attr(attr_); }
+  void set_attr(const ObMemAttr &attr) { attr_ = attr; page_allocator_.set_attr(attr_); }
   int set_idle(const int64_t idle_size, const bool sync=false);
   int set_max(const int64_t max_size, const bool sync=false);
   int64_t get_max() const { return max_size_; }
@@ -156,6 +156,7 @@ private:
   common::ObMalloc malloc_allocator_;
   int64_t page_size_;
   ObMemAttr attr_;
+  TrackedAllocator page_allocator_;
   int64_t idle_size_;
   int64_t max_size_;
   PageList free_page_list_;

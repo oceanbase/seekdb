@@ -75,7 +75,6 @@ private:
   int64_t get_used_memory_size();
   int64_t get_max_dtl_memory_size();
   int64_t get_max_memory_limit_size();
-  int get_memstore_limit_percentage_();
   void real_free(ObDtlLinkedBuffer *buf);
 private:
   int64_t size_per_buffer_;
@@ -86,7 +85,6 @@ private:
 
   int64_t pre_alloc_cnt_;
   double max_mem_percent_;
-  int64_t memstore_limit_percent_;
 
   // some statistics
   int64_t alloc_cnt_;
@@ -109,18 +107,19 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_dtl_memory_size()
 
 OB_INLINE int64_t ObDtlChannelMemManager::get_max_memory_limit_size()
 {
-  int ret = OB_SUCCESS;
-  if (0 == memstore_limit_percent_) {
-    get_memstore_limit_percentage_();
-  }
-  int64_t percent_execpt_memstore = 100 - memstore_limit_percent_;
-  return lib::get_allocator_memory_limit() * percent_execpt_memstore / 100;
+  static const int64_t DTL_MEMORY_PERCENTAGE = 140;
+  const int64_t memory_budget = lib::get_memory_budget();
+  const int64_t quotient = memory_budget / 100;
+  const int64_t remainder_charge =
+      memory_budget % 100 * DTL_MEMORY_PERCENTAGE / 100;
+  return quotient > (INT64_MAX - remainder_charge) / DTL_MEMORY_PERCENTAGE
+      ? INT64_MAX
+      : quotient * DTL_MEMORY_PERCENTAGE + remainder_charge;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()
 {
   size_per_buffer_ = GCONF.dtl_buffer_size;
-  get_memstore_limit_percentage_();
   get_max_mem_percent();
 }
 

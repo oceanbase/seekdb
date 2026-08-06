@@ -278,7 +278,6 @@ ob_set_subtarget(ob_server virtual_table
   virtual_table/ob_virtual_show_trace.cpp
   virtual_table/ob_all_virtual_sql_plan.cpp
   virtual_table/ob_all_virtual_opt_stat_gather_monitor.cpp
-  virtual_table/ob_all_virtual_thread.cpp
   virtual_table/ob_all_virtual_resource_limit.cpp
   virtual_table/ob_all_virtual_resource_limit_detail.cpp
   virtual_table/ob_all_virtual_activity_metrics.cpp
@@ -310,6 +309,7 @@ if (OB_SO_CACHE)
     IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/liboceanbase.so")
   target_link_libraries(oceanbase
     INTERFACE ob_base
+    sql_nio
     ${STDC_SHARED_LIB})
 else()
   add_library(oceanbase
@@ -328,6 +328,7 @@ else()
     ob_storage_static
     ob_share_static
     $<$<NOT:$<PLATFORM_ID:Darwin>>:-Wl,--no-whole-archive>
+    sql_nio
     $<$<PLATFORM_ID:Linux>:-static-libgcc>
     $<$<PLATFORM_ID:Linux>:-static-libstdc++>)
 endif()
@@ -337,14 +338,16 @@ if(STDC_SHARED_LIB)
   target_link_options(oceanbase INTERFACE "-Wl,-rpath=${STDC_SHARED_LIB_DIR}")
 endif()
 
-# On macOS, malloc_hook conflicts with linked LLVM
-# LLVM's global constructors run before main() and use hooked malloc,
-# but free with system free, causing crashes
-if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
-  set(link_malloc_hook malloc_hook)
-else()
-  message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
-  set(link_malloc_hook "")
+set(link_malloc_hook "")
+if (NOT OB_USE_ASAN)
+  # On macOS, malloc_hook conflicts with linked LLVM
+  # LLVM's global constructors run before main() and use hooked malloc,
+  # but free with system free, causing crashes
+  if (NOT APPLE AND NOT WIN32 AND NOT ANDROID)
+    set(link_malloc_hook malloc_hook)
+  else()
+    message(STATUS "Disabling malloc_hook on macOS/Windows/Android")
+  endif()
 endif()
 
 if(WIN32)
@@ -382,6 +385,7 @@ target_link_libraries(seekdb
   ob_sql_static
   ob_storage_static
   ob_share_static
+  sql_nio
   $<$<PLATFORM_ID:Windows>:ob_malloc>
   $<$<PLATFORM_ID:Windows>:synchronization>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--end-group>
@@ -389,6 +393,12 @@ target_link_libraries(seekdb
   $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook}
 )
+
+if(APPLE AND OB_HAVE_BUNDLED_JEMALLOC)
+  # jemalloc's macOS allocator takeover lives in a standalone archive member.
+  # Force it into seekdb so its zone registration constructor is retained.
+  target_link_options(seekdb PRIVATE "-Wl,-u,_je_zone_register")
+endif()
 
 if(WIN32)
   execute_process(

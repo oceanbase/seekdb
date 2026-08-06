@@ -192,9 +192,11 @@ DEF_TO_STRING(ObUserResourceCalculateArg)
 {
   int64_t pos = 0;
   J_OBJ_START();
-  for (int64_t i = LOGIC_RESOURCE_LS; i < needed_num_.count(); i++) {
-    J_KV(get_logic_res_type_name(i), needed_num_[i]);
-    J_COMMA();
+  for (int64_t i = INVALID_LOGIC_RESOURCE + 1; i < needed_num_.count(); i++) {
+    if (is_valid_logic_res_type(i)) {
+      J_KV(get_logic_res_type_name(i), needed_num_[i]);
+      J_COMMA();
+    }
   }
   J_OBJ_END();
   return pos;

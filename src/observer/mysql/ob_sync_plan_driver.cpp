@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/ob_sync_plan_driver.h"
+#include "observer/mysql/obmp_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_query.h"
 
@@ -32,7 +33,7 @@ ObSyncPlanDriver::ObSyncPlanDriver(const ObGlobalContext &gctx,
                                    const ObSqlCtx &ctx,
                                    sql::ObSQLSessionInfo &session,
                                    ObQueryRetryCtrl &retry_ctrl,
-                                   ObIMPPacketSender &sender,
+                                   ObMPPacketSender &sender,
                                    int32_t iteration_count)
     : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender),
     iteration_count_(iteration_count)
@@ -147,7 +148,7 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       } else {
         // Two-in-one protocol select statement result set EOF packets should be sent here
         // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
-        if (need_send_eof && OB_FAIL(sender_.response_packet(eofp, &result.get_session()))) {
+        if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
           LOG_WARN("response packet fail", K(ret));
         }
       }

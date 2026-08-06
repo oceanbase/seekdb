@@ -35,10 +35,6 @@ public:
   OMPKEOF();
   virtual ~OMPKEOF();
 
-  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const;
-  virtual int64_t get_serialize_size() const;
-  virtual int decode();
-
   inline void set_warning_count(const uint16_t count) { warning_count_ = count; }
   inline void set_server_status(const ObServerStatusFlags status) { server_status_ = status; }
 

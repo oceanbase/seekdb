@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 #define OCEANBASE_SQL_OB_LOGICAL_OPERATOR_H
 
+#include <limits>
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_iterator.h"
@@ -288,14 +289,26 @@ struct FilterCompare
   common::ObIArray<ObExprSelPair> &predicate_selectivities_;
 };
 
-typedef std::pair<double, ObRawExpr *> ObExprRankPair;
+struct ObExprRankPair
+{
+  ObExprRankPair() : rank_(0), original_pos_(0), expr_(NULL) {}
+  ObExprRankPair(double rank, int64_t original_pos, ObRawExpr *expr)
+      : rank_(rank), original_pos_(original_pos), expr_(expr)
+  {}
+
+  double rank_;
+  int64_t original_pos_;
+  ObRawExpr *expr_;
+  TO_STRING_KV(K_(rank), K_(original_pos), KP_(expr));
+};
 
 struct ObExprRankPairCompare
 {
   ObExprRankPairCompare() {};
-  bool operator()(ObExprRankPair &left, ObExprRankPair &right)
+  bool operator()(const ObExprRankPair &left, const ObExprRankPair &right)
   {
-    return left.first < right.first;
+    return left.rank_ < right.rank_
+        || (left.rank_ == right.rank_ && left.original_pos_ < right.original_pos_);
   }
 };
 

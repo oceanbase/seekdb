@@ -27,13 +27,11 @@ using namespace share;
 
 namespace common
 {
-static ObSimpleMemLimitGetter getter;
 class TestLogFileHandler: public blocksstable::TestDataFilePrepare
 {
 public:
   TestLogFileHandler()
-    : blocksstable::TestDataFilePrepare(&getter,
-                                        "TestLogFileHandler")
+    : blocksstable::TestDataFilePrepare("TestLogFileHandler")
   {
   }
   virtual ~TestLogFileHandler()

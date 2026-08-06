@@ -266,7 +266,7 @@ ObRuntimeSysStat::ObRuntimeSysStat()
   : min_cpu_cnt_(0),
     max_cpu_cnt_(0),
     memory_hold_(0),
-    memory_limit_(0)
+    memory_budget_(0)
 {
 }
 
@@ -275,7 +275,7 @@ void ObRuntimeSysStat::reset()
   min_cpu_cnt_ = 0;
   max_cpu_cnt_ = 0;
   memory_hold_ = 0;
-  memory_limit_ = 0;
+  memory_budget_ = 0;
 }
 
 bool ObRuntimeSysStat::is_low_resource() const
@@ -283,9 +283,9 @@ bool ObRuntimeSysStat::is_low_resource() const
   bool bret = false;
   // 8c16g
   const int64_t cpu_threshold = 8;
-  // When the runtime memory exceeds 10GB, the runtime metadata occupies at least 10% of the memory.
-  const int64_t mem_threshold = (16L << 30) * 9 / 10;
-  bret = max_cpu_cnt_ < cpu_threshold || memory_limit_ < mem_threshold;
+  // Preserve the old 16 GiB scale after moving to the logical memory budget.
+  const int64_t mem_threshold = (8L << 30) * 9 / 10;
+  bret = max_cpu_cnt_ < cpu_threshold || memory_budget_ < mem_threshold;
   return bret;
 }
 
@@ -298,7 +298,7 @@ int ObRuntimeSysStat::refresh(const bool force_refresh /*=false*/)
     LOG_WARN("failed to get runtime CPU count", K(ret));
   } else {
     memory_hold_ = lib::get_allocator_memory_hold();
-    memory_limit_ = lib::get_allocator_memory_limit();
+    memory_budget_ = lib::get_memory_budget();
   }
   return ret;
 }

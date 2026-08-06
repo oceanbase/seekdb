@@ -1,6 +1,8 @@
 oblib_addtest(test_cell_reader.cpp)
 oblib_addtest(test_cell_writer.cpp)
 oblib_addtest(test_common_utility.cpp)
+oblib_addtest(test_mysql_packet_storage.cpp)
+oblib_addtest(test_sql_nio_lifecycle.cpp sql_nio)
 oblib_addtest(test_delay_free_allocator.cpp)
 #oblib_addtest(test_ext_store_range.cpp)
 #oblib_addtest(test_multi_version_range.cpp)

@@ -22,7 +22,6 @@
 #include "storage/blocksstable/ob_micro_block_reader.h"
 #include "storage/blocksstable/ob_row_cache.h"
 #include "ob_row_generate.h"
-#include "share/ob_simple_mem_limit_getter.h"
 
 namespace oceanbase
 {
@@ -30,7 +29,6 @@ using namespace common;
 using namespace blocksstable;
 using namespace storage;
 using namespace share::schema;
-static ObSimpleMemLimitGetter getter;
 
 #define INVALID_ITERATOR ObIMicroBlockReaderInfo::INVALID_ROW_INDEX
 
@@ -159,7 +157,7 @@ TEST_F(TestMicroBlockReader, test_success)
   const int64_t bucket_num = 1024;
   const int64_t max_cache_size = 1024 * 1024 * 512;
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
-  ObKVGlobalCache::get_instance().init(&getter, bucket_num, max_cache_size, block_size);
+  ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size, block_size);
   ObRowCache cache;
   ASSERT_EQ(OB_SUCCESS, cache.init("row_cache", 1));
 

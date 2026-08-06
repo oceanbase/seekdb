@@ -17,12 +17,9 @@
 #define USING_LOG_PREFIX PL
 #include "ob_pl_type.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/mysql/obsm_utils.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
-#include "observer/mysql/obmp_stmt_execute.h"
 #include "pl/ob_pl_package.h"
 #include "sql/resolver/ob_stmt_resolver.h"
-#include "observer/mysql/ob_query_driver.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "share/schema/ob_routine_info.h"
 namespace oceanbase
@@ -374,107 +371,6 @@ int ObPLDataType::init_session_var(const ObPLResolveCtx &resolve_ctx,
                                     default_expr,
                                     default_construct,
                                     obj), KPC(this));
-  }
-  return ret;
-}
-
-int ObPLDataType::serialize(share::schema::ObSchemaGetterGuard &schema_guard,
-                            const sql::ObSQLSessionInfo &session,
-                            const ObTimeZoneInfo *tz_info,
-                            MYSQL_PROTOCOL_TYPE type,
-                            char *&src,
-                            char *dst,
-                            const int64_t dst_len,
-                            int64_t &dst_pos) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    obmysql::EMySQLFieldType mysql_type = obmysql::EMySQLFieldType::MYSQL_TYPE_NOT_DEFINED;
-    uint16_t flags;
-    ObScale num_decimals;
-    ObObj obj;
-    ObField field;
-    if (OB_FAIL(ObSMUtils::get_mysql_type(get_obj_type(), mysql_type, flags, num_decimals))) {
-      LOG_WARN("get mysql type failed", K(ret), K(get_obj_type()));
-    } else {
-      obj = *(reinterpret_cast<ObObj *>(src));
-      src += sizeof(ObObj);
-      field.accuracy_ = get_data_type()->get_accuracy();
-      field.flags_ = get_data_type()->is_zero_fill() ? ZEROFILL_FLAG : 0;
-    }
-    if (OB_SUCC(ret)
-        && !obj.is_invalid_type() // deleted element not serialize.
-        && !obj.is_null()) { // null already serialized into null map.
-      if (obj.get_type() != get_obj_type()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("failed to serialize pl data type, data type inconsistent with pl type",
-                 K(get_obj_type()), K(obj.get_type()), K(obj), K(*this), K(ret));
-      } else if (obj.is_lob() || obj.is_json() || obj.is_geometry()) {
-        ObArenaAllocator local_allocator(GET_PL_MOD_STRING(PL_MOD_IDX::OB_PL_ARENA), OB_MALLOC_NORMAL_BLOCK_SIZE);
-        if (OB_FAIL(ObQueryDriver::process_lob_locator_results(obj, 
-                                                               &local_allocator,
-                                                               &session,
-                                                               NULL))) {
-          LOG_WARN("failed to process lob locator_results", K(ret), K(obj));
-        } else if (OB_FAIL(ObSMUtils::cell_str(dst, dst_len, obj, type, dst_pos, OB_INVALID_ID, NULL, tz_info, &field, session, NULL))) {
-          LOG_WARN("failed to cell str", K(ret), K(obj), K(dst_len), K(dst_pos));
-        }
-      } else if (OB_FAIL(ObSMUtils::cell_str(dst, dst_len, obj, type, dst_pos, OB_INVALID_ID, NULL, tz_info, &field, session, NULL))) {
-        LOG_WARN("failed to cell str", K(ret), K(obj), K(dst_len), K(dst_pos));
-      } else {
-        LOG_DEBUG("success serialize pl data type", K(*this), K(obj),
-          K(reinterpret_cast<int64_t>(dst)), K(dst_len), K(type), K(dst_pos));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPLDataType::deserialize(ObSchemaGetterGuard &schema_guard,
-                              common::ObIAllocator &allocator,
-                              sql::ObSQLSessionInfo *session,
-                              const ObCharsetType charset,
-                              const ObCollationType cs_type,
-                              const common::ObTimeZoneInfo *tz_info,
-                              const char *&src,
-                              char *dst,
-                              const int64_t dst_len,
-                              int64_t &dst_pos) const
-{
-  int ret = OB_SUCCESS;
-  if (is_obj_type()) {
-    int64_t init_size = 0;
-    obmysql::EMySQLFieldType mysql_type = obmysql::EMySQLFieldType::MYSQL_TYPE_NOT_DEFINED;
-    uint16_t flags;
-    ObScale num_decimals;
-    ObObj param;
-    ObArenaAllocator local_allocator;
-    if (OB_FAIL(get_size(PL_TYPE_INIT_SIZE, init_size))) {
-      LOG_WARN("get base type init size failed", K(ret));
-    } else if (OB_ISNULL(dst) || (dst_len - dst_pos < init_size)) {
-      ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("data size overflow", K(ret));
-    } else if (OB_FAIL(ObSMUtils::get_mysql_type(get_obj_type(), mysql_type, flags, num_decimals))) {
-      LOG_WARN("get mysql type failed", K(ret));
-    } else if (obmysql::EMySQLFieldType::MYSQL_TYPE_ORA_BLOB == mysql_type 
-              && CS_TYPE_BINARY != get_data_type()->get_collation_type()) {
-      // Here must check collation_type which is set by request_type to distinguish clob or blob
-      mysql_type = obmysql::EMySQLFieldType::MYSQL_TYPE_ORA_CLOB;
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObMPStmtExecute::parse_basic_param_value(
-        local_allocator, (uint8_t)mysql_type, session, charset, cs_type, src, tz_info, param, true, NULL,
-        NULL == get_data_type() ? false : get_data_type()->get_meta_type().is_unsigned_integer()))) {
-        // get_data_type() is null, its a extend type, unsigned need false.
-        LOG_WARN("failed to parse basic param value", K(ret));
-      } else {
-        ObObj *obj = reinterpret_cast<ObObj *>(dst + dst_pos);
-        OZ (deep_copy_obj(allocator, param, *obj));
-        OX (dst_pos += sizeof(ObObj));
-        LOG_DEBUG("deserialize ob pl data type success",
-                  K(*this), K(*obj), K(obj), K(dst_pos), K(dst), K(ret));
-      }
-    }
   }
   return ret;
 }

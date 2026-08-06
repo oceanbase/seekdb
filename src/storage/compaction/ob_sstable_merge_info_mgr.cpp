@@ -46,9 +46,8 @@ int ObSSTableMergeInfoMgr::server_module_init(ObSSTableMergeInfoMgr *&sstable_me
 
 int64_t ObSSTableMergeInfoMgr::cal_max()
 {
-
-  int64_t max_size = std::min(lib::get_allocator_memory_limit() * MEMORY_PERCENTAGE / 100,
-                          static_cast<int64_t>(POOL_MAX_SIZE));
+  int64_t max_size = std::min(lib::get_memory_budget() / 100 * MEMORY_PERCENTAGE,
+                           static_cast<int64_t>(POOL_MAX_SIZE));
   return max_size;
 }
 

@@ -95,8 +95,7 @@ void ObStorageMetaMemMgr::RefreshConfigTask::runTimerTask()
 {
   ObDIActionGuard ag("RefreshConfigTask");
   int ret = OB_SUCCESS;
-
-  const int64_t mem_limit = GCONF._storage_meta_memory_limit_percentage;
+  const int64_t mem_limit = 2 * GCONF._storage_meta_memory_limit_percentage;
   if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
     LOG_WARN("fail to set meta object memory limit", K(ret), K(mem_limit));
   }
@@ -2192,23 +2191,21 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   const int64_t config_tablet_per_gb = true ?
                                           GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = true ?
-                                          GCONF._storage_meta_memory_limit_percentage :
-                                          OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
-  const int64_t hard_memory_limit = lib::get_hard_memory_limit();
-  // Calculate config constraint: (runtime memory / 1GB) * configured tablets per GB.
-  const int64_t config_constraint = hard_memory_limit / (1.0 * 1024 * 1024 * 1024 /* 1GB */) * config_tablet_per_gb;
-  // Calculate memory constraint from the runtime memory budget.
-  const int64_t memory_constraint = hard_memory_limit * (config_mem_percentage / 100.0) /
-                                    (200.0 * 1024 * 1024 /* 200MB */) *
-                                    DEFAULT_TABLET_CNT_PER_GB;
+  const int64_t config_mem_percentage =
+      2 * GCONF._storage_meta_memory_limit_percentage;
+  const int64_t memory_budget = lib::get_memory_budget();
+  // Preserve the historical 2 GiB sizing scale with the new logical memory budget.
+  const int64_t config_constraint = memory_budget / (512.0 * 1024 * 1024 /* 512MB */) * config_tablet_per_gb;
+  const int64_t memory_constraint = memory_budget * (config_mem_percentage / 100.0) /
+                                     (200.0 * 1024 * 1024 /* 200MB */) *
+                                     DEFAULT_TABLET_CNT_PER_GB;
   // Set into constraint value
   if (OB_FAIL(constraint_value.set_type_value(CONFIGURATION_CONSTRAINT, config_constraint))) {
     LOG_WARN("set type value failed", K(ret), K(CONFIGURATION_CONSTRAINT),
-             K(config_tablet_per_gb), K(hard_memory_limit), K(config_constraint));
+             K(config_tablet_per_gb), K(memory_budget), K(config_constraint));
   } else if (OB_FAIL(constraint_value.set_type_value(MEMORY_CONSTRAINT, memory_constraint))) {
     LOG_WARN("set type value failed", K(ret), K(MEMORY_CONSTRAINT),
-             K(config_mem_percentage), K(hard_memory_limit), K(memory_constraint));
+             K(config_mem_percentage), K(memory_budget), K(memory_constraint));
   }
   return ret;
 }
@@ -2222,14 +2219,14 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   const int64_t config_tablet_per_gb = true ?
                                           GCONF._max_tablet_cnt_per_gb :
                                           DEFAULT_TABLET_CNT_PER_GB;
-  const int64_t config_mem_percentage = true ?
+  const int64_t config_mem_percentage = 2 * (true ?
                                           GCONF._storage_meta_memory_limit_percentage :
-                                          OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT;
+                                          OB_DEFAULT_META_OBJ_PERCENTAGE_LIMIT);
   // Inverse calculate through config formula and memory formula
   const int64_t memory_constraint_formula_inverse =
       cal_num * (200.0 * 1024 * 1024 /* 200MB */) / DEFAULT_TABLET_CNT_PER_GB / (config_mem_percentage / 100.0);
   const int64_t config_constraint_formula_inverse =
-      cal_num * (1.0 * 1024 * 1024 * 1024 /* 1GB */) / config_tablet_per_gb;
+      cal_num * (512.0 * 1024 * 1024 /* 512MB */) / config_tablet_per_gb;
   // Set into MinPhyResourceResult
   const int64_t minimum_physics_needed = std::max(memory_constraint_formula_inverse, config_constraint_formula_inverse);
   LOG_INFO("t3m resource limit calculator, cal_min_phy_resource_needed", K(num),

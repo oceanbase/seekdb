@@ -47,15 +47,11 @@ const char* const FREEZE_TRIGGER_PERCENTAGE = "freeze_trigger_percentage";
 const char* const WRITING_THROTTLEIUNG_TRIGGER_PERCENTAGE = "writing_throttling_trigger_percentage";
 const char* const DATA_DISK_WRITE_LIMIT_PERCENTAGE = "data_disk_write_limit_percentage";
 const char* const DATA_DISK_USAGE_LIMIT_PERCENTAGE = "data_disk_usage_limit_percentage";
-const char* const _TX_SHARE_MEMORY_LIMIT_PERCENTAGE = "_tx_share_memory_limit_percentage";
-const char* const MEMSTORE_LIMIT_PERCENTAGE = "memstore_limit_percentage";
-const char* const INTERNAL_MEMSTORE_LIMIT_PERCENTAGE = "_memstore_limit_percentage";
-const char* const _TX_DATA_MEMORY_LIMIT_PERCENTAGE = "_tx_data_memory_limit_percentage";
-const char* const _MDS_MEMORY_LIMIT_PERCENTAGE = "_mds_memory_limit_percentage";
+const char* const COMPATIBLE = "compatible";
+const char* const ENABLE_COMPATIBLE_MONOTONIC = "_enable_compatible_monotonic";
 const char* const WEAK_READ_VERSION_REFRESH_INTERVAL = "weak_read_version_refresh_interval";
 const char* const LOG_DISK_UTILIZATION_LIMIT_THRESHOLD = "log_disk_utilization_limit_threshold";
 const char* const LOG_DISK_THROTTLING_PERCENTAGE = "log_disk_throttling_percentage";
-const char* const OB_VECTOR_MEMORY_LIMIT_PERCENTAGE = "ob_vector_memory_limit_percentage";
 const char* const DEFAULT_TABLE_ORGANIZATION = "default_table_organization";
 
 class ObServerMemoryConfig;
@@ -64,11 +60,11 @@ class ObServerConfig : public ObCommonConfig, ObConfigUpdateCb
 {
 public:
   friend class ObServerMemoryConfig;
-  int init(const ObSystemConfig &config);
   static ObServerConfig &get_instance();
 
-  // read all config from system_config_
-  virtual int read_config(const bool enable_static_effect);
+  // Copy all applicable values from a temporary system config snapshot.
+  virtual int read_config(const ObSystemConfig &system_config,
+                          const bool enable_static_effect);
 
   // check if all config is validated
   virtual int check_all() const;
@@ -100,7 +96,6 @@ public:
     return v == 2;
   }
 
-  bool is_valid() const { return  system_config_!= NULL; };
   int publish_special_config_after_dump();
 
 public:
@@ -120,7 +115,6 @@ public:
 protected:
   ObServerConfig();
   virtual ~ObServerConfig();
-  const ObSystemConfig *system_config_;
   static const int16_t OB_CONFIG_MAGIC = static_cast<int16_t>(0XBCDE);
   static const int16_t OB_CONFIG_VERSION = 1;
 
@@ -137,14 +131,9 @@ public:
   ObServerMemoryConfig();
   static ObServerMemoryConfig &get_instance();
   int reload_config(const ObServerConfig& server_config);
-  int64_t get_server_memory_limit() { return memory_limit_; }
-  int64_t get_server_hard_memory_limit() { return hard_memory_limit_; }
+  int64_t get_server_memory_budget() const;
   int64_t get_reserved_server_memory() { return 1LL<<30; }
-  int64_t get_server_memory_avail() { return memory_limit_; }
   void check_limit();
-private:
-  int64_t memory_limit_;
-  int64_t hard_memory_limit_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObServerMemoryConfig);
 };

@@ -18,6 +18,7 @@
 
 #include "ob_async_plan_driver.h"
 
+#include "obmp_packet_sender.h"
 #include "observer/mysql/obmp_query.h"
 
 namespace oceanbase
@@ -32,7 +33,7 @@ ObAsyncPlanDriver::ObAsyncPlanDriver(const ObGlobalContext &gctx,
                                      const ObSqlCtx &ctx,
                                      sql::ObSQLSessionInfo &session,
                                      ObQueryRetryCtrl &retry_ctrl,
-                                     ObIMPPacketSender &sender)
+                                     ObMPPacketSender &sender)
     : ObQueryDriver(gctx, ctx, session, retry_ctrl, sender)
 {
 }

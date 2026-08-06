@@ -28,18 +28,14 @@ namespace obmysql
 class OMPKResheader : public ObMySQLPacket
 {
 public:
-  OMPKResheader();
-  virtual ~OMPKResheader();
-
-  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const;
-  virtual int64_t get_serialize_size() const;
+  OMPKResheader() : field_count_(0) {}
+  virtual ~OMPKResheader() = default;
 
   inline void set_field_count(uint64_t count)
   {
     field_count_ = count;
   }
 
-  //for test
   inline uint64_t get_field_count() const
   {
     return field_count_;

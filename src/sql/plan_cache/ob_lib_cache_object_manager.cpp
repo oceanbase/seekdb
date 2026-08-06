@@ -28,10 +28,14 @@ class ObIAllocator;
 namespace sql
 {
 
-int ObLCObjectManager::init(int64_t hash_bucket)
+int ObLCObjectManager::init(int64_t hash_bucket, ObPlanCache *lib_cache)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
+  if (OB_ISNULL(lib_cache)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid plan cache", K(ret));
+  } else if (FALSE_IT(lib_cache_ = lib_cache)) {
+  } else if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_LC_STAT,
                                     ObModIds::OB_HASH_NODE_LC_STAT))) {
     LOG_WARN("failed to init cache obj map", K(ret));
@@ -174,6 +178,9 @@ int ObLCObjectManager::destroy_cache_obj(const bool is_leaked,
 void ObLCObjectManager::inner_free(ObILibCacheObject *cache_obj)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(lib_cache_)) {
+    lib_cache_->release_cache_object(*cache_obj);
+  }
   lib::MemoryContext entity = cache_obj->get_mem_context();
   WITH_CONTEXT(entity) { cache_obj->~ObILibCacheObject(); }
   cache_obj = NULL;

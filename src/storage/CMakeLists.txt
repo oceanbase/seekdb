@@ -379,7 +379,6 @@ ob_set_subtarget(ob_storage throttle
 )
 
 ob_set_subtarget(ob_storage tx_storage
-  tx_storage/ob_server_mem_limit_getter.cpp
   tx_storage/ob_access_service.cpp
   tx_storage/ob_checkpoint_service.cpp
   tx_storage/ob_ls_freeze_thread.cpp

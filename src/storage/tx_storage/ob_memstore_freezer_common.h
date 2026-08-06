@@ -66,12 +66,10 @@ public:
 
   // running data
   int64_t memstore_freeze_trigger_;
-  int64_t max_mem_memstore_can_get_now_;
 
   int64_t active_memstore_used_;
   int64_t freezable_active_memstore_used_;
-  int64_t total_memstore_used_;
-  int64_t total_memstore_hold_;
+  int64_t memstore_quota_used_;
   int64_t max_cached_memstore_size_;
 
 private:
@@ -86,13 +84,10 @@ public:
   void reset();
 public:
   int64_t active_memstore_used_;
-  int64_t total_memstore_used_;
-  int64_t total_memstore_hold_;
+  int64_t memstore_quota_used_;
   int64_t memstore_freeze_trigger_;
   int64_t memstore_limit_;
-  int64_t memory_limit_;
-  int64_t memory_hold_;
-  int64_t memstore_can_get_now_;
+  int64_t memory_budget_;
   int64_t max_cached_memstore_size_;
 
   // these used to analysis write/frozen/release speed of memstore
@@ -103,7 +98,7 @@ private:
   DISABLE_COPY_ASSIGN(ObMemstoreStatistic);
 };
 
-// store the runtime info, such as memory limit, memstore limit,
+// store the runtime info, such as memory budget, memstore limit,
 // slow freeze flag, freezing flag and so on.
 class ObMemstoreInfo : public ObDLinkBase<ObMemstoreInfo>
 {

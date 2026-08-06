@@ -25,6 +25,7 @@ devdeps-zlib-1.2.13-20251208.tar.gz
 devdeps-vsag-1.1.0-20260107.tar.gz
 devdeps-grpc-1.46.7-20260318.tar.gz
 devdeps-sqlite-3.38.1-20260318.tar.gz
+devdeps-jemalloc-5.3.1-20260724.tar.gz
 
 [tools]
 obdevtools-llvm-17.0.6-20251212.tar.gz

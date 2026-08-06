@@ -33,11 +33,7 @@ class ObMPResetConnection : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_RESET_CONNECTION;
-  explicit ObMPResetConnection(const ObGlobalContext &gctx)
-      :ObMPBase(gctx),
-      pkt_()
-  {
-  }
+  explicit ObMPResetConnection(const ObGlobalContext &gctx) : ObMPBase(gctx) {}
 
   virtual ~ObMPResetConnection() {}
 
@@ -48,8 +44,6 @@ protected:
 
 private:
 
-private:
-  obmysql::ObMySQLRawPacket pkt_;
   DISALLOW_COPY_AND_ASSIGN(ObMPResetConnection);
 };// end of class
 

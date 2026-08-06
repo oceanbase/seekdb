@@ -69,6 +69,9 @@ int ObPsSqlUtils::alloc_new_var(common::ObIAllocator &allocator, const T &t, T *
       new_t = new (buf) T(data_buf, &allocator);
       if (OB_FAIL(new_t->deep_copy(t))) {
         SQL_PC_LOG(WARN, "deep copy failed", K(ret), K(cv_size));
+        new_t->~T();
+        allocator.free(new_t);
+        new_t = NULL;
       }
     }
   }

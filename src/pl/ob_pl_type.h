@@ -460,12 +460,6 @@ public:
   virtual int get_all_depended_user_type(const ObPLResolveCtx &resolve_ctx,
                                          const ObPLBlockNS &current_ns) const;
 
-  int serialize(share::schema::ObSchemaGetterGuard &schema_guard, const sql::ObSQLSessionInfo &session, const common::ObTimeZoneInfo *tz_info,
-                obmysql::MYSQL_PROTOCOL_TYPE type, char *&src, char *dst, const int64_t dst_len, int64_t &dst_pos) const;
-  int deserialize(share::schema::ObSchemaGetterGuard &schema_guard, common::ObIAllocator &allocator, sql::ObSQLSessionInfo *session,
-                  const common::ObCharsetType charset, const common::ObCollationType cs_type, const common::ObTimeZoneInfo *tz_info,
-                  const char *&src, char *dst, const int64_t dst_len, int64_t &dst_pos) const;
-
   int convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const;
   static int get_table_type_by_name(uint64_t owner_id,
                                   const ObString &table,

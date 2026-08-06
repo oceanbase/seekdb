@@ -398,7 +398,7 @@ int run_test() {
 
   if(OB_SUCC(ret)) {
     const int64_t cache_size = config.get_cache_size() * 1024L * 1024L;
-    lib::set_memory_limit(10LL * 1024 * 1024 * 1024);
+    lib::set_memory_budget(10LL * 1024 * 1024 * 1024);
     lib::ob_set_reserved_memory(1024L * 1024L * 1024L);
     if (OB_FAIL(cache_mem_limit_getter.set_memory_limit(cache_size / 2, cache_size))) {
       STORAGE_LOG(WARN, "fail to set cache memory limit", K(ret), K(cache_size));

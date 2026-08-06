@@ -770,7 +770,9 @@ public:
 public:
   ObWindowFunctionOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
     : ObOperator(exec_ctx, spec, input),
-      local_allocator_(),
+      local_allocator_(ObModIds::OB_SQL_WINDOW_LOCAL,
+                       OB_MALLOC_NORMAL_BLOCK_SIZE,
+                       ObCtxIds::WORK_AREA),
       stat_(ProcessStatus::PARTIAL),
       input_rows_(),
       wf_list_(),

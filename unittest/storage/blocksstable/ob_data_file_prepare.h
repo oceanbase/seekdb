@@ -32,10 +32,10 @@
 #include "storage/ob_file_system_router.h"
 #include "share/ob_force_print_log.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
-#include "share/ob_simple_mem_limit_getter.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -49,8 +49,7 @@ class TestDataFilePrepareUtil
 public:
   TestDataFilePrepareUtil();
   virtual ~TestDataFilePrepareUtil() { destory(); }
-  int init(ObIServerMemLimitGetter *getter,
-           const char *test_name,
+  int init(const char *test_name,
            const int64_t macro_block_size = 64 * 1024,
            const int64_t macro_block_count = 100,
            const int64_t disk_num = 0);
@@ -70,7 +69,6 @@ private:
   ObArenaAllocator allocator_;
   int64_t disk_num_;
   ObLogFileHandler clog_file_handler_;
-  ObIServerMemLimitGetter *getter_;
   ObServerRuntimeState runtime_state_;
   ObServerRuntimeState *old_server_runtime_;
   int64_t old_micro_block_merge_verify_level_;
@@ -82,8 +80,7 @@ private:
 class TestDataFilePrepare : public ::testing::Test
 {
 public:
-  TestDataFilePrepare(ObIServerMemLimitGetter *getter,
-                      const char *test_name,
+  TestDataFilePrepare(const char *test_name,
                       const int64_t macro_block_size = OB_DEFAULT_MACRO_BLOCK_SIZE,
                       const int64_t macro_block_count = 100);
   virtual ~TestDataFilePrepare();
@@ -97,22 +94,19 @@ protected:
   const char *test_name_;
   const int64_t macro_block_size_;
   const int64_t macro_block_count_;
-  ObIServerMemLimitGetter *getter_;
   oceanbase::share::ObIModuleProvider mock_module_provider_;
   oceanbase::share::ObIModuleProvider *old_g_mp_ = nullptr;
   bool module_provider_overridden_ = false;
 };
 
-TestDataFilePrepare::TestDataFilePrepare(ObIServerMemLimitGetter *getter,
-                                         const char *test_name,
+TestDataFilePrepare::TestDataFilePrepare(const char *test_name,
                                          const int64_t macro_block_size,
                                          const int64_t macro_block_count)
   : util_(),
     allocator_(ObModIds::TEST),
     test_name_(test_name),
     macro_block_size_(macro_block_size),
-    macro_block_count_(macro_block_count),
-    getter_(getter)
+    macro_block_count_(macro_block_count)
 {
 }
 
@@ -129,7 +123,7 @@ void TestDataFilePrepare::SetUp()
     module_provider_overridden_ = true;
   }
 
-  const int init_ret = util_.init(getter_, test_name_, macro_block_size_, macro_block_count_);
+  const int init_ret = util_.init(test_name_, macro_block_size_, macro_block_count_);
   if (OB_SUCCESS != init_ret) {
     util_.destory();
     oceanbase::share::g_mp = old_g_mp_;
@@ -165,7 +159,6 @@ TestDataFilePrepareUtil::TestDataFilePrepareUtil()
     allocator_(ObModIds::TEST),
     disk_num_(0),
     clog_file_handler_(),
-    getter_(nullptr),
     runtime_state_(),
     old_server_runtime_(nullptr),
     old_micro_block_merge_verify_level_(0),
@@ -176,7 +169,6 @@ TestDataFilePrepareUtil::TestDataFilePrepareUtil()
 }
 
 int TestDataFilePrepareUtil::init(
-    ObIServerMemLimitGetter *getter,
     const char *test_name,
     const int64_t macro_block_size,
     const int64_t macro_block_count,
@@ -188,9 +180,9 @@ int TestDataFilePrepareUtil::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "cannot init twice", K(ret));
-  } else if (OB_ISNULL(getter) || OB_ISNULL(test_name) || disk_num < 0) {
+  } else if (OB_ISNULL(test_name) || disk_num < 0) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(ERROR, "invalid args", K(ret), KP(getter), KP(test_name), K(disk_num));
+    STORAGE_LOG(ERROR, "invalid args", K(ret), KP(test_name), K(disk_num));
   } else if (NULL == getcwd(cur_dir,  OB_MAX_FILE_NAME_LENGTH)) {
     ret = OB_BUF_NOT_ENOUGH;
     STORAGE_LOG(WARN, "cannot get cur dir", K(ret));
@@ -235,7 +227,6 @@ int TestDataFilePrepareUtil::init(
     tmp_addr.set_ip_addr("100.1.2.3", 456);
     GCONF.self_addr_ = tmp_addr;
     disk_num_ = disk_num;
-    getter_ = getter;
     is_inited_ = true;
   }
 
@@ -254,7 +245,7 @@ int TestDataFilePrepareUtil::open()
   const int64_t block_size = common::OB_MALLOC_BIG_BLOCK_SIZE;
   const int64_t mem_limit = 10LL * 1024 * 1024 * 1024;
   const int64_t data_disk_size = 4LL * 1024 * 1024 * 1024;
-  lib::set_memory_limit(mem_limit);
+  lib::set_memory_budget(mem_limit);
 
   const int64_t default_partition_cnt = 1000;
   ObLogCursor start_cursor;
@@ -276,8 +267,7 @@ int TestDataFilePrepareUtil::open()
     STORAGE_LOG(WARN, "failed to create slog dir", K(ret), K(slog_dir_));
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(file_dir_))) {
     STORAGE_LOG(WARN, "failed to create file dir", K(ret), K(file_dir_));
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(getter_,
-                                                          bucket_num,
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                           max_cache_size,
                                                           block_size))) {
     STORAGE_LOG(WARN, "failed to init kv cache", K(ret));
@@ -389,7 +379,6 @@ void TestDataFilePrepareUtil::destory()
   ObTimerService::get_instance().stop();
   ObTimerService::get_instance().wait();
   ObTimerService::get_instance().destroy();
-
   if (server_runtime_overridden_) {
     share::g_server_runtime = old_server_runtime_;
     old_server_runtime_ = nullptr;
@@ -401,7 +390,6 @@ void TestDataFilePrepareUtil::destory()
     GCONF.self_addr_ = old_self_addr_;
     config_overridden_ = false;
   }
-  getter_ = nullptr;
   is_inited_ = false;
 }
 }

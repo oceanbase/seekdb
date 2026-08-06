@@ -18,6 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "ob_tablet_merge_ctx.h"
+#include "ob_tablet_scheduler.h"
 
 namespace oceanbase
 {
@@ -288,9 +289,11 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
   }
 
   if (OB_SUCC(ret)) {
-    calc_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_HIGH,
-                         (total_bytes + MINI_PARALLEL_BASE_MEM - 1) / MINI_PARALLEL_BASE_MEM,
-                         concurrent_cnt_);
+    calc_adaptive_parallel_degree(
+        ObDagPrio::DAG_PRIO_COMPACTION_HIGH,
+        MINI_MEM_PER_THREAD,
+        (total_bytes + MINI_PARALLEL_BASE_MEM - 1) / MINI_PARALLEL_BASE_MEM,
+        concurrent_cnt_);
 
 #ifdef ERRSIM
   if (concurrent_cnt_ <= 1) {
@@ -367,9 +370,11 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
       STORAGE_LOG(WARN, "Invalid argument to calc mini minor parallel degree", K(ret), K(tablet_size),
                 K(total_size), K(tables.count()), K(merge_ctx));
     } else {
-      calc_parallel_degree(ObDagPrio::DAG_PRIO_COMPACTION_MID,
-                           (total_size / tables.count() + tablet_size - 1) / tablet_size,
-                           parallel_target_count);
+      calc_adaptive_parallel_degree(
+          ObDagPrio::DAG_PRIO_COMPACTION_MID,
+          MINOR_MEM_PER_THREAD,
+          (total_size / tables.count() + tablet_size - 1) / tablet_size,
+          parallel_target_count);
     }
 
     if (OB_FAIL(ret)) {
@@ -409,8 +414,9 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
   return ret;
 }
 
-void ObParallelMergeCtx::calc_parallel_degree(
+void ObParallelMergeCtx::calc_adaptive_parallel_degree(
     const int64_t prio,
+    const int64_t mem_per_thread,
     const int64_t origin_degree,
     int64_t &parallel_degree)
 {
@@ -422,6 +428,19 @@ void ObParallelMergeCtx::calc_parallel_degree(
     STORAGE_LOG_RET(WARN, tmp_ret, "failed to get worker thread cnt, use dfault value", K(prio), K(dag_worker_limit));
   }
   parallel_degree = MIN(MAX(dag_worker_limit, PARALLEL_MERGE_TARGET_TASK_CNT), origin_degree);
+  if (parallel_degree <= 2) {
+    // do nothing
+  } else if (share::g_mp->tablet_scheduler()->enable_adaptive_compaction()) {
+    const int64_t compaction_memory_limit = lib::get_compaction_memory_limit();
+    const int64_t mem_allow_max_thread_cnt =
+        compaction_memory_limit / MAX(mem_per_thread, 1);
+    if (mem_allow_max_thread_cnt < parallel_degree) {
+      parallel_degree = MAX(parallel_degree / 2, 2); // fix the parallel degree
+    }
+
+    STORAGE_LOG(INFO, "[ADAPTIVE_SCHED] calc adaptive parallel degree", K(prio), K(compaction_memory_limit), K(mem_per_thread),
+                K(dag_worker_limit), K(origin_degree), K(mem_allow_max_thread_cnt), K(parallel_degree));
+  }
 }
 
 

@@ -831,7 +831,7 @@ int ObService::get_server_resource_info(share::ObServerResourceInfo &resource_in
     // mem
     resource_info.report_mem_assigned_ = svr_res_assigned.memory_size_;
     resource_info.mem_in_use_ = 0;
-    resource_info.mem_total_ = GMEMCONF.get_server_memory_avail();
+    resource_info.mem_total_ = GMEMCONF.get_server_memory_budget();
     // log_disk
     resource_info.log_disk_total_ = clog_total_size_byte;
     resource_info.log_disk_in_use_ = clog_in_use_size_byte;

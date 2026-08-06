@@ -28,11 +28,11 @@ namespace obmysql
 class OMPKRow : public ObMySQLPacket
 {
 public:
-  explicit OMPKRow(const ObMySQLRow &row);
+  explicit OMPKRow(const ObMySQLRow &row) : row_(row) {}
   virtual ~OMPKRow() { }
   inline ObMySQLPacketType get_mysql_packet_type() { return ObMySQLPacketType::PKT_ROW; }
+  inline const ObMySQLRow &get_row() const { return row_; }
 
-  virtual int serialize(char *buffer, int64_t len, int64_t &pos) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(OMPKRow);
   const ObMySQLRow &row_;

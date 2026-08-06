@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RPC_FRAME
 
 #include "rpc/frame/ob_sql_processor.h"
+#include "rpc/ob_sql_request_operator.h"
 using namespace oceanbase::common;
 using namespace oceanbase::rpc::frame;
 

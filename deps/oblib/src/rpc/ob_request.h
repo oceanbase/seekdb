@@ -30,6 +30,10 @@
 
 namespace oceanbase
 {
+namespace obmysql
+{
+class ObSqlSockSession;
+}
 namespace rpc
 {
 
@@ -53,7 +57,8 @@ public:
   };
 public:
   explicit ObRequest(Type type)
-      : handling_state_(-1), type_(type), handle_ctx_(NULL), group_id_(0), pkt_(NULL),
+      : handling_state_(-1), nio_request_generation_(0), type_(type),
+        handle_ctx_(NULL), group_id_(0), pkt_(NULL),
         connection_phase_(ConnectionPhaseEnum::CPE_CONNECTED),
         recv_timestamp_(0), enqueue_timestamp_(0),
         request_arrival_time_(0), traverse_index_(0), recv_mts_(), arrival_push_diff_(0),
@@ -64,8 +69,10 @@ public:
   }
   virtual ~ObRequest() {}  // not guaranteed to call
 
-  void set_server_handle_context(void* ctx) { handle_ctx_ = ctx; }
-  void* get_server_handle_context() const { return handle_ctx_; }
+  uint64_t get_nio_request_generation() const { return nio_request_generation_; }
+  void set_nio_request_generation(uint64_t generation) { nio_request_generation_ = generation; }
+  void set_server_handle_context(obmysql::ObSqlSockSession *ctx) { handle_ctx_ = ctx; }
+  obmysql::ObSqlSockSession *get_server_handle_context() const { return handle_ctx_; }
   Type get_type() const { return type_; }
   void set_type(const Type &type) { type_ = type; }
 
@@ -114,8 +121,9 @@ public:
 public:
   int32_t handling_state_;
 protected:
+  uint64_t nio_request_generation_;
   Type type_;
-  void* handle_ctx_;
+  obmysql::ObSqlSockSession *handle_ctx_;
   int32_t group_id_;
   const ObPacket *pkt_;
   ConnectionPhaseEnum connection_phase_;
@@ -267,6 +275,5 @@ inline TraceId ObRequest::generate_trace_id(const ObAddr &addr)
 void on_translate_fail(ObRequest* req, int ret);
 } // end of namespace rp
 } // end of namespace oceanbase
-#include "ob_sql_request_operator.h"
 
 #endif /* _OCEABASE_RPC_OB_REQUEST_H_ */

@@ -176,6 +176,11 @@ endif()
 
 target_compile_features(oblib_base INTERFACE cxx_std_11)
 
+if(OB_HAVE_BUNDLED_JEMALLOC)
+  target_compile_definitions(oblib_base_without_pass
+    INTERFACE OB_HAVE_BUNDLED_JEMALLOC=1)
+endif()
+
 set(_LIB_PATH "${DEP_DIR}/lib64/")
 set(LIBAIO_LINK_OPTION "-laio")
 if(APPLE OR ANDROID)

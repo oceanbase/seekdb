@@ -197,7 +197,7 @@ int main(int argc, char** argv)
   OB_LOGGER.set_file_name("test_data_buffer.log");
   OB_LOGGER.set_log_level("INFO");
   testing::InitGoogleTest(&argc, argv);
-  oceanbase::lib::set_memory_limit(40UL << 30);
+  oceanbase::lib::set_memory_budget(40UL << 30);
   signal(49, SIG_IGN);
   return RUN_ALL_TESTS();
 }

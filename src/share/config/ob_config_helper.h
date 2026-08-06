@@ -122,40 +122,6 @@ private:
   static int64_t get_write_throttle_trigger_percentage_();
   DISALLOW_COPY_AND_ASSIGN(ObConfigFreezeTriggerIntChecker);
 };
-class ObConfigTxShareMemoryLimitChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigTxShareMemoryLimitChecker);
-};
-class ObConfigMemstoreLimitChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigMemstoreLimitChecker);
-};
-
-class ObConfigTxDataLimitChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigTxDataLimitChecker);
-};
-class ObConfigMdsLimitChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigMdsLimitChecker);
-};
-
 class ObConfigWriteThrottleTriggerIntChecker
 {
 public:
@@ -389,16 +355,16 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigWorkAreaPolicyChecker);
 };
 
-class ObConfigMemoryLimitChecker
+class MemoryBudgetConfigChecker
   : public ObConfigChecker
 {
 public:
-  ObConfigMemoryLimitChecker() {}
-  virtual ~ObConfigMemoryLimitChecker() {};
+  MemoryBudgetConfigChecker() {}
+  virtual ~MemoryBudgetConfigChecker() {};
   bool check(const ObConfigItem &t) const;
 
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigMemoryLimitChecker);
+  DISALLOW_COPY_AND_ASSIGN(MemoryBudgetConfigChecker);
 };
 
 class ObConfigAuditModeChecker
@@ -709,15 +675,6 @@ private:
 
 typedef __ObConfigContainer<ObConfigStringKey,
                             ObConfigItem, OB_MAX_CONFIG_NUMBER> ObConfigContainer;
-
-class ObConfigVectorMemoryChecker
-{
-public:
-  static bool check(const obcall::ObAdminSetConfigItem &t);
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigVectorMemoryChecker);
-};
 
 class ObConfigDefaultTableOrganizationChecker : public ObConfigChecker
 {

@@ -612,10 +612,10 @@ int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limi
 {
   bool ret = OB_SUCCESS;
   {
-    int64_t total_memory = lib::get_hard_memory_limit();
+    int64_t memory_budget = lib::get_memory_budget();
     int64_t vector_limit = ObVectorAllocator::get_vector_mem_limit_percentage(&GCONF);
-    memory_limit = total_memory * vector_limit / 100;
-    LOG_TRACE("vector index memory limit debug", K(total_memory), K(vector_limit), K(memory_limit));
+    memory_limit = memory_budget / 100 * vector_limit;
+    LOG_TRACE("vector index memory limit debug", K(memory_budget), K(vector_limit), K(memory_limit));
   }
   return ret;
 }

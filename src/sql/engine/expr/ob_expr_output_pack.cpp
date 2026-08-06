@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/expr/ob_expr_output_pack.h"
 #include "share/ob_lob_access_utils.h"
+#include "lib/container/ob_se_array.h"
+#include "observer/mysql/ob_mysql_rust_row.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase{
@@ -203,38 +205,6 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-
-int ObExprOutputPack::encode_cell(const ObObj &cell, const common::ObIArray<ObField> &param_fields,
-                                  char *buf, int64_t len, int64_t &pos, char *bitmap,
-                                  int64_t column_num, ObSQLSessionInfo *session,
-                                  share::schema::ObSchemaGetterGuard *schema_guard,
-                                  obmysql::MYSQL_PROTOCOL_TYPE encode_type)
-{
-  int ret = OB_SUCCESS;
-  const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
-  CK (OB_NOT_NULL(session));
-  OZ (ObSMUtils::cell_str(buf, len, cell, encode_type, pos, column_num, bitmap,
-                            dtc_params, &param_fields.at(column_num), *session, schema_guard));
-  return ret;
-}
-
-int ObExprOutputPack::reset_bitmap(char *result_buffer, const int64_t len,
-                                  const int64_t column_num, int64_t &pos, char *&bitmap)
-{
-  int ret = OB_SUCCESS;
-  const int64_t bitmap_bytes =  (column_num + 7 + 2) / 8;
-  if (len - pos < 1 + bitmap_bytes) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    MEMSET(result_buffer + pos, 0, 1);
-    pos++;
-    bitmap = result_buffer + pos;
-    MEMSET(bitmap, 0, bitmap_bytes);
-    pos += bitmap_bytes;
-  }
-  return ret;
-}
-
 int ObExprOutputPack::convert_string_value_charset(common::ObObj &value,
                                                    common::ObIAllocator &alloc,
                                                    const ObSQLSessionInfo &my_session)
@@ -394,14 +364,15 @@ int ObExprOutputPack::convert_string_charset(const common::ObString &in_str,
   return ret;
 }
 
-int ObExprOutputPack::try_encode_row(const ObExpr &expr, ObEvalCtx &ctx,
-                                     ObSQLSessionInfo *session, common::ObIAllocator &alloc,
-                                     ObOutputPackInfo *extra_info, char *buffer, char *bitmap,
-                                     share::schema::ObSchemaGetterGuard *schema_guard,
-                                     obmysql::MYSQL_PROTOCOL_TYPE encode_type,
-                                     const int64_t len, int64_t &pos)
-{
+int ObExprOutputPack::build_row_values(
+    const ObExpr &expr, ObEvalCtx &ctx, ObSQLSessionInfo *session,
+    common::ObIAllocator &alloc, ObOutputPackInfo *extra_info,
+    share::schema::ObSchemaGetterGuard *schema_guard,
+    obmysql::MYSQL_PROTOCOL_TYPE encode_type,
+    common::ObIArray<obmysql::ObMySQLCellValue> &values) {
   int ret = OB_SUCCESS;
+  const ObDataTypeCastParams dtc_params =
+      ObBasicSessionInfo::create_dtc_params(session);
   for (int64_t column_idx = 1; OB_SUCC(ret) && column_idx < expr.arg_cnt_; ++column_idx) {
     ObDatum &datum = expr.locate_param_datum(ctx, column_idx);
     ObObj obj;
@@ -446,12 +417,17 @@ int ObExprOutputPack::try_encode_row(const ObExpr &expr, ObEvalCtx &ctx,
         }
       }
     }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(encode_cell(obj, extra_info->param_fields_, buffer, len,
-                              pos, bitmap, column_idx - 1/*for encode type expr*/,
-                              session, schema_guard, encode_type))) {
-      if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-        LOG_WARN("failed to encode obj", K(ret), K(column_idx));
+    if (OB_SUCC(ret)) {
+      obmysql::ObMySQLCellValue value;
+      if (OB_FAIL(ObSMUtils::build_cell_value(
+              obj, encode_type, alloc, value, dtc_params,
+              &extra_info->param_fields_.at(column_idx - 1), *session,
+              schema_guard))) {
+        LOG_WARN("failed to build MySQL Row semantic value", K(ret),
+                 K(column_idx));
+      } else if (OB_FAIL(values.push_back(value))) {
+        LOG_WARN("failed to retain MySQL Row semantic value", K(ret),
+                 K(column_idx));
       }
     }
   }
@@ -466,52 +442,77 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
   int ret = OB_SUCCESS;
   char *buffer = nullptr;
   int64_t len = 0;
-  int64_t pos = 0;
-  char *bitmap = nullptr;
+  int64_t blob_len = 0;
   obmysql::MYSQL_PROTOCOL_TYPE encode_type;
   ObDatum &type_datum = expr.locate_param_datum(ctx, 0);
   encode_type = (type_datum.get_int() == 0)
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
-  int tmp_ret = OB_SIZE_OVERFLOW;
+  const int64_t cell_count = expr.arg_cnt_ - 1;
+  ObSEArray<obmysql::ObMySQLCellValue, 16> values;
+  ObSEArray<nio_mysql_cell_view, 16> views;
   expr.cur_str_resvered_buf(ctx, buffer, len);
-  if (OB_ISNULL(buffer) || len <= 0) {
+  if (OB_ISNULL(buffer) || len <= 0 || cell_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get str res mem", K(ret), K(len));
-  }
-  //if try encode failed, refresh buffer and retry
-  while(OB_SUCC(ret) && OB_SUCCESS != tmp_ret) {
-    tmp_ret = OB_SUCCESS;
-    if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
-      tmp_ret = reset_bitmap(buffer, len, expr.arg_cnt_ - 1, pos, bitmap);
+    LOG_WARN("invalid packed MySQL Row output", K(ret), K(len), K(cell_count));
+  } else if (OB_FAIL(values.reserve(cell_count))) {
+    LOG_WARN("failed to reserve packed MySQL Row semantic values", K(ret),
+             K(cell_count));
+  } else if (OB_FAIL(views.reserve(cell_count))) {
+    LOG_WARN("failed to reserve packed Rust MySQL Row views", K(ret),
+             K(cell_count));
+  } else if (OB_FAIL(build_row_values(expr, ctx, session, alloc, extra_info,
+                                      schema_guard, encode_type, values))) {
+    LOG_WARN("failed to build packed MySQL Row semantic values", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
+      nio_mysql_cell_view view = {};
+      if (OB_FAIL(observer::build_nio_mysql_cell_view(values.at(i), view))) {
+        LOG_WARN("failed to build packed Rust MySQL Row cell view", K(ret),
+                 K(i));
+      } else if (OB_FAIL(views.push_back(view))) {
+        LOG_WARN("failed to retain packed Rust MySQL Row cell view", K(ret),
+                 K(i));
+      }
     }
-    if (OB_SUCCESS == tmp_ret) {
-      tmp_ret = try_encode_row(expr, ctx, session, alloc, extra_info,
-                              buffer, bitmap, schema_guard, encode_type, len, pos);
-    }
-    if (OB_SUCCESS != tmp_ret) {
-      len *= 2;
-      if (len >= MAX_PACK_LEN) {
-        ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("encode row size overflow ", K(ret), K(len));
-      } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, len))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to get str res mem", K(ret), K(len));
+    if (OB_SUCC(ret)) {
+      nio_mysql_row_view row_view = {};
+      row_view.cells = &views.at(0);
+      row_view.cell_count = views.count();
+      if (OB_FAIL(observer::get_nio_mysql_row_protocol(encode_type,
+                                                       row_view.protocol))) {
+        LOG_WARN("invalid packed MySQL Row protocol", K(ret), K(encode_type));
       } else {
-        //re encode from begin
-        pos = 0;
+        int frame_ret =
+            nio_encode_mysql_packed_row_blob(buffer, len, &row_view, &blob_len);
+        if (NIO_FRAME_NEED_MORE == frame_ret) {
+          if (blob_len <= 0 || blob_len >= MAX_PACK_LEN) {
+            ret = OB_SIZE_OVERFLOW;
+            LOG_WARN("packed MySQL Row blob size overflow", K(ret),
+                     K(blob_len));
+          } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, blob_len))) {
+            ret = OB_ALLOCATE_MEMORY_FAILED;
+            LOG_WARN("failed to resize packed MySQL Row blob", K(ret),
+                     K(blob_len));
+          } else {
+            len = blob_len;
+            frame_ret = nio_encode_mysql_packed_row_blob(buffer, len, &row_view,
+                                                         &blob_len);
+          }
+        }
+        if (OB_SUCC(ret) && NIO_FRAME_OK != frame_ret) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Rust packed MySQL Row blob encoding failed", K(ret),
+                   K(frame_ret), K(blob_len), K(len));
+        }
       }
     }
   }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(tmp_ret)) {
-    LOG_WARN("failed to try encode row", K(ret));
-  }
   if (OB_SUCC(ret)) {
-    expr_datum.set_string(buffer, pos);
+    expr_datum.set_string(buffer, blob_len);
   }
   return ret;
 }
 
 
 }//namespace sql
-}//namespace oceambase
+} // namespace oceanbase

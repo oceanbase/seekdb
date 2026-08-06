@@ -32,8 +32,9 @@ namespace oceanbase
 namespace observer
 {
 
-class ObMPBase : public rpc::frame::ObSqlProcessor, public ObIMPPacketSender
-{
+class ObSqlEndTransCb;
+
+class ObMPBase : public rpc::frame::ObSqlProcessor {
 public:
   explicit ObMPBase(const ObGlobalContext &gctx);
   virtual ~ObMPBase();
@@ -52,19 +53,14 @@ protected:
 
   bool is_conn_valid() const { return packet_sender_.is_conn_valid(); }
 
-  virtual int read_packet(obmysql::ObICSMemPool& mem_pool, obmysql::ObMySQLPacket*& pkt) override;
-  virtual int release_packet(obmysql::ObMySQLPacket* pkt) override;
-
-
   // Response a packet to client peer.
   //
   // It'll wake up responding IO thread and then wait for that thread
   // write the data back to this fd. After data has been sent out, IO
   // thread will wake up this thread in turn.
   //
-  OB_INLINE int response_packet(obmysql::ObMySQLPacket &pkt, sql::ObSQLSessionInfo* session)
-  {
-    return packet_sender_.response_packet(pkt, session);
+  OB_INLINE int response_packet(obmysql::ObMySQLPacket &pkt) {
+    return packet_sender_.response_packet(pkt);
   }
 
   /// send a error packet to client
@@ -78,7 +74,6 @@ protected:
 
   int send_null_packet(sql::ObSQLSessionInfo &session, ObOKPParam &ok_param);
 
-  int send_switch_packet(common::ObString &auth_name, common::ObString& auth_data);
   ObSMConnection *get_conn() const;
   int get_conn_id(uint32_t &sessid) const;
   int create_session(ObSMConnection *conn, sql::ObSQLSessionInfo *&sess_info);
@@ -86,7 +81,6 @@ protected:
   int get_session(sql::ObSQLSessionInfo *&sess_info);
   int revert_session(sql::ObSQLSessionInfo *sess_info);
   int flush_buffer(const bool is_last);
-  int clean_buffer();
   int init_process_var(sql::ObSqlCtx &ctx,
                        const sql::ObMultiStmtItem &multi_stmt_item,
                        sql::ObSQLSessionInfo &session) const;
@@ -104,8 +98,9 @@ protected:
     return session.set_session_active(sql, get_receive_timestamp(), last_active_time_ts, cmd);
   }
   int check_and_refresh_schema(sql::ObSQLSessionInfo *session = NULL);
-  bool need_flush_buffer() const;
   int update_charset_sys_vars(ObSMConnection &conn, sql::ObSQLSessionInfo &sess_info);
+  int handoff_async_request(ObSqlEndTransCb &end_trans_cb);
+  int cancel_unsubmitted_callback(ObSqlEndTransCb &end_trans_cb);
 
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
@@ -124,6 +119,7 @@ protected:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPBase);
   int64_t process_timestamp_;
+  ObSqlEndTransCb *end_trans_cb_to_enable_;
 }; // end of class ObMPBase
 
 inline void ObMPBase::setup_wb(sql::ObSQLSessionInfo &session)
@@ -162,7 +158,7 @@ public:
     //ensuring consistency with the endianness of the target machine.
     int64_t label_high64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_HIGH64);
     if (OB_UNLIKELY(lib::ObLabel("SqlDtlBuf") == attr.label_
-                    || ObCtxIds::MEMSTORE_CTX_ID == attr.ctx_id_)) {
+                    || lib::ObLabel(ObNewModIds::OB_MEMSTORE) == attr.label_)) {
       // do nothing
     } else if (label_high64 != 0) {
       int64_t label_low64 = - EVENT_CODE(EventTable::EN_SQL_MEMORY_LABEL_LOW64);

@@ -4,4 +4,5 @@
 #ob_unittest(test_perf_kv_storecache)
 storage_unittest(test_recycle_multi_kvcache)
 storage_unittest(test_vtable_event_recycle_buffer)
+storage_unittest(test_kvcache_fixed_limit)
 storage_unittest(test_kv_storecache_bucket)

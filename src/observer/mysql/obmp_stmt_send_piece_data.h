@@ -214,9 +214,14 @@ class ObPieceCache {
                     uint16_t param_id, 
                     uint64_t &length, 
                     ObSqlString &str_buf);
+    int collect_piece_payload(ObPiece &piece, int64_t max_length,
+                              ObSqlString &str_buf);
     inline int64_t get_piece_key(int32_t stmt_id, uint16_t param_id)
     {
-      return (((static_cast<int64_t>(stmt_id)) << 32) | param_id);
+      const uint64_t key =
+          (static_cast<uint64_t>(static_cast<uint32_t>(stmt_id)) << 32) |
+          static_cast<uint64_t>(param_id);
+      return static_cast<int64_t>(key);
     }
     int add_piece_buffer(ObPiece *piece, ObPieceMode piece_mode, ObString *buf);
     /* merge ObPieceBuffer.buffer_ into buf , and move & free this ObPieceBuffer from buffer_array_

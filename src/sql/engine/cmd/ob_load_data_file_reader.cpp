@@ -272,7 +272,8 @@ ObPacketStreamFileReader::~ObPacketStreamFileReader()
   const int64_t wait_timeout = 10 * 1000000L; // seconds
   timeout_ts_ = ObTimeUtility::current_time() + wait_timeout;
   int64_t last_received_size = received_size_;
-  while (!eof_ && OB_SUCC(ret) && ObTimeUtility::current_time() <= timeout_ts_) {
+  while (!eof_ && OB_SUCC(ret) && !is_killed()
+         && ObTimeUtility::current_time() <= timeout_ts_) {
     ret = receive_packet();
     if (received_size_ > last_received_size) {
       last_received_size = received_size_;
@@ -283,6 +284,10 @@ ObPacketStreamFileReader::~ObPacketStreamFileReader()
   if (!eof_ && OB_NOT_NULL(session_) && OB_NOT_NULL(session_->get_cur_exec_ctx())) {
     session_->get_cur_exec_ctx()->set_need_disconnect(true);
     LOG_WARN("we'll close the connection as we can't read all of the file content", K(eof_));
+  }
+  const int release_ret = release_packet();
+  if (OB_SUCCESS != release_ret) {
+    LOG_WARN("failed to release cached load-data packet", K(release_ret));
   }
   arena_allocator_.reset();
 }
@@ -300,9 +305,9 @@ int ObPacketStreamFileReader::open(const ObString &filename,
     // in `load data local` request, we should send the filename to client
     obmysql::OMPKLocalInfile filename_packet;
     filename_packet.set_filename(filename);
-    if (OB_FAIL(packet_handle.response_packet(filename_packet, session))) {
+    if (OB_FAIL(packet_handle.response_packet(filename_packet))) {
       LOG_INFO("failed to send local infile packet to client", K(ret), K(filename));
-    } else if (OB_FAIL(packet_handle.flush_buffer(false/*is_last*/))) {
+    } else if (OB_FAIL(packet_handle.flush_buffer(false /*is_last*/))) {
       LOG_INFO("failed to flush socket buffer while send local infile packet", K(ret), K(filename));
     } else {
       LOG_INFO("[load data local]send filename to client success", K(filename));
@@ -340,25 +345,24 @@ int ObPacketStreamFileReader::read(char *buf, int64_t count, int64_t &read_size)
   const int64_t remain_in_packet = received_size_ - read_size_;
   if (OB_SUCC(ret) && OB_NOT_NULL(cached_packet_) && (!eof_ || remain_in_packet > 0)) {
     read_size = MIN(count, remain_in_packet);
-    // a MySQL packet contains a header and payload. The payload is the file content here.
-    // In the mysql_packet code, it use the first byte as MySQL command, but there is no
-    // MySQL command in the file content packet, so we backward 1 byte.
-    const int64_t packet_offset = cached_packet_->get_pkt_len() - remain_in_packet;
-    MEMCPY(buf, cached_packet_->get_cdata() - 1 + packet_offset, read_size);
+    // LOCAL_INFILE_DATA packets carry no command byte: get_cdata() points at
+    // the file-content payload itself and get_clen() is its true length.
+    const int64_t packet_offset = cached_packet_->get_clen() - remain_in_packet;
+    MEMCPY(buf, cached_packet_->get_cdata() + packet_offset, read_size);
     read_size_ += read_size;
   } else {
     read_size = 0;
   }
 
+  int terminate_ret = OB_SUCCESS;
   if (is_timeout()) {
     ret = OB_TIMEOUT;
     LOG_WARN("load data won't read more data from client as the task was timeout", KR(ret), K_(timeout_ts));
-  } else if (session_ != NULL && session_->is_query_killed()) {
-    ret = OB_ERR_QUERY_INTERRUPTED;
-    LOG_WARN("load data reader terminated as the query is killed", KR(ret));
-  } else if (session_ != NULL && session_->is_zombie()) {
-    ret = OB_SESSION_KILLED;
-    LOG_WARN("load data reader terminated as the session is killed", KR(ret));
+  } else if (session_ != NULL && session_->is_terminate(terminate_ret)) {
+    // Preserve LOAD DATA's historical SESSION_KILLED result while using the
+    // common helper to distinguish QUERY_KILLED from QUERY_DEADLOCKED.
+    ret = OB_ERR_SESSION_INTERRUPTED == terminate_ret ? OB_SESSION_KILLED : terminate_ret;
+    LOG_WARN("load data reader terminated by session state", KR(ret));
   } else if (!eof_ && read_size == 0) {
     ret = OB_IO_ERROR;
     LOG_WARN("[should not happen] cannot read data but eof is false", KR(ret));
@@ -375,22 +379,17 @@ int ObPacketStreamFileReader::receive_packet()
     arena_allocator_.reuse();
     CSMemPoolAdaptor mem_pool(&arena_allocator_);
 
-    // We read packet until we got one or timeout or error occurs
-    obmysql::ObMySQLPacket *pkt = NULL;
-    ret = packet_handle_->read_packet(mem_pool, pkt);
-    cached_packet_ = static_cast<obmysql::ObMySQLRawPacket *>(pkt);
-
-    while (OB_SUCC(ret) && OB_ISNULL(cached_packet_) && !is_timeout() && !is_killed()) {
-      // sleep can reduce cpu usage while the network is not so good.
-      // We need not worry about the speed while the speed of load data core is lower than
-      // file receiver's.
-      usleep(100 * 1000); // 100 ms
-      ret = packet_handle_->read_packet(mem_pool, pkt);
+    if (!is_timeout() && !is_killed()) {
+      obmysql::ObMySQLPacket *pkt = NULL;
+      const int64_t timeout_us = -1 == timeout_ts_
+          ? -1
+          : MAX(0, timeout_ts_ - ObTimeUtility::current_time());
+      ret = packet_handle_->wait_packet(mem_pool, timeout_us, pkt);
       cached_packet_ = static_cast<obmysql::ObMySQLRawPacket *>(pkt);
     }
 
     if (OB_SUCC(ret) && OB_NOT_NULL(cached_packet_)) {
-      const int pkt_len = cached_packet_->get_pkt_len();
+      const int pkt_len = cached_packet_->get_clen();
       if (0 == pkt_len) { // empty packet
         eof_ = true;
         (void)release_packet();

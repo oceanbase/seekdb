@@ -19,7 +19,6 @@
 
 #include "lib/string/ob_string.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "lib/container/ob_se_array.h"
 
 namespace oceanbase
 {
@@ -31,11 +30,6 @@ class OMPKAuthSwitch : public ObMySQLPacket
 public:
   OMPKAuthSwitch();
   virtual ~OMPKAuthSwitch() {}
-
-  // serialize all data into thread buffer not include packet header
-  // Attention!! before called serialize or get_serialize_size, must set capability
-  virtual int serialize(char *buffer, const int64_t length, int64_t &pos) const;
-  virtual int64_t get_serialize_size() const;
 
   // shadow copy
   void set_plugin_name(const common::ObString &plugin_name) { plugin_name_ = plugin_name; }
@@ -49,7 +43,6 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(OMPKAuthSwitch);
 
-  uint8_t status_;    // always 0xfe
   common::ObString plugin_name_;
   common::ObString scramble_;
 };

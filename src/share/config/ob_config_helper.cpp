@@ -90,103 +90,6 @@ int64_t ObConfigFreezeTriggerIntChecker::get_write_throttle_trigger_percentage_(
   return percent;
 }
 
-bool ObConfigTxShareMemoryLimitChecker::check(const ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  int64_t cluster_memstore_limit = GCONF.memstore_limit_percentage;
-  int64_t memstore_limit = 0;
-  int64_t tx_data_limit = 0;
-  int64_t mds_limit = 0;
-
-  memstore_limit = GCONF._memstore_limit_percentage;
-  tx_data_limit = GCONF._tx_data_memory_limit_percentage;
-  mds_limit = GCONF._mds_memory_limit_percentage;
-
-  if (0 == memstore_limit) {
-    memstore_limit = cluster_memstore_limit;
-  }
-  if (!is_valid) {
-  } else if (0 == memstore_limit) {
-    // both 0 means adjust the percentage automatically.
-    is_valid = true;
-  } else if (0 == value) {
-    // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
-    is_valid = true;
-  } else if ((value > 0 && value < 100) && (memstore_limit <= value) && (tx_data_limit <= value) &&
-             (mds_limit <= value)) {
-    is_valid = true;
-  } else {
-    is_valid = false;
-  }
-
-  if (!is_valid) {
-    OB_LOG_RET(WARN, OB_INVALID_CONFIG,
-       "update _tx_share_memory_limit_percentage failed",
-       "_tx_share_memory_limit_percentage",   value,
-       "memstore_limit_percentage",           memstore_limit,
-       "_tx_data_memory_limit_percentage",    tx_data_limit,
-       "_mds_memory_limit_percentage",        mds_limit);
-  }
-
-  return is_valid;
-}
-
-bool less_or_equal_tx_share_limit(const int64_t value)
-{
-  bool bool_ret = true;
-  int64_t tx_share_limit = 0;
-  tx_share_limit = GCONF._tx_share_memory_limit_percentage;
-  if (0 == value) {
-    // 0 is default value, which means memstore limit percentage will adjust itself.
-    bool_ret = true;
-  } else if (0 == tx_share_limit) {
-    // 0 is default value, which means (_tx_share_memory_limit_percentage = memstore_limit_percentage + 10)
-    bool_ret = true;
-  } else if (value > 0 && value < 100 && value <= tx_share_limit) {
-    bool_ret = true;
-  } else {
-    bool_ret = false;
-  }
-  return bool_ret;
-}
-
-bool ObConfigMemstoreLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
-    is_valid = true;
-  } else {
-    is_valid = false;
-  }
-  return is_valid;
-}
-
-bool ObConfigTxDataLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
-    is_valid = true;
-  } else {
-    is_valid = false;
-  }
-  return is_valid;
-}
-
-bool ObConfigMdsLimitChecker::check(const obcall::ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
-    is_valid = true;
-  } else {
-    is_valid = false;
-  }
-  return is_valid;
-}
-
 bool ObConfigWriteThrottleTriggerIntChecker::check(const ObAdminSetConfigItem &t)
 {
   bool is_valid = false;
@@ -542,25 +445,12 @@ bool ObVecIndexOptDutyTimeChecker::check(const ObConfigItem& t) const
       && duty_duration.is_valid();
 }
 
-bool ObConfigMemoryLimitChecker::check(const ObConfigItem &t) const
+bool MemoryBudgetConfigChecker::check(const ObConfigItem &t) const
 {
   bool is_valid = false;
   int64_t value = ObConfigCapacityParser::get(t.str(), is_valid, false);
   if (is_valid) {
-    int64_t min_memory_size = lib::ObRunningModeConfig::instance().MINI_MEM_LOWER;
-    is_valid = 0 == value || value >= min_memory_size;
-  }
-  return is_valid;
-}
-
-bool ObConfigVectorMemoryChecker::check(const obcall::ObAdminSetConfigItem &t)
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(t.value_.ptr(), is_valid);
-  if (less_or_equal_tx_share_limit(value)) {
-    is_valid = true;
-  } else {
-    is_valid = false;
+    is_valid = 0 == value || value >= lib::DEFAULT_MEMORY_BUDGET;
   }
   return is_valid;
 }

@@ -19,6 +19,7 @@
 
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
+#include "share/config/ob_system_config.h"
 
 namespace oceanbase
 {
@@ -34,10 +35,6 @@ int ObConfigManager::init(share::ObSQLiteConnectionPool *pool)
   if (OB_ISNULL(pool)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid storage", K(ret));
-  } else if (OB_FAIL(system_config_.init())) {
-    LOG_ERROR("init system config failed", K(ret));
-  } else if (OB_FAIL(server_config_.init(system_config_))) {
-    LOG_ERROR("init server config failed", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
     LOG_WARN("failed to init storage", K(ret));
   } else {
@@ -84,29 +81,29 @@ int ObConfigManager::dump2file_unsafe(const char* path) const
 
 int ObConfigManager::dump2file(const char* path) const
 {
-  DRWLock::RDLockGuard guard(GCONF.rwlock_);
+  DRWLock::RDLockGuard guard(server_config_.rwlock_);
   return dump2file_unsafe(path);
 }
 
 int ObConfigManager::update_local()
 {
   int ret = OB_SUCCESS;
+  ObSystemConfig system_config;
 
-  if (OB_FAIL(system_config_.clear())) {
-    LOG_WARN("Clear system config map failed", K(ret));
+  if (OB_FAIL(system_config.init())) {
+    LOG_ERROR("init system config failed", K(ret));
+  } else if (OB_FAIL(storage_.load_all_configs(system_config))) {
+    LOG_WARN("failed to load config", K(ret));
   } else {
-    DRWLock::WRLockGuard guard(GCONF.rwlock_);
-    if (OB_FAIL(storage_.load_all_configs(system_config_))) {
-      LOG_WARN("failed to load config", K(ret));
+    DRWLock::WRLockGuard guard(server_config_.rwlock_);
+    if (OB_FAIL(server_config_.read_config(system_config, enable_static_effect_))) {
+      LOG_ERROR("Read server config failed", K(ret));
     } else {
       LOG_INFO("read config success");
     }
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(server_config_.read_config(enable_static_effect_))) {
-      LOG_ERROR("Read server config failed", K(ret));
-    }
     server_config_.print();
   } else {
     LOG_WARN("Read system config error", K(ret));

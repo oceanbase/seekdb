@@ -29,6 +29,7 @@
 #include "lib/utility/utility.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/ob_allocator_v2.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/allocator/ob_page_manager.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/thread_local/ob_tsi_factory.h"
@@ -292,6 +293,7 @@ public:
   { return ref_context_; }
   bool check_magic_code() const { return MAGIC_CODE == magic_code_; }
   int64_t tree_mem_hold();
+  static int64_t metadata_size();
   static MemoryContext &root();
 private:
   int64_t magic_code_;
@@ -326,6 +328,7 @@ public:
       p_arena_alloc_(nullptr),
       p_safe_arena_alloc_(nullptr),
       parallel_alloc_(nullptr),
+      p_freeable_malloc_alloc_(nullptr),
       freeable_alloc_(nullptr),
       default_allocator_(nullptr)
   {
@@ -362,11 +365,15 @@ public:
   }
   int64_t malloc_hold() const
   {
-    return hold() - arena_hold();
+    return common::is_ob_malloc_backend()
+        ? hold() - arena_hold()
+        : freeable_alloc_->total();
   }
   int64_t malloc_used() const
   {
-    return freeable_alloc_->used() - arena_hold();
+    return common::is_ob_malloc_backend()
+        ? freeable_alloc_->used() - arena_hold()
+        : freeable_alloc_->used();
   }
   int64_t arena_hold() const
   {
@@ -378,7 +385,9 @@ public:
   }
   int64_t hold() const
   {
-    return freeable_alloc_->total();
+    return common::is_ob_malloc_backend()
+        ? freeable_alloc_->total()
+        : malloc_hold() + arena_hold();
   }
   int64_t used() const
   {
@@ -422,7 +431,7 @@ public:
     if (ablock_size != lib::INTACT_MIDDLE_AOBJECT_SIZE) {
       ablock_size = lib::INTACT_NORMAL_AOBJECT_SIZE;
     }
-    ret = init_alloc(alloc_, thread_safe, ablock_size);
+    ret = init_default_alloc(thread_safe, ablock_size);
     if (OB_SUCC(ret)) {
       // init arena allocator
       p_arena_alloc_ = new (&arena_alloc_) common::ObArenaAllocator(*p_alloc_, param_.page_size_);
@@ -436,7 +445,14 @@ public:
     }
     return ret;
   }
-  int init_alloc(common::ObAllocator& allocator, const bool thread_safe, uint32_t ablock_size)
+  int init_default_alloc(const bool thread_safe, uint32_t ablock_size)
+  {
+    return common::is_ob_malloc_backend()
+        ? init_alloc(alloc_, thread_safe, ablock_size)
+        : init_malloc_alloc(thread_safe, ablock_size);
+  }
+
+  int init_alloc(common::ObAllocator &allocator, const bool thread_safe, uint32_t ablock_size)
   {
     int ret = common::OB_SUCCESS;
     if (OB_UNLIKELY(thread_safe)) {
@@ -460,6 +476,16 @@ public:
     return ret;
   }
 
+  int init_malloc_alloc(const bool thread_safe, uint32_t ablock_size)
+  {
+    UNUSED(thread_safe);
+    UNUSED(ablock_size);
+    p_alloc_ = new (&page_malloc_alloc_) common::ObMalloc(attr_);
+    p_freeable_malloc_alloc_ = new (&freeable_malloc_alloc_) common::MemoryContextMalloc(attr_);
+    freeable_alloc_ = p_freeable_malloc_alloc_;
+    return common::OB_SUCCESS;
+  }
+
   void deinit()
   {
     default_allocator_ = nullptr;
@@ -477,6 +503,10 @@ public:
       abort_unless(p_alloc_ != nullptr);
       p_alloc_->free(parallel_alloc_);
       parallel_alloc_ = nullptr;
+    }
+    if (p_freeable_malloc_alloc_ != nullptr) {
+      p_freeable_malloc_alloc_->~MemoryContextMalloc();
+      p_freeable_malloc_alloc_ = nullptr;
     }
     if (p_alloc_ != nullptr) {
       p_alloc_->~ObIAllocator();
@@ -598,6 +628,7 @@ public:
   // Delayed member
   union {
     common::ObAllocator alloc_;
+    common::ObMalloc page_malloc_alloc_;
   };
   union {
     common::ObArenaAllocator arena_alloc_;
@@ -610,6 +641,11 @@ public:
   common::ObArenaAllocator *p_arena_alloc_;
   common::ObSafeArenaAllocator *p_safe_arena_alloc_;
   common::ObIAllocator *parallel_alloc_;
+
+  union {
+    common::MemoryContextMalloc freeable_malloc_alloc_;
+  };
+  common::MemoryContextMalloc *p_freeable_malloc_alloc_;
 
   // Allocators that require explicit free, p_alloc_ or parallel_alloc_
   common::ObIAllocator *freeable_alloc_;

@@ -41,7 +41,7 @@ public:
   int retry_das_task(ObDASRef &das_ref, ObIDASTaskOp &task_op);
   int parallel_execute_das_task(common::ObIArray<ObIDASTaskOp *> &task_list);
   int parallel_submit_das_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task);
-  int push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task, int32_t group_id);
+  int push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTask &agg_task);
   int collect_das_copy_refs(ObIArray<ObIDASTaskOp*> &task_list, ObDASCopyContext &copy_context);
 private:
   int execute_local_das_task(ObDasAggregatedTask &task_ops);

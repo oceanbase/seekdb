@@ -18,7 +18,6 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "rpc/frame/ob_req_translator.h"
-#include "rpc/obmysql/ob_mysql_translator.h"
 #include "observer/ob_server_struct.h"
 
 union EP_CALLP_BUF;
@@ -27,7 +26,6 @@ RLOCAL_EXTERN(EP_CALLP_BUF, co_ep_callp_buf);
 namespace oceanbase { namespace observer {
 
 using rpc::frame::ObReqProcessor;
-using obmysql::ObMySQLTranslator;
 using common::ObIAllocator;
 
 extern thread_local bool g_in_sync_dispatch;
@@ -37,7 +35,7 @@ template <typename T> void worker_allocator_delete(T *&ptr) {
   if (NULL != ptr) { ptr->~T(); get_sql_arena_allocator().free(ptr); ptr = NULL; }
 }
 
-class ObSrvMySQLXlator : public ObMySQLTranslator {
+class ObSrvMySQLXlator : public rpc::frame::ObReqTranslator {
 public:
   explicit ObSrvMySQLXlator(const ObGlobalContext &gctx) : gctx_(gctx) {}
   int translate(rpc::ObRequest &req, ObReqProcessor *&processor);

@@ -37,7 +37,13 @@ int ObMPInitDB::deserialize()
     LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    db_name_.assign_ptr(const_cast<char *>(pkt.get_cdata()), pkt.get_clen()-1);
+    if (OB_UNLIKELY(ObMySQLCommandLayout::BYTES != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected init-db command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else if (OB_FAIL(pkt.get_command_field(0, db_name_))) {
+      LOG_WARN("get rust parsed database name failed", K(ret));
+    }
   }
   return ret;
 }
@@ -50,7 +56,6 @@ int ObMPInitDB::process()
   ObSQLSessionInfo *session = NULL;
   ObString tmp_db_name;
   ObDataBuffer allocator(db_name_conv_buf, sizeof(db_name_conv_buf));
-  const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   int64_t query_timeout = 0;
   bool is_packet_retry = false;
   bool need_response_error = true; //temporary placeholder

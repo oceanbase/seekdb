@@ -66,7 +66,9 @@ ObPsStmtItem::ObPsStmtItem()
     stmt_id_(OB_INVALID_STMT_ID),
     is_expired_evicted_(false),
     allocator_(NULL),
-    external_allocator_(NULL)
+    external_allocator_(NULL),
+    memory_owner_(NULL),
+    accounted_size_(0)
 {
 }
 
@@ -75,7 +77,9 @@ ObPsStmtItem::ObPsStmtItem(const ObPsStmtId ps_stmt_id)
       stmt_id_(ps_stmt_id),
       is_expired_evicted_(false),
       allocator_(NULL),
-      external_allocator_(NULL)
+      external_allocator_(NULL),
+      memory_owner_(NULL),
+      accounted_size_(0)
 {
 }
 
@@ -85,8 +89,26 @@ ObPsStmtItem::ObPsStmtItem(ObIAllocator *inner_allocator,
        stmt_id_(OB_INVALID_STMT_ID),
        is_expired_evicted_(false),
        allocator_(inner_allocator),
-       external_allocator_(external_allocator)
+       external_allocator_(external_allocator),
+       memory_owner_(NULL),
+       accounted_size_(0)
 {}
+
+void ObPsStmtItem::set_memory_account(ObPsCache *owner, const int64_t accounted_size)
+{
+  memory_owner_ = owner;
+  ATOMIC_STORE(&accounted_size_, accounted_size);
+}
+
+void ObPsStmtItem::release_memory_account()
+{
+  const int64_t accounted_size = ATOMIC_TAS(&accounted_size_, 0);
+  ObPsCache *owner = memory_owner_;
+  memory_owner_ = NULL;
+  if (OB_NOT_NULL(owner)) {
+    owner->release_managed_memory(accounted_size);
+  }
+}
 
 
 int ObPsStmtItem::deep_copy(const ObPsStmtItem &other)
@@ -150,6 +172,7 @@ void ObPsStmtItem::dec_ref_count()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(allocator), K(ret));
     } else {
+      ps_item->release_memory_account();
       ps_item->~ObPsStmtItem();
       allocator->free(ps_item);
     }
@@ -263,7 +286,9 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator)
     raw_sql_(),
     raw_params_(inner_allocator),
     raw_params_idx_(inner_allocator),
-    literal_stmt_type_(stmt::T_NONE)
+    literal_stmt_type_(stmt::T_NONE),
+    memory_owner_(NULL),
+    accounted_size_(0)
 
 {
 }
@@ -291,8 +316,26 @@ ObPsStmtInfo::ObPsStmtInfo(ObIAllocator *inner_allocator,
     raw_sql_(),
     raw_params_(inner_allocator),
     raw_params_idx_(inner_allocator),
-    literal_stmt_type_(stmt::T_NONE)
+    literal_stmt_type_(stmt::T_NONE),
+    memory_owner_(NULL),
+    accounted_size_(0)
 {
+}
+
+void ObPsStmtInfo::set_memory_account(ObPsCache *owner, const int64_t accounted_size)
+{
+  memory_owner_ = owner;
+  ATOMIC_STORE(&accounted_size_, accounted_size);
+}
+
+void ObPsStmtInfo::release_memory_account()
+{
+  const int64_t accounted_size = ATOMIC_TAS(&accounted_size_, 0);
+  ObPsCache *owner = memory_owner_;
+  memory_owner_ = NULL;
+  if (OB_NOT_NULL(owner)) {
+    owner->release_managed_memory(accounted_size);
+  }
 }
 
 bool ObPsStmtInfo::is_valid() const
@@ -653,6 +696,8 @@ int ObPsSessionInfo::fill_param_types_with_null_type()
   for (int64_t i=0; OB_SUCC(ret) && i<num_of_params_; ++i) {
     if (OB_FAIL(param_types_.push_back(obmysql::MYSQL_TYPE_NULL))) {
       LOG_WARN("push null type into param_types_ failed", K(ret));
+    } else if (OB_FAIL(param_type_flags_.push_back(0))) {
+      LOG_WARN("push null flags into param_type_flags_ failed", K(ret));
     }
   }
   return ret;

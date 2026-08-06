@@ -58,11 +58,11 @@ public:
     } else if (OB_FAIL(vector_allocator_.init())) {
       SHARE_LOG(ERROR, "init vector allocator failed", KR(ret));
     } else if (OB_FAIL(
-                   share_resource_throttle_tool_.init(&memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
+                   share_resource_throttle_tool_.init(&memstore_allocator_, &tx_data_allocator_, &mds_allocator_))) {
       SHARE_LOG(ERROR, "init share resource throttle tool failed", KR(ret));
+    } else if (OB_FAIL(vector_throttle_tool_.init(&vector_allocator_))) {
+      SHARE_LOG(ERROR, "init vector throttle tool failed", KR(ret));
     } else {
-      
-      share_resource_throttle_tool_.enable_adaptive_limit<FakeAllocatorForTxShare>();
       SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }
     return ret;
@@ -78,8 +78,21 @@ public:
   ObTxDataAllocator &tx_data_allocator() { return tx_data_allocator_; }
   ObMdsAllocator &mds_allocator() { return mds_allocator_; }
   TxShareThrottleTool &share_resource_throttle_tool() { return share_resource_throttle_tool_; }
+  VectorThrottleTool &vector_throttle_tool() { return vector_throttle_tool_; }
   ObTxDataOpAllocator &tx_data_op_allocator() { return tx_data_op_allocator_; }
   ObVectorAllocator &vector_allocator() { return vector_allocator_; }
+  common::MemoryUsageTracker &tx_data_memtable_tracker()
+  { return tx_data_memtable_tracker_; }
+  common::MemoryUsageTracker &tx_data_metadata_tracker()
+  { return tx_data_metadata_tracker_; }
+  int64_t tx_data_quota_used() const
+  {
+    return tx_data_allocator_.slice_backing()
+        + tx_data_op_allocator_.hold()
+        + tx_data_memtable_tracker_.used();
+  }
+  int64_t tx_data_managed_used() const
+  { return tx_data_quota_used() + tx_data_metadata_tracker_.used(); }
 
 private:
   void update_share_throttle_config_(const int64_t total_memory, common::ObServerConfig *config);
@@ -90,11 +103,14 @@ private:
 private:
   
   TxShareThrottleTool share_resource_throttle_tool_;
+  VectorThrottleTool vector_throttle_tool_;
   ObMemstoreAllocator memstore_allocator_;
   ObTxDataAllocator tx_data_allocator_;
   ObMdsAllocator mds_allocator_;
   ObTxDataOpAllocator tx_data_op_allocator_;
   ObVectorAllocator vector_allocator_;
+  common::MemoryUsageTracker tx_data_memtable_tracker_;
+  common::MemoryUsageTracker tx_data_metadata_tracker_;
 };
 
 class TxShareMemThrottleUtil

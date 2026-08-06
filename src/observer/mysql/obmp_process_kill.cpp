@@ -45,9 +45,15 @@ int ObMPProcessKill::deserialize()
     LOG_ERROR("invalid request", K(ret), K(req_));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
-    sessid = *(reinterpret_cast<const uint32_t *>(pkt.get_cdata()));
-    snprintf(kill_sql_buf_, KILL_SQL_BUF_SIZE, kill_sql_fmt, sessid);
-    assign_sql(kill_sql_buf_, STRLEN(kill_sql_buf_));
+    if (OB_UNLIKELY(ObMySQLCommandLayout::U32 != pkt.get_command_layout())) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("unexpected process-kill command layout", K(ret),
+               K(pkt.get_command_layout()));
+    } else {
+      sessid = static_cast<uint32_t>(pkt.get_command_scalar0());
+      snprintf(kill_sql_buf_, KILL_SQL_BUF_SIZE, kill_sql_fmt, sessid);
+      assign_sql(kill_sql_buf_, STRLEN(kill_sql_buf_));
+    }
   }
   return ret;
 }

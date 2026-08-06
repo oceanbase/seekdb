@@ -1187,17 +1187,17 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   int64_t host_cpu_count = common::get_cpu_num();
   int64_t port = GCONF.mysql_port;
   char version[OB_SERVER_VERSION_LENGTH] = {'\0'};
-  char memory_limit[SIZE_STR_LEN] = {'\0'};
+  char memory_budget[SIZE_STR_LEN] = {'\0'};
   char host_memory_size[SIZE_STR_LEN] = {'\0'};
   char log_disk_size[SIZE_STR_LEN] = {'\0'};
   char datafile_size[SIZE_STR_LEN] = {'\0'};
 
   // construct report content
-  double memory_limit_gb = static_cast<double>(lib::get_memory_limit()) / 1024 / 1024 / 1024;
+  double memory_budget_gb = static_cast<double>(lib::get_memory_budget()) / 1024 / 1024 / 1024;
   double host_memory_size_gb = static_cast<double>(common::get_phy_mem_size()) / 1024 / 1024 / 1024;
   double log_disk_size_gb = static_cast<double>(GCONF.log_disk_size) / 1024 / 1024 / 1024;
   double datafile_size_gb = static_cast<double>(GCONF.datafile_size) / 1024 / 1024 / 1024;
-  snprintf(memory_limit, sizeof(memory_limit), "%.9gG", memory_limit_gb);
+  snprintf(memory_budget, sizeof(memory_budget), "%.9gG", memory_budget_gb);
   snprintf(host_memory_size, sizeof(host_memory_size), "%.9gG", host_memory_size_gb);
   snprintf(log_disk_size, sizeof(log_disk_size), "%.9gG", log_disk_size_gb);
   snprintf(datafile_size, sizeof(datafile_size), "%.9gG", datafile_size_gb);
@@ -1235,12 +1235,13 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
 
   // construct resource
   ObJsonInt cpu_count_json(cpu_count);
-  ObJsonString memory_limit_json(memory_limit);
+  ObJsonString memory_budget_json(memory_budget);
   ObJsonString log_disk_size_json(log_disk_size);
   ObJsonString datafile_size_json(datafile_size);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(resource.add("cpuCount", &cpu_count_json))) {
-  } else if (OB_FAIL(resource.add("memoryLimit", &memory_limit_json))) {
+  // Keep the legacy JSON key for telemetry schema compatibility.
+  } else if (OB_FAIL(resource.add("memoryLimit", &memory_budget_json))) {
   } else if (OB_FAIL(resource.add("logDiskSize", &log_disk_size_json))) {
   } else if (OB_FAIL(resource.add("dataFileSize", &datafile_size_json))) {
   }

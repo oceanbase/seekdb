@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_CONFIG_OB_CONFIG_MANAGER_H_
 
 #include "share/config/ob_server_config.h"
-#include "share/config/ob_system_config.h"
 #include "share/config/ob_reload_config.h"
 #include "share/config/ob_config_storage.h"
 // Remove code changes are significant, keep for now
@@ -66,7 +65,6 @@ private:
 
 private:
   bool inited_;
-  ObSystemConfig system_config_;
   ObServerConfig &server_config_;
   ObReloadConfig &reload_config_func_;
   ObConfigStorage storage_;
@@ -77,7 +75,6 @@ private:
 inline ObConfigManager::ObConfigManager(ObServerConfig &server_config,
                                         ObReloadConfig &reload_config)
     : inited_(false),
-      system_config_(),
       server_config_(server_config),
       reload_config_func_(reload_config),
       enable_static_effect_(false)

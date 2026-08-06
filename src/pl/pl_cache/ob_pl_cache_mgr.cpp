@@ -248,8 +248,6 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
           && OB_SQL_PC_PLAN_DUPLICATE != ret) {
         PL_CACHE_LOG(WARN, "fail to add pl function", K(ret));
       }
-    } else {
-      (void)lib_cache->inc_mem_used(pl_object->get_mem_size());
     }
   }
   return ret;

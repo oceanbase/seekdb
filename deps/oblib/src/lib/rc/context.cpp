@@ -62,5 +62,10 @@ int64_t MemoryContext::tree_mem_hold()
   return total;
 }
 
+int64_t MemoryContext::metadata_size()
+{
+  return sizeof(__MemoryContext__);
+}
+
 } // end of namespace lib
 } // end of namespace oceanbase

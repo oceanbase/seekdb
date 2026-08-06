@@ -1,0 +1,63 @@
+# Copyright (c) 2025 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Static analysis for the Rust transport crate: clippy as a hard gate and a
+# RustSec advisory audit of the locked dependency tree. Unit tests run in
+# buildbase alongside the C++ build; this job exists to give rust-only PRs a
+# fast signal without a full server build.
+name: rust-checks
+
+on:
+  pull_request:
+    paths:
+      - 'rust/**'
+      - '.github/workflows/rust-checks.yml'
+      - '.github/actions/setup-rust/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clippy-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: clippy (deny warnings)
+        working-directory: rust
+        run: cargo clippy --locked -p sql-nio --all-targets -- -D warnings
+
+      # No Windows runner: a cross `cargo check` is the cheapest signal that
+      # the cfg(windows) transport code still compiles. It would have caught
+      # every break the TCP-only cut left behind. windows-gnu, not msvc:
+      # ring's build script compiles C, and mingw is the only Windows C
+      # toolchain this runner can provide (the cc crate auto-detects the
+      # x86_64-w64-mingw32- prefix).
+      - name: check windows target
+        working-directory: rust
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64
+          cargo check --locked -p sql-nio --target x86_64-pc-windows-gnu
+
+      - name: cargo audit
+        working-directory: rust
+        run: |
+          command -v cargo-audit >/dev/null 2>&1 || cargo install cargo-audit --locked
+          cargo audit

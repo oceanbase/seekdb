@@ -33,7 +33,7 @@ class ObSQLSessionInfo;
 namespace observer
 {
 
-class ObIMPPacketSender;
+class ObMPPacketSender;
 class ObMySQLResultSet;
 class ObQueryRetryCtrl;
 class ObSyncCmdDriver : public ObQueryDriver
@@ -43,7 +43,7 @@ public:
                   const sql::ObSqlCtx &ctx,
                   sql::ObSQLSessionInfo &session,
                   ObQueryRetryCtrl &retry_ctrl,
-                  ObIMPPacketSender &sender);
+                  ObMPPacketSender &sender);
   virtual ~ObSyncCmdDriver();
 
   int send_eof_packet(bool has_more_result);

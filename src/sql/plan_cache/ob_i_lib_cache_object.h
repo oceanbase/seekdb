@@ -55,6 +55,12 @@ public:
   inline bool is_valid_cache_obj() const { return ns_ > NS_INVALID && ns_ < NS_MAX; }
   inline uint64_t get_object_id() const { return object_id_; }
   inline int64_t get_mem_size() const { return allocator_.total(); }
+  int64_t get_accounted_size() const { return ATOMIC_LOAD(&accounted_size_); }
+  bool set_accounted_size_once(const int64_t size)
+  {
+    return size > 0 && ATOMIC_BCAS(&accounted_size_, 0, size);
+  }
+  int64_t take_accounted_size() { return ATOMIC_TAS(&accounted_size_, 0); }
   int64_t get_ref_count() const { return ATOMIC_LOAD(&ref_count_); }
   int64_t inc_ref_count();
   bool try_inc_ref_count();
@@ -97,6 +103,7 @@ protected:
   bool added_to_lc_;
   ObLibCacheNameSpace ns_;
   CacheObjStatus obj_status_;
+  int64_t accounted_size_;
 };
 
 

@@ -32,10 +32,6 @@ int ObRecursiveInnerDataOp::init()
     LOG_WARN("sql session info is null", K(ret));
   } else if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(share::SYS_VAR_CTE_MAX_RECURSION_DEPTH, max_recursion_depth_))) {
     LOG_WARN("Get sys variable error", K(ret));
-  } else {
-    
-    
-    stored_row_buf_.set_ctx_id(ObCtxIds::WORK_AREA);
   }
   return ret;
 }

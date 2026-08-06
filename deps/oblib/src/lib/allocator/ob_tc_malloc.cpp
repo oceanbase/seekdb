@@ -52,9 +52,6 @@ void  __attribute__((constructor(MALLOC_INIT_PRIORITY))) init_global_memory_pool
 {
   auto& t = EventTable::instance();
   auto& a = AChunkMgr::instance();
-  // Set unlimited memory limit early to avoid 8GB default limit issue
-  // This will be reset to proper value in main() after config is loaded
-  set_memory_limit(INT64_MAX);
   in_hook()= true;
   global_default_allocator = ObMallocAllocator::get_instance();
   in_hook()= false;

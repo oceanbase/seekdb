@@ -11,6 +11,17 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Setup Rust
+      uses: ./.github/actions/setup-rust
+
+    # Fail fast: the crate's unit tests carry the ABI layout assertions and the
+    # protocol/reactor suites; no point building the C++ tree against a broken
+    # staticlib.
+    - name: Rust unit tests
+      shell: bash
+      working-directory: rust
+      run: cargo test --locked -p sql-nio
+
     - name: Build init
       shell: bash
       run: |

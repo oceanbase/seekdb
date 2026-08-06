@@ -89,8 +89,7 @@ ObGlobalIteratorPool::ObGlobalIteratorPool()
     is_disabled_(false),
     get_cnt_(0),
     bucket_cnt_(0),
-    runtime_mem_limit_(0),
-    runtime_mem_hold_(0),
+    memory_budget_(0),
     allocator_(ObModIds::OB_TABLE_SCAN_ITER, OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
   MEMSET(cached_node_array_, 0, sizeof(cached_node_array_));
@@ -166,8 +165,7 @@ void ObGlobalIteratorPool::destroy()
   is_disabled_ = false;
   get_cnt_ = 0;
   bucket_cnt_ = 0;
-  runtime_mem_limit_ = 0;
-  runtime_mem_hold_ = 0;
+  memory_budget_ = 0;
   allocator_.reset();
 }
 
@@ -235,15 +233,12 @@ void ObGlobalIteratorPool::wash()
   if (IS_NOT_INIT) {
   } else if (is_washing()) {
   } else if (false == ATOMIC_VCAS(&is_washing_, false, true)) {
-    runtime_mem_limit_ = lib::get_allocator_memory_limit();
-    runtime_mem_hold_ = lib::get_allocator_memory_hold();
-    const bool need_wash = runtime_mem_hold_ * 100 > runtime_mem_limit_ * ITER_POOL_WASH_HIGH_THRESHOLD;
+    memory_budget_ = lib::get_memory_budget();
+    const bool need_wash = memory_budget_ < ITER_POOL_MIN_MEM_THRESHOLD
+        || calc_bucket_cnt() < bucket_cnt_;
     const bool disabled = is_disabled();
     if (!need_wash) {
-      if (disabled &&
-          calc_bucket_cnt() >= bucket_cnt_ &&
-          runtime_mem_hold_ * 100 < runtime_mem_limit_ * ITER_POOL_WASH_LOW_THRESHOLD) {
-        // current holding memory is low, enable iter pool
+      if (disabled && calc_bucket_cnt() >= bucket_cnt_) {
         ATOMIC_STORE(&is_disabled_, false);
       }
     } else if (!disabled) {
@@ -259,15 +254,12 @@ void ObGlobalIteratorPool::wash()
           }
         }
       }
-      runtime_mem_hold_ = lib::get_allocator_memory_hold();
-      const bool can_enable = calc_bucket_cnt() >= bucket_cnt_
-          && runtime_mem_hold_ * 100 < runtime_mem_limit_ * ITER_POOL_WASH_LOW_THRESHOLD;
+      const bool can_enable = memory_budget_ >= ITER_POOL_MIN_MEM_THRESHOLD
+          && calc_bucket_cnt() >= bucket_cnt_;
       if (can_enable) {
         ATOMIC_STORE(&is_disabled_, false);
       } else {
-         // current holding memory is still high or scaling down happened
-         // 1. keep iter pool disabled, enable it later
-         // 2. the following returned iters would be released directly until the iter pool is enabled
+         // Keep the pool disabled until memory_limit grows back to its initialized capacity.
       }
     }
     ATOMIC_STORE(&is_washing_, false);

@@ -64,7 +64,7 @@ public:
       pos_ = 0;
       ref_ = 0;
     }
-    int64_t hold() { return limit_ + sizeof(*this); }
+    int64_t hold() const { return limit_ + sizeof(*this); }
     int64_t xref(int64_t x) { return ATOMIC_AAF(&ref_, x); }
     char* alloc(bool& need_switch, int64_t size) {
       char* ret = NULL;
@@ -89,7 +89,6 @@ public:
       }
       return ref;
     }
-    int64_t get_actual_hold_size();
     Ref self_ref_;  // record the allocated bytes from page, include self_ref_ itself
     int64_t limit_; // the max bytes of a page that can be used
     int64_t pos_;   // the position after which can be allocated
@@ -150,8 +149,8 @@ public:
     TO_STRING_KV(K_(allocated));
     int64_t lock_;
     Ref* ref_[MAX_NWAY];
-    int64_t allocated_;  // record all the memory hold by pages, include the size of page structure, AObject and so on.
-                         // only increase while a page is created.
+    int64_t allocated_;  // record requested bytes of all pages acquired by this handle,
+                         // including the page structure; only increase when a page is created.
   };
 
 public:
@@ -185,12 +184,12 @@ public:
 
   void set_memstore_threshold(int64_t memstore_threshold);
   int64_t hold() const {
-    return hold_;
+    return ATOMIC_LOAD(&hold_);
   }
   
   int64_t get_max_cached_memstore_size() const
   {
-    return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * (ALLOC_PAGE_SIZE + ACHUNK_PRESERVE_SIZE);
+    return MAX_CACHED_GROUP_COUNT * ATOMIC_LOAD(&nway_) * ALLOC_PAGE_SIZE;
   }
 
 private:

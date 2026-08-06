@@ -29,7 +29,6 @@
 #include "lib/lock/ob_drw_lock.h"
 #include "share/cache/ob_cache_utils.h"
 #include "share/cache/ob_kvcache_struct.h"
-#include "share/ob_i_server_mem_limit_getter.h"
 
 namespace oceanbase
 {
@@ -116,7 +115,6 @@ public:
   ObKVCacheInstMap();
   virtual ~ObKVCacheInstMap();
   int init(const int64_t max_entry_cnt, const ObKVCacheConfig *configs,
-           const ObIServerMemLimitGetter &mem_limit_getter,
            ObLfFIFOAllocator *node_allocator);
   void destroy();
   int get_cache_inst(
@@ -139,7 +137,6 @@ private:
   KVCacheInstMap  inst_map_;
   const ObKVCacheConfig *configs_;
 
-  const ObIServerMemLimitGetter *mem_limit_getter_;
   ObLfFIFOAllocator *node_allocator_;
 
   bool is_inited_;

@@ -1,0 +1,15 @@
+# Pin the toolchain so the staticlib is built the same way everywhere.
+# An exact version, not a channel: `stable` floats to whatever is newest at
+# install time, so two runners weeks apart would compile the network engine
+# with different compilers. Bump deliberately, in its own reviewed commit.
+[toolchain]
+channel = "1.97.1"
+# The windows-gnu target exists only for `cargo check`: it keeps the
+# cfg(windows) transport code compiling without a Windows runner in CI.
+# gnu, not msvc: ring (rustls) compiles C in its build script, and mingw
+# is the only Windows C toolchain a Linux/mac host can provide. The
+# production Windows target stays msvc and is exercised by a real runner.
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-gnu"]
+# clippy gates CI (`cargo clippy -- -D warnings`); ship it with the toolchain
+# so the minimal-profile CI install has it too.
+components = ["clippy"]

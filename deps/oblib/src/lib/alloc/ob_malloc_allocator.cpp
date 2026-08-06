@@ -17,7 +17,10 @@
 #define USING_LOG_PREFIX LIB
 
 #include "ob_malloc_allocator.h"
+#include "lib/allocator/ob_jemalloc.h"
+#include "lib/allocator/ob_malloc.h"
 #include "lib/utility/ob_smart_var.h"
+#include <cstdlib>
 
 // ob_backtrace is implemented in ob_backtrace.cpp for Windows
 
@@ -58,30 +61,49 @@ void *ObMallocAllocator::alloc(const int64_t size, const oceanbase::lib::ObMemAt
 void *ObMallocAllocator::realloc(
   const void *ptr, const int64_t size, const oceanbase::lib::ObMemAttr &attr)
 {
-#if defined(OB_USE_ASAN)
-  UNUSED(attr);
-  return ::realloc(const_cast<void *>(ptr), size);
-#else
-  // Do not create a context allocator here.
+  void *old_ptr = const_cast<void *>(ptr);
   void *nptr = NULL;
-  ObMemAttr inner_attr = attr;
-  ObCtxAllocatorGuard allocator = NULL;
-  if (OB_ISNULL(allocator = get_ctx_allocator(inner_attr.ctx_id_))) {
-    // do nothing
-  } else if (OB_ISNULL(nptr = allocator->realloc(ptr, size, inner_attr))) {
-    // do nothing
+  const ObMallocBackend backend = get_ob_malloc_backend();
+  if (OB_UNLIKELY(oceanbase::common::is_jemalloc_backend(backend))) {
+    if (OB_LIKELY(size >= 0)) {
+      nptr = oceanbase::common::jemalloc_realloc(old_ptr, static_cast<size_t>(size));
+    }
   }
-  return nptr;
+#if defined(OB_USE_ASAN)
+  else if (oceanbase::common::is_ob_malloc_backend(backend)) {
+    UNUSED(attr);
+    nptr = ::realloc(old_ptr, size);
+  }
+#else
+  else if (oceanbase::common::is_ob_malloc_backend(backend)) {
+    // Do not create a context allocator here.
+    ObMemAttr inner_attr = attr;
+    ObCtxAllocatorGuard allocator = NULL;
+    if (OB_ISNULL(allocator = get_ctx_allocator(inner_attr.ctx_id_))) {
+      // do nothing
+    } else if (OB_ISNULL(nptr = allocator->realloc(ptr, size, inner_attr))) {
+      // do nothing
+    }
+  }
 #endif
+  return nptr;
 }
 
 void ObMallocAllocator::free(void *ptr)
 {
+  const ObMallocBackend backend = get_ob_malloc_backend();
+  if (OB_UNLIKELY(oceanbase::common::is_jemalloc_backend(backend))) {
+    oceanbase::common::jemalloc_free(ptr);
+  }
 #if defined(OB_USE_ASAN)
-  ::free(ptr);
+  else if (oceanbase::common::is_ob_malloc_backend(backend)) {
+    ::free(ptr);
+  }
 #else
-  // Free the object directly instead of using a context allocator.
-  ObCtxAllocator::common_free(ptr);
+  else if (oceanbase::common::is_ob_malloc_backend(backend)) {
+    // Free the object directly instead of using a context allocator.
+    ObCtxAllocator::common_free(ptr);
+  }
 #endif
 }
 
