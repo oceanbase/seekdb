@@ -595,10 +595,6 @@ inline int64_t get_phy_mem_size()
 #endif
 }
 
-// Returns the memory available to this process. On Linux this also observes
-// cgroup v1/v2 hard limits; on other platforms it equals physical memory.
-int64_t get_effective_memory_size();
-
 int64_t get_level1_dcache_size();
 
 int64_t get_level1_icache_size();

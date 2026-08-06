@@ -34,8 +34,6 @@ TEST(utility, memory_limit_scaled_value_compatibility)
   const int64_t one_gib = 1L << 30;
   const int64_t min_value = 4096;
   const int64_t max_value = 100000;
-  EXPECT_GT(get_effective_memory_size(), 0);
-  EXPECT_LE(get_effective_memory_size(), get_phy_mem_size());
   const auto old_scaled_value = [=](const int64_t memory_limit) {
     const int64_t lower_bound = one_gib;
     const int64_t upper_bound = 128L * one_gib;

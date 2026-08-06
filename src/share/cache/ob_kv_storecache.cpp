@@ -143,36 +143,53 @@ ObKVGlobalCache &ObKVGlobalCache::get_instance()
   return instance_;
 }
 
-int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
+int ObKVGlobalCache::calculate_suitable_bucket_num(
+    const int64_t cache_memory_limit,
+    const int64_t reserved_memory,
+    int64_t &bucket_num)
 {
   INIT_SUCC(ret);
-  // Bucket count affects hash load rather than the number of cache blocks, so
-  // size it from the current effective limit without over-reserving metadata
-  // for all physical memory.
-  const int64_t cache_capacity = MIN(
-      GMEMCONF.get_kvcache_memory_limit(), MAX_CACHE_SIZE);
-  int64_t server_memory_factor =
-      upper_align(cache_capacity, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
-  int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
   bucket_num = -1;
-  for (int64_t bucket_level = MAX_BUCKET_NUM_LEVEL -1; bucket_level >= 0; bucket_level--) {
-    if ((1 << bucket_level) > server_memory_factor) {
-      // pass
-    } else {
-      if (bucket_num_array_[bucket_level] * static_cast<int64_t>(sizeof(void *)) <= reserved_memory * MAX_RESERVED_MEMORY_RATIO) {
+  if (cache_memory_limit <= 0 || reserved_memory <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const int64_t bounded_limit = MIN(cache_memory_limit, MAX_CACHE_SIZE);
+    const int64_t required_bucket_num =
+        upper_align(bounded_limit, KVCACHE_BYTES_PER_BUCKET)
+        / KVCACHE_BYTES_PER_BUCKET;
+    int64_t bucket_level = 0;
+    while (bucket_level < MAX_BUCKET_NUM_LEVEL - 1
+           && bucket_num_array_[bucket_level] < required_bucket_num) {
+      ++bucket_level;
+    }
+    for (; bucket_level >= 0; --bucket_level) {
+      if (bucket_num_array_[bucket_level] * static_cast<int64_t>(sizeof(void *))
+          <= reserved_memory * MAX_RESERVED_MEMORY_RATIO) {
         bucket_num = bucket_num_array_[bucket_level];
         break;
       }
     }
+    if (-1 == bucket_num) {
+      ret = OB_ERR_UNEXPECTED;
+    }
   }
-  if (-1 == bucket_num) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(ERROR, "reserved memory is not enough!", K(cache_capacity),
-               K(server_memory_factor), K(reserved_memory));
+
+  return ret;
+}
+
+int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
+{
+  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
+  const int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
+  int ret = calculate_suitable_bucket_num(
+      cache_memory_limit, reserved_memory, bucket_num);
+  if (OB_FAIL(ret)) {
+    COMMON_LOG(ERROR, "reserved memory is not enough!", K(ret),
+               K(cache_memory_limit), K(reserved_memory));
   } else {
     share::ObTaskController::get().allow_next_syslog();
     COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num),
-               K(cache_capacity), K(server_memory_factor), K(reserved_memory));
+               K(cache_memory_limit), K(reserved_memory));
   }
 
   return ret;

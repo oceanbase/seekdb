@@ -69,12 +69,6 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
   EXPECT_EQ(4 * ONE_GIB,
             ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB));
 
-  EXPECT_EQ(lib::get_memory_by_percentage(ONE_GIB, 25),
-            ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 0));
-  EXPECT_EQ(lib::get_memory_by_percentage(ONE_GIB, 20),
-            ObServerMemoryConfig::resolve_memstore_memory_limit(0, 0));
-  EXPECT_EQ(lib::get_memory_by_percentage(ONE_GIB, 10),
-            ObServerMemoryConfig::resolve_vector_memory_limit(0, 0));
   EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 25),
             ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB));
   EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 20),
@@ -118,10 +112,10 @@ TEST(TestServerMemoryConfig, reload_uses_automatic_budget_independent_of_memory_
 {
   ServerConfigRestore restore;
   ObServerMemoryConfig memory_config;
-  const int64_t effective_memory = get_effective_memory_size();
+  const int64_t physical_memory = get_phy_mem_size();
   const int64_t expected_memory_budget =
       ObServerMemoryConfig::calculate_automatic_memory_budget(
-          effective_memory);
+          physical_memory);
 
   GCONF._memory_budget = 0;
   GCONF.memory_limit = 4 * ONE_GIB;
@@ -132,13 +126,13 @@ TEST(TestServerMemoryConfig, reload_uses_automatic_budget_independent_of_memory_
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
   EXPECT_EQ(expected_memory_budget, memory_config.get_server_memory_budget());
   EXPECT_EQ(ObServerMemoryConfig::resolve_kvcache_memory_limit(
-                0, effective_memory),
+                0, physical_memory),
             memory_config.get_kvcache_memory_limit());
   EXPECT_EQ(ObServerMemoryConfig::resolve_memstore_memory_limit(
-                0, effective_memory),
+                0, physical_memory),
             memory_config.get_memstore_memory_limit());
   EXPECT_EQ(ObServerMemoryConfig::resolve_vector_memory_limit(
-                0, effective_memory),
+                0, physical_memory),
             memory_config.get_vector_memory_limit());
 
   GCONF.memory_limit = 16 * ONE_GIB;

@@ -196,10 +196,15 @@ private:
   static const int64_t MAX_MAP_ONCE_REPLACE_NUM = 100000;  // 100K
   static const int64_t TIMER_SCHEDULE_INTERVAL_US = 800 * 1000;
   static const int64_t WORKING_SET_LIMIT_PERCENTAGE = 5;
-  static const int64_t BASE_SERVER_MEMORY_FACTOR = 1LL << 30; // 1G is the start level
+  // Target one hash bucket per 2 KiB of KV cache capacity, then round up to
+  // one of the supported prime bucket counts below.
+  static const int64_t KVCACHE_BYTES_PER_BUCKET = 2LL << 10;
   static constexpr double MAX_RESERVED_MEMORY_RATIO = 0.3;
   static const int64_t MAX_BUCKET_NUM_LEVEL = 10;
   static const int64_t bucket_num_array_[MAX_BUCKET_NUM_LEVEL];
+  static int calculate_suitable_bucket_num(const int64_t cache_memory_limit,
+                                           const int64_t reserved_memory,
+                                           int64_t &bucket_num);
   static const int64_t PRINT_INTERVAL = 30 * 1000L * 1000L;
   static const int64_t MAP_WASH_CLEAN_INTERNAL = 10;
   static const int64_t MAP_REPLACE_ONCE_SKIP_COUNT = 10;
