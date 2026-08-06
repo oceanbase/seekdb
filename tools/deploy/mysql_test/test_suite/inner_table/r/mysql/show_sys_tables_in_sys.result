@@ -1666,15 +1666,6 @@ id	field	type	length	precision	nullable
 27	maxY	15	0	38	1
 28	proj4text	22	2048	-1	1
 29	description	22	2048	-1	1
-table oceanbase.__all_dbms_lock_allocated column_count 6 table_id 1098
-select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1098 order by column_id;
-id	field	type	length	precision	nullable
-16	gmt_create	18	0	25	1
-17	gmt_modified	18	0	25	1
-18	name	22	128	-1	0
-19	lockid	5	0	20	0
-20	lockhandle	22	128	-1	0
-21	expiration	18	0	25	0
 table oceanbase.__all_scheduler_job_class column_count 7 table_id 1099
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=1099 order by column_id;
 id	field	type	length	precision	nullable
