@@ -72,7 +72,8 @@ private:
     OBJ_ID,
     OWNER_TYPE,
     PRIORITY,
-    WAIT_SEQ
+    WAIT_SEQ,
+    OBJ_NAME
   };
 private:
   storage::ObLS *ls_;

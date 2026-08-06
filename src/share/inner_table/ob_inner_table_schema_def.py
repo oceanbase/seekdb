@@ -5312,7 +5312,8 @@ def_table_schema(
   ('obj_id', 'int'),
   ('owner_type', 'int'),
   ('priority', 'varchar:MAX_LOCK_OP_PRIORITY_BUF_LENGTH'),
-  ('wait_seq', 'int')
+  ('wait_seq', 'int'),
+  ('obj_name', 'varchar:128', 'true')
   ],  vtable_route_policy = 'local'
   )
 

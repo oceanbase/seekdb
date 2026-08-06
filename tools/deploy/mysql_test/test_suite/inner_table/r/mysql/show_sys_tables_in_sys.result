@@ -3371,7 +3371,7 @@ id	field	type	length	precision	nullable
 23	tablet_status	5	0	20	0
 24	is_committed	5	0	20	0
 25	is_empty_shell	5	0	20	0
-table oceanbase.__all_virtual_obj_lock column_count 16 table_id 12289
+table oceanbase.__all_virtual_obj_lock column_count 17 table_id 12289
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12289 order by column_id;
 id	field	type	length	precision	nullable
 16	lock_id	22	64	-1	0
@@ -3390,6 +3390,7 @@ id	field	type	length	precision	nullable
 29	owner_type	5	0	20	0
 30	priority	22	16	-1	0
 31	wait_seq	5	0	20	0
+32	obj_name	22	128	-1	1
 table oceanbase.__all_virtual_merge_info column_count 10 table_id 12291
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=12291 order by column_id;
 id	field	type	length	precision	nullable

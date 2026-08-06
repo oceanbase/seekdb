@@ -431,8 +431,8 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
         case EXTRA_INFO: {
           if (OB_NOT_NULL(named_lock)) {
             snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
-                     "count:%ld, position:named_lock_manager, name:%s",
-                     named_lock->ref_count_, named_lock->lock_name_.c_str());
+                     "count:%ld, position:named_lock_manager",
+                     named_lock->ref_count_);
           } else {
             snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
                      "count:%ld, position:%s",
@@ -488,6 +488,16 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
             cur_row_.cells_[i].set_int(lock_op.create_timestamp_);
           } else {
             cur_row_.cells_[i].set_int(0);
+          }
+          break;
+        }
+        case OBJ_NAME: {
+          if (OB_ISNULL(named_lock)) {
+            cur_row_.cells_[i].set_null();
+          } else {
+            cur_row_.cells_[i].set_varchar(named_lock->lock_name_.c_str());
+            cur_row_.cells_[i].set_collation_type(
+                ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }
