@@ -25,6 +25,7 @@
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "storage/tablelock/ob_table_lock_local_executor.h"
+#include "storage/tablelock/ob_named_lock_manager.h"
 
 namespace oceanbase
 {
@@ -223,6 +224,7 @@ public:
   ObTableLockService()
     : sql_proxy_(nullptr),
       obj_lock_garbage_collector_(),
+      named_lock_manager_(),
       is_inited_(false) {}
   ~ObTableLockService() {}
   int init();
@@ -291,6 +293,7 @@ public:
                    const ObReplaceAllLocksRequest &replace_req);
   int garbage_collect_right_now();
   int get_obj_lock_garbage_collector(ObOBJLockGarbageCollector *&obj_lock_garbage_collector);
+  NamedLockManager &get_named_lock_manager() { return named_lock_manager_; }
 
 private:
   bool need_retry_trans_(const ObTableLockCtx &ctx,
@@ -441,6 +444,7 @@ private:
 
   common::ObMySQLProxy *sql_proxy_;
   ObOBJLockGarbageCollector obj_lock_garbage_collector_;
+  NamedLockManager named_lock_manager_;
   bool is_inited_;
 };
 }

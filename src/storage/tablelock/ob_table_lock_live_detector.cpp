@@ -19,8 +19,8 @@
 #include "storage/tablelock/ob_lock_executor.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_table_lock_live_detector.h"
-#include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_lock_func_executor.h"
+#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "observer/ob_inner_sql_connection.h"
@@ -292,7 +292,6 @@ int ObTableLockDetector::do_detect_and_clear()
   if (OB_FAIL(func1.call_function_directly())) {
     LOG_WARN("do session_alive detect failed", K(ret));
   }
-  remove_expired_lock_id();
 
   return ret;
 }
@@ -300,42 +299,17 @@ int ObTableLockDetector::do_detect_and_clear()
 int ObTableLockDetector::remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id)
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  int64_t release_count = 0;
   ObUnLockExecutor executor;
+  ObTableLockService *lock_service = share::g_mp->table_lock_service();
+  if (OB_NOT_NULL(lock_service)
+      && OB_TMP_FAIL(lock_service->get_named_lock_manager().release_all(owner_id, release_count))) {
+    LOG_WARN("remove named lock by owner_id failed", K(tmp_ret), K(owner_id));
+  }
   if (OB_FAIL(executor.execute(owner_id))) {
     LOG_WARN("remove lock by owner_id failed", K(owner_id));
   }
-  return ret;
-}
-
-int ObTableLockDetector::remove_expired_lock_id()
-{
-  int ret =OB_SUCCESS;
-  char dbms_lock_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
-  char new_table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
-  ObSqlString where_cond;
-  ObSqlString detect_table_cond;
-  ObSqlString obj_type_cond;
-  const int64_t now = ObTimeUtility::current_time();
-  // delete 10 rows each time, to avoid causing abnormal delays due to deleting too many rows
-  const int delete_limit = 10;
-
-  OZ (databuff_printf(dbms_lock_table_name, OB_MAX_TABLE_NAME_BUF_LENGTH,
-                      "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (get_table_name(new_table_name));
-  OZ (obj_type_cond.assign_fmt(" WHERE obj_type = %d or obj_type = %d",
-                               static_cast<int>(ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC),
-                               static_cast<int>(ObLockOBJType::OBJ_TYPE_DBMS_LOCK)));
-
-  OZ (detect_table_cond.assign_fmt("SELECT obj_id FROM %s", new_table_name));
-  OZ (detect_table_cond.append(obj_type_cond.ptr(), obj_type_cond.length()));
-  OZ (where_cond.assign_fmt("expiration <= usec_to_time(%" PRId64 ")"
-                            "AND lockid NOT IN"
-                            "( %s )"
-                            " LIMIT %d",
-                            now,
-                            detect_table_cond.ptr(),
-                            delete_limit));
-  OZ (ObTableAccessHelper::delete_row(dbms_lock_table_name, where_cond.string()));
   return ret;
 }
 
