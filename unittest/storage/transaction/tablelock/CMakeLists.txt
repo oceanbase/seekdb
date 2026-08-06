@@ -1,1 +1,2 @@
 storage_unittest(test_ob_replace_lock_request)
+storage_unittest(test_named_lock_manager)

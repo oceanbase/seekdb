@@ -21,6 +21,7 @@
 #include <set>
 #include <string>
 
+#include "lib/charset/ob_charset.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "storage/tablelock/ob_table_lock_owner_id.h"
 
@@ -37,6 +38,9 @@ namespace tablelock
 class NamedLockManager final
 {
 public:
+  // Keep the boundary of the former __all_dbms_lock_allocated.name
+  // VARCHAR(128) column. The legacy implementation had no lock-count limit.
+  static constexpr int64_t MAX_LOCK_NAME_LENGTH = 128;
   static constexpr int64_t LOCK_NOT_EXIST_RELEASE_RESULT = -1;
   static constexpr int64_t LOCK_NOT_OWN_RELEASE_RESULT = 0;
   static constexpr int64_t LOCK_RELEASED_RESULT = 1;
@@ -59,8 +63,23 @@ public:
   int get_owner(const common::ObString &lock_name,
                 ObTableLockOwnerID &owner_id);
   int has_lock(const ObTableLockOwnerID &owner_id, bool &has_lock);
+  int get_counts(int64_t &lock_count, int64_t &waiter_count);
 
 private:
+  struct LockNameLess
+  {
+    bool operator()(const std::string &lhs, const std::string &rhs) const
+    {
+      const common::ObCharsetType charset_type = common::ObCharset::get_default_charset();
+      const common::ObCollationType collation_type =
+          common::ObCharset::get_default_collation(charset_type);
+      return common::ObCharset::strcmpsp(collation_type,
+                                         lhs.data(), lhs.length(),
+                                         rhs.data(), rhs.length(),
+                                         false /* cmp_endspace */) < 0;
+    }
+  };
+
   struct LockInfo
   {
     LockInfo() : owner_id_(), ref_count_(0) {}
@@ -71,8 +90,8 @@ private:
     int64_t ref_count_;
   };
 
-  typedef std::map<std::string, LockInfo> LockMap;
-  typedef std::set<std::string> LockNameSet;
+  typedef std::map<std::string, LockInfo, LockNameLess> LockMap;
+  typedef std::set<std::string, LockNameLess> LockNameSet;
   typedef std::map<ObTableLockOwnerID, LockNameSet> OwnerLockMap;
   typedef std::map<ObTableLockOwnerID, ObTableLockOwnerID> WaitForMap;
 

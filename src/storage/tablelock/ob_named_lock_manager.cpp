@@ -83,6 +83,10 @@ int NamedLockManager::acquire(const ObString &lock_name,
   } else if (OB_UNLIKELY(lock_name.empty() || !owner_id.is_valid() || timeout_us < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid named lock argument", K(ret), K(lock_name), K(owner_id), K(timeout_us));
+  } else if (OB_UNLIKELY(lock_name.length() > MAX_LOCK_NAME_LENGTH)) {
+    ret = OB_ERR_DATA_TOO_LONG;
+    LOG_WARN("named lock name is longer than legacy limit",
+             K(ret), K(lock_name.length()), K(MAX_LOCK_NAME_LENGTH));
   } else {
     const std::string name(lock_name.ptr(), lock_name.length());
     const int64_t start_ts = ObTimeUtility::current_time();
@@ -246,6 +250,21 @@ int NamedLockManager::has_lock(const ObTableLockOwnerID &owner_id, bool &has_loc
   } else {
     ObThreadCondGuard guard(cond_);
     has_lock = owner_lock_map_.find(owner_id) != owner_lock_map_.end();
+  }
+  return ret;
+}
+
+int NamedLockManager::get_counts(int64_t &lock_count, int64_t &waiter_count)
+{
+  int ret = OB_SUCCESS;
+  lock_count = 0;
+  waiter_count = 0;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    ObThreadCondGuard guard(cond_);
+    lock_count = lock_map_.size();
+    waiter_count = wait_for_map_.size();
   }
   return ret;
 }
