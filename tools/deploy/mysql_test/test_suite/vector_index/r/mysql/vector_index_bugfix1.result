@@ -1,5 +1,5 @@
 # Vector Index Basic Test
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 vector(3),c3 vector(3) ,c4 vector(3),
 VECTOR INDEX vector_idx(c3)
@@ -720,4 +720,4 @@ Outputs & filters:
       is_index_back=true, is_global_index=false, 
       range_key([t1.__ivf_center_id_0_0]), range(MIN ; MAX)always true
 drop table t1;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

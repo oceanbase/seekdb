@@ -21,7 +21,7 @@ connection conn1;
 --disable_warnings
 drop table if exists t_vec;
 --enable_warnings
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 sleep 3;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw));
 show create table t_vec;
@@ -355,5 +355,5 @@ connection conn1;
 --disable_warnings
 drop table if exists t_vec;
 --enable_warnings
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;

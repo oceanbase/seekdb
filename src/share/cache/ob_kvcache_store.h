@@ -99,17 +99,18 @@ public:
   {
     return max_cache_size / block_size + 2 * (WASH_THREAD_RETIRE_LIMIT + RETIRE_LIMIT * QClock::MAX_QCLOCK_SLOT_NUM);
   }
-  static int64_t compute_fixed_cache_limit(const int64_t memory_budget, const int64_t block_size)
+  static int64_t compute_fixed_cache_limit(const int64_t cache_memory_limit,
+                                           const int64_t block_size)
   {
-    const int64_t cache_limit = memory_budget / 100 * KV_CACHE_LIMIT_PERCENTAGE
-        + memory_budget % 100 * KV_CACHE_LIMIT_PERCENTAGE / 100;
-    return memory_budget > 0 && block_size > 0 ? cache_limit / block_size * block_size : 0;
+    return cache_memory_limit > 0 && block_size > 0
+        ? cache_memory_limit / block_size * block_size
+        : 0;
   }
   static int64_t compute_fixed_wash_size(const int64_t cache_size,
-                                         const int64_t memory_budget,
+                                         const int64_t cache_memory_limit,
                                          const int64_t block_size)
   {
-    return MAX(cache_size - compute_fixed_cache_limit(memory_budget, block_size), 0);
+    return MAX(cache_size - compute_fixed_cache_limit(cache_memory_limit, block_size), 0);
   }
 
 private:
@@ -131,7 +132,6 @@ private:
   static const int64_t RETIRE_LIMIT = 2;
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
-  static const int64_t KV_CACHE_LIMIT_PERCENTAGE = 30;
 #ifndef _WIN32
   static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
 #else

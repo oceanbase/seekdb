@@ -1,5 +1,5 @@
 # Vector Ivf Index Filter Test
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 vector(3), primary key(c1), vector index idxv(c3) with (distance=l2, type=ivf_flat, nlist=2, sample_per_nlist=3));
 insert into t1 values(1, 90, '[0.203846,0.205289,0.880265]');
@@ -637,4 +637,4 @@ Outputs & filters:
       is_index_back=false, is_global_index=false, 
       range_key([t1.c1]), range(MIN ; MAX)always true
 drop table if exists t1;
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

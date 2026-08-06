@@ -2,7 +2,7 @@
 #owner group: shenzhen
 --echo # Vector Similarity
 
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 --disable_warnings

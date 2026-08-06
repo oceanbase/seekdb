@@ -1,6 +1,6 @@
 # Vector Index Basic Test
 drop table if exists t1;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 create table t1(c1 int, c2 int, c3 vector(3), c4 vector(3), c5 vector(3), primary key(c1));
 create index idx1 on t1(c2);
@@ -353,7 +353,7 @@ insert into t1 values(77, '[0.075354,0.230557,0.248149]');
 insert into t1 values(78, '[0.558301,0.543172,0.335010]');
 insert into t1 values(79, '[0.272721,0.648755,0.966464]');
 insert into t1 values(90, '[0.950869,0.275233,0.844568]');
-select  * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
+select /*+ opt_param('rowsets_enabled', 'false') */ * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 c1	c2
 53	[0.660493,0.373283,0.755029]
 10	[0.345999,0.254102,0.950869]
@@ -487,7 +487,7 @@ insert into t1 values(1, [1,1,1]);
 select 567 from t1 for update;
 567
 567
-select  567 from t1 for update;
+select /*+ opt_param('rowsets_enabled', 'false') */ 567 from t1 for update;
 567
 567
 drop table t1;
@@ -518,4 +518,4 @@ vector index vec_idx2(vec2) with (distance=l2,type=hnsw,lib=vsag,m=20,ef_constru
 );
 alter table vec_idx_tb drop index vec_idx1, drop index vec_idx2;
 drop table vec_idx_tb;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

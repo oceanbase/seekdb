@@ -104,12 +104,14 @@ int ObDataBlockCachePreWarmer::reserve(const blocksstable::ObMicroBlockDesc &mic
   } else {
     if (FALSE_IT(reuse())) {
     } else if (OB_FAIL(do_reserve_kvpair(micro_block_desc, kvpair_size))) {
+      COMMON_LOG(WARN, "Fail to reserve block cache value", K(ret), K(micro_block_desc));
     } else {
       rest_size_ = MAX(0, rest_size_ - kvpair_size);
       reserve_succ_flag = true;
     }
     update_rest();
   }
+  COMMON_LOG(DEBUG, "pre warmer reserve cache value details", K(ret), K(kvpair_size), K(level),                                                            K(micro_block_desc));
   return ret;
 }
 
@@ -128,8 +130,12 @@ int ObDataBlockCachePreWarmer::add(
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The block cache pre warmer is not inited", K(ret), KP(cache_));
   } else if (OB_FAIL(cache_->get_cache(kvcache))) {
+    COMMON_LOG(WARN, "Fail to get block kvcache", K(ret));
   } else if (OB_FAIL(do_put_kvpair(micro_block_desc, *kvcache))) {
+    COMMON_LOG(WARN, "Fail to put kvpair into kvcache", K(ret));
   }
+  COMMON_LOG(DEBUG, "pre warmer build cache key and put details", K(ret), K(rest_size_), K(update_step_),
+                                                                  K(micro_block_desc), KPC(micro_block_desc.header_));
   // reuse handles outside
 
   return ret;
@@ -144,15 +150,17 @@ void ObDataBlockCachePreWarmer::update_rest()
 
 void ObDataBlockCachePreWarmer::inner_update_rest()
 {
-  const int64_t memory_budget = lib::get_memory_budget();
-  rest_size_ = memory_budget / 100 * warm_size_percentage_;
-  calculate_base_percentage(memory_budget);
+  const int64_t cache_memory_limit = lib::get_kvcache_memory_limit();
+  rest_size_ = cache_memory_limit / 100 * warm_size_percentage_;
+  calculate_base_percentage(cache_memory_limit);
   update_step_ = 0;
+  COMMON_LOG(DEBUG, "pre warmer update rest", K(rest_size_), K(base_percentage_),
+             K(cache_memory_limit));
 }
 
-void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t memory_budget)
+void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t cache_memory_limit)
 {
-  base_percentage_ = memory_budget > 0 ? 50 : 0;
+  base_percentage_ = cache_memory_limit > 0 ? 50 : 0;
 }
 
 bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)
@@ -164,6 +172,8 @@ bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)
     if (100 > threshold) {
       bret = random_value <= threshold;
     }
+    COMMON_LOG(DEBUG, "block cache pre warmer filter", K(bret), K(base_percentage_), K(level), K(update_step_),
+                                                       K(random_value), K(threshold));
   }
   return bret;
 }
@@ -172,6 +182,7 @@ bool ObDataBlockCachePreWarmer::warm_block_for_percentage()
 {
   const int64_t random_value = ObRandom::rand(0, 99);
   const bool bret = random_value < fixed_percentage_;
+  COMMON_LOG(DEBUG, "warm block for percentage", K(bret), K(random_value), K_(fixed_percentage));
   return bret;
 }
 
@@ -203,6 +214,7 @@ int ObDataBlockCachePreWarmer::do_put_kvpair(
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);
     }
     if (OB_FAIL(kvcache.put_kvpair(inst_handle_, kvpair_, cache_handle_))) {
+      COMMON_LOG(WARN, "failed to put kvpair to block cache", K(ret));
     }
   }
   return ret;
@@ -256,6 +268,7 @@ int ObIndexBlockCachePreWarmer::do_reserve_kvpair(
   blocksstable::ObMicroBlockData micro_data(micro_block_desc.get_block_buf(), micro_block_desc.get_block_size());
   char *allocated_buf = nullptr;
   if (OB_FAIL(idx_transformer_.transform(micro_data, value_.get_block_data(), allocator_, allocated_buf, table_read_info_))) {
+    COMMON_LOG(WARN, "Fail to transform index block to memory format", K(ret));
   } else {
     kvpair_size = sizeof(blocksstable::ObMicroBlockCacheKey) + value_.size();
   }
@@ -282,6 +295,7 @@ int ObIndexBlockCachePreWarmer::do_put_kvpair(
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);
     }
     if (OB_FAIL(kvcache.put(key_, value_))) {
+      COMMON_LOG(WARN, "failed to put index block to cache", K(ret), K_(key), K_(value));
     }
   }
   return ret;

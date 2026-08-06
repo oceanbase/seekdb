@@ -1,7 +1,7 @@
 # Vector Index Rebuild Test
 drop table if exists t1;
 set ob_enable_index_direct_select = 1;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 create table t1(c1 int, c2 vector(3), c3 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
 call dbms_vector.rebuild_index('idx1','t1','c2');
 create vector index idx2 on t1(c3) WITH (distance=L2, lib=vsag, type=hnsw, m=10, ef_construction = 12, ef_search = 40);
@@ -399,5 +399,5 @@ select count(*) from (select * from t1 order by l2_distance(c2, [0.428146,0.4087
 count(*)
 8
 drop table t1;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;

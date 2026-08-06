@@ -538,7 +538,7 @@ if($before_table_id == $after_table_id)
 
 connection mysql;
 drop table xingrui_vector_table;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 5;
 create table xingrui_vector_table(c1 int, c2 int, c3 vector(3), c4 vector(3), c5 vector(3), c6 int, primary key(c1));
 create index idx1 on xingrui_vector_table(c2);
@@ -668,7 +668,7 @@ connection mysql;
 --echo #case vector列
 --error 0,1051
 drop table xingrui_vector;
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 5;
 create table xingrui_vector(c1 int, c2 vector(3), c3 vector(5), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200), vector index idx2(c3) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
 insert into xingrui_vector values (1, '[0.990622,0.861702,0.114999]', '[0.558301,0.543172,0.335010,0.844568,0.275233]');

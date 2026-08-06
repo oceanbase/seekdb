@@ -2,7 +2,7 @@
 #owner group: shenzhen
 --echo # Vector Ivf Index Filter Test
 
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 1;
 
 # create index when create table
@@ -286,4 +286,4 @@ explain select * from t1  order by l2_distance(c3, [0.712338,0.603321,0.133444])
 --disable_warnings
 drop table if exists t1;
 --enable_warnings
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

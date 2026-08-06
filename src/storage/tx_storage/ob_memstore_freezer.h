@@ -22,6 +22,7 @@
 #include "lib/literals/ob_literals.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/task/ob_timer.h"
+#include "share/ob_occam_timer.h"
 #include "storage/multi_data_source/runtime_utility/mds_factory.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "storage/ls/ob_freezer_define.h"
@@ -104,6 +105,7 @@ public:
 class ObMemstoreFreezer
 {
 friend ObTxDataFreezeGuard;
+friend class ObFreezer;
 struct PeriodicalUpdateValueCache {
   PeriodicalUpdateValueCache() : value_(false), update_ts_(0) {}
   void reset()
@@ -119,6 +121,7 @@ public:
   const static int64_t TIME_WHEEL_PRECISION = 100_ms;
   const static int64_t SLOW_FREEZE_INTERVAL = 30_s;
   const static int FREEZE_TRIGGER_THREAD_NUM= 1;
+  const static int FREEZE_THREAD_NUM= 1;
   const static int64_t FREEZE_TRIGGER_INTERVAL = 2_s;
   const static int64_t UPDATE_INTERVAL = 100_ms;
   const static int64_t MAX_FREEZE_TIMEOUT_US = 1800 * 1000 * 1000; // 30 min
@@ -198,8 +201,6 @@ public:
   // get the memstore used
   // get the memstore limit.
   int get_memstore_limit(int64_t &mem_limit);
-  // get the memstore limit percentage
-  static int64_t get_memstore_limit_percentage();
   // this is used to check if the runtime's memstore is out at user side.
   int check_memstore_full(bool &is_out_of_mem);
   // this is used for internal check rather than user side.
@@ -273,7 +274,6 @@ private:
   // @param[in] rollback_freeze_cnt, reduce the runtime's freeze count by 1, if true.
   int unset_freezing_(const bool rollback_freeze_cnt);
   static int64_t get_freeze_trigger_percentage_();
-  static int64_t get_memstore_limit_percentage_();
   int async_freeze_(const ObMemstoreFreezeArg &arg);
   int post_freeze_request_(const storage::ObFreezeType freeze_type,
                            const int64_t try_frozen_version);
@@ -323,6 +323,8 @@ ObAddr self_;
 
   common::ObTimer freeze_trigger_timer_;
   TimerTask freeze_trigger_timer_task_;
+  common::ObOccamThreadPool freeze_thread_pool_;
+  ObSpinLock freeze_thread_pool_lock_;
 
   // diagnose only, we capture the freeze stats every 30 minutes
   ObMemstoreFreezerStat freezer_stat_;

@@ -21,7 +21,7 @@ ob_embed	DENSE_EMBEDDING	bge-M3
 select ENDPOINT_NAME, AI_MODEL_NAME, PROVIDER, REQUEST_MODEL_NAME from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS;
 ENDPOINT_NAME	AI_MODEL_NAME	PROVIDER	REQUEST_MODEL_NAME
 ob_embed_endpoint	ob_embed	openai	bge-M3
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 
 
 "------------------------------- not support hybrid vec index and fts in same table -------------------------------"
@@ -105,7 +105,7 @@ t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 delete from t_vec;
 "-------------------------------------------- invalid statement ------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1));
 ERROR HY000: Column 'c1' cannot be part of VECTOR index
@@ -168,7 +168,7 @@ ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 ERROR 0A000: setting vector index storing column is not supported
 "------------------------------------------ show create table -------------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 show create table t_vec;
@@ -439,7 +439,7 @@ t_vec	1	vec_idx1	1	c2	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 t_vec	1	vec_idx2	1	c3	A	NULL	NULL	NULL	YES	VECTOR	available		YES	NULL
 delete from t_vec;
 "-------------------------------------------- invalid statement ------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1)) ORGANIZATION HEAP;
 ERROR HY000: Column 'c1' cannot be part of VECTOR index
@@ -502,7 +502,7 @@ ERROR 0A000: hnsw vector index setting model or sync_interval is not supported
 create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector index vec_idx1(c2) storing (c3) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 ERROR 0A000: setting vector index storing column is not supported
 "------------------------------------------ show create table -------------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 show create table t_vec;

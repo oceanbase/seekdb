@@ -5,7 +5,7 @@
 connect (conn_user,$OBMYSQL_MS0,root,,test,$OBMYSQL_PORT);
 connection conn_user;
 
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 --echo # 单分区
@@ -387,4 +387,4 @@ create vector index idx1 on t1 (wine_data) with (distance=l2, type=ivf_flat, nli
 
 drop table t1;
 
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

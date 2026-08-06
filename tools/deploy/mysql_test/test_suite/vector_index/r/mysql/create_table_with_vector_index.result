@@ -1,7 +1,7 @@
 drop database if exists yjl_vec;
 create database yjl_vec;
 use yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 
 
 "------------------------------- not support vec index and fts in same table -------------------------------"
@@ -139,7 +139,7 @@ ERROR 0A000: setting vector index storing column is not supported
 
 
 "----------------------------------------- specify case ---------------------------------------------------------------"
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw));
 show create table t_vec;
@@ -327,5 +327,5 @@ t_vec	CREATE TABLE `t_vec` (
 ) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0
 drop table if exists t_vec;
 drop database if exists yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 PURGE RECYCLEBIN;

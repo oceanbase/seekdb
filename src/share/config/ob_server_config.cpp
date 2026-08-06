@@ -33,6 +33,8 @@
 #include "share/config/ob_system_config_key.h"
 #include "share/config/ob_runtime_config.h"
 #include "share/ob_errno.h"
+#include "share/ob_rpc_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -82,6 +84,7 @@ int ObServerConfig::read_config(const ObSystemConfig &system_config,
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
       temp_ret = system_config.read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
+        OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
     }
   }
@@ -166,26 +169,47 @@ ObServerMemoryConfig &ObServerMemoryConfig::get_instance()
 int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
 {
   int ret = OB_SUCCESS;
-  static constexpr int64_t AUTO_MEMORY_BUDGET_PERCENTAGE = 40;
   const int64_t configured_memory_budget = server_config.memory_budget;
   const int64_t legacy_memory_limit = server_config.memory_limit;
   const bool use_legacy_memory_limit = legacy_memory_limit > 0;
   int64_t memory_budget = use_legacy_memory_limit
       ? legacy_memory_limit / 2
       : configured_memory_budget;
-  int64_t physical_memory = 0;
-  int64_t automatic_memory_budget = 0;
+  const int64_t physical_memory = get_phy_mem_size();
+  const int64_t effective_memory = get_effective_memory_size();
+  const int64_t automatic_memory_budget =
+      lib::calculate_default_memory_base(effective_memory);
   if (0 == memory_budget) {
-    physical_memory = get_phy_mem_size();
-    automatic_memory_budget = physical_memory / 100 * AUTO_MEMORY_BUDGET_PERCENTAGE
-        + physical_memory % 100 * AUTO_MEMORY_BUDGET_PERCENTAGE / 100;
-    memory_budget = MAX(lib::DEFAULT_MEMORY_BUDGET, automatic_memory_budget);
+    memory_budget = automatic_memory_budget;
   }
+  const int64_t configured_kvcache_memory_limit =
+      server_config.kvcache_memory_limit;
+  const int64_t configured_memstore_memory_limit =
+      server_config.memstore_memory_limit;
+  const int64_t configured_vector_memory_limit =
+      server_config.vector_memory_limit;
+  const int64_t resolved_kvcache_memory_limit = lib::resolve_kvcache_memory_limit(
+      configured_kvcache_memory_limit, effective_memory);
+  const int64_t kvcache_memory_capacity = lib::get_kvcache_memory_capacity();
+  const int64_t kvcache_memory_limit = kvcache_memory_capacity > 0
+      ? MIN(resolved_kvcache_memory_limit, kvcache_memory_capacity)
+      : resolved_kvcache_memory_limit;
+  const int64_t memstore_memory_limit = lib::resolve_memstore_memory_limit(
+      configured_memstore_memory_limit, effective_memory);
+  const int64_t vector_memory_limit = lib::resolve_vector_memory_limit(
+      configured_vector_memory_limit, effective_memory);
   lib::set_memory_budget(memory_budget);
+  lib::set_kvcache_memory_limit(kvcache_memory_limit);
+  lib::set_memstore_memory_limit(memstore_memory_limit);
+  lib::set_vector_memory_limit(vector_memory_limit);
   LOG_INFO("update observer memory config", K(memory_budget),
            K(configured_memory_budget), K(legacy_memory_limit),
            K(use_legacy_memory_limit), K(physical_memory),
-           K(automatic_memory_budget));
+           K(effective_memory), K(automatic_memory_budget), K(kvcache_memory_limit),
+           K(resolved_kvcache_memory_limit), K(kvcache_memory_capacity),
+           K(configured_kvcache_memory_limit), K(memstore_memory_limit),
+           K(configured_memstore_memory_limit), K(vector_memory_limit),
+           K(configured_vector_memory_limit));
   return ret;
 }
 

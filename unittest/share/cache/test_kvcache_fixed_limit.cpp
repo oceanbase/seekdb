@@ -23,48 +23,54 @@ namespace oceanbase
 namespace common
 {
 
-TEST(TestKVCacheFixedLimit, aligns_thirty_percent_to_block_size)
+TEST(TestKVCacheFixedLimit, aligns_configured_limit_to_block_size)
 {
   const int64_t mib = 1L << 20;
-  const int64_t memory_budget = 300L * mib;
+  const int64_t cache_memory_limit = 90L * mib;
   const int64_t block_size = 2L * mib;
 
   EXPECT_EQ(90L * mib,
-            ObKVCacheStore::compute_fixed_cache_limit(memory_budget, block_size));
+            ObKVCacheStore::compute_fixed_cache_limit(cache_memory_limit, block_size));
   EXPECT_EQ(88L * mib,
-            ObKVCacheStore::compute_fixed_cache_limit(299L * mib, block_size));
+            ObKVCacheStore::compute_fixed_cache_limit(89L * mib, block_size));
 
   const int64_t expected_achunk_limit =
-      (memory_budget * 30 / 100) / lib::ACHUNK_SIZE * lib::ACHUNK_SIZE;
+      cache_memory_limit / lib::ACHUNK_SIZE * lib::ACHUNK_SIZE;
   EXPECT_EQ(expected_achunk_limit,
-            ObKVCacheStore::compute_fixed_cache_limit(memory_budget, lib::ACHUNK_SIZE));
+            ObKVCacheStore::compute_fixed_cache_limit(cache_memory_limit, lib::ACHUNK_SIZE));
   EXPECT_EQ(0, ObKVCacheStore::compute_fixed_cache_limit(0, block_size));
-  EXPECT_EQ(0, ObKVCacheStore::compute_fixed_cache_limit(memory_budget, 0));
+  EXPECT_EQ(0, ObKVCacheStore::compute_fixed_cache_limit(cache_memory_limit, 0));
 
-  const int64_t max_limit = INT64_MAX / 100 * 30 + INT64_MAX % 100 * 30 / 100;
-  EXPECT_EQ(max_limit / block_size * block_size,
+  EXPECT_EQ(INT64_MAX / block_size * block_size,
             ObKVCacheStore::compute_fixed_cache_limit(INT64_MAX, block_size));
 }
 
 TEST(TestKVCacheFixedLimit, computes_store_block_excess)
 {
   const int64_t mib = 1L << 20;
-  const int64_t memory_budget = 300L * mib;
+  const int64_t cache_memory_limit = 90L * mib;
   const int64_t block_size = 2L * mib;
 
   EXPECT_EQ(0, ObKVCacheStore::compute_fixed_wash_size(88L * mib,
-                                                       memory_budget,
+                                                       cache_memory_limit,
                                                        block_size));
   EXPECT_EQ(0, ObKVCacheStore::compute_fixed_wash_size(90L * mib,
-                                                       memory_budget,
+                                                       cache_memory_limit,
                                                        block_size));
   EXPECT_EQ(2L * mib, ObKVCacheStore::compute_fixed_wash_size(92L * mib,
-                                                              memory_budget,
+                                                              cache_memory_limit,
                                                               block_size));
   EXPECT_EQ(20L * mib, ObKVCacheStore::compute_fixed_wash_size(110L * mib,
-                                                               memory_budget,
+                                                               cache_memory_limit,
                                                                block_size));
 }
 
 } // namespace common
 } // namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  OB_LOGGER.set_file_name("test_kvcache_fixed_limit.log", true);
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

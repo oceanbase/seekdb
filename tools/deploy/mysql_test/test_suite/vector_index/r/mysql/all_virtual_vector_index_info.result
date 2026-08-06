@@ -1,6 +1,6 @@
 drop table if exists t1;
 drop table if exists t2;
-alter system set ob_vector_memory_limit_percentage = 10;
+alter system set vector_memory_limit = 0;
 create table t1(c1 int, c2 vector(10), primary key(c1));
 create table t2 (c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=l2, type=hnsw, lib=vsag)) partition by hash(c1) partitions 2;
 create vector index idx1 on t1(c2) with (distance=l2, type=hnsw);
@@ -67,4 +67,4 @@ join oceanbase.__all_table t on t.table_id = i.data_table_id
 where t.table_name = 't4';
 count
 0
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

@@ -1,4 +1,4 @@
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 # 单分区先建索引
 drop table if exists hhst1;
 CREATE TABLE hhst1 (c1 int primary key, c2 varchar(30),c3 vector(3) ,c4 vector(3),
@@ -194,7 +194,7 @@ insert into t1 values(1, [1,1,1]);
 select c2,123 from t1 for update;
 c2	123
 [1,1,1]	123
-select  c2,123 from t1 for update;
+select /*+ opt_param('rowsets_enabled', 'false') */ c2,123 from t1 for update;
 c2	123
 [1,1,1]	123
 drop table t1;
@@ -680,4 +680,4 @@ table_name
 alter table tv set lob_inrow_threshold = 1024;
 drop table tv;
 clear
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

@@ -1,5 +1,5 @@
 # Vector Similarity
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 create table t1 (c1 int, c2 int, c3 vector(3), primary key(c1), vector index idx1(c3) with (distance=l2, type=hnsw));
 insert into t1 values(1, 1, [0,1,2]);

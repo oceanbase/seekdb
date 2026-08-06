@@ -23,7 +23,7 @@ create table test_sparse_vec_tbl (
 --source sparse_vec_dml.inc
 
 # 其他列创建索引
-alter system set ob_vector_memory_limit_percentage =44;
+alter system set vector_memory_limit =0;
 
 create table test_sparse_vec_tbl (
   id int primary key, c1 bool, c2 int, c3 decimal, c4 float, c5 bit, 
@@ -32,4 +32,4 @@ create table test_sparse_vec_tbl (
 create index idx_c2 on test_sparse_vec_tbl(c2);
 create vector index idx_c12 on test_sparse_vec_tbl(c12) with (distance=l2, lib=vsag, type=hnsw, m=10, ef_construction=100, ef_search=40);
 --source sparse_vec_dml.inc
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

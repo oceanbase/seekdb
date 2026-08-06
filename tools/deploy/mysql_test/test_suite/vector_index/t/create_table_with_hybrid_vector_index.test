@@ -29,7 +29,7 @@ call DBMS_AI_SERVICE.CREATE_AI_MODEL_ENDPOINT (
 select NAME, TYPE, MODEL_NAME from oceanbase.DBA_OB_AI_MODELS;
 select ENDPOINT_NAME, AI_MODEL_NAME, PROVIDER, REQUEST_MODEL_NAME from oceanbase.DBA_OB_AI_MODEL_ENDPOINTS;
 
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 
 --echo
 --echo
@@ -107,7 +107,7 @@ delete from t_vec;
 
 # for invalid statement
 echo "-------------------------------------------- invalid statement ------------------------------------------------";
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 --error 7601
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1));
@@ -174,7 +174,7 @@ create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector inde
 
 # show create table/index
 echo "------------------------------------------ show create table -------------------------------------------------------";
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024));
 show create table t_vec;
@@ -304,7 +304,7 @@ delete from t_vec;
 
 # for invalid statement
 echo "-------------------------------------------- invalid statement ------------------------------------------------";
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 --error 7601
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c1)) ORGANIZATION HEAP;
@@ -371,7 +371,7 @@ create table t_vec(c1 int, c2 varchar(100), c3 int, primary key(c1), vector inde
 
 # show create table/index
 echo "------------------------------------------ show create table -------------------------------------------------------";
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 drop table if exists t_vec;
 create table t_vec(c1 int, c2 varchar(100), primary key(c1), vector index vec_idx1(c2) with (distance=L2, type=hnsw, model=ob_embed, dim=1024)) ORGANIZATION HEAP;
 show create table t_vec;

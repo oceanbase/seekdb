@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-#include "share/rc/ob_server_runtime.h"
+#include "lib/alloc/alloc_func.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/rc/ob_module_provider.h"
 #include "ob_log_allocator_mgr.h"
 #include "ob_log_allocator.h"
 
@@ -52,6 +54,7 @@ int ObLogAllocatorMgr::delete_log_allocator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_allocator_())) {
+    OB_LOG(WARN, "delete_allocator_ failed", K(ret));
   } else {
     OB_LOG(INFO, "delete_allocator_ success");
   }
@@ -72,6 +75,7 @@ int ObLogAllocatorMgr::get_allocator_(Allocator *&out_allocator)
 
     if (NULL == out_allocator) {
       if (OB_FAIL(create_allocator_(out_allocator))) {
+        OB_LOG(WARN, "fail to create_allocator_", K(ret));
       }
     }
   }
@@ -81,26 +85,6 @@ int ObLogAllocatorMgr::get_allocator_(Allocator *&out_allocator)
     OB_LOG(WARN, "got allocator is NULL", K(ret));
   }
 
-  return ret;
-}
-
-int ObLogAllocatorMgr::get_memstore_limit_percent_(int64_t &limit_percent) const
-{
-  int ret = OB_SUCCESS;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else {
-    SERVER_MODULE_SCOPE {
-      share::ObIMemstoreRuntime *runtime =
-          share::server_service<share::ObIMemstoreRuntime>();
-      if (OB_ISNULL(runtime)) {
-        ret = OB_NOT_INIT;
-      } else {
-        ret = runtime->get_memstore_limit_percentage(limit_percent);
-      }
-    }
-  }
   return ret;
 }
 
@@ -135,6 +119,7 @@ int ObLogAllocatorMgr::create_allocator_(Allocator *&out_allocator)
     } else {
       Allocator *new_allocator = NULL;
       if (OB_FAIL(construct_allocator_(new_allocator))) {
+        OB_LOG(WARN, "fail to construct_allocator_", K(ret));
       } else if (!ATOMIC_BCAS(&allocator_, NULL, new_allocator)) {
         out_allocator = ATOMIC_LOAD(&allocator_);
         if (NULL != new_allocator) {
@@ -181,25 +166,30 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
-      int64_t cur_memstore_limit_percent = 0;
-
       const bool has_memstore = runtime_config.has_memstore_;
       int32_t nway = static_cast<int32_t>(runtime_config.resource_config_.max_cpu());
       if (nway == 0) {
         nway = 1;
       }
       const int64_t memory_size = runtime_config.resource_config_.memory_size();
+      const int64_t memstore_limit = lib::get_memstore_memory_limit();
       int64_t new_limit = memory_size;
       if (has_memstore) {
-        if (OB_TMP_FAIL(get_memstore_limit_percent_(cur_memstore_limit_percent))) {
-        } else if (cur_memstore_limit_percent > 100 || cur_memstore_limit_percent <= 0) {
-          OB_LOG(WARN, "memstore_limit_percentage val is unexpected", K(cur_memstore_limit_percent));
+        if (memstore_limit <= 0) {
+          OB_LOG(WARN, "memstore memory limit is unexpected", K(memstore_limit));
         } else {
-          new_limit = memory_size / 100 * ( 100 - cur_memstore_limit_percent);
+          // ObLogAllocator historically treats a non-positive limit as "do not
+          // update" and starts unlimited. Keep that behavior deterministic
+          // when the independently configured Memstore limit leaves no
+          // remainder in memory_budget.
+          new_limit = memory_size > memstore_limit
+              ? memory_size - memstore_limit
+              : INT64_MAX;
         }
       }
       ObLogAllocator *log_allocator = NULL;
       if (OB_TMP_FAIL(get_allocator_(log_allocator))) {
+        OB_LOG(WARN, "get_allocator_ failed", K(tmp_ret));
       } else if (NULL == log_allocator) {
         OB_LOG(WARN, "get_allocator_ failed");
       } else {
@@ -209,16 +199,13 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
           log_allocator->set_limit(new_limit);
         }
         OB_LOG(INFO, "ObLogAllocator memory limit updated", K(ret),
-             K(nway), K(new_limit), K(previous_limit), K(cur_memstore_limit_percent), K(runtime_config));
+             K(nway), K(new_limit), K(previous_limit), K(memstore_limit), K(runtime_config));
       }
 
       SERVER_MODULE_SCOPE {
-        share::ObIMemstoreRuntime *runtime =
-            share::server_service<share::ObIMemstoreRuntime>();
-        if (OB_ISNULL(runtime)) {
-          ret = OB_NOT_INIT;
-          OB_LOG(WARN, "memstore runtime is unavailable", K(ret));
-        } else if (OB_FAIL(runtime->set_memstore_threshold())) {
+        ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+        if (OB_FAIL(memstore_allocator.set_memstore_threshold())) {
+          OB_LOG(WARN, "failed to set_memstore_threshold of memstore allocator", K(ret));
         } else {
           OB_LOG(INFO, "succ to set_memstore_threshold of memstore allocator", K(ret));
         }

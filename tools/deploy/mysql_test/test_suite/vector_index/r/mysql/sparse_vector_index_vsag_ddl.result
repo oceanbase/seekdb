@@ -1,4 +1,4 @@
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 # 随表创建索引
 drop table if exists t1;
 CREATE TABLE t1 (c1 int primary key, c2 sparsevector, vector index idx1(c2) with (lib=vsag, type=sindi, distance=inner_product));

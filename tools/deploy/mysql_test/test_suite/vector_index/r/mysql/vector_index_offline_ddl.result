@@ -1,7 +1,7 @@
 drop database if exists yjl_vec;
 create database yjl_vec;
 use yjl_vec;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 
 
 "=========================================== add column ==========================================="
@@ -390,4 +390,4 @@ t_vec	CREATE TABLE `t_vec` (
 partition `p1` values less than (100))
 drop table if exists t_vec;
 drop database if exists yjl_vec;
-alter system set ob_vector_memory_limit_percentage =0;
+alter system set vector_memory_limit =0;

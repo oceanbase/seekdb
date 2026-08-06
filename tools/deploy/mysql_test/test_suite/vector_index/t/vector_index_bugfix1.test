@@ -2,7 +2,7 @@
 #owner group: shenzhen
 --echo # Vector Index Basic Test
 
-alter system set ob_vector_memory_limit_percentage = 44;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 # bugfix: 2024080600104051161
@@ -569,4 +569,4 @@ explain select /*+ index(t1 idx_ivf_pq) */ * from t1 order by l2_distance(c6, '[
 
 drop table t1;
 
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

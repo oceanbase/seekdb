@@ -42,7 +42,8 @@ class TestMemoryLimitAccounting : public ::testing::Test
 public:
   static void SetUpTestSuite()
   {
-    ASSERT_NE(nullptr, ObMallocAllocator::get_instance());
+    ASSERT_EQ(common::OB_SUCCESS,
+              ObMallocAllocator::get_instance()->create_and_add_tenant_allocator());
   }
 
   static MemoryContext create_context(const char *label)
@@ -114,7 +115,7 @@ TEST_F(TestMemoryLimitAccounting, plan_object_and_node_release_at_final_lifetime
 
     // Logical eviction does not release either charge. Final destruction does.
     EXPECT_EQ(object_charge + node_charge, plan_cache.get_managed_used());
-    plan_cache.release_cache_node(node);
+    plan_cache.release_cache_node_memory_account(node);
     EXPECT_EQ(object_charge, plan_cache.get_managed_used());
     plan_cache.release_cache_object(object);
     EXPECT_EQ(0, plan_cache.get_managed_used());
@@ -190,3 +191,10 @@ TEST_F(TestMemoryLimitAccounting, workarea_tracks_sub_megabyte_allocations)
 
 } // namespace sql
 } // namespace oceanbase
+
+int main(int argc, char **argv)
+{
+  OB_LOGGER.set_file_name("test_memory_limit_accounting.log", true);
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

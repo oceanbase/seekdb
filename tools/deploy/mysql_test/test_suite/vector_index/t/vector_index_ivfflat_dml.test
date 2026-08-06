@@ -5,7 +5,7 @@
 connect (conn_user,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
 connection conn_user;
 
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 sleep 3;
 
 --disable_warnings
@@ -426,6 +426,6 @@ eval select count(*) from $cid_vector_table2 t1 inner join vec_xly t2 on t1.c1 =
 
 drop table vec_xly;
 --echo ===clean====
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
 --disable_query_log
 --enable_query_log

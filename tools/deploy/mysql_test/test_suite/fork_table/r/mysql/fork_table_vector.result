@@ -3,7 +3,7 @@ create database db_fork_vec;
 use db_fork_vec;
 set ob_trx_timeout = 100000000;
 set ob_query_timeout = 100000000;
-alter system set ob_vector_memory_limit_percentage = 20;
+alter system set vector_memory_limit = 0;
 # 1. Fork table with existing HNSW vector index
 drop table if exists t_src;
 drop table if exists t_fork;
@@ -563,4 +563,4 @@ drop table t_src_ivf3;
 drop table t_fork_ivf3;
 # 12. Cleanup
 drop database if exists db_fork_vec;
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;

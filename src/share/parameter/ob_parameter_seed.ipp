@@ -74,6 +74,22 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
         "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+        common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
+        "the maximum memory used by KV cache. 0 derives the limit from effective system memory. "
+        "The automatic value is min(1T, 25% of effective system memory). "
+        "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
+        "the maximum memory used by Memstore. 0 derives the limit from effective system memory. "
+        "The automatic value is 20% of effective system memory. "
+        "Range: [0M,).",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
+        "the maximum memory used by the vector module. 0 derives the limit from effective system memory. "
+        "The automatic value is 10% of effective system memory. "
+        "Range: [0M,).",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of CPU\\'s in the system. "
         "If this parameter is set to zero, the number will be set according to sysconf; "
@@ -260,6 +276,9 @@ DEF_PARAM(undo_retention, INT, OB_CLUSTER_PARAMETER, "1800", "[0, 4294967295]",
 DEF_PARAM(_mvcc_gc_using_min_txn_snapshot, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies enable mvcc gc using active txn snapshot",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_rowsets_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "specifies whether vectorized sql execution engine is activated",
+         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_rowsets_target_maxsize, INT, OB_CLUSTER_PARAMETER, "524288", "[262144, 8388608]",
         "the size of the memory reserved for vectorized sql engine. Range: [262144, 8388608]",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -322,11 +341,6 @@ DEF_PARAM(_non_standard_comparison_level, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
         "none, equal, range");
 
-// Kept only for compatibility with tools that still set this retired parameter.
-DEF_PARAM(_memstore_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
-        "but is ignored by memstore sizing and memory control.",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(freeze_trigger_percentage, INT, OB_CLUSTER_PARAMETER, "20", "(0, 100)",
         "the threshold of the size of the mem store when freeze will be triggered. Rang:(0,100)",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1055,11 +1069,6 @@ DEF_PARAM(_enable_ddl_worker_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
          "a switch controling ddl thread isolation",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0",
-        "[0,100)",
-        "Used to control the upper limit percentage of memory resources that the vector_index module can use. Range:[0, 100)."
-        "The system will adjust automatically if ob_vector_memory_limit_percentage set to 0(by default).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(vector_index_memory_saving_mode, OB_CLUSTER_PARAMETER, "True",
         "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild.",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

@@ -18,7 +18,7 @@
 
 #include "ob_memstore_freezer_common.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -141,11 +141,10 @@ void ObMemstoreInfo::update_mem_limit(const int64_t lower_limit,
   mem_upper_limit_ = upper_limit;
 }
 
-void ObMemstoreInfo::update_memstore_limit(const int64_t memstore_limit_percentage)
+void ObMemstoreInfo::update_memstore_limit(const int64_t memstore_limit)
 {
   SpinWLockGuard guard(lock_);
-  int64_t tmp_var = mem_upper_limit_ / 100;
-  mem_memstore_limit_ = tmp_var * memstore_limit_percentage;
+  mem_memstore_limit_ = memstore_limit;
 }
 
 int64_t ObMemstoreInfo::get_memstore_limit() const
@@ -154,12 +153,10 @@ int64_t ObMemstoreInfo::get_memstore_limit() const
   return mem_memstore_limit_;
 }
 
-bool ObMemstoreInfo::is_memstore_limit_changed(const int64_t curr_memstore_limit_percentage) const
+bool ObMemstoreInfo::is_memstore_limit_changed(const int64_t curr_memstore_limit) const
 {
   SpinRLockGuard guard(lock_);
-  const int64_t tmp_var = mem_upper_limit_ / 100;
-  const int64_t curr_mem_memstore_limit = tmp_var * curr_memstore_limit_percentage;
-  return (curr_mem_memstore_limit != mem_memstore_limit_);
+  return curr_memstore_limit != mem_memstore_limit_;
 }
 
 void ObMemstoreInfo::get_freeze_ctx(ObMemstoreFreezeCtx &ctx) const
@@ -232,7 +229,7 @@ ObMemstoreFreezeGuard::ObMemstoreFreezeGuard(int &err_code, const ObMemstoreInfo
       error_code_(err_code),
       time_guard_("FREEZE_CHECKER", warn_threshold)
 {
-  ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
   pre_retire_pos_ = memstore_allocator.get_retire_clock();
 }
 
@@ -240,8 +237,9 @@ ObMemstoreFreezeGuard::~ObMemstoreFreezeGuard()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(error_code_)) {
+    LOG_WARN("[FREEZE_CHECKER]global freeze failed, skip check frozen memstore", KR(error_code_));
   } else {
-    ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
+    ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
     int64_t curr_frozen_pos = 0;
     curr_frozen_pos = memstore_allocator.get_frozen_memstore_pos();
     const bool retired_mem_frozen = (curr_frozen_pos >= pre_retire_pos_);

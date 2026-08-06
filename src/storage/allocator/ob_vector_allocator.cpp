@@ -16,7 +16,7 @@
 
 
 #include "ob_vector_allocator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"  // _ms literal(free within lib)
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
@@ -38,39 +38,11 @@ void ObVectorAllocator::init_throttle_config(int64_t &resource_limit, int64_t &t
   get_vector_mem_config(resource_limit, max_duration);
 }
 
-int64_t ObVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfig *runtime_config)
-{
-  const int64_t LOW_RESOURCE_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
-  const int64_t SMALL_VECTOR_LIMIT_PERCENTAGE = 40;
-  const int64_t LARGE_VECTOR_LIMIT_PERCENTAGE = 50;
-  const int64_t memory_budget = lib::get_memory_budget();
-  int64_t configured_limit_percent = 0;
-  int64_t percent = 0;
-  if (nullptr != runtime_config) {
-    configured_limit_percent = runtime_config->ob_vector_memory_limit_percentage;
-  }
-  if (configured_limit_percent != 0) {
-    percent = configured_limit_percent;
-  } else {
-    // both is default value, adjust automatically
-    if (memory_budget <= LOW_RESOURCE_MEMORY_LIMIT) {
-      percent = SMALL_VECTOR_LIMIT_PERCENTAGE;
-    } else {
-      percent = LARGE_VECTOR_LIMIT_PERCENTAGE;
-    }
-  }
-  return percent;
-}
-
 void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
 {
-  const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
-  const int64_t memory_budget = lib::get_memory_budget();
-  int64_t percent = 0;
   common::ObServerConfig *runtime_config = &GCONF;
   max_duration = runtime_config->writing_throttling_maximum_duration;
-  percent = get_vector_mem_limit_percentage(runtime_config);
-  resource_limit = memory_budget / 100 * percent;
+  resource_limit = lib::get_vector_memory_limit();
 }
 
 int64_t ObVectorAllocator::hold()
@@ -82,7 +54,7 @@ int64_t ObVectorAllocator::hold()
 
 int64_t ObVectorAllocator::get_rb_mem_used()
 {
-  ObRbMemMgr *rb_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>();
+  ObRbMemMgr *rb_mgr = share::g_mp->rb_mem_mgr();
   return rb_mgr != nullptr ? rb_mgr->get_vec_idx_used() : 0;
 }
 
@@ -160,14 +132,16 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   ObMemAttr attr("VIndexVsagADP", ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
+    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
+    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }
@@ -228,14 +202,16 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   ObMemAttr attr(label, ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
+    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
+    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }

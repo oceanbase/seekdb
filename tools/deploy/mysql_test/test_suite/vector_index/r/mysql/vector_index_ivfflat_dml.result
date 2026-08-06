@@ -1,4 +1,4 @@
-alter system set ob_vector_memory_limit_percentage = 34;
+alter system set vector_memory_limit = 0;
 drop table if exists t1;
 drop table if exists t2;
 create table t1 (c1 int AUTO_INCREMENT, c2 int UNIQUE, c3 int, c4 varchar(10), c5 vector(3), c6 vector(3),
@@ -326,4 +326,4 @@ count(*)
 3
 drop table vec_xly;
 ===clean====
-alter system set ob_vector_memory_limit_percentage = 0;
+alter system set vector_memory_limit = 0;
