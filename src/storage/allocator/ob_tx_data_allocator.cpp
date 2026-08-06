@@ -18,7 +18,8 @@
 
 
 #include "ob_tx_data_allocator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "lib/alloc/alloc_func.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -30,8 +31,9 @@ thread_local int64_t ObTxDataOpAllocator::local_alloc_size_ = 0;
 
 int64_t ObTxDataAllocator::hold() const
 {
-  ObSharedMemAllocMgr *manager =
-      ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
+  ObSharedMemAllocMgr *manager = nullptr != share::g_mp
+      ? share::g_mp->shared_mem_alloc_mgr()
+      : nullptr;
   return nullptr != manager ? manager->tx_data_quota_used() : slice_backing();
 }
 
@@ -41,11 +43,18 @@ int64_t ObTxDataAllocator::resource_unit_size()
   return TX_DATA_RESOURCE_UNIT_SIZE;
 }
 
+int64_t ObTxDataAllocator::get_memory_limit()
+{
+  static constexpr int64_t TX_DATA_MEMORY_PERCENTAGE = 40;
+  return lib::get_memory_by_percentage(
+      lib::get_memory_budget(), TX_DATA_MEMORY_PERCENTAGE);
+}
+
 void ObTxDataAllocator::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  resource_limit = lib::get_tx_data_memory_limit();
+  resource_limit = get_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
 }
@@ -71,7 +80,7 @@ ObTxDataThrottleGuard::ObTxDataThrottleGuard(const bool for_replay,
                                              const int64_t abs_expire_time)
     : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME;
@@ -85,7 +94,7 @@ int ObTxDataOpAllocator::init()
   ObMemAttr mem_attr;
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   mem_attr.label_ = "TX_OP";
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   if (IS_INIT){
     ret = OB_INIT_TWICE;
@@ -94,6 +103,7 @@ int ObTxDataOpAllocator::init()
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
+    MDS_LOG(WARN, "init vslice allocator failed", K(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE), KP(this), K(mem_attr));
   } else {
     allocator_.set_nway(MDS_ALLOC_CONCURRENCY);
     is_inited_ = true;

@@ -82,6 +82,8 @@ namespace share {
 DEFINE_SHARE_THROTTLE(TxShare, ObMemstoreAllocator, ObTxDataAllocator, ObMdsAllocator)
 DEFINE_SHARE_THROTTLE(Vector, ObVectorAllocator)
 
+int64_t get_tx_share_memory_limit();
+
 
 class ObThrottleInfoGuard;
 

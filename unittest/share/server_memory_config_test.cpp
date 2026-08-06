@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "lib/alloc/alloc_func.h"
+#include "lib/utility/utility.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/config/ob_server_config.h"
 
@@ -34,7 +35,7 @@ class ServerConfigRestore
 public:
   ServerConfigRestore()
     : memory_limit_(GCONF.memory_limit),
-      memory_budget_(GCONF.memory_budget),
+      memory_budget_(GCONF._memory_budget),
       kvcache_memory_limit_(GCONF.kvcache_memory_limit),
       memstore_memory_limit_(GCONF.memstore_memory_limit),
       vector_memory_limit_(GCONF.vector_memory_limit),
@@ -44,7 +45,7 @@ public:
   ~ServerConfigRestore()
   {
     GCONF.memory_limit = memory_limit_;
-    GCONF.memory_budget = memory_budget_;
+    GCONF._memory_budget = memory_budget_;
     GCONF.kvcache_memory_limit = kvcache_memory_limit_;
     GCONF.memstore_memory_limit = memstore_memory_limit_;
     GCONF.vector_memory_limit = vector_memory_limit_;
@@ -88,30 +89,76 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
             ObServerMemoryConfig::resolve_kvcache_memory_limit(INT64_MAX, INT64_MAX));
 }
 
-TEST(TestServerMemoryConfig, reload_publishes_independent_module_limits)
+TEST(TestServerMemoryConfig, reload_uses_explicit_memory_budget)
 {
   ServerConfigRestore restore;
   ObServerMemoryConfig memory_config;
 
-  GCONF.memory_limit = 0;
-  GCONF.memory_budget = ONE_GIB;
+  GCONF._memory_budget = 3 * ONE_GIB;
+  GCONF.memory_limit = 8 * ONE_GIB;
   GCONF.kvcache_memory_limit = 3 * ONE_GIB;
   GCONF.memstore_memory_limit = 4 * ONE_GIB;
   GCONF.vector_memory_limit = 5 * ONE_GIB;
 
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
   EXPECT_EQ(3 * ONE_GIB, memory_config.get_kvcache_memory_limit());
   EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
   EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
-  EXPECT_EQ(4 * ONE_GIB, memory_config.get_tx_share_memory_limit());
 
-  GCONF.memory_budget = 5 * ONE_GIB;
+  GCONF.memory_limit = 16 * ONE_GIB;
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
   EXPECT_EQ(3 * ONE_GIB, memory_config.get_kvcache_memory_limit());
   EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
   EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
-  EXPECT_EQ(lib::get_memory_by_percentage(5 * ONE_GIB, 130),
-            memory_config.get_tx_share_memory_limit());
+}
+
+TEST(TestServerMemoryConfig, reload_uses_automatic_budget_independent_of_memory_limit)
+{
+  ServerConfigRestore restore;
+  ObServerMemoryConfig memory_config;
+  const int64_t effective_memory = get_effective_memory_size();
+  const int64_t expected_memory_budget =
+      ObServerMemoryConfig::calculate_automatic_memory_budget(
+          effective_memory);
+
+  GCONF._memory_budget = 0;
+  GCONF.memory_limit = 4 * ONE_GIB;
+  GCONF.kvcache_memory_limit = 0;
+  GCONF.memstore_memory_limit = 0;
+  GCONF.vector_memory_limit = 0;
+
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(expected_memory_budget, memory_config.get_server_memory_budget());
+  EXPECT_EQ(ObServerMemoryConfig::resolve_kvcache_memory_limit(
+                0, effective_memory),
+            memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(ObServerMemoryConfig::resolve_memstore_memory_limit(
+                0, effective_memory),
+            memory_config.get_memstore_memory_limit());
+  EXPECT_EQ(ObServerMemoryConfig::resolve_vector_memory_limit(
+                0, effective_memory),
+            memory_config.get_vector_memory_limit());
+
+  GCONF.memory_limit = 16 * ONE_GIB;
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(expected_memory_budget, memory_config.get_server_memory_budget());
+}
+
+TEST(TestServerMemoryConfig, kvcache_limit_does_not_exceed_startup_capacity)
+{
+  ServerConfigRestore restore;
+  ObServerMemoryConfig memory_config;
+
+  GCONF._memory_budget = ONE_GIB;
+  GCONF.kvcache_memory_limit = 3 * ONE_GIB;
+  GCONF.memstore_memory_limit = 0;
+  GCONF.vector_memory_limit = 0;
+  memory_config.publish_kvcache_memory_capacity(2 * ONE_GIB);
+
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(2 * ONE_GIB, memory_config.get_kvcache_memory_limit());
 }
 
 } // namespace common

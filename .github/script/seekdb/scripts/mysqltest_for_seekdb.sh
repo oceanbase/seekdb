@@ -39,7 +39,7 @@ function prepare_config {
     then
         [[ -f $HOME/seekdb/tools/deploy/enable_mini_mode ]] && MINI_SIZE=$(cat $HOME/seekdb/tools/deploy/enable_mini_mode)
         [[ $MINI_SIZE =~ ^[0-9]+G ]] || MINI_SIZE="8G"
-        MINI_CONFIG_ITEM="ObCfg.init_config['memory_budget']='$MINI_SIZE'"
+        MINI_CONFIG_ITEM="ObCfg.init_config['_memory_budget']='$MINI_SIZE'"
     fi
 
 
@@ -141,7 +141,12 @@ export -f run_mysqltest
 function obd_prepare_obd {
     if [[ -f $HOME/seekdb/deps/init/dep_create.sh ]]
     then
-        cd $HOME/seekdb && ./build.sh init || return 3
+        if [[ "$IS_CE" == "1" ]]
+        then
+          cd $HOME/seekdb && ./build.sh init --ce || return 3
+        else  
+          cd $HOME/seekdb && ./build.sh init || return 3
+        fi
     else
         if grep 'dep_create.sh' $HOME/seekdb/build.sh
         then
@@ -542,7 +547,12 @@ function obd_run_mysqltest {
 
             if [[ -f $HOME/seekdb/deps/init/dep_create.sh ]]
             then
-                cd $HOME/seekdb && ./build.sh init || ret=3
+                if [[ "$IS_CE" == "1" ]]
+                then
+                    cd $HOME/seekdb && ./build.sh init --ce || ret=3
+                else  
+                    cd $HOME/seekdb && ./build.sh init || ret=3
+                fi
             else
                 if grep 'dep_create.sh' $HOME/seekdb/build.sh
                 then

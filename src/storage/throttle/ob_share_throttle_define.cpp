@@ -16,6 +16,7 @@
 
 
 #include "ob_share_throttle_define.h"
+#include "lib/alloc/alloc_func.h"
 #include "storage/throttle/ob_throttle_info.h"
 #include "storage/allocator/ob_vector_allocator.h"
 #include "share/config/ob_server_config.h"
@@ -32,11 +33,23 @@ int64_t FakeAllocatorForTxShare::resource_unit_size()
   return SHARE_RESOURCE_UNIT_SIZE;
 }
 
+int64_t get_tx_share_memory_limit()
+{
+  static constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = 4LL << 30;
+  static constexpr int64_t SMALL_TX_SHARE_MEMORY_PERCENTAGE = 110;
+  static constexpr int64_t LARGE_TX_SHARE_MEMORY_PERCENTAGE = 130;
+  const int64_t memory_budget = lib::get_memory_budget();
+  const int64_t percentage = memory_budget <= LOW_RESOURCE_MEMORY_BUDGET
+      ? SMALL_TX_SHARE_MEMORY_PERCENTAGE
+      : LARGE_TX_SHARE_MEMORY_PERCENTAGE;
+  return lib::get_memory_by_percentage(memory_budget, percentage);
+}
+
 void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  resource_limit = GMEMCONF.get_tx_share_memory_limit();
+  resource_limit = get_tx_share_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
 }

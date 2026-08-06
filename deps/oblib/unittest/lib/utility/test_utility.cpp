@@ -61,16 +61,11 @@ TEST(utility, memory_limit_scaled_value_compatibility)
             get_memory_by_percentage(INT64_MAX, 99));
   EXPECT_EQ(INT64_MAX, get_memory_by_percentage(INT64_MAX, 130));
 
-  set_memory_budget(one_gib);
-  EXPECT_EQ(2 * one_gib * 20 / 100, get_tx_data_memory_limit());
-  EXPECT_EQ(2 * one_gib * 10 / 100, get_mds_memory_limit());
-  EXPECT_EQ(2 * one_gib * 5 / 100, get_tx_data_freeze_trigger_memory());
-  EXPECT_EQ(2 * one_gib * 2 / 100, get_mds_freeze_trigger_memory());
   set_memory_budget(99);
-  EXPECT_EQ(128, get_memory_budget_by_percentage(130));
+  EXPECT_EQ(128, get_memory_by_percentage(get_memory_budget(), 130));
   set_memory_budget(INT64_MAX);
   EXPECT_EQ(INT64_MAX / 100 * 40 + INT64_MAX % 100 * 40 / 100,
-            get_tx_data_memory_limit());
+            get_memory_by_percentage(get_memory_budget(), 40));
   set_memory_budget(old_memory_budget);
 }
 

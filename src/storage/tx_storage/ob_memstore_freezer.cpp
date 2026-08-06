@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/alloc/alloc_func.h"
 #include "ob_memstore_freezer.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/config/ob_server_config.h"
@@ -38,6 +39,24 @@ using namespace share;
 namespace storage
 {
 using namespace mds;
+
+namespace
+{
+constexpr int64_t TX_DATA_FREEZE_MEMORY_PERCENTAGE = 10;
+constexpr int64_t MDS_FREEZE_MEMORY_PERCENTAGE = 4;
+
+int64_t get_tx_data_freeze_trigger_memory()
+{
+  return lib::get_memory_by_percentage(
+      lib::get_memory_budget(), TX_DATA_FREEZE_MEMORY_PERCENTAGE);
+}
+
+int64_t get_mds_freeze_trigger_memory()
+{
+  return lib::get_memory_by_percentage(
+      lib::get_memory_budget(), MDS_FREEZE_MEMORY_PERCENTAGE);
+}
+}
 
 ObMemstoreFreezer::ObMemstoreFreezer()
 	: is_inited_(false),
@@ -469,8 +488,8 @@ int ObMemstoreFreezer::check_and_freeze_tx_data_()
   int64_t frozen_tx_data_mem_used = 0;
   int64_t active_tx_data_mem_used = 0;
   int64_t memory_budget = lib::get_memory_budget();
-  int64_t self_freeze_trigger_memory = lib::get_tx_data_freeze_trigger_memory();
-  int64_t tx_data_mem_limit = lib::get_tx_data_memory_limit();
+  int64_t self_freeze_trigger_memory = get_tx_data_freeze_trigger_memory();
+  int64_t tx_data_mem_limit = ObTxDataAllocator::get_memory_limit();
 
   static int skip_count = 0;
   bool need_re_freeze = false;
@@ -603,7 +622,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000 /*10 seconds*/)) {
     bool trigger_flush = false;
     int64_t memory_budget = lib::get_memory_budget();
-    int64_t trigger_freeze_memory = lib::get_mds_freeze_trigger_memory();
+    int64_t trigger_freeze_memory = get_mds_freeze_trigger_memory();
     ObMdsAllocator &mds_allocator = share::g_mp->shared_mem_alloc_mgr()->mds_allocator();
     int64_t hold_memory = mds_allocator.hold();
 
@@ -613,7 +632,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
                 K(trigger_freeze_memory),
                 K(memory_budget),
                 "mds_freeze_memory_percent",
-                lib::MDS_FREEZE_MEMORY_PERCENT);
+                MDS_FREEZE_MEMORY_PERCENTAGE);
     } else if (hold_memory >= trigger_freeze_memory) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(post_mds_table_freeze_request_())) {
@@ -1843,9 +1862,9 @@ void ObSharedMemAllocMgr::update_throttle_config()
     int64_t trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
     int64_t max_duration = runtime_config->writing_throttling_maximum_duration;
     const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
-    const int64_t share_mem_limit = GMEMCONF.get_tx_share_memory_limit();
-    const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
-    const int64_t mds_limit = lib::get_mds_memory_limit();
+    const int64_t share_mem_limit = get_tx_share_memory_limit();
+    const int64_t tx_data_limit = ObTxDataAllocator::get_memory_limit();
+    const int64_t mds_limit = ObMdsAllocator::get_memory_limit();
     const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
 
     bool share_config_changed = false;

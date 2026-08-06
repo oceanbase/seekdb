@@ -16,7 +16,8 @@
 
 
 #include "ob_mds_allocator.h"
-#include "share/rc/ob_server_runtime.h"
+#include "lib/alloc/alloc_func.h"
+#include "share/rc/ob_module_provider.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::storage::mds;
@@ -30,13 +31,20 @@ int64_t ObMdsAllocator::resource_unit_size()
   return MDS_RESOURCE_UNIT_SIZE;
 }
 
+int64_t ObMdsAllocator::get_memory_limit()
+{
+  static constexpr int64_t MDS_MEMORY_PERCENTAGE = 20;
+  return lib::get_memory_by_percentage(
+      lib::get_memory_budget(), MDS_MEMORY_PERCENTAGE);
+}
+
 void ObMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trigger_percentage, int64_t &max_duration)
 {
   // define some default value
   const int64_t MDS_THROTTLE_TRIGGER_PERCENTAGE = 60;
   const int64_t MDS_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
-  resource_limit = lib::get_mds_memory_limit();
+  resource_limit = get_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
   if (trigger_percentage <= 0 || max_duration <= 0) {
@@ -60,7 +68,7 @@ void ObMdsAllocator::adaptive_update_limit(const int64_t holding_size,
 ObMdsThrottleGuard::ObMdsThrottleGuard(const bool for_replay, const int64_t abs_expire_time)
     : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
+  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObMdsThrottleGuard>::DEFAULT_MAX_THROTTLE_TIME;
@@ -92,6 +100,7 @@ void *ObMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_time)
     share::mds_throttled_alloc() += size;
   }
   void *obj = allocator_.alloc(size);
+  MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
   return obj;
 }
 

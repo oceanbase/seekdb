@@ -64,15 +64,15 @@ DEF_PARAM(net_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,128]",
 DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
         "the size of the local server runtime task queue. Range: [1024,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+DEF_PARAM(_memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 means max(1G, 40% of physical memory). Range: 0, [1G,).",
+        "0 means max(1G, 40% of effective system memory). Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
-        "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
-        "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
+        "deprecated compatibility parameter. The configured value is accepted and persisted, "
+        "but is ignored by memory sizing and memory control. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",

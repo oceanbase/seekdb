@@ -34,6 +34,7 @@ private:
   static const int64_t MDS_ALLOC_CONCURRENCY = 8;
 public:
   DEFINE_CUSTOM_FUNC_FOR_THROTTLE(Mds);
+  static int64_t get_memory_limit();
 
 public:
   ObMdsAllocator() : is_inited_(false), throttle_tool_(nullptr), block_alloc_(), allocator_() {}
