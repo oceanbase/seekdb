@@ -1082,7 +1082,9 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
       param.tx_desc_ = tx_desc;
       ObPluginVectorIndexAdaptor *adp = adaptor_guard.get_adatper();
       if (OB_FAIL(adp->check_snap_hnswsq_index())) {
-      } else if (OB_FAIL(adp->set_snapshot_key_prefix(tablet_id_.id(), ctx.snapshot_version_, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH))) {
+        LOG_WARN("failed to check snap hnswsq index", K(ret));
+      } else if (OB_FAIL(adp->set_snapshot_key_prefix(tablet_id_.id(), ctx.snapshot_version_, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH))) {
+        LOG_WARN("failed to set snapshot key prefix", K(ret), K(tablet_id_.id()), K(ctx.snapshot_version_));
       } else if (OB_FAIL(adp->serialize(&row_allocator_, param, cb))) {
         if (OB_NOT_INIT == ret) {
           // ignore // no data in slice store

@@ -19,7 +19,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
@@ -169,7 +169,8 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
 
   /* check major sstable exist */
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
   } else if (OB_FALSE_IT(first_major_sstable = static_cast<ObSSTable *>(
                                                 table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
@@ -325,7 +326,9 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), K(dag), K(start_slice_idx), K(end_slice_idx));
   } else if (OB_FAIL(merge_param.get_tablet_param(tablet_id, tablet_param))) {
-  } else  if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet param", K(ret), K(merge_param));
+  } else  if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret), K(merge_param));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret), K(merge_param));
@@ -461,7 +464,9 @@ int ObIDDLMergeHelper::get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merg
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else if (OB_FAIL(merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet param", K(ret));
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_FAIL(merge_param.get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -554,7 +559,8 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
 
   /* check major sstable exist */
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
   } else if (OB_FALSE_IT(first_major_sstable = static_cast<ObSSTable *>(
                                                 table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
@@ -582,7 +588,8 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
 
   /* release ddl kv when build major sstable */
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_TASK_EXPIRED;

@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -28,7 +28,7 @@ namespace storage
 /* use to check ddl need to do major merge,
 *  notice don't use it to judge whether major exist 
 */
-int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging)
+int ObDDLDirectLoadUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &ddl_need_merging)
 {
   int ret = OB_SUCCESS;
   ddl_need_merging = false;
@@ -54,12 +54,12 @@ int ObDirectLoadMgrUtil::is_ddl_need_major_merge(const ObTablet &tablet, bool &d
 
 
 
-ObDirectLoadType ObDirectLoadMgrUtil::ddl_get_direct_load_type()
+ObDirectLoadType ObDDLDirectLoadUtil::ddl_get_direct_load_type()
 {
   return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL;
 }
 
-int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param)
+int ObDDLDirectLoadUtil::generate_merge_param(const ObTabletDDLCompleteArg &arg, ObDDLTableMergeDagParam &merge_param)
 {
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
@@ -77,7 +77,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteArg &arg,
   return ret;
 }
 
-int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param)
+int ObDDLDirectLoadUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserData &data, ObTablet &tablet, ObDDLTableMergeDagParam &merge_param)
 {
   int ret = OB_SUCCESS;
   share::SCN mock_scn;
@@ -123,7 +123,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
   return ret;
 }
 
-int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,
+int ObDDLDirectLoadUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     const ObTableSchema *&data_table_schema,
     ObIAllocator &allocator,
@@ -188,7 +188,7 @@ int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuar
   return ret;
 }
 
-int ObDirectLoadMgrUtil::get_tablet_handle(const ObTabletID &tablet_id, ObTabletHandle &tablet_handle)
+int ObDDLDirectLoadUtil::get_tablet_handle(const ObTabletID &tablet_id, ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;

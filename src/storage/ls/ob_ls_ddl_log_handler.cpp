@@ -21,9 +21,8 @@
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/ddl/ob_ddl_replay_executor.h"
 #include "share/ob_structured_event_logger.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 
 namespace oceanbase
 {
@@ -271,16 +270,8 @@ int ObLSDDLLogHandler::replay(const void *buffer,
         ret = replay_ddl_redo_log_(log_buf, buf_size, tmp_pos, log_scn);
         break;
       }
-      case ObDDLClogType::DDL_COMMIT_LOG: {
-        ret = replay_ddl_commit_log_(log_buf, buf_size, tmp_pos, log_scn);
-        break;
-      }
       case ObDDLClogType::DDL_TABLET_SCHEMA_VERSION_CHANGE_LOG: {
         ret = replay_ddl_tablet_schema_version_change_log_(log_buf, buf_size, tmp_pos, log_scn);
-        break;
-      }
-      case ObDDLClogType::DDL_START_LOG: {
-        ret = replay_ddl_start_log_(log_buf, buf_size, tmp_pos, log_scn);
         break;
       }
       case ObDDLClogType::DDL_TABLE_FORK_FREEZE_LOG: {
@@ -378,7 +369,8 @@ int ObLSDDLLogHandler::flush(SCN &rec_scn)
           }
 
           if (OB_FAIL(ret)) {
-          } else if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
+          } else if (OB_FAIL(ObDDLDirectLoadUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
+            LOG_WARN("failed to generate merge param", K(ret));
           } else if (OB_FAIL(ObTabletDDLUtil::freeze_ddl_kv(param))) {
           } else if (FALSE_IT(param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn())) {
           } else if (OB_TMP_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
@@ -426,12 +418,6 @@ SCN ObLSDDLLogHandler::get_rec_scn()
     last_rec_scn_ = SCN::max(last_rec_scn_, rec_scn);
   }
 
-  // gc tablet direct load periodically
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
-  if (OB_NOT_NULL(direct_load_mgr)) {
-    (void)direct_load_mgr->gc_tablet_direct_load();
-  }
-
   LOG_INFO("[CHECKPOINT] ObLSDDLLogHandler::get_rec_scn", K(ret),
       K(barrier_tablet_id), K(rec_scn), K_(last_rec_scn));
   return rec_scn;
@@ -448,23 +434,6 @@ int ObLSDDLLogHandler::replay_ddl_redo_log_(const char *log_buf,
   } else if (OB_FAIL(ddl_log_replayer_.replay_redo(log, log_scn))) {
     if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
       LOG_ERROR("fail to replay ddl redo log", K(ret), K(log));
-      ret = OB_EAGAIN;
-    }
-  }
-  return ret;
-}
-
-int ObLSDDLLogHandler::replay_ddl_commit_log_(const char *log_buf,
-                                               const int64_t buf_size,
-                                               int64_t pos,
-                                               const SCN &log_scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLCommitLog log;
-  if (OB_FAIL(log.deserialize(log_buf, buf_size, pos))) {
-  } else if (OB_FAIL(ddl_log_replayer_.replay_commit(log, log_scn))) {
-    if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_ERROR("fail to replay ddl commit log", K(ret), K(log));
       ret = OB_EAGAIN;
     }
   }
@@ -491,23 +460,6 @@ int ObLSDDLLogHandler::replay_ddl_tablet_schema_version_change_log_(const char *
     }
   }
 
-  return ret;
-}
-
-int ObLSDDLLogHandler::replay_ddl_start_log_(const char *log_buf,
-                                             const int64_t buf_size,
-                                             int64_t pos,
-                                             const SCN &log_scn)
-{
-  int ret = OB_SUCCESS;
-  ObDDLStartLog log;
-  if (OB_FAIL(log.deserialize(log_buf, buf_size, pos))) {
-  } else if (OB_FAIL(ddl_log_replayer_.replay_start(log, log_scn))) {
-    if (OB_TABLET_NOT_EXIST != ret && OB_EAGAIN != ret) {
-      LOG_ERROR("fail to replay ddl redo log", K(ret), K(log));
-      ret = OB_EAGAIN;
-    }
-  }
   return ret;
 }
 

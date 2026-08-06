@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_MGR_UTILS_H
-#define OCEANBASE_STORAGE_DDL_OB_DIRECT_LOAD_MGR_UTILS_H
+#ifndef OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H
+#define OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H
 
 #include "common/ob_tablet_id.h"
-#include "storage/ddl/ob_i_direct_load_mgr.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 namespace oceanbase
 {
 namespace storage
 {
 class ObInsertMonitor;
-class ObDirectLoadMgrUtil
+class ObDDLDirectLoadUtil
 {
 public:
 static bool need_process_vec_index(const ObIndexType & index_type)
@@ -49,4 +48,4 @@ static bool need_process_vec_index(const ObIndexType & index_type)
 } // namespace storage
 } // namespace oceanbaes
 
-#endif //OB_DIRECT_LOAD_MGR_UTILS_H
+#endif // OCEANBASE_STORAGE_DDL_OB_DDL_DIRECT_LOAD_UTILS_H

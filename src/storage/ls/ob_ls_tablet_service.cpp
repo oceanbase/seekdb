@@ -33,7 +33,6 @@
 #include "storage/access/ob_table_estimator.h"
 #include "storage/access/ob_index_sstable_estimator.h"
 #include "storage/blocksstable/ob_sstable.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_tablet_iterator.h"
@@ -393,7 +392,6 @@ int ObLSTabletService::inner_remove_tablet(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(tablet_id);
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
-  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
 
   if (OB_FAIL(tablet_id_set_.erase(tablet_id))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -409,17 +407,6 @@ int ObLSTabletService::inner_remove_tablet(const ObTabletID &tablet_id)
     while (OB_FAIL(t3m->del_tablet(key))) {
       if (REACH_TIME_INTERVAL(10_s)) {
         LOG_ERROR("failed to delete tablet from t3m", K(ret), K(tablet_id));
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(direct_load_mgr->remove_tablet_direct_load(
-        ObTabletDirectLoadMgrKey(tablet_id, ObDirectLoadType::DIRECT_LOAD_DDL)))) {
-      if (OB_ENTRY_NOT_EXIST == ret) {
-        ret = OB_SUCCESS;
-      } else {
-        LOG_ERROR("remove tablet direct load failed", K(ret), K(tablet_id));
       }
     }
   }

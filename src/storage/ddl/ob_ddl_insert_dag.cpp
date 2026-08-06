@@ -19,7 +19,8 @@
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
 #include "storage/ddl/ob_ddl_macro_block_write_task.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 

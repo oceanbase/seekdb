@@ -1727,7 +1727,8 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
         param.tx_desc_ = tx_desc;
         ObVectorIndexAlgorithmType index_type = VIAT_MAX;
 
-        if (OB_FAIL(adaptor.set_snapshot_key_prefix(adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH))) {
+        if (OB_FAIL(adaptor.set_snapshot_key_prefix(adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), OB_VEC_IDX_SNAPSHOT_KEY_LENGTH))) {
+          LOG_WARN("failed to set snapshot key prefix", K(ret), K(adaptor.get_snap_tablet_id().id()), K(ctx_->task_status_.target_scn_.get_val_for_inner_table_field()));
         } else if (OB_FAIL(adaptor.check_snap_hnswsq_index())) {
         } else if (OB_FAIL(adaptor.serialize(&allocator_, param, cb))) {
         } else if (OB_FAIL(row_iter.init())) {
@@ -1743,20 +1744,20 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
             for (int64_t row_id = 0; row_id < ctx.vals_.count() && OB_SUCC(ret); row_id++) {
               int64_t key_pos = 0;
               char *key_str = nullptr;
-              key_str = static_cast<char*>(allocator_.alloc(data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH));
+              key_str = static_cast<char*>(allocator_.alloc(OB_VEC_IDX_SNAPSHOT_KEY_LENGTH));
               if (OB_ISNULL(key_str)) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 LOG_WARN("fail to alloc vec key", K(ret));
-              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build vec snapshot key str", K(ret), K(index_type));
               } else if (index_type == VIAT_HGRAPH &&
-                OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hgraph_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+                OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hgraph_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build vec hgraph snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_sq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_sq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
               } else if (OB_ISNULL(key_str)) {
                 ret = OB_ERR_UNEXPECTED;

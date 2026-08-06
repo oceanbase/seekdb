@@ -25,7 +25,7 @@
 #include "storage/ddl/ob_ddl_insert_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 
@@ -243,7 +243,7 @@ public:
             K(tenant_data_version));
       } else {
         dag_param.direct_load_type_ =
-            storage::ObDirectLoadMgrUtil::ddl_get_direct_load_type();
+            storage::ObDDLDirectLoadUtil::ddl_get_direct_load_type();
         dag_param.ddl_thread_count_ = param.worker_count_;
         dag_param.px_thread_count_ = param.worker_count_;
         dag_param.ddl_task_param_.ddl_task_id_ = param.ddl_task_id_;

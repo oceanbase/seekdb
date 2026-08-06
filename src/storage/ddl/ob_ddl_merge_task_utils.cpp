@@ -25,7 +25,7 @@
 #include "storage/ob_storage_schema_util.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_direct_load_struct.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_structured_event_logger.h"
 #include "data_plane/report/ob_tablet_report.h"
@@ -348,7 +348,9 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(dag_merge_param), K(major_sstable), K(slice_sstable_array));
   } else if (OB_FAIL(dag_merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
-  } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet param", K(ret));
+  } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else {
     snapshot_version    = for_major ? max(dag_merge_param.ddl_task_param_.snapshot_version_, tablet_handle.get_obj()->get_snapshot_version()) :

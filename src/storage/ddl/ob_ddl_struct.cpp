@@ -22,8 +22,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
-#include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
@@ -294,7 +293,7 @@ ObDDLMacroBlockRedoInfo::ObDDLMacroBlockRedoInfo()
     block_type_(ObDDLMacroBlockType::DDL_MB_INVALID_TYPE),
     start_scn_(SCN::min_scn()),
     data_format_version_(0),
-    type_(ObDirectLoadType::DIRECT_LOAD_DDL),
+    type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
     macro_block_id_(MacroBlockId::mock_valid_macro_id()),
     parallel_cnt_(0),
     merge_slice_idx_(0)
@@ -309,7 +308,7 @@ void ObDDLMacroBlockRedoInfo::reset()
   logic_id_.reset();
   start_scn_ = SCN::min_scn();
   data_format_version_ = 0;
-  type_ = ObDirectLoadType::DIRECT_LOAD_DDL;
+  type_ = ObDirectLoadType::DIRECT_LOAD_INVALID;
   macro_block_id_ = MacroBlockId::mock_valid_macro_id();
   parallel_cnt_ = 0;
   merge_slice_idx_ = 0;
@@ -339,97 +338,6 @@ OB_SERIALIZE_MEMBER(ObDDLMacroBlockRedoInfo,
                     macro_block_id_,
                     parallel_cnt_,
                     merge_slice_idx_);
-
-ObTabletDirectLoadMgrHandle::ObTabletDirectLoadMgrHandle()
-  : tablet_mgr_(nullptr)
-{ }
-
-ObTabletDirectLoadMgrHandle::~ObTabletDirectLoadMgrHandle()
-{
-  reset();
-}
-
-int ObTabletDirectLoadMgrHandle::set_obj(ObBaseTabletDirectLoadMgr *mgr)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(mgr)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret));
-  } else {
-    mgr->inc_ref();
-    reset();
-    tablet_mgr_ = mgr;
-  }
-  return ret;
-}
-
-ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj()
-{
-  return tablet_mgr_;
-}
-
-const ObBaseTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_base_obj() const
-{
-  return tablet_mgr_;
-}
-
-ObTabletDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_obj()
-{
-  ObTabletDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-const ObTabletDirectLoadMgr *ObTabletDirectLoadMgrHandle::get_obj() const
-{
-  ObTabletDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-ObTabletFullDirectLoadMgr* ObTabletDirectLoadMgrHandle::get_full_obj() const
-{
-  ObTabletFullDirectLoadMgr* res = nullptr;
-  if (nullptr != tablet_mgr_ && !is_idem_type(tablet_mgr_->get_direct_load_type())) {
-    res = static_cast<ObTabletFullDirectLoadMgr*>(tablet_mgr_);
-  }
-  return res;
-}
-
-bool ObTabletDirectLoadMgrHandle::is_valid() const
-{
-  return nullptr != tablet_mgr_;
-}
-
-void ObTabletDirectLoadMgrHandle::reset()
-{
-  if (nullptr != tablet_mgr_) {
-    if (0 == tablet_mgr_->dec_ref()) {
-      if (is_idem_type(tablet_mgr_->get_direct_load_type())) {
-        tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-      } else {
-        tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_allocator().free(tablet_mgr_);
-      }
-    }
-    tablet_mgr_ = nullptr;
-  }
-}
-
-int ObTabletDirectLoadMgrHandle::assign(const ObTabletDirectLoadMgrHandle &other)
-{
-  int ret = OB_SUCCESS;
-  reset();
-  if (OB_LIKELY(other.is_valid())) {
-    if (OB_FAIL(set_obj(other.tablet_mgr_))) {
-    }
-  }
-  return ret;
-}
 
 ObDDLWriteStat::ObDDLWriteStat() : row_count_(0)
 { }

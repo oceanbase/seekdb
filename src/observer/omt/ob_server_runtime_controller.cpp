@@ -42,7 +42,6 @@
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
-#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_memory_printer.h"
 #include "storage/compaction/ob_compaction_progress.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
@@ -1278,7 +1277,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
@@ -1344,7 +1342,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(tablet_stat_mgr, storage::ObTabletStatMgr);
     BIND_SERVICE(plan_cache, sql::ObPlanCache);
     BIND_SERVICE(dtl_interm_result_manager, sql::dtl::ObDTLIntermResultManager);
-    BIND_SERVICE(direct_load_mgr, storage::ObDirectLoadMgr);
     BIND_SERVICE(shared_macro_block_mgr, blocksstable::ObSharedMacroBlockMgr);
     BIND_SERVICE(server_runtime_service, storage::ObIServerRuntime);
     BIND_SERVICE(table_lock_service, transaction::tablelock::ObTableLockService);
@@ -1488,7 +1485,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObDirectLoadMgr::server_module_init(mods_direct_load_mgr_))) { SERVER_LOG(WARN, "mods_direct_load_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTxLoopWorker::server_module_init(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
@@ -1710,7 +1706,6 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_tx_loop_worker_);
   server_module_destroy_default(mods_freeze_info_mgr_);
   server_module_destroy_default(mods_dag_scheduler_);
-  server_module_destroy_default(mods_direct_load_mgr_);
   server_module_destroy_default(mods_compaction_mem_pool_);
   server_module_destroy_default(mods_medium_checker_);
   server_module_destroy_default(mods_tablet_scheduler_);
@@ -1797,7 +1792,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObTabletStatMgr);
   UNBIND_SERVICE(sql::ObPlanCache);
   UNBIND_SERVICE(sql::dtl::ObDTLIntermResultManager);
-  UNBIND_SERVICE(storage::ObDirectLoadMgr);
   UNBIND_SERVICE(blocksstable::ObSharedMacroBlockMgr);
   UNBIND_SERVICE(storage::ObIServerRuntime);
   UNBIND_SERVICE(transaction::tablelock::ObTableLockService);

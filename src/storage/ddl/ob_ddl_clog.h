@@ -38,8 +38,6 @@ enum class ObDDLClogType : int64_t
   UNKNOWN = -1,
   DDL_REDO_LOG = 0x1,
   DDL_TABLET_SCHEMA_VERSION_CHANGE_LOG = 0x10,
-  DDL_START_LOG = 0x20,
-  DDL_COMMIT_LOG = 0x40,// rename from DDL_PREPARE_LOG
   DDL_TABLE_FORK_FREEZE_LOG = 0x44,
   DDL_TABLE_FORK_START_LOG = 0x45,
   DDL_TABLE_FORK_FINISH_LOG = 0x46,
@@ -87,39 +85,6 @@ private:
   ObDDLClogCbStatus status_;
 };
 
-class ObDDLStartClogCb : public logservice::AppendCb
-{
-public:
-  ObDDLStartClogCb();
-  virtual ~ObDDLStartClogCb() = default;
-  int init(const ObITable::TableKey &table_key,
-      const uint64_t data_format_version,
-      const int64_t execution_id,
-      ObDDLKvMgrHandle &ddl_kv_mgr_handle,
-      ObDDLKvMgrHandle &lob_kv_mgr_handle,
-      ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-      const uint32_t lock_tid);
-  virtual int on_success() override;
-  virtual int on_failure() override;
-  inline bool is_success() const { return status_.is_success(); }
-  inline bool is_failed() const { return status_.is_failed(); }
-  inline bool is_finished() const { return status_.is_finished(); }
-  int get_ret_code() const { return status_.get_ret_code(); }
-  void try_release();
-  const char *get_cb_name() const override { return "DDLStartClogCb"; }
-  TO_STRING_KV(K(is_inited_), K(status_), K_(table_key), K_(data_format_version), K_(execution_id), K_(lock_tid));
-private:
-  bool is_inited_;
-  ObDDLClogCbStatus status_;
-  ObITable::TableKey table_key_;
-  uint64_t data_format_version_;
-  int64_t execution_id_;
-  uint32_t lock_tid_;
-  ObDDLKvMgrHandle ddl_kv_mgr_handle_;
-  ObDDLKvMgrHandle lob_kv_mgr_handle_;
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle_;
-};
-
 class ObDDLMacroBlockClogCb : public logservice::AppendCb
 {
 public:
@@ -152,35 +117,6 @@ private:
   bool is_macro_block_exist_;
 };
 
-class ObDDLCommitClogCb : public logservice::AppendCb
-{
-public:
-  ObDDLCommitClogCb();
-  virtual ~ObDDLCommitClogCb() = default;
-  int init(const common::ObTabletID &tablet_id,
-           const share::SCN &start_scn,
-           const uint32_t lock_tid,
-           ObTabletDirectLoadMgrHandle &direct_load_mgr_handle,
-           ObTabletDirectLoadMgrHandle &lob_direct_load_mgr_handle);
-  virtual int on_success() override;
-  virtual int on_failure() override;
-  inline bool is_success() const { return status_.is_success(); }
-  inline bool is_failed() const { return status_.is_failed(); }
-  inline bool is_finished() const { return status_.is_finished(); }
-  int get_ret_code() const { return status_.get_ret_code(); }
-  void try_release();
-  const char *get_cb_name() const override { return "DDLCommitClogCb"; }
-  TO_STRING_KV(K(is_inited_), K(status_), K(tablet_id_), K(start_scn_), K_(lock_tid));
-private:
-  bool is_inited_;
-  ObDDLClogCbStatus status_;
-  common::ObTabletID tablet_id_;
-  share::SCN start_scn_;
-  uint32_t lock_tid_;
-  ObTabletDirectLoadMgrHandle direct_load_mgr_handle_;
-  ObTabletDirectLoadMgrHandle lob_direct_load_mgr_handle_;
-};
-
 class ObDDLClogHeader final
 {
 public:
@@ -196,38 +132,6 @@ private:
   ObDDLClogType ddl_clog_type_;
 };
 
-class ObDDLClog
-{
-public:
-  static const uint64_t COMPATIBLE_LOB_META_TABLET_ID = 1;
-};
-
-class ObDDLStartLog final
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObDDLStartLog();
-  ~ObDDLStartLog() = default;
-  int init(const ObITable::TableKey &table_key,
-           const uint64_t data_format_version,
-           const int64_t execution_id,
-           const ObDirectLoadType direct_load_type,
-           const ObTabletID &lob_meta_tablet_id);
-  bool is_valid() const { return table_key_.is_valid() && data_format_version_ >= 0 && execution_id_ >= 0 && is_valid_direct_load(direct_load_type_); }
-  ObITable::TableKey get_table_key() const { return table_key_; }
-  uint64_t get_data_format_version() const { return data_format_version_; }
-  int64_t get_execution_id() const { return execution_id_; }
-  ObDirectLoadType get_direct_load_type() const { return direct_load_type_; }
-  const ObTabletID &get_lob_meta_tablet_id() const { return lob_meta_tablet_id_; }
-  TO_STRING_KV(K_(table_key), K_(data_format_version), K_(execution_id), K_(direct_load_type), K_(lob_meta_tablet_id));
-private:
-  ObITable::TableKey table_key_;
-  uint64_t data_format_version_; // used for compatibility
-  int64_t execution_id_;
-  ObDirectLoadType direct_load_type_;
-  ObTabletID lob_meta_tablet_id_; // avoid replay get newest mds data
-};
-
 class ObDDLRedoLog final
 {
 public:
@@ -240,26 +144,6 @@ public:
   OB_UNIS_VERSION_V(1);
 private:
   storage::ObDDLMacroBlockRedoInfo redo_info_;
-};
-
-class ObDDLCommitLog final
-{
-  OB_UNIS_VERSION_V(1);
-public:
-  ObDDLCommitLog();
-  ~ObDDLCommitLog() = default;
-  int init(const ObITable::TableKey &table_key,
-           const share::SCN &start_scn,
-           const ObTabletID &lob_meta_tablet_id);
-  bool is_valid() const { return table_key_.is_valid() && start_scn_.is_valid(); }
-  ObITable::TableKey get_table_key() const { return table_key_; }
-  share::SCN get_start_scn() const { return start_scn_; }
-  const ObTabletID &get_lob_meta_tablet_id() const { return lob_meta_tablet_id_; }
-  TO_STRING_KV(K_(table_key), K_(start_scn), K_(lob_meta_tablet_id));
-private:
-  ObITable::TableKey table_key_;
-  share::SCN start_scn_;
-  ObTabletID lob_meta_tablet_id_; // avoid replay get newest mds data
 };
 
 class ObTabletSchemaVersionChangeLog final
