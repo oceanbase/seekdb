@@ -598,6 +598,12 @@ int ObDDLRedoLogHandle::wait(const int64_t timeout)
   return ret;
 }
 
+ObDDLRedoLogWriter::ObDDLRedoLogWriter()
+  : is_inited_(false), tablet_id_(), ddl_redo_handle_array_(), buffer_(nullptr)
+{
+  ddl_redo_handle_array_.set_attr(lib::ObMemAttr("DdlWriteHdl"));
+}
+
 int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
