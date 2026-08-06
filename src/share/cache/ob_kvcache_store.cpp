@@ -20,6 +20,7 @@
 
 #include "share/cache/ob_kvcache_store.h"
 #include "share/cache/ob_kvcache_hazard_domain.h"
+#include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
@@ -111,6 +112,7 @@ int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVCacheStore has been inited, ", K(ret));
   } else if (OB_UNLIKELY(max_cache_size <= block_size * 3)
+      || OB_UNLIKELY(max_cache_size > MAX_CACHE_SIZE)
       || OB_UNLIKELY(block_size <= (int64_t)(sizeof(ObKVStoreMemBlock)))) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid arguments, ", K(max_cache_size),
@@ -922,7 +924,7 @@ int ObKVCacheStore::alloc_mbhandle(
 
 void ObKVCacheStore::compute_wash_size(int64_t &wash_size)
 {
-  const int64_t cache_memory_limit = lib::get_kvcache_memory_limit();
+  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
   const int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
   const int64_t aligned_cache_limit =
       compute_fixed_cache_limit(cache_memory_limit, block_size_);

@@ -18,8 +18,6 @@
 #define OCEANBASE_ALLOCATOR_OB_VECTOR_ALLOCATOR_H_
 #include "lib/vector/ob_vector_util.h"
 #include "storage/throttle/ob_share_throttle_define.h"
-#include "share/config/ob_runtime_config.h"
-#include "share/config/ob_server_config.h"
 namespace oceanbase {
 namespace share {
 

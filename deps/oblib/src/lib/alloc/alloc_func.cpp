@@ -32,13 +32,6 @@ namespace lib
 namespace
 {
 std::atomic<int64_t> g_memory_budget(DEFAULT_MEMORY_BUDGET);
-std::atomic<int64_t> g_kvcache_memory_limit(
-    resolve_kvcache_memory_limit(0, 0));
-std::atomic<int64_t> g_kvcache_memory_capacity(0);
-std::atomic<int64_t> g_memstore_memory_limit(
-    resolve_memstore_memory_limit(0, 0));
-std::atomic<int64_t> g_vector_memory_limit(
-    resolve_vector_memory_limit(0, 0));
 }
 
 void set_memory_budget(int64_t bytes)
@@ -49,46 +42,6 @@ void set_memory_budget(int64_t bytes)
 int64_t get_memory_budget()
 {
   return g_memory_budget.load(std::memory_order_acquire);
-}
-
-void set_kvcache_memory_limit(int64_t bytes)
-{
-  g_kvcache_memory_limit.store(bytes, std::memory_order_release);
-}
-
-int64_t get_kvcache_memory_limit()
-{
-  return g_kvcache_memory_limit.load(std::memory_order_acquire);
-}
-
-void set_kvcache_memory_capacity(int64_t bytes)
-{
-  g_kvcache_memory_capacity.store(bytes, std::memory_order_release);
-}
-
-int64_t get_kvcache_memory_capacity()
-{
-  return g_kvcache_memory_capacity.load(std::memory_order_acquire);
-}
-
-void set_memstore_memory_limit(int64_t bytes)
-{
-  g_memstore_memory_limit.store(bytes, std::memory_order_release);
-}
-
-int64_t get_memstore_memory_limit()
-{
-  return g_memstore_memory_limit.load(std::memory_order_acquire);
-}
-
-void set_vector_memory_limit(int64_t bytes)
-{
-  g_vector_memory_limit.store(bytes, std::memory_order_release);
-}
-
-int64_t get_vector_memory_limit()
-{
-  return g_vector_memory_limit.load(std::memory_order_acquire);
 }
 
 int64_t get_allocator_memory_hold()

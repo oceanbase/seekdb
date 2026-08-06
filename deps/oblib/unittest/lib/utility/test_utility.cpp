@@ -31,10 +31,6 @@ using namespace std;
 TEST(utility, memory_limit_scaled_value_compatibility)
 {
   const int64_t old_memory_budget = get_memory_budget();
-  const int64_t old_kvcache_memory_limit = get_kvcache_memory_limit();
-  const int64_t old_kvcache_memory_capacity = get_kvcache_memory_capacity();
-  const int64_t old_memstore_memory_limit = get_memstore_memory_limit();
-  const int64_t old_vector_memory_limit = get_vector_memory_limit();
   const int64_t one_gib = 1L << 30;
   const int64_t min_value = 4096;
   const int64_t max_value = 100000;
@@ -61,62 +57,21 @@ TEST(utility, memory_limit_scaled_value_compatibility)
   set_memory_budget(128 * one_gib);
   EXPECT_EQ(max_value, calculate_scaled_value_by_memory(min_value, max_value));
 
-  EXPECT_EQ(get_memory_by_percentage(one_gib, 25),
-            resolve_kvcache_memory_limit(0, 0));
-  EXPECT_EQ(MAX_KV_CACHE_MEMORY_LIMIT,
-            resolve_kvcache_memory_limit(INT64_MAX, INT64_MAX));
-  EXPECT_EQ(get_memory_by_percentage(one_gib, 20),
-            resolve_memstore_memory_limit(0, 0));
-  EXPECT_EQ(get_memory_by_percentage(one_gib, 10),
-            resolve_vector_memory_limit(0, 0));
-  EXPECT_EQ(get_memory_by_percentage(10 * one_gib, 25),
-            resolve_kvcache_memory_limit(0, 10 * one_gib));
-  EXPECT_EQ(get_memory_by_percentage(10 * one_gib, 20),
-            resolve_memstore_memory_limit(0, 10 * one_gib));
-  EXPECT_EQ(get_memory_by_percentage(10 * one_gib, 10),
-            resolve_vector_memory_limit(0, 10 * one_gib));
-  EXPECT_EQ(12345, resolve_kvcache_memory_limit(12345, INT64_MAX));
-  EXPECT_EQ(23456, resolve_memstore_memory_limit(23456, INT64_MAX));
-  EXPECT_EQ(34567, resolve_vector_memory_limit(34567, INT64_MAX));
   EXPECT_EQ(INT64_MAX / 100 * 99 + INT64_MAX % 100 * 99 / 100,
             get_memory_by_percentage(INT64_MAX, 99));
   EXPECT_EQ(INT64_MAX, get_memory_by_percentage(INT64_MAX, 130));
-
-  set_kvcache_memory_limit(3 * one_gib);
-  set_kvcache_memory_capacity(8 * one_gib);
-  set_memstore_memory_limit(4 * one_gib);
-  set_vector_memory_limit(5 * one_gib);
-  set_memory_budget(one_gib / 2);
-  EXPECT_EQ(3 * one_gib, get_kvcache_memory_limit());
-  EXPECT_EQ(8 * one_gib, get_kvcache_memory_capacity());
-  EXPECT_EQ(4 * one_gib, get_memstore_memory_limit());
-  EXPECT_EQ(5 * one_gib, get_vector_memory_limit());
-  EXPECT_EQ(4 * one_gib, get_tx_share_memory_limit());
-  set_memory_budget(64 * one_gib);
-  EXPECT_EQ(3 * one_gib, get_kvcache_memory_limit());
-  EXPECT_EQ(4 * one_gib, get_memstore_memory_limit());
-  EXPECT_EQ(5 * one_gib, get_vector_memory_limit());
 
   set_memory_budget(one_gib);
   EXPECT_EQ(2 * one_gib * 20 / 100, get_tx_data_memory_limit());
   EXPECT_EQ(2 * one_gib * 10 / 100, get_mds_memory_limit());
   EXPECT_EQ(2 * one_gib * 5 / 100, get_tx_data_freeze_trigger_memory());
   EXPECT_EQ(2 * one_gib * 2 / 100, get_mds_freeze_trigger_memory());
-  EXPECT_EQ(4 * one_gib, get_tx_share_memory_limit());
-  EXPECT_GE(get_tx_share_memory_limit(), get_memstore_memory_limit());
-  set_memory_budget(5 * one_gib);
-  EXPECT_EQ(10 * one_gib * 65 / 100, get_tx_share_memory_limit());
   set_memory_budget(99);
   EXPECT_EQ(128, get_memory_budget_by_percentage(130));
   set_memory_budget(INT64_MAX);
   EXPECT_EQ(INT64_MAX / 100 * 40 + INT64_MAX % 100 * 40 / 100,
             get_tx_data_memory_limit());
-  EXPECT_EQ(INT64_MAX, get_tx_share_memory_limit());
   set_memory_budget(old_memory_budget);
-  set_kvcache_memory_limit(old_kvcache_memory_limit);
-  set_kvcache_memory_capacity(old_kvcache_memory_capacity);
-  set_memstore_memory_limit(old_memstore_memory_limit);
-  set_vector_memory_limit(old_vector_memory_limit);
 }
 
 struct TestItem

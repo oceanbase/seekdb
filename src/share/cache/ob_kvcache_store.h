@@ -66,6 +66,7 @@ class ObKVCacheStore final : public ObIKVCacheStore,
     public ObIMBHandleAllocator
 {
 public:
+  static constexpr int64_t MAX_CACHE_SIZE = MAX_KVCACHE_MEMORY_SIZE;
   ObKVCacheStore();
   virtual ~ObKVCacheStore();
   int init(const int64_t max_cache_size, const int64_t block_size);
@@ -132,18 +133,13 @@ private:
   static const int64_t RETIRE_LIMIT = 2;
   static const int64_t WASH_THREAD_RETIRE_LIMIT = 64;
   static const int64_t SUPPLY_MB_NUM_ONCE = 128;
-#ifndef _WIN32
-  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
-#else
-  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
-#endif
-  static const int64_t MAX_MB_NUM = DEFAULT_MAX_CACHE_SIZE / lib::ACHUNK_SIZE;
-
   constexpr static const double  WASH_OUT_SCORE_THRESHOLD = 1e-6;
 
 public:
   static const int64_t MAX_MB_HANDLE_NUM = 
-        MAX_MB_NUM + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
+        MAX_CACHE_SIZE / lib::ACHUNK_SIZE
+        + 2 * (ObKVCacheStore::WASH_THREAD_RETIRE_LIMIT
+               + ObKVCacheStore::RETIRE_LIMIT * OB_MAX_THREAD_NUM);
 
 private:
 struct WashCallBack {

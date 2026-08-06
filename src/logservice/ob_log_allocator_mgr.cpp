@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "lib/alloc/alloc_func.h"
+#include "share/config/ob_server_config.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_log_allocator_mgr.h"
@@ -172,7 +172,7 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
         nway = 1;
       }
       const int64_t memory_size = runtime_config.resource_config_.memory_size();
-      const int64_t memstore_limit = lib::get_memstore_memory_limit();
+      const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
       int64_t new_limit = memory_size;
       if (has_memstore) {
         if (memstore_limit <= 0) {

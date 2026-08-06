@@ -117,6 +117,7 @@ const int64_t ObKVGlobalCache::bucket_num_array_[MAX_BUCKET_NUM_LEVEL] =
 
 ObKVGlobalCache::ObKVGlobalCache()
     : inited_(false),
+      memory_capacity_(0),
       cache_num_(0),
       mutex_(common::ObLatchIds::GLOBAL_KV_CACHE_CONFIG_LOCK),
       map_clean_pos_(0),
@@ -149,7 +150,7 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
   // size it from the current effective limit without over-reserving metadata
   // for all physical memory.
   const int64_t cache_capacity = MIN(
-      lib::get_kvcache_memory_limit(), DEFAULT_MAX_CACHE_SIZE);
+      GMEMCONF.get_kvcache_memory_limit(), MAX_CACHE_SIZE);
   int64_t server_memory_factor =
       upper_align(cache_capacity, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
   int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
@@ -190,6 +191,7 @@ int ObKVGlobalCache::init(
     COMMON_LOG(WARN, "The ObKVGlobalCache has been inited, ", K(ret));
   } else if (bucket_num <= 0 ||
              max_cache_size <= 0 ||
+             max_cache_size > MAX_CACHE_SIZE ||
              block_size <= 0 ||
              cache_wash_interval < 0) {
     ret = OB_INVALID_ARGUMENT;
@@ -218,6 +220,7 @@ int ObKVGlobalCache::init(
       map_once_clean_num_ = MAX(MAX_MAP_ONCE_CLEAN_NUM, map_once_clean_num_/EXPAND_MAP_ONCE_CLEAN_RATIO);
     }
     map_once_replace_num_ = min(MAX_MAP_ONCE_REPLACE_NUM, bucket_num / MAP_ONCE_REPLACE_RATIO);
+    ATOMIC_STORE(&memory_capacity_, max_cache_size);
     inited_ = true;
   }
 
@@ -267,6 +270,7 @@ void ObKVGlobalCache::destroy()
     }
     cache_num_ = 0;
 
+    ATOMIC_STORE(&memory_capacity_, 0);
     inited_ = false;
     COMMON_LOG(INFO, "The ObKVGlobalCache has been destroyed!");
   }

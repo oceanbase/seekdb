@@ -17,8 +17,9 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_SERVER_CONFIG_H_
 #define OCEANBASE_SHARE_CONFIG_OB_SERVER_CONFIG_H_
 
+#include <atomic>
+
 #include "share/config/ob_common_config.h"
-#include "share/config/ob_config_rpc_types.h"
 #include "share/config/ob_system_config.h"
 #include "lib/lock/ob_drw_lock.h"
 
@@ -132,10 +133,30 @@ public:
   ObServerMemoryConfig();
   static ObServerMemoryConfig &get_instance();
   int reload_config(const ObServerConfig& server_config);
+  static int64_t calculate_automatic_memory_budget(const int64_t system_memory);
+  static int64_t resolve_kvcache_memory_limit(const int64_t configured_limit,
+                                              const int64_t system_memory);
+  static int64_t resolve_memstore_memory_limit(const int64_t configured_limit,
+                                               const int64_t system_memory);
+  static int64_t resolve_vector_memory_limit(const int64_t configured_limit,
+                                             const int64_t system_memory);
+  static int64_t resolve_tx_share_memory_limit(const int64_t memory_budget,
+                                               const int64_t memstore_memory_limit);
   int64_t get_server_memory_budget() const;
+  int64_t get_kvcache_memory_limit() const;
+  int64_t get_kvcache_memory_capacity() const;
+  void publish_kvcache_memory_capacity(const int64_t bytes);
+  int64_t get_memstore_memory_limit() const;
+  int64_t get_vector_memory_limit() const;
+  int64_t get_tx_share_memory_limit() const;
   int64_t get_reserved_server_memory() { return 1LL<<30; }
   void check_limit();
 private:
+  std::atomic<int64_t> kvcache_memory_limit_;
+  std::atomic<int64_t> kvcache_memory_capacity_;
+  std::atomic<int64_t> memstore_memory_limit_;
+  std::atomic<int64_t> vector_memory_limit_;
+  std::atomic<int64_t> tx_share_memory_limit_;
   DISALLOW_COPY_AND_ASSIGN(ObServerMemoryConfig);
 };
 }

@@ -16,6 +16,7 @@
 
 
 #include "ob_vector_allocator.h"
+#include "share/config/ob_server_config.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"  // _ms literal(free within lib)
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -42,7 +43,7 @@ void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &
 {
   common::ObServerConfig *runtime_config = &GCONF;
   max_duration = runtime_config->writing_throttling_maximum_duration;
-  resource_limit = lib::get_vector_memory_limit();
+  resource_limit = GMEMCONF.get_vector_memory_limit();
 }
 
 int64_t ObVectorAllocator::hold()

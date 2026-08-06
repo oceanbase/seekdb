@@ -19,6 +19,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memstore_freezer.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/config/ob_server_config.h"
 #include "lib/ob_running_mode.h"
 #include "observer/ob_srv_network_frame.h"
 #include "share/ob_ex_rpc.h"
@@ -861,7 +862,7 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
     LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(lower_limit), K(upper_limit));
   } else {
     const int64_t freeze_trigger_percentage = get_freeze_trigger_percentage_();
-    const int64_t memstore_limit = lib::get_memstore_memory_limit();
+    const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
     if (memstore_limit <= 0 ||
         freeze_trigger_percentage > 100 ||
         freeze_trigger_percentage <= 0) {
@@ -1299,7 +1300,7 @@ int ObMemstoreFreezer::reload_config()
 {
   int ret = OB_SUCCESS;
   const int64_t freeze_trigger_percentage = get_freeze_trigger_percentage_();
-  const int64_t memstore_limit = lib::get_memstore_memory_limit();
+  const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
@@ -1819,7 +1820,7 @@ void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
     trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
     max_duration = MEMSTORE_THROTTLE_MAX_DURATION;
   }
-  resource_limit = lib::get_memstore_memory_limit();
+  resource_limit = GMEMCONF.get_memstore_memory_limit();
 }
 
 
@@ -1841,11 +1842,11 @@ void ObSharedMemAllocMgr::update_throttle_config()
   {
     int64_t trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
     int64_t max_duration = runtime_config->writing_throttling_maximum_duration;
-    const int64_t memstore_limit = lib::get_memstore_memory_limit();
-    const int64_t share_mem_limit = lib::get_tx_share_memory_limit();
+    const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
+    const int64_t share_mem_limit = GMEMCONF.get_tx_share_memory_limit();
     const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
     const int64_t mds_limit = lib::get_mds_memory_limit();
-    const int64_t vector_limit = lib::get_vector_memory_limit();
+    const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
 
     bool share_config_changed = false;
     (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(

@@ -36,7 +36,7 @@ void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  resource_limit = lib::get_tx_share_memory_limit();
+  resource_limit = GMEMCONF.get_tx_share_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
 }

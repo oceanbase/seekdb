@@ -15,10 +15,13 @@
  */
 #define USING_LOG_PREFIX SHARE
 
+#include "ob_config_helper.h"
+
 #include "lib/alloc/alloc_func.h"
+#include "share/cache/ob_kvcache_struct.h"
+#include "share/config/ob_server_config.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_utils.h"
-#include "ob_config_helper.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_rpc_struct.h"
 
@@ -461,10 +464,10 @@ bool KVCacheMemoryLimitConfigChecker::check(const ObConfigItem &t) const
   bool is_valid = false;
   const int64_t value = ObConfigCapacityParser::get(t.str(), is_valid, false);
   if (is_valid) {
-    const int64_t initialized_capacity = lib::get_kvcache_memory_capacity();
+    const int64_t initialized_capacity = GMEMCONF.get_kvcache_memory_capacity();
     const int64_t maximum_value = initialized_capacity > 0
         ? initialized_capacity
-        : lib::MAX_KV_CACHE_MEMORY_LIMIT;
+        : MAX_KVCACHE_MEMORY_SIZE;
     is_valid = 0 == value || (value > 0 && value <= maximum_value);
   }
   return is_valid;

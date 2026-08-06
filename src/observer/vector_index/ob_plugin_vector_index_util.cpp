@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_plugin_vector_index_util.h"
+#include "share/config/ob_server_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_iter.h"
@@ -612,7 +613,7 @@ int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limi
 {
   bool ret = OB_SUCCESS;
   {
-    memory_limit = lib::get_vector_memory_limit();
+    memory_limit = GMEMCONF.get_vector_memory_limit();
     LOG_TRACE("vector index memory limit debug", K(memory_limit));
   }
   return ret;
