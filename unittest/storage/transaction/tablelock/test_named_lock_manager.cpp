@@ -16,6 +16,7 @@
 
 #include <chrono>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -192,6 +193,41 @@ TEST_F(NamedLockManagerTest, deadlock_detection)
   owner1_waiter.join();
 
   ASSERT_EQ(OB_SUCCESS, owner1_wait_ret);
+}
+
+TEST_F(NamedLockManagerTest, snapshot_contains_holders_and_waiters)
+{
+  const ObString name = ObString::make_string("snapshot-lock");
+  int waiter_ret = OB_SUCCESS;
+  int64_t release_result = 0;
+  std::vector<NamedLockManager::LockSnapshot> snapshot;
+
+  ASSERT_EQ(OB_SUCCESS, manager_.acquire(name, owner1_, 0));
+  ASSERT_EQ(OB_SUCCESS, manager_.acquire(name, owner1_, 0));
+  std::thread waiter([&]() {
+    waiter_ret = manager_.acquire(name, owner2_, 2 * 1000 * 1000L);
+  });
+  ASSERT_TRUE(wait_for_waiter_count(1));
+  ASSERT_EQ(OB_SUCCESS, manager_.get_lock_snapshot(snapshot));
+  ASSERT_EQ(2, snapshot.size());
+  EXPECT_EQ("snapshot-lock", snapshot.at(0).lock_name_);
+  EXPECT_EQ(owner1_, snapshot.at(0).owner_id_);
+  EXPECT_EQ(2, snapshot.at(0).ref_count_);
+  EXPECT_FALSE(snapshot.at(0).is_waiter_);
+  EXPECT_GT(snapshot.at(0).lock_id_, 0);
+  EXPECT_EQ("snapshot-lock", snapshot.at(1).lock_name_);
+  EXPECT_EQ(owner2_, snapshot.at(1).owner_id_);
+  EXPECT_EQ(0, snapshot.at(1).ref_count_);
+  EXPECT_TRUE(snapshot.at(1).is_waiter_);
+  EXPECT_EQ(snapshot.at(0).lock_id_, snapshot.at(1).lock_id_);
+
+  ASSERT_EQ(OB_SUCCESS, manager_.release(name, owner1_, release_result));
+  ASSERT_EQ(OB_SUCCESS, manager_.release(name, owner1_, release_result));
+  waiter.join();
+  ASSERT_EQ(OB_SUCCESS, waiter_ret);
+  ASSERT_EQ(OB_SUCCESS, manager_.release(name, owner2_, release_result));
+  ASSERT_EQ(OB_SUCCESS, manager_.get_lock_snapshot(snapshot));
+  EXPECT_TRUE(snapshot.empty());
 }
 
 TEST_F(NamedLockManagerTest, owner_cleanup_releases_all_locks)

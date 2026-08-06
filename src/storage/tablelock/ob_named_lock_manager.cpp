@@ -35,6 +35,7 @@ NamedLockManager::NamedLockManager()
     lock_map_(),
     owner_lock_map_(),
     wait_for_map_(),
+    next_lock_id_(1),
     is_inited_(false)
 {
 }
@@ -66,6 +67,7 @@ void NamedLockManager::destroy()
       lock_map_.clear();
       owner_lock_map_.clear();
       wait_for_map_.clear();
+      next_lock_id_ = 1;
       cond_.broadcast();
       is_inited_ = false;
     }
@@ -97,7 +99,8 @@ int NamedLockManager::acquire(const ObString &lock_name,
     while (OB_SUCC(ret) && !finished) {
       LockMap::iterator lock_it = lock_map_.find(name);
       if (lock_it == lock_map_.end()) {
-        lock_map_.insert(std::make_pair(name, LockInfo(owner_id, 1)));
+        lock_map_.insert(std::make_pair(
+            name, LockInfo(owner_id, 1, next_lock_id_++, ObTimeUtility::current_time())));
         owner_lock_map_[owner_id].insert(name);
         remove_waiter_(owner_id);
         finished = true;
@@ -111,7 +114,7 @@ int NamedLockManager::acquire(const ObString &lock_name,
         LOG_WARN("named lock deadlock detected", K(ret), K(lock_name), K(owner_id),
                  "blocker", lock_it->second.owner_id_);
       } else {
-        wait_for_map_[owner_id] = lock_it->second.owner_id_;
+        wait_for_map_[owner_id] = WaitInfo(lock_it->second.owner_id_, name, start_ts);
         const int64_t now = ObTimeUtility::current_time();
         if (timeout_us == 0 || now >= deadline_ts) {
           ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
@@ -269,6 +272,40 @@ int NamedLockManager::get_counts(int64_t &lock_count, int64_t &waiter_count)
   return ret;
 }
 
+int NamedLockManager::get_lock_snapshot(std::vector<LockSnapshot> &snapshot)
+{
+  int ret = OB_SUCCESS;
+  snapshot.clear();
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    ObThreadCondGuard guard(cond_);
+    snapshot.reserve(lock_map_.size() + wait_for_map_.size());
+    for (LockMap::const_iterator lock_it = lock_map_.begin();
+         lock_it != lock_map_.end(); ++lock_it) {
+      snapshot.push_back(LockSnapshot(lock_it->first,
+                                      lock_it->second.lock_id_,
+                                      lock_it->second.owner_id_,
+                                      lock_it->second.ref_count_,
+                                      lock_it->second.create_timestamp_,
+                                      false));
+    }
+    for (WaitForMap::const_iterator wait_it = wait_for_map_.begin();
+         wait_it != wait_for_map_.end(); ++wait_it) {
+      LockMap::const_iterator lock_it = lock_map_.find(wait_it->second.lock_name_);
+      if (lock_it != lock_map_.end()) {
+        snapshot.push_back(LockSnapshot(lock_it->first,
+                                        lock_it->second.lock_id_,
+                                        wait_it->first,
+                                        0,
+                                        wait_it->second.create_timestamp_,
+                                        true));
+      }
+    }
+  }
+  return ret;
+}
+
 bool NamedLockManager::would_deadlock_(const ObTableLockOwnerID &waiter,
                                        const ObTableLockOwnerID &blocker) const
 {
@@ -279,7 +316,7 @@ bool NamedLockManager::would_deadlock_(const ObTableLockOwnerID &waiter,
     if (it == wait_for_map_.end()) {
       break;
     } else {
-      current = it->second;
+      current = it->second.blocker_id_;
       deadlock = current == waiter;
     }
   }
