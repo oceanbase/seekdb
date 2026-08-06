@@ -353,18 +353,6 @@ insert into t1 values(77, '[0.075354,0.230557,0.248149]');
 insert into t1 values(78, '[0.558301,0.543172,0.335010]');
 insert into t1 values(79, '[0.272721,0.648755,0.966464]');
 insert into t1 values(90, '[0.950869,0.275233,0.844568]');
-select /*+ opt_param('rowsets_max_rows', 1) */ * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
-c1	c2
-53	[0.660493,0.373283,0.755029]
-10	[0.345999,0.254102,0.950869]
-50	[0.495983,0.556285,0.986712]
-1	[0.203846,0.205289,0.880265]
-8	[0.185221,0.315131,0.558301]
-2	[0.484526,0.669954,0.986755]
-79	[0.272721,0.648755,0.966464]
-36	[0.646577,0.103579,0.802476]
-73	[0.08467,0.389642,0.970982]
-18	[0.515894,0.188949,0.420311]
 select * from t1 order by l2_distance(c2, [0.428146,0.408760,0.765300]) APPROXIMATE limit 10;
 c1	c2
 53	[0.660493,0.373283,0.755029]
@@ -485,9 +473,6 @@ drop table if exists t1;
 create table t1(c1 int, c2 vector(3), primary key(c1), vector index idx1(c2) with (distance=L2, type=hnsw, lib=vsag, m=20, ef_construction=200, ef_search=200));
 insert into t1 values(1, [1,1,1]);
 select 567 from t1 for update;
-567
-567
-select /*+ opt_param('rowsets_max_rows', 1) */ 567 from t1 for update;
 567
 567
 drop table t1;

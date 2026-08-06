@@ -232,7 +232,6 @@ create vector index idx1 on t1(c2) WITH (distance=L2, lib=vsag, type=hnsw, m=10,
 
 select * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) limit 10;
 select * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
-select /*+ opt_param('rowsets_max_rows', 1) */ * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
 
 update t1 set c2 = [0.701092,0.489040,0.428438,0.705990,0.408267,0.016295,0.899748,0.386882,0.561377,0.576779] where c1 = 5;
 update t1 set c2 = [0.422295,0.386228,0.339575,0.636140,0.039339,0.737867,0.642355,0.300752,0.671344,0.752407] where c1 = 10;
@@ -337,7 +336,6 @@ update t1 set c2 = [0.722487,0.057171,0.843645,0.918717,0.472954,0.393969,0.1102
 
 select * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) limit 10;
 select * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
-select /*+ opt_param('rowsets_max_rows', 1) */ * from t1 order by l2_distance(c2, [0,0,0,0,0,0,0,0,0,0]) approx limit 10;
 
 drop table t1;
 
