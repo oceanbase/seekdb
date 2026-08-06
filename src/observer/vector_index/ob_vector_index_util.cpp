@@ -6079,8 +6079,7 @@ bool ObVectorIndexUtil::check_vector_index_memory(
       } else if (OB_FAIL(estimate_vector_memory_used(schema_guard, index_schema, row_count, estimate_memory))) {
         LOG_WARN("failed to estimate vector memory used", K(ret), K(index_schema), K(row_count));
       } else if (OB_FALSE_IT(estimate_memory = ceil(estimate_memory * VEC_ESTIMATE_MEMORY_FACTOR * VEC_MEMORY_HOLD_FACTOR))) { // multiple 2.0， and need to consider the hold memory.
-      } else if (hold_mem > mem_limited_size ||
-                 estimate_memory > mem_limited_size - hold_mem) {
+      } else if (hold_mem + estimate_memory > mem_limited_size) {
         is_satisfied = false;
       }
       LOG_INFO("finish estimate size", K(ret), K(is_satisfied), 
@@ -6133,8 +6132,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
       LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
       LOG_WARN("failed to estimate ivf memory", K(ret));
-    } else if (hold_mem > mem_limited_size ||
-               construct_mem > static_cast<uint64_t>(mem_limited_size - hold_mem)) {
+    } else if (hold_mem + static_cast<int64_t>(construct_mem) > mem_limited_size) {
       is_satisfied = false;
     }
   }

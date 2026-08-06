@@ -143,7 +143,6 @@ public:
   int64_t get_server_memory_budget() const;
   int64_t get_kvcache_memory_limit() const;
   int64_t get_kvcache_memory_capacity() const;
-  void publish_kvcache_memory_capacity(const int64_t bytes);
   int64_t get_memstore_memory_limit() const;
   int64_t get_vector_memory_limit() const;
   int64_t get_reserved_server_memory() { return 1LL<<30; }

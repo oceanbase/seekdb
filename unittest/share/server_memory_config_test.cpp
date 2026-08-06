@@ -69,12 +69,19 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
   EXPECT_EQ(4 * ONE_GIB,
             ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB));
 
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 25),
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 15),
             ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB));
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 20),
-            ObServerMemoryConfig::resolve_memstore_memory_limit(0, 10 * ONE_GIB));
   EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
+            ObServerMemoryConfig::resolve_memstore_memory_limit(0, 10 * ONE_GIB));
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 5),
             ObServerMemoryConfig::resolve_vector_memory_limit(0, 10 * ONE_GIB));
+
+  const int64_t automatic_limit_sum =
+      ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB)
+      + ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB)
+      + ObServerMemoryConfig::resolve_memstore_memory_limit(0, 10 * ONE_GIB)
+      + ObServerMemoryConfig::resolve_vector_memory_limit(0, 10 * ONE_GIB);
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 70), automatic_limit_sum);
 
   EXPECT_EQ(12345, ObServerMemoryConfig::resolve_kvcache_memory_limit(12345, INT64_MAX));
   EXPECT_EQ(23456, ObServerMemoryConfig::resolve_memstore_memory_limit(23456, INT64_MAX));
@@ -146,11 +153,15 @@ TEST(TestServerMemoryConfig, kvcache_limit_does_not_exceed_startup_capacity)
   ObServerMemoryConfig memory_config;
 
   GCONF._memory_budget = ONE_GIB;
-  GCONF.kvcache_memory_limit = 3 * ONE_GIB;
+  GCONF.kvcache_memory_limit = ONE_GIB;
   GCONF.memstore_memory_limit = 0;
   GCONF.vector_memory_limit = 0;
-  memory_config.publish_kvcache_memory_capacity(2 * ONE_GIB);
 
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(ONE_GIB, memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(2 * ONE_GIB, memory_config.get_kvcache_memory_capacity());
+
+  GCONF.kvcache_memory_limit = 3 * ONE_GIB;
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
   EXPECT_EQ(2 * ONE_GIB, memory_config.get_kvcache_memory_limit());
 }

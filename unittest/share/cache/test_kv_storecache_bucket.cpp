@@ -38,7 +38,7 @@ TEST(TestKVStorecacheBucket, selects_bucket_count_for_cache_capacity)
   int64_t bucket_num = -1;
 
   ASSERT_EQ(OB_SUCCESS, ObKVGlobalCache::calculate_suitable_bucket_num(
-      cache_memory_limit, 1L << 30, bucket_num));
+      cache_memory_limit, bucket_num));
   ASSERT_EQ(1572869, bucket_num);
 }
 
@@ -50,10 +50,10 @@ TEST(TestKVStorecacheBucket, selects_bucket_level_at_capacity_boundary)
   int64_t bucket_num = -1;
 
   ASSERT_EQ(OB_SUCCESS, ObKVGlobalCache::calculate_suitable_bucket_num(
-      cache_memory_limit, 1L << 30, bucket_num));
+      cache_memory_limit, bucket_num));
   ASSERT_EQ(786433, bucket_num);
   ASSERT_EQ(OB_SUCCESS, ObKVGlobalCache::calculate_suitable_bucket_num(
-      cache_memory_limit + 1, 1L << 30, bucket_num));
+      cache_memory_limit + 1, bucket_num));
   ASSERT_EQ(1572869, bucket_num);
 }
 
@@ -62,13 +62,10 @@ TEST(TestKVStorecacheBucket, handles_tiny_and_invalid_limits)
   int64_t bucket_num = -1;
 
   ASSERT_EQ(OB_SUCCESS, ObKVGlobalCache::calculate_suitable_bucket_num(
-      1, 1L << 30, bucket_num));
+      1, bucket_num));
   ASSERT_EQ(196613, bucket_num);
   ASSERT_EQ(OB_ERR_UNEXPECTED, ObKVGlobalCache::calculate_suitable_bucket_num(
-      0, 1L << 30, bucket_num));
-  ASSERT_EQ(-1, bucket_num);
-  ASSERT_EQ(OB_ERR_UNEXPECTED, ObKVGlobalCache::calculate_suitable_bucket_num(
-      1L << 30, 0, bucket_num));
+      0, bucket_num));
   ASSERT_EQ(-1, bucket_num);
 }
 

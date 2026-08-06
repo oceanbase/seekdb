@@ -24,11 +24,10 @@ namespace oceanbase
 namespace common
 {
 
-TEST(TestKVCacheFixedLimit, owns_cache_capacity)
+TEST(TestKVCacheFixedLimit, defines_cache_capacity_limit)
 {
   EXPECT_EQ(1LL << 40, ObKVCacheStore::MAX_CACHE_SIZE);
   EXPECT_EQ(ObKVCacheStore::MAX_CACHE_SIZE, ObKVGlobalCache::MAX_CACHE_SIZE);
-  EXPECT_EQ(0, ObKVGlobalCache::get_instance().get_memory_capacity());
 }
 
 TEST(TestKVCacheFixedLimit, aligns_configured_limit_to_block_size)

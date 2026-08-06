@@ -127,10 +127,6 @@ public:
     return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
   }
   OB_INLINE int64_t get_bucket_num() const { return map_.get_bucket_num(); }
-  int64_t get_memory_capacity() const
-  {
-    return ATOMIC_LOAD(&memory_capacity_);
-  }
   int64_t get_managed_used() const
   {
     return store_.get_store_size() + map_.get_managed_used();
@@ -199,11 +195,9 @@ private:
   // Target one hash bucket per 2 KiB of KV cache capacity, then round up to
   // one of the supported prime bucket counts below.
   static const int64_t KVCACHE_BYTES_PER_BUCKET = 2LL << 10;
-  static constexpr double MAX_RESERVED_MEMORY_RATIO = 0.3;
   static const int64_t MAX_BUCKET_NUM_LEVEL = 10;
   static const int64_t bucket_num_array_[MAX_BUCKET_NUM_LEVEL];
   static int calculate_suitable_bucket_num(const int64_t cache_memory_limit,
-                                           const int64_t reserved_memory,
                                            int64_t &bucket_num);
   static const int64_t PRINT_INTERVAL = 30 * 1000L * 1000L;
   static const int64_t MAP_WASH_CLEAN_INTERNAL = 10;
@@ -243,7 +237,6 @@ private:
   };
 private:
   bool inited_;
-  int64_t memory_capacity_;
   // map
   ObKVCacheMap map_;
   // store

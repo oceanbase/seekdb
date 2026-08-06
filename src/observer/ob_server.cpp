@@ -586,7 +586,6 @@ void ObServer::destroy()
 
     FLOG_INFO("begin to destroy kv global cache");
     ObKVGlobalCache::get_instance().destroy();
-    GMEMCONF.publish_kvcache_memory_capacity(0);
     FLOG_INFO("kv global cache destroyed");
 
     // for unittest, make sure threads can exit
@@ -1713,12 +1712,9 @@ int ObServer::init_global_kvcache()
 {
   int ret = OB_SUCCESS;
   int64_t bucket_num;
-  // Reserve handles for twice the initial limit so the KV-cache limit can be
-  // increased within that capacity. The handle pool should support dynamic
-  // expansion in the future.
-  const int64_t initial_kvcache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
-  const int64_t max_cache_size =
-      MIN(initial_kvcache_memory_limit, ObKVGlobalCache::MAX_CACHE_SIZE / 2) * 2;
+  // The capacity is fixed to twice the initial limit by the memory config.
+  // The handle pool should support dynamic expansion in the future.
+  const int64_t max_cache_size = GMEMCONF.get_kvcache_memory_capacity();
   if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(bucket_num))) {
     LOG_WARN("Failed to get suitable bucket num");
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num, max_cache_size))) {
@@ -1726,9 +1722,6 @@ int ObServer::init_global_kvcache()
   } else if (OB_FAIL(ObResourceMgr::get_instance().set_cache_washer(
       ObKVGlobalCache::get_instance()))) {
     LOG_ERROR("Fail to set_cache_washer", KR(ret));
-  } else {
-    GMEMCONF.publish_kvcache_memory_capacity(
-        ObKVGlobalCache::get_instance().get_memory_capacity());
   }
 
   return ret;

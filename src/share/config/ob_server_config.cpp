@@ -45,9 +45,12 @@ namespace common
 namespace
 {
 constexpr int64_t MEMORY_BUDGET_PERCENTAGE = 40;
-constexpr int64_t KV_CACHE_MEMORY_PERCENTAGE = 25;
-constexpr int64_t MEMSTORE_MEMORY_PERCENTAGE = 20;
-constexpr int64_t VECTOR_MEMORY_PERCENTAGE = 10;
+constexpr int64_t KV_CACHE_MEMORY_PERCENTAGE = 15;
+constexpr int64_t MEMSTORE_MEMORY_PERCENTAGE = 10;
+constexpr int64_t VECTOR_MEMORY_PERCENTAGE = 5;
+static_assert(MEMORY_BUDGET_PERCENTAGE + KV_CACHE_MEMORY_PERCENTAGE
+              + MEMSTORE_MEMORY_PERCENTAGE + VECTOR_MEMORY_PERCENTAGE == 70,
+              "default memory percentages must total 70");
 }
 
 int64_t get_cpu_count()
@@ -238,10 +241,14 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
       server_config.vector_memory_limit;
   const int64_t resolved_kvcache_memory_limit = resolve_kvcache_memory_limit(
       configured_kvcache_memory_limit, physical_memory);
-  const int64_t kvcache_memory_capacity = get_kvcache_memory_capacity();
-  const int64_t kvcache_memory_limit = kvcache_memory_capacity > 0
-      ? MIN(resolved_kvcache_memory_limit, kvcache_memory_capacity)
-      : resolved_kvcache_memory_limit;
+  int64_t kvcache_memory_capacity = get_kvcache_memory_capacity();
+  if (0 == kvcache_memory_capacity) {
+    kvcache_memory_capacity =
+        MIN(resolved_kvcache_memory_limit, MAX_KVCACHE_MEMORY_SIZE / 2) * 2;
+    kvcache_memory_capacity_.store(kvcache_memory_capacity, std::memory_order_release);
+  }
+  const int64_t kvcache_memory_limit =
+      MIN(resolved_kvcache_memory_limit, kvcache_memory_capacity);
   const int64_t memstore_memory_limit = resolve_memstore_memory_limit(
       configured_memstore_memory_limit, physical_memory);
   const int64_t vector_memory_limit = resolve_vector_memory_limit(
@@ -273,11 +280,6 @@ int64_t ObServerMemoryConfig::get_kvcache_memory_limit() const
 int64_t ObServerMemoryConfig::get_kvcache_memory_capacity() const
 {
   return kvcache_memory_capacity_.load(std::memory_order_acquire);
-}
-
-void ObServerMemoryConfig::publish_kvcache_memory_capacity(const int64_t bytes)
-{
-  kvcache_memory_capacity_.store(bytes, std::memory_order_release);
 }
 
 int64_t ObServerMemoryConfig::get_memstore_memory_limit() const
