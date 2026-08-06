@@ -26,7 +26,6 @@ namespace storage
 
 enum ObDirectLoadType {
   DIRECT_LOAD_INVALID = 0,
-  DIRECT_LOAD_DDL = 1,
   IDEM_DIRECT_LOAD_DDL = 4,
   DIRECT_LOAD_MAX = 5
 };
@@ -38,20 +37,17 @@ static inline bool is_complete_logic(const ObDirectLoadType &type)
 }
 static inline bool is_valid_direct_load(const ObDirectLoadType &type)
 {
-  return ObDirectLoadType::DIRECT_LOAD_DDL == type ||
-         ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
+  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
 }
 
 static inline bool is_ddl_direct_load(const ObDirectLoadType &type)
 {
-  return ObDirectLoadType::DIRECT_LOAD_DDL == type ||
-         ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
+  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
 }
 
 static inline bool is_full_direct_load(const ObDirectLoadType &type)
 {
-  return ObDirectLoadType::DIRECT_LOAD_DDL == type
-      || ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
+  return ObDirectLoadType::IDEM_DIRECT_LOAD_DDL == type;
 }
 
 static inline bool is_idem_type(const ObDirectLoadType &type)
