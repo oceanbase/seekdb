@@ -18,7 +18,7 @@
 
 #include "ob_server_config.h"
 
-#include "lib/alloc/alloc_struct.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/cpu/ob_cpu_topology.h"
 #include "lib/hash/ob_hashtable.h"
 #include "lib/hash/ob_hashutils.h"
@@ -291,24 +291,6 @@ int64_t ObServerMemoryConfig::get_vector_memory_limit() const
 {
   return vector_memory_limit_.load(std::memory_order_acquire);
 }
-
-void ObServerMemoryConfig::check_limit()
-{
-  // check unmanaged memory size
-  const int64_t UNMANAGED_MEMORY_LIMIT = 2LL<<30;
-  int64_t unmanaged_memory_size = lib::get_unmanaged_memory_size();
-  if (unmanaged_memory_size > UNMANAGED_MEMORY_LIMIT) {
-    LOG_ERROR_RET(OB_EXCEED_MEM_LIMIT, "unmanaged_memory_size is over the limit",
-                  K(unmanaged_memory_size), K(UNMANAGED_MEMORY_LIMIT));
-  }
-}
-
-int ObServerConfig::publish_special_config_after_dump()
-{
-  int ret = OB_SUCCESS;
-  return ret;
-}
-
 
 } // end of namespace common
 namespace obgrpc {

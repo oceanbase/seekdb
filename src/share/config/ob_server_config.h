@@ -98,9 +98,6 @@ public:
     return v == 2;
   }
 
-  int publish_special_config_after_dump();
-
-public:
   int64_t disk_actual_space_;
   ObAddr self_addr_;
   mutable common::DRWLock rwlock_;
@@ -146,7 +143,6 @@ public:
   int64_t get_memstore_memory_limit() const;
   int64_t get_vector_memory_limit() const;
   int64_t get_reserved_server_memory() { return 1LL<<30; }
-  void check_limit();
 private:
   std::atomic<int64_t> kvcache_memory_limit_;
   std::atomic<int64_t> kvcache_memory_capacity_;
