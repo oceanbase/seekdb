@@ -20,6 +20,8 @@
 #include "ob_sql_session_info.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/memtable/mvcc/ob_btree_iter_cache.h"
+#include "storage/tablelock/ob_table_lock_service.h"
+#include "storage/tablelock/ob_table_lock_owner_id.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "pl/ob_pl_package.h"
@@ -1806,6 +1808,8 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
 int ObSQLSessionInfo::on_user_disconnect()
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  int64_t release_count = 0;
   ObConnectResourceMgr *conn_res_mgr = GCTX.conn_res_mgr_;
   if (OB_ISNULL(conn_res_mgr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1813,6 +1817,20 @@ int ObSQLSessionInfo::on_user_disconnect()
   } else if (OB_FAIL(conn_res_mgr->on_user_disconnect(*this))) {
     LOG_WARN("user disconnect failed", K(ret));
   }
+  // Do not use is_lock_session() as the guard here. It is shared with LOCK
+  // TABLES and can be cleared after UNLOCK TABLES while this session still
+  // owns a named lock.
+  transaction::tablelock::ObTableLockOwnerID owner_id;
+  transaction::tablelock::ObTableLockService *lock_service = share::g_mp->table_lock_service();
+  if (OB_ISNULL(lock_service)) {
+    tmp_ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table lock service is null when releasing named locks", K(tmp_ret));
+  } else if (OB_TMP_FAIL(owner_id.convert_from_session_id(get_server_sid(), get_sess_create_time()))) {
+    LOG_WARN("failed to build named lock owner on disconnect", K(tmp_ret), K(get_server_sid()));
+  } else if (OB_TMP_FAIL(lock_service->get_named_lock_manager().release_all(owner_id, release_count))) {
+    LOG_WARN("failed to release named locks on disconnect", K(tmp_ret), K(owner_id));
+  }
+  ret = COVER_SUCC(tmp_ret);
   return ret;
 }
 

@@ -183,8 +183,8 @@ int ObMPResetConnection::process()
       if (OB_FAIL(owner_id.convert_from_session_id(session->get_server_sid(),
                                                    session->get_sess_create_time()))) {
         LOG_WARN("failed to convert from session id", K(ret));
-      } else if (OB_FAIL(ObTableLockDetector::remove_lock_by_owner_id(owner_id))) {
-        LOG_WARN("failed to remove lock by owner id", K(ret));
+      } else if (OB_FAIL(ObTableLockDetector::remove_named_lock_by_owner_id(owner_id))) {
+        LOG_WARN("failed to remove named lock by owner id", K(ret));
       }
     }
 

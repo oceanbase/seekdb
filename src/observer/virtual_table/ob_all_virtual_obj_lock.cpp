@@ -17,6 +17,7 @@
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ls/ob_ls.h"
+#include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_tx_ctx.h"
 
@@ -36,6 +37,9 @@ ObAllVirtualObjLock::ObAllVirtualObjLock()
       lock_op_iter_(),
       prio_op_iter_(),
       is_iter_tx_(true),
+      is_iter_named_lock_(false),
+      named_lock_snapshot_(),
+      named_lock_snapshot_idx_(0),
       is_iter_priority_list_(true)
 {
 }
@@ -57,6 +61,10 @@ void ObAllVirtualObjLock::reset()
   obj_lock_iter_.reset();
   lock_op_iter_.reset();
   prio_op_iter_.reset();
+  is_iter_named_lock_ = false;
+  std::vector<transaction::tablelock::NamedLockManager::LockSnapshot>().swap(
+      named_lock_snapshot_);
+  named_lock_snapshot_idx_ = 0;
   start_to_read_ = false;
   is_iter_priority_list_ = true;
   ObVirtualTableScannerIterator::reset();
@@ -259,6 +267,52 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_lock_memtable()
   return ret;
 }
 
+int ObAllVirtualObjLock::prepare_named_lock_snapshot()
+{
+  int ret = OB_SUCCESS;
+  transaction::tablelock::ObTableLockService *lock_service =
+      share::g_mp->table_lock_service();
+  named_lock_snapshot_.clear();
+  named_lock_snapshot_idx_ = 0;
+  if (OB_ISNULL(lock_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "table lock service is null", K(ret));
+  } else if (OB_FAIL(lock_service->get_named_lock_manager().get_lock_snapshot(named_lock_snapshot_))) {
+    SERVER_LOG(WARN, "get named lock snapshot failed", K(ret));
+  }
+  return ret;
+}
+
+int ObAllVirtualObjLock::get_next_named_lock_op(
+    transaction::tablelock::ObTableLockOp &lock_op,
+    transaction::tablelock::ObTableLockPriority &priority,
+    const transaction::tablelock::NamedLockManager::LockSnapshot *&snapshot)
+{
+  int ret = OB_SUCCESS;
+  snapshot = NULL;
+  if (named_lock_snapshot_idx_ >= static_cast<int64_t>(named_lock_snapshot_.size())) {
+    ret = OB_ITER_END;
+  } else {
+    snapshot = &named_lock_snapshot_.at(named_lock_snapshot_idx_++);
+    if (OB_FAIL(lock_op.lock_id_.set(
+            transaction::tablelock::ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC,
+                                     snapshot->lock_id_))) {
+      SERVER_LOG(WARN, "set named lock id failed", K(ret), K(snapshot->lock_id_));
+    } else {
+      lock_op.lock_mode_ = transaction::tablelock::EXCLUSIVE;
+      lock_op.owner_id_ = snapshot->owner_id_;
+      lock_op.op_type_ = transaction::tablelock::OUT_TRANS_LOCK;
+      lock_op.lock_op_status_ = snapshot->is_waiter_
+          ? transaction::tablelock::LOCK_OP_DOING
+          : transaction::tablelock::LOCK_OP_COMPLETE;
+      lock_op.create_timestamp_ = snapshot->create_timestamp_;
+      lock_op.create_schema_version_ = -1;
+      priority = transaction::tablelock::ObTableLockPriority::NORMAL;
+    }
+  }
+  return ret;
+}
+
 int ObAllVirtualObjLock::prepare_start_to_read()
 {
   int ret = OB_SUCCESS;
@@ -271,9 +325,15 @@ int ObAllVirtualObjLock::prepare_start_to_read()
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
     SERVER_LOG(WARN, "get log stream failed", K(ret));
-  } else if (OB_FAIL(get_next_lock_op_iter())) {
+  } else if (OB_FAIL(prepare_named_lock_snapshot())) {
+    SERVER_LOG(WARN, "prepare named lock snapshot failed", K(ret));
+  } else if (OB_FAIL(get_next_lock_op_iter()) && OB_ITER_END != ret) {
     SERVER_LOG(WARN, "init lock_op_iter_ failed", K(ret));
   } else {
+    if (OB_ITER_END == ret) {
+      ret = OB_SUCCESS;
+      is_iter_named_lock_ = true;
+    }
     start_to_read_ = true;
   }
   return ret;
@@ -284,13 +344,25 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   transaction::tablelock::ObTableLockOp lock_op;
   transaction::tablelock::ObTableLockPriority priority;
+  const transaction::tablelock::NamedLockManager::LockSnapshot *named_lock = NULL;
   if (!start_to_read_ && OB_FAIL(prepare_start_to_read())) {
     SERVER_LOG(WARN, "prepare start to read failed", K(ret));
-  } else if (OB_FAIL(get_next_lock_op(lock_op, priority))) {
-    if (OB_ITER_END != ret) {
-      SERVER_LOG(WARN, "get_next_lock_op failed", K(ret));
-    }
   } else {
+    if (!is_iter_named_lock_ && OB_FAIL(get_next_lock_op(lock_op, priority))) {
+      if (OB_ITER_END == ret) {
+        ret = OB_SUCCESS;
+        is_iter_named_lock_ = true;
+      } else {
+        SERVER_LOG(WARN, "get_next_lock_op failed", K(ret));
+      }
+    }
+    if (OB_SUCC(ret) && is_iter_named_lock_
+        && OB_FAIL(get_next_named_lock_op(lock_op, priority, named_lock))
+        && OB_ITER_END != ret) {
+      SERVER_LOG(WARN, "get next named lock op failed", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
     const int64_t col_count = output_column_ids_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
@@ -356,15 +428,23 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(lock_op.create_schema_version_);
           break;
         }
-        case EXTRA_INFO:
-          snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
-                   "count:%ld, position:%s",
-                   ((lock_op.op_type_ == IN_TRANS_DML_LOCK && !is_iter_tx_) ? lock_op.lock_seq_no_.cast_to_int() : 0),
-                   is_iter_tx_ ? "tx_ctx" : "lock_table");
+        case EXTRA_INFO: {
+          if (OB_NOT_NULL(named_lock)) {
+            snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
+                     "count:%ld, position:named_lock_manager",
+                     named_lock->ref_count_);
+          } else {
+            snprintf(lock_op_extra_info_, sizeof(lock_op_extra_info_),
+                     "count:%ld, position:%s",
+                     ((lock_op.op_type_ == IN_TRANS_DML_LOCK && !is_iter_tx_)
+                         ? lock_op.lock_seq_no_.cast_to_int() : 0),
+                     is_iter_tx_ ? "tx_ctx" : "lock_table");
+          }
           lock_op_extra_info_[MAX_LOCK_OP_EXTRA_INFO_LENGTH - 1] = '\0';
           cur_row_.cells_[i].set_varchar(lock_op_extra_info_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
+        }
         case TIME_AFTER_CREATE: {
           cur_row_.cells_[i].set_int(ObTimeUtility::current_time() - lock_op.create_timestamp_);
           break;
@@ -402,10 +482,22 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case WAIT_SEQ: {
-          if (is_iter_priority_list_ && is_iter_tx_) {
+          if (OB_NOT_NULL(named_lock) && named_lock->is_waiter_) {
+            cur_row_.cells_[i].set_int(named_lock->create_timestamp_);
+          } else if (is_iter_priority_list_ && is_iter_tx_) {
             cur_row_.cells_[i].set_int(lock_op.create_timestamp_);
           } else {
             cur_row_.cells_[i].set_int(0);
+          }
+          break;
+        }
+        case OBJ_NAME: {
+          if (OB_ISNULL(named_lock)) {
+            cur_row_.cells_[i].set_null();
+          } else {
+            cur_row_.cells_[i].set_varchar(named_lock->lock_name_.c_str());
+            cur_row_.cells_[i].set_collation_type(
+                ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
           break;
         }

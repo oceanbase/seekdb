@@ -21,15 +21,12 @@
 
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_result.h"
-#include "lib/utility/ob_fast_convert.h"
 #include "lib/utility/alloc_assist.h"
 #include "observer/ob_inner_sql_connection.h"
-#include "share/ob_table_access_helper.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_end_trans_callback.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "storage/ob_common_id_utils.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/tablelock/ob_table_lock_live_detector.h"
@@ -360,86 +357,6 @@ int ObLockExecutor::unlock_table_(ObTxDesc *tx_desc,
   return ret;
 }
 
-int ObLockExecutor::query_lock_id_(const ObString &lock_name,
-                                   uint64_t &lock_id)
-{
-  int ret = OB_SUCCESS;
-  
-  ObStringHolder query_lock_handle;
-  // 1. check if there's a lock with the same lock name
-  char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
-  // generate corresponding lock handle for the lock name,
-  // and insert them into the inner table DBMS_LOCK_ALLOCATED
-
-  lock_id = OB_INVALID_OBJECT_ID;
-
-  ObCStringHelper helper;
-  OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", helper.convert(lock_name)));
-  OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
-                      "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (ObTableAccessHelper::read_single_row(
-                                           { "lockhandle" },
-                                           table_name,
-                                           where_cond,
-                                           query_lock_handle));
-  if (OB_EMPTY_RESULT == ret) {
-    // there is no lock name.
-  } else if (OB_SUCC(ret)) {
-    OZ (extract_lock_id_(query_lock_handle.get_ob_string(), lock_id));
-  }
-  return ret;
-}
-
-int ObLockExecutor::query_lock_id_and_lock_handle_(const ObString &lock_name,
-                                                   uint64_t &lock_id,
-                                                   char *lock_handle_buf)
-{
-  int ret = OB_SUCCESS;
-  
-  ObStringHolder query_lock_handle;
-  // 1. check if there's a lock with the same lock name
-  char where_cond[WHERE_CONDITION_BUFFER_SIZE] = {0};
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
-  int64_t lock_handle_len = 0;
-  // generate corresponding lock handle for the lock name,
-  // and insert them into the inner table DBMS_LOCK_ALLOCATED
-  ObCStringHelper helper;
-  OZ (databuff_printf(where_cond, WHERE_CONDITION_BUFFER_SIZE,
-                      "WHERE name = '%s'", helper.convert(lock_name)));
-  OZ (databuff_printf(table_name, MAX_FULL_TABLE_NAME_LENGTH,
-                      "%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_DBMS_LOCK_ALLOCATED_TNAME));
-  OZ (ObTableAccessHelper::read_single_row(
-                                           { "lockhandle" },
-                                           table_name,
-                                           where_cond,
-                                           query_lock_handle));
-  if (OB_EMPTY_RESULT == ret) {
-    // there is no lock name.
-  } else if (OB_SUCC(ret)) {
-    ObString lock_handle_string = query_lock_handle.get_ob_string();
-    OZ (extract_lock_id_(lock_handle_string, lock_id));
-    OV (lock_handle_string.length() < MAX_LOCK_HANDLE_LEGNTH, OB_INVALID_ARGUMENT, lock_handle_string);
-    OX (MEMCPY(lock_handle_buf, lock_handle_string.ptr(), lock_handle_string.length()));
-    lock_handle_buf[lock_handle_string.length()] = '\0';
-  }
-  return ret;
-}
-
-int ObLockExecutor::extract_lock_id_(const ObString &lock_handle,
-                                     uint64_t &lock_id)
-{
-  int ret = OB_SUCCESS;
-
-  OV (lock_handle.is_numeric(), OB_INVALID_ARGUMENT, lock_handle);
-  OV (lock_handle.length() >= LOCK_ID_LENGTH, OB_INVALID_ARGUMENT, lock_handle, lock_handle.length());
-  OX (lock_id = ObFastAtoi<uint64_t>::atoi_positive_unchecked(lock_handle.ptr(), lock_handle.ptr() + LOCK_ID_LENGTH));
-  OV (lock_id >= MIN_LOCK_HANDLE_ID && lock_id <= MAX_LOCK_HANDLE_ID, OB_INVALID_ARGUMENT, lock_id);
-
-  return ret;
-}
-
 void ObLockExecutor::mark_lock_session_(sql::ObSQLSessionInfo *session,
                                         const bool is_lock_session)
 {
@@ -595,9 +512,7 @@ int ObUnLockExecutor::release_all_locks_(ObLockContext &ctx,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  char table_name[MAX_FULL_TABLE_NAME_LENGTH] = {0};
   ObArray<ObLockRequest*> arg_list;
-  ObSqlString sql;
   ObTableLockTaskType task_type = INVALID_LOCK_TASK_TYPE;
   ObArenaAllocator allocator(ObModIds::OB_SQL_RES_TYPE);
 

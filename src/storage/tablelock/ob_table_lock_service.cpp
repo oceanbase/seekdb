@@ -423,6 +423,8 @@ int ObTableLockService::init()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(GCTX.self_addr()),
              KP(GCTX.sql_proxy_));
+  } else if (OB_FAIL(named_lock_manager_.init())) {
+    LOG_WARN("failed to init named lock manager", K(ret));
   } else {
     sql_proxy_ = GCTX.sql_proxy_;
     is_inited_ = true;
@@ -454,6 +456,7 @@ void ObTableLockService::wait()
 void ObTableLockService::destroy()
 {
   obj_lock_garbage_collector_.destroy();
+  named_lock_manager_.destroy();
   sql_proxy_ = nullptr;
   is_inited_ = false;
 }

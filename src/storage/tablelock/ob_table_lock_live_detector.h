@@ -95,8 +95,8 @@ public:
                                                  const ObLockRequest &lock_req,
                                                  int64_t &cnt);
   static int do_detect_and_clear();
-  static int remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id);
-  static int remove_expired_lock_id();
+  static int remove_named_lock_by_owner_id(const ObTableLockOwnerID &owner_id);
+  static int remove_obj_lock_by_owner_id(const ObTableLockOwnerID &owner_id);
 
   static int check_lock_id_exist_in_inner_table(sql::ObSQLSessionInfo *session_info,
                                                 const uint64_t &obj_id,
@@ -111,7 +111,6 @@ public:
                                              const ObLockRequest &lock_req,
                                              bool &exist);
   static int get_table_name(char *table_name);
-  static int get_lock_owner_by_lock_id(const uint64_t &lock_id, ObTableLockOwnerID &lock_owner);
   static int get_unlock_request_list(sql::ObSQLSessionInfo *session,
                                      const ObTableLockOwnerID &owner_id,
                                      const ObTableLockTaskType task_type,
