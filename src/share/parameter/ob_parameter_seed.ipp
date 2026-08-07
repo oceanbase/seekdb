@@ -341,6 +341,11 @@ DEF_PARAM(_non_standard_comparison_level, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
         "none, equal, range");
 
+// Kept only for compatibility with tools that still set this retired parameter.
+DEF_PARAM(_memstore_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
+        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
+        "but is ignored by memstore sizing and memory control.",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(freeze_trigger_percentage, INT, OB_CLUSTER_PARAMETER, "20", "(0, 100)",
         "the threshold of the size of the mem store when freeze will be triggered. Rang:(0,100)",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1069,6 +1074,11 @@ DEF_PARAM(_enable_ddl_worker_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
          "a switch controling ddl thread isolation",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
+// Kept only for compatibility with tools that still set this retired parameter.
+DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
+        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
+        "but is ignored by vector memory sizing and memory control.",
+        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(vector_index_memory_saving_mode, OB_CLUSTER_PARAMETER, "True",
         "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild.",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

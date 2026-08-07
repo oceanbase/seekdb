@@ -27,6 +27,11 @@
 namespace oceanbase
 {
 
+namespace rootserver
+{
+  class ObAdminSetConfig;
+}
+
 namespace common
 {
 
@@ -74,6 +79,7 @@ class ObCommonConfig;
 class ObSystemConfig;
 class ObConfigItem
 {
+  friend class oceanbase::rootserver::ObAdminSetConfig;
   friend class ObBaseConfig;
   friend class ObCommonConfig;
   friend class ObSystemConfig;
@@ -107,12 +113,6 @@ public:
 #else
     return set_value_with_lock(string);
 #endif
-  }
-  // Validation uses an unpublished temporary config container, so the caller
-  // owns synchronization and can avoid taking the production config latch.
-  bool set_value_for_validation(const common::ObString &string)
-  {
-    return set_value_unsafe(string);
   }
   void set_name(const char *name)
   {
@@ -548,9 +548,9 @@ public:
   ObConfigCapacityItem &operator = (int64_t value);
   virtual bool check_unit(const char *str) const
   {
-    bool is_valid;
+    bool is_valid = false;
     IGNORE_RETURN ObConfigCapacityParser::get(str, is_valid);
-    return is_valid;
+    return is_valid || (NULL != str && 0 == STRCMP("0", str));
   }
 
   virtual ObConfigItemType get_config_item_type() const {

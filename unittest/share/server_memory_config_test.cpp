@@ -39,6 +39,8 @@ public:
       kvcache_memory_limit_(GCONF.kvcache_memory_limit),
       memstore_memory_limit_(GCONF.memstore_memory_limit),
       vector_memory_limit_(GCONF.vector_memory_limit),
+      memstore_limit_percentage_(GCONF._memstore_limit_percentage),
+      vector_memory_limit_percentage_(GCONF.ob_vector_memory_limit_percentage),
       effective_memory_budget_(lib::get_memory_budget())
   {}
 
@@ -49,6 +51,8 @@ public:
     GCONF.kvcache_memory_limit = kvcache_memory_limit_;
     GCONF.memstore_memory_limit = memstore_memory_limit_;
     GCONF.vector_memory_limit = vector_memory_limit_;
+    GCONF._memstore_limit_percentage = memstore_limit_percentage_;
+    GCONF.ob_vector_memory_limit_percentage = vector_memory_limit_percentage_;
     lib::set_memory_budget(effective_memory_budget_);
   }
 
@@ -58,6 +62,8 @@ private:
   int64_t kvcache_memory_limit_;
   int64_t memstore_memory_limit_;
   int64_t vector_memory_limit_;
+  int64_t memstore_limit_percentage_;
+  int64_t vector_memory_limit_percentage_;
   int64_t effective_memory_budget_;
 };
 }
@@ -90,6 +96,27 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
             ObServerMemoryConfig::resolve_kvcache_memory_limit(INT64_MAX, INT64_MAX));
 }
 
+TEST(TestServerMemoryConfig, capacity_unit_check_accepts_only_unitless_zero)
+{
+  EXPECT_TRUE(GCONF._memory_budget.check_unit("0"));
+  EXPECT_TRUE(GCONF.kvcache_memory_limit.check_unit("0"));
+  EXPECT_TRUE(GCONF.memstore_memory_limit.check_unit("0"));
+  EXPECT_TRUE(GCONF.vector_memory_limit.check_unit("0"));
+
+  EXPECT_TRUE(GCONF.vector_memory_limit.check_unit("0M"));
+  EXPECT_TRUE(GCONF.vector_memory_limit.check_unit("1G"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("1"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("00"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("+0"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("-0"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("0x0"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit(" 0"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("0 "));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit(""));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit("invalid"));
+  EXPECT_FALSE(GCONF.vector_memory_limit.check_unit(NULL));
+}
+
 TEST(TestServerMemoryConfig, reload_uses_explicit_memory_budget)
 {
   ServerConfigRestore restore;
@@ -111,6 +138,35 @@ TEST(TestServerMemoryConfig, reload_uses_explicit_memory_budget)
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
   EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
   EXPECT_EQ(3 * ONE_GIB, memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
+  EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
+}
+
+TEST(TestServerMemoryConfig, legacy_percentage_parameters_are_accepted_but_ignored)
+{
+  ServerConfigRestore restore;
+  ObServerMemoryConfig memory_config;
+
+  GCONF._memory_budget = 3 * ONE_GIB;
+  GCONF.kvcache_memory_limit = ONE_GIB;
+  GCONF.memstore_memory_limit = 4 * ONE_GIB;
+  GCONF.vector_memory_limit = 5 * ONE_GIB;
+  ASSERT_TRUE(GCONF._memstore_limit_percentage.set_value("10"));
+  ASSERT_TRUE(GCONF._memstore_limit_percentage.check());
+  ASSERT_TRUE(GCONF.ob_vector_memory_limit_percentage.set_value("70"));
+  ASSERT_TRUE(GCONF.ob_vector_memory_limit_percentage.check());
+
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
+  EXPECT_EQ(ONE_GIB, memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
+  EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
+
+  ASSERT_TRUE(GCONF._memstore_limit_percentage.set_value("99"));
+  ASSERT_TRUE(GCONF.ob_vector_memory_limit_percentage.set_value("1"));
+  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
+  EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
+  EXPECT_EQ(ONE_GIB, memory_config.get_kvcache_memory_limit());
   EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
   EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
 }
