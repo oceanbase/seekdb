@@ -46,10 +46,12 @@ int get_system_tablet_handle(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
+    LOG_WARN("get ls failed", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is null", K(ret));
   } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
+    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
   return ret;
 }
@@ -119,11 +121,14 @@ int ObTabletAutoincMgr::fetch_interval(const ObTabletAutoincParam &param, ObTabl
     if (OB_SUCC(set_interval(param, interval))) {
       if (prefetch_condition()) {
         if (OB_FAIL(fetch_new_range(param, tablet_id_, prefetch_node_))) {
+          LOG_WARN("failed to prefetch tablet node", K(param), K(ret));
         }
       }
     } else if (OB_SIZE_OVERFLOW == ret) {
       if (OB_FAIL(fetch_new_range(param, tablet_id_, curr_node_))) {
+        LOG_WARN("failed to fetch tablet node", K(param), K(ret));
       } else if (OB_FAIL(set_interval(param, interval))) {
+        LOG_WARN("failed to alloc cache handle", K(param), K(ret));
       }
     }
     mutex_.unlock();
@@ -140,6 +145,7 @@ int ObTabletAutoincMgr::fetch_interval_without_cache(const ObTabletAutoincParam 
     ret = OB_NOT_INIT;
     LOG_WARN("tablet autoinc mgr is not inited", K(ret));
   } else if (OB_FAIL(fetch_new_range(param, tablet_id_, node))) {
+    LOG_WARN("failed to fetch tablet node", K(param), K(ret));
   } else {
     interval.set(node.cache_start_, node.cache_end_);
   }
@@ -163,6 +169,8 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
           ? THIS_WORKER.get_timeout_remain() : OB_DEFAULT_RPC_TIMEOUT;
       if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance().fetch_tablet_autoinc_seq_cache(
           tablet_id, range_size, interval))) {
+        LOG_WARN("fail to fetch local autoinc cache for tablet",
+            K(ret), K(tablet_id), K(range_size), K(retry_times), K(timeout));
       } else {
         finish = true;
       }
@@ -173,6 +181,7 @@ int ObTabletAutoincMgr::fetch_new_range(const ObTabletAutoincParam &param,
           ret = OB_TIMEOUT;
           LOG_WARN("timeout while fetching local autoinc cache", K(ret), K(timeout));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
+          LOG_WARN("failed to check status", K(ret));
         } else {
           interval.reset();
           ob_usleep<common::ObWaitEventIds::STORAGE_AUTOINC_FETCH_RETRY_SLEEP>(RETRY_INTERVAL);
@@ -225,8 +234,11 @@ int ObTabletAutoincrementService::acquire_mgr(const common::ObTabletID &tablet_i
       lib::ObMutexGuard guard(mutex);
       if (OB_ENTRY_NOT_EXIST == (ret = tablet_autoinc_mgr_map_.get(key, autoinc_mgr))) {
         if (OB_FAIL(tablet_autoinc_mgr_map_.alloc_value(autoinc_mgr))) {
+          LOG_WARN("failed to alloc table mgr", K(ret));
         } else if (OB_FAIL(autoinc_mgr->init(key.tablet_id_, init_cache_size))) {
+          LOG_WARN("fail to init tablet autoinc mgr", K(ret), K(key));
         } else if (OB_FAIL(tablet_autoinc_mgr_map_.insert_and_get(key, autoinc_mgr))) {
+          LOG_WARN("failed to create table node", K(ret));
         }
         if (OB_FAIL(ret) && autoinc_mgr != nullptr) {
           tablet_autoinc_mgr_map_.free_value(autoinc_mgr);
@@ -254,13 +266,16 @@ int ObTabletAutoincrementService::get_autoinc_seq(const common::ObTabletID &tabl
     ret = OB_NOT_INIT;
     LOG_WARN("tablet auto increment service is not inited", K(ret));
   } else if (OB_FAIL(acquire_mgr(tablet_id, auto_increment_cache_size, autoinc_mgr))) {
+    LOG_WARN("failed to acquire mgr", K(ret));
   } else {
     ObTabletCacheInterval interval(tablet_id, 1/*cache size*/);
     if (OB_ISNULL(autoinc_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("autoinc mgr is unexpected null", K(ret));
     } else if (OB_FAIL(autoinc_mgr->fetch_interval(param, interval))) {
+      LOG_WARN("fail to fetch interval", K(ret), K(param));
     } else if (OB_FAIL(interval.next_value(autoinc_seq))) {
+      LOG_WARN("fail to get next value", K(ret));
     }
   }
   if (nullptr != autoinc_mgr) {
@@ -283,8 +298,11 @@ int ObTabletAutoincrementService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("tablet autoincrement service init twice", K(ret));
   } else if (OB_FAIL(node_allocator_.init(sizeof(ObTabletAutoincMgr), ObModIds::OB_AUTOINCREMENT))) {
+    LOG_WARN("failed to init table node allocator", K(ret));
   } else if (OB_FAIL(tablet_autoinc_mgr_map_.init(attr))) {
+    LOG_WARN("failed to init table node map", K(ret));
   } else if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance().init())) {
+    LOG_WARN("failed to init local tablet autoinc sequence service", K(ret));
   } else {
     for (int64_t i = 0; i < INIT_NODE_MUTEX_NUM; ++i) {
       init_node_mutexs_[i].set_latch_id(common::ObLatchIds::TABLET_AUTO_INCREMENT_SERVICE_LOCK);
@@ -319,10 +337,12 @@ int ObTabletAutoincrementService::get_tablet_cache_interval(ObTabletCacheInterva
     param.auto_increment_cache_size_ = auto_increment_cache_size;
     ObTabletAutoincMgr *autoinc_mgr = nullptr;
     if (OB_FAIL(acquire_mgr(interval.tablet_id_, auto_increment_cache_size, autoinc_mgr))) {
+      LOG_WARN("failed to acquire mgr", K(ret));
     } else if (OB_ISNULL(autoinc_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("autoinc mgr is unexpected null", K(ret));
     } else if (OB_FAIL(autoinc_mgr->fetch_interval_without_cache(param, interval))) {
+      LOG_WARN("fail to fetch interval", K(ret), K(param));
     }
     if (nullptr != autoinc_mgr) {
       release_mgr(autoinc_mgr);
@@ -347,6 +367,7 @@ int ObTabletAutoincrementService::clear_tablet_autoinc_seq_cache(const common::O
     lib::ObMutex &mutex = init_node_mutexs_[key.tablet_id_.id() % INIT_NODE_MUTEX_NUM];
     lib::ObMutexGuardWithTimeout guard(mutex, abs_timeout_us);
     if (OB_FAIL(guard.get_ret())) {
+      LOG_WARN("failed to lock", K(ret));
     } else if (OB_FAIL(tablet_autoinc_mgr_map_.del(key))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
@@ -393,21 +414,30 @@ int ObTabletAutoincrementService::copy_sequences_for_fork(
       LOG_WARN("invalid tablet pair for sequence copy", K(ret),
           K(source_tablet_id), K(destination_tablet_id), K(i));
     } else if (OB_FAIL(get_system_tablet_handle(source_tablet_id, tablet_handle))) {
+      LOG_WARN("failed to get source tablet", K(ret), K(source_tablet_id));
     } else if (OB_ISNULL(tablet_handle.get_obj())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet handle is null", K(ret), K(source_tablet_id));
     } else if (OB_FAIL(tablet_handle.get_obj()->get_autoinc_seq(
                    autoinc_seq, allocator))) {
+      LOG_WARN("failed to get autoincrement sequence", K(ret),
+          K(source_tablet_id));
     } else if (OB_FAIL(autoinc_seq.get_autoinc_seq_value(param.autoinc_seq_))) {
+      LOG_WARN("failed to get autoincrement sequence value", K(ret),
+          K(source_tablet_id));
     } else if (OB_FAIL(arg.autoinc_params_.push_back(param))) {
+      LOG_WARN("failed to append autoincrement sequence", K(ret), K(param));
     }
   }
 
   if (OB_SUCC(ret)) {
     storage::ObTabletForkMdsArg fork_mds_arg;
     if (OB_FAIL(fork_mds_arg.set_autoinc_seq_arg(arg))) {
+      LOG_WARN("failed to set autoincrement fork arg", K(ret), K(arg));
     } else if (OB_FAIL(storage::ObTabletForkMdsHelper::register_mds(
                    fork_mds_arg, false /*need_flush_redo*/, trans))) {
+      LOG_WARN("failed to register fork MDS for autoincrement sequences",
+          K(ret));
     } else {
       LOG_INFO("registered fork MDS for autoincrement sequences",
           K(arg.autoinc_params_.count()));
@@ -426,8 +456,10 @@ int ObTabletAutoincrementService::read_migration_sequences(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sequence migration read", K(ret), K(request_params.count()));
   } else if (OB_FAIL(result_params.assign(request_params))) {
+    LOG_WARN("failed to copy sequence migration request", K(ret));
   } else if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance()
                          .batch_get_tablet_autoinc_seq(result_params))) {
+    LOG_WARN("failed to read migration sequences", K(ret));
   }
   return ret;
 }
@@ -442,8 +474,10 @@ int ObTabletAutoincrementService::write_migration_sequences(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sequence migration write", K(ret), K(request_params.count()));
   } else if (OB_FAIL(result_params.assign(request_params))) {
+    LOG_WARN("failed to copy sequence migration request", K(ret));
   } else if (OB_FAIL(storage::ObTabletAutoincSeqService::get_instance()
                          .batch_set_tablet_autoinc_seq(result_params))) {
+    LOG_WARN("failed to write migration sequences", K(ret));
   }
   return ret;
 }
@@ -456,7 +490,9 @@ int ObTabletAutoincrementService::collect_single_table_cache_invalidation_(
   if (table_schema.is_table_with_hidden_pk_column() || table_schema.is_aux_lob_meta_table()) {
     ObArray<ObTabletID> tablet_ids;
     if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
+      LOG_WARN("failed to get tablet ids", K(ret));
     } else if (OB_FAIL(append(cache_tablet_ids, tablet_ids))) {
+      LOG_WARN("failed to append tablet ids", K(ret));
     }
   }
   return ret;
@@ -470,6 +506,7 @@ int ObTabletAutoincrementService::collect_table_cache_invalidation(
   int ret = OB_SUCCESS;
   if (OB_FAIL(collect_single_table_cache_invalidation_(
           table_schema, cache_tablet_ids))) {
+    LOG_WARN("failed to add single table", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -477,11 +514,13 @@ int ObTabletAutoincrementService::collect_table_cache_invalidation(
     if (OB_INVALID_ID != lob_meta_tid) {
       const ObTableSchema *lob_meta_table_schema = nullptr;
       if (OB_FAIL(schema_guard.get_table_schema(lob_meta_tid, lob_meta_table_schema))) {
+        LOG_WARN("failed to get aux table schema", K(ret), K(lob_meta_tid));
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid table schema", K(ret), K(lob_meta_tid));
       } else if (OB_FAIL(collect_single_table_cache_invalidation_(
                      *lob_meta_table_schema, cache_tablet_ids))) {
+        LOG_WARN("failed to add single table", K(ret));
       }
     }
   }
@@ -496,6 +535,7 @@ int ObTabletAutoincrementService::collect_table_cache_invalidation(
   int ret = OB_SUCCESS;
   if (OB_FAIL(collect_single_table_cache_invalidation_(
           table_schema, cache_tablet_ids))) {
+    LOG_WARN("failed to add single table", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -504,11 +544,13 @@ int ObTabletAutoincrementService::collect_table_cache_invalidation(
       const ObTableSchema *lob_meta_table_schema = nullptr;
       if (OB_FAIL(schema_guard.get_table_schema(
               lob_meta_tid, lob_meta_table_schema))) {
+        LOG_WARN("failed to get aux table schema", K(ret), K(lob_meta_tid));
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid table schema", K(ret), K(lob_meta_tid));
       } else if (OB_FAIL(collect_single_table_cache_invalidation_(
                      *lob_meta_table_schema, cache_tablet_ids))) {
+        LOG_WARN("failed to add single table", K(ret));
       }
     }
   }
@@ -525,8 +567,10 @@ int ObTabletAutoincrementService::collect_database_cache_invalidation(
   ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
   if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schemas_in_database(
                  database_id, table_schemas))) {
+    LOG_WARN("fail to get table ids in database", K(1UL), K(database_id), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
       const ObSimpleTableSchemaV2 *table_schema = table_schemas.at(i);
@@ -535,6 +579,8 @@ int ObTabletAutoincrementService::collect_database_cache_invalidation(
         LOG_WARN("table schema should not be null", K(ret));
       } else if (OB_FAIL(collect_single_table_cache_invalidation_(
                      *table_schema, cache_tablet_ids))) {
+        LOG_WARN("failed to collect table cache invalidation", KR(ret),
+            KPC(table_schema));
       }
     }
   }
@@ -561,6 +607,8 @@ int ObTabletAutoincrementService::invalidate_caches(
   }
   if (OB_FAIL(clear_tablet_autoinc_seq_cache(
           cache_tablet_ids, abs_timeout_us))) {
+    LOG_WARN("failed to clear tablet autoincrement cache", K(ret),
+        K(cache_tablet_ids));
   }
   return ret;
 }
