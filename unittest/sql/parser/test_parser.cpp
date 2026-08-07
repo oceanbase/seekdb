@@ -61,6 +61,24 @@ void TestParser::TearDown()
 {
 }
 
+TEST_F(TestParser, file_scan_syntax)
+{
+  const char *queries[] = {
+    "select * from file_scan('/tmp/orders.csv') as f",
+    "select f.id from file_scan('/tmp/orders.jsonl', 'jsonl') f",
+    "select * from file_scan('/tmp/a.csv') a join file_scan('/tmp/b.csv', 'csv') b on a.id = b.id",
+    "select * from file_list('/tmp') as files",
+    "select column_name, sql_type from file_schema('/tmp/orders.csv') schema_info"
+  };
+  for (int64_t i = 0; i < ARRAYSIZEOF(queries); ++i) {
+    ObParser parser(allocator_, DEFAULT_MYSQL_MODE);
+    ParseResult result;
+    ASSERT_EQ(OB_SUCCESS, parser.parse(ObString::make_string(queries[i]), result));
+    ASSERT_NE(nullptr, result.result_tree_);
+    parser.free_result(result);
+  }
+}
+
 void TestParser::print_parse_tree(const char *query_str, std::ofstream &of_result, int64_t expect_error) {
   ObSQLMode mode = test::clp.sql_mode;
   ObParser parser(allocator_, mode);

@@ -389,6 +389,7 @@ class Path
     int assign(const Path &other, common::ObIAllocator *allocator);
     bool is_cte_path() const;
     bool is_function_table_path() const;
+    bool is_file_table_path() const;
     bool is_json_table_path() const;
     bool is_temp_table_path() const;
     bool is_access_path() const;
@@ -1147,6 +1148,27 @@ class Path
     ObRawExpr* value_expr_;
   private:
       DISALLOW_COPY_AND_ASSIGN(FunctionTablePath);
+  };
+
+  class FileTablePath : public Path
+  {
+  public:
+    FileTablePath() : Path(NULL), table_id_(OB_INVALID_ID) {}
+    virtual ~FileTablePath() {}
+    int assign(const FileTablePath &other, common::ObIAllocator *allocator);
+    virtual int estimate_cost() override;
+    virtual int get_name_internal(char *buf, const int64_t buf_len, int64_t &pos) const
+    {
+      int ret = OB_SUCCESS;
+      if (OB_FAIL(BUF_PRINTF("@file_"))) {
+      } else if (OB_FAIL(BUF_PRINTF("%lu", table_id_))) {
+      }
+      return ret;
+    }
+  public:
+    uint64_t table_id_;
+  private:
+    DISALLOW_COPY_AND_ASSIGN(FileTablePath);
   };
 
   class JsonTablePath : public Path
@@ -2040,6 +2062,7 @@ struct NullAwareAntiJoinInfo {
                                   ObShardingInfo * sharding);
     int generate_cte_table_paths();
     int generate_function_table_paths();
+    int generate_file_table_paths();
     int generate_json_table_paths();
     int generate_values_table_paths();
     int generate_temp_table_paths();

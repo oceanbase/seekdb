@@ -340,6 +340,16 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     } else {
       is_exist = true;
     }
+  } else if (table_item.is_file_table()) {
+    if (OB_ISNULL(table_item.file_table_def_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("file table definition is null", K(ret));
+    } else {
+      for (int64_t i = 0; !is_exist && i < table_item.file_table_def_->columns_.count(); ++i) {
+        is_exist = ObCharset::case_insensitive_equal(
+          table_item.file_table_def_->columns_.at(i).column_name_, col_name);
+      }
+    }
   } else if (table_item.is_json_table()) {
     if (OB_FAIL(ObResolverUtils::check_json_table_column_exists(table_item,
                                                                 params_,

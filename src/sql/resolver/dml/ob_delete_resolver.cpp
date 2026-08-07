@@ -236,7 +236,8 @@ int ObDeleteResolver::resolve_table_list(const ParseNode &table_list, bool &is_m
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
         LOG_WARN("failed to resolve table", K(ret));
-      } else if (table_item->is_function_table() || table_item->is_json_table()) { // invalid delete target
+      } else if (table_item->is_function_table() || table_item->is_file_table()
+                 || table_item->is_json_table()) { // invalid delete target
         ret = OB_WRONG_TABLE_NAME;
         LOG_WARN("invalid table name", K(ret));
       } else if (OB_FAIL(column_namespace_checker_.add_reference_table(table_item))) {

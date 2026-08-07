@@ -12386,7 +12386,8 @@ int ObTransformUtils::check_is_json_constraint(ObTransformerCtx *ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get table item", K(col_item.table_id_), K(ret));
   } else if (table->is_json_table() || table->is_temp_table() 
-              || table->is_generated_table() || table->is_function_table()) {
+              || table->is_generated_table() || table->is_function_table()
+              || table->is_file_table()) {
     ObColumnRefRawExpr* col_expr = col_item.get_expr();
     if (OB_NOT_NULL(col_expr)) {
       is_json = (col_expr->get_result_type().get_type() == ObJsonType
