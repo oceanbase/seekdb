@@ -26,6 +26,10 @@
 // aliases, ObTestModule and lib::Worker::CompatMode.
 #include "share/rc/ob_server_runtime.h"
 
+struct seekdb_plugin_execution_context_v1;
+struct seekdb_plugin_execution_value_v1;
+typedef int32_t seekdb_plugin_extension_kind_t;
+
 namespace oceanbase
 {
 namespace common
@@ -207,6 +211,38 @@ public:
   virtual rootserver::ObDDLScheduler * ddl_scheduler() { return nullptr; }
   virtual omt::ObAiService * ai_service() { return nullptr; }
   virtual share::ObChangeStreamMgr * change_stream_mgr() { return nullptr; }
+  // Generic byte-oriented plugin execution bridge. The default implementation
+  // keeps core-only builds independent from the optional plugin loader.
+  virtual int execute_plugin_function(
+      const char *service_id,
+      uint32_t abi_major,
+      uint32_t required_minor,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count)
+  {
+    UNUSED(service_id);
+    UNUSED(abi_major);
+    UNUSED(required_minor);
+    UNUSED(context);
+    UNUSED(arguments);
+    UNUSED(argument_count);
+    return common::OB_NOT_SUPPORTED;
+  }
+  virtual int execute_plugin_extension(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count)
+  {
+    UNUSED(kind);
+    UNUSED(sql_name);
+    UNUSED(context);
+    UNUSED(arguments);
+    UNUSED(argument_count);
+    return common::OB_NOT_SUPPORTED;
+  }
 };
 
 // Set to &OBSERVER once the server modules are created (boot), before

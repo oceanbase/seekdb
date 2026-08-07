@@ -499,6 +499,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           // to string in ObRawExprWrapEnumSet::visit(ObSysFunRawExpr &expr) later.
         } else {
           if (ob_is_geometry_tc(dst_type.get_type())) {
+#if SEEKDB_ENABLE_CORE_GIS
             ObCastMode cast_mode = cast_raw_expr->get_cast_mode();
             const ObObj &param = type2.get_param();
             ParseNode parse_node;
@@ -509,6 +510,9 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
             }
+#else
+            ret = OB_NOT_SUPPORTED;
+#endif
           }
           if (OB_SUCC(ret)) {
             // need_wrap is false, set calc_type to type1 itself.

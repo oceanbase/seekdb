@@ -224,6 +224,156 @@ gen_sqlite_table_def(
     primary_key = ['job_id']
   )
 
+# __all_plugin_sequence: durable monotonic plugin catalog sequences
+gen_sqlite_table_def(
+  table_name = '__all_plugin_sequence',
+  columns = [
+      ('sequence_name', 'TEXT', 'NOT NULL', None),
+      ('next_value', 'INTEGER', 'NOT NULL', None)
+  ],
+  primary_key = ['sequence_name']
+  )
+
+# __all_plugin_package: authoritative durable plugin package state
+gen_sqlite_table_def(
+  table_name = '__all_plugin_package',
+  columns = [
+      ('plugin_id', 'TEXT', 'NOT NULL', None),
+      ('relative_path', 'TEXT', 'NOT NULL', None),
+      ('build_id', 'TEXT', 'NOT NULL', None),
+      ('package_digest', 'TEXT', 'NOT NULL', None),
+      ('version_major', 'INTEGER', 'NOT NULL', None),
+      ('version_minor', 'INTEGER', 'NOT NULL', None),
+      ('version_patch', 'INTEGER', 'NOT NULL', None),
+      ('catalog_version', 'INTEGER', 'NOT NULL', None),
+      ('data_format_version', 'INTEGER', 'NOT NULL', None),
+      ('verification_level', 'INTEGER', 'NOT NULL', None),
+      ('desired_state', 'INTEGER', 'NOT NULL', None),
+      ('actual_state', 'INTEGER', 'NOT NULL', None),
+      ('generation', 'INTEGER', 'NOT NULL', None),
+      ('runtime_incarnation', 'TEXT', 'NOT NULL', "''"),
+      ('operation_id', 'TEXT', 'NOT NULL', "''"),
+      ('last_phase', 'INTEGER', 'NOT NULL', '0'),
+      ('last_status', 'INTEGER', 'NOT NULL', '0'),
+      ('last_error', 'TEXT', 'NOT NULL', "''"),
+      ('operator_id', 'TEXT', 'NOT NULL', "''"),
+      ('audit_id', 'TEXT', 'NOT NULL', "''"),
+      ('gmt_create', 'INTEGER', 'NOT NULL', None),
+      ('gmt_modified', 'INTEGER', 'NOT NULL', None)
+  ],
+  primary_key = ['plugin_id']
+  )
+
+# __all_plugin_operation: durable plugin activation/disable/uninstall intents
+gen_sqlite_table_def(
+  table_name = '__all_plugin_operation',
+  columns = [
+      ('operation_id', 'TEXT', 'NOT NULL', None),
+      ('plugin_id', 'TEXT', 'NOT NULL', None),
+      ('generation', 'INTEGER', 'NOT NULL', None),
+      ('runtime_incarnation', 'TEXT', 'NOT NULL', None),
+      ('kind', 'INTEGER', 'NOT NULL', None),
+      ('state', 'INTEGER', 'NOT NULL', None),
+      ('relative_path', 'TEXT', 'NOT NULL', None),
+      ('package_digest', 'TEXT', 'NOT NULL', None),
+      ('phase', 'INTEGER', 'NOT NULL', None),
+      ('status', 'INTEGER', 'NOT NULL', None),
+      ('actual_state', 'INTEGER', 'NOT NULL', None),
+      ('start_entered', 'INTEGER', 'NOT NULL', None),
+      ('candidate_prepared', 'INTEGER', 'NOT NULL', None),
+      ('stop_entered', 'INTEGER', 'NOT NULL', '0'),
+      ('error', 'TEXT', 'NOT NULL', "''"),
+      ('operator_id', 'TEXT', 'NOT NULL', "''"),
+      ('audit_id', 'TEXT', 'NOT NULL', "''"),
+      ('gmt_create', 'INTEGER', 'NOT NULL', None),
+      ('gmt_modified', 'INTEGER', 'NOT NULL', None)
+  ],
+  primary_key = ['operation_id']
+  )
+
+# __all_plugin_service: services contributed by one durable plugin generation
+gen_sqlite_table_def(
+  table_name = '__all_plugin_service',
+  columns = [
+      ('plugin_id', 'TEXT', 'NOT NULL', None),
+      ('generation', 'INTEGER', 'NOT NULL', None),
+      ('service_id', 'TEXT', 'NOT NULL', None),
+      ('abi_major', 'INTEGER', 'NOT NULL', None),
+      ('abi_minor', 'INTEGER', 'NOT NULL', None),
+      ('abi_patch', 'INTEGER', 'NOT NULL', None),
+      ('capabilities', 'INTEGER', 'NOT NULL', None)
+  ],
+  primary_key = ['plugin_id', 'generation', 'service_id', 'abi_major']
+  )
+
+# __all_plugin_extension: normalized extension descriptors by plugin generation
+gen_sqlite_table_def(
+  table_name = '__all_plugin_extension',
+  columns = [
+      ('plugin_id', 'TEXT', 'NOT NULL', None),
+      ('generation', 'INTEGER', 'NOT NULL', None),
+      ('kind', 'INTEGER', 'NOT NULL', None),
+      ('object_id', 'TEXT', 'NOT NULL', None),
+      ('sql_name', 'TEXT', 'NOT NULL', "''"),
+      ('physical_format_id', 'TEXT', 'NOT NULL', "''"),
+      ('source_type_id', 'TEXT', 'NOT NULL', "''"),
+      ('target_type_id', 'TEXT', 'NOT NULL', "''"),
+      ('static_result_type_id', 'TEXT', 'NOT NULL', "''"),
+      ('hook_point', 'TEXT', 'NOT NULL', "''"),
+      ('catalog_object_kind', 'TEXT', 'NOT NULL', "''"),
+      ('schema_name', 'TEXT', 'NOT NULL', "''"),
+      ('definition_digest', 'TEXT', 'NOT NULL', "''"),
+      ('physical_format_version', 'INTEGER', 'NOT NULL', '0'),
+      ('minimum_arity', 'INTEGER', 'NOT NULL', '0'),
+      ('maximum_arity', 'INTEGER', 'NOT NULL', '0'),
+      ('cast_context', 'INTEGER', 'NOT NULL', '0'),
+      ('cost', 'INTEGER', 'NOT NULL', '0'),
+      ('priority', 'INTEGER', 'NOT NULL', '0'),
+      ('flags', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_service_id', 'TEXT', 'NOT NULL', "''"),
+      ('implementation_min_version_major', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_min_version_minor', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_min_version_patch', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_max_version_major', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_max_version_minor', 'INTEGER', 'NOT NULL', '0'),
+      ('implementation_max_version_patch', 'INTEGER', 'NOT NULL', '0'),
+      ('required_capabilities', 'INTEGER', 'NOT NULL', '0')
+  ],
+  primary_key = ['plugin_id', 'generation', 'kind', 'object_id']
+  )
+
+# __all_plugin_dependency: durable RESTRICT dependency edges
+gen_sqlite_table_def(
+  table_name = '__all_plugin_dependency',
+  columns = [
+      ('consumer_kind', 'INTEGER', 'NOT NULL', None),
+      ('consumer_id', 'TEXT', 'NOT NULL', None),
+      ('consumer_plugin_id', 'TEXT', 'NOT NULL', None),
+      ('consumer_generation', 'INTEGER', 'NOT NULL', None),
+      ('provider_plugin_id', 'TEXT', 'NOT NULL', None),
+      ('provider_generation', 'INTEGER', 'NOT NULL', None),
+      ('dependency_kind', 'INTEGER', 'NOT NULL', None),
+      ('dependency_id', 'TEXT', 'NOT NULL', None),
+      ('service_abi_major', 'INTEGER', 'NOT NULL', '0'),
+      ('optional', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_min_version_major', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_min_version_minor', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_min_version_patch', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_max_version_major', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_max_version_minor', 'INTEGER', 'NOT NULL', '0'),
+      ('requested_max_version_patch', 'INTEGER', 'NOT NULL', '0'),
+      ('provider_version_major', 'INTEGER', 'NOT NULL', '0'),
+      ('provider_version_minor', 'INTEGER', 'NOT NULL', '0'),
+      ('provider_version_patch', 'INTEGER', 'NOT NULL', '0'),
+      ('required_capabilities', 'INTEGER', 'NOT NULL', '0')
+  ],
+  primary_key = [
+      'consumer_kind', 'consumer_id', 'consumer_plugin_id',
+      'consumer_generation', 'provider_plugin_id', 'provider_generation',
+      'dependency_kind', 'dependency_id', 'service_abi_major'
+  ]
+  )
+
 # __all_kv_table: SQLite KV table for simple information storage (tenant info, etc.)
 
 ################################################################################

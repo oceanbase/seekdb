@@ -97,6 +97,82 @@ set_source_files_properties(
   engine/expr/ob_expr_array_sort.cpp
   PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
+# The GIS coordinate adapter is a core-side ABI bridge in the lightweight
+# profile.  Keep it out of unrelated unity groups so the adapter can be built
+# without pulling the legacy GIS implementation into ob_sql.
+set_source_files_properties(
+  engine/expr/ob_geo_expr_utils.cpp
+  engine/expr/ob_expr_st_x.cpp
+  engine/expr/ob_expr_st_srid.cpp
+  engine/expr/ob_expr_st_aswkb.cpp
+  engine/expr/ob_expr_priv_st_geometrytype.cpp
+  engine/expr/ob_expr_st_isvalid.cpp
+  engine/expr/ob_expr_st_astext.cpp
+  engine/expr/ob_expr_st_geomfromwkb.cpp
+  engine/expr/ob_expr_priv_st_setsrid.cpp
+  engine/expr/ob_expr_st_geomfromtext.cpp
+  engine/expr/ob_expr_st_geometryfromtext.cpp
+  engine/expr/ob_expr_st_area.cpp
+  engine/expr/ob_expr_st_length.cpp
+  engine/expr/ob_expr_st_distance.cpp
+  engine/expr/ob_expr_st_contains.cpp
+  engine/expr/ob_expr_st_intersects.cpp
+  engine/expr/ob_expr_st_within.cpp
+  engine/expr/ob_expr_st_covers.cpp
+  engine/expr/ob_expr_st_dwithin.cpp
+  engine/expr/ob_expr_priv_st_equals.cpp
+  engine/expr/ob_expr_priv_st_touches.cpp
+  engine/expr/ob_expr_st_crosses.cpp
+  engine/expr/ob_expr_st_overlaps.cpp
+  engine/expr/ob_expr_priv_st_asewkb.cpp
+  engine/expr/ob_expr_st_asewkt.cpp
+  engine/expr/ob_expr_st_geomfromewkb.cpp
+  engine/expr/ob_expr_st_geomfromewkt.cpp
+  engine/expr/ob_expr_priv_st_geogfromtext.cpp
+  engine/expr/ob_expr_priv_st_geographyfromtext.cpp
+  engine/expr/ob_expr_priv_st_iscollection.cpp
+  engine/expr/ob_expr_priv_st_numinteriorrings.cpp
+  engine/expr/ob_expr_st_asgeojson.cpp
+  engine/expr/ob_expr_st_distance_sphere.cpp
+  engine/expr/ob_expr_st_centroid.cpp
+  engine/expr/ob_expr_priv_st_pointonsurface.cpp
+  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+ob_set_subtarget(ob_sql geo_plugin_adapters
+  engine/expr/ob_expr_st_x.cpp
+  engine/expr/ob_expr_st_srid.cpp
+  engine/expr/ob_expr_st_aswkb.cpp
+  engine/expr/ob_expr_priv_st_geometrytype.cpp
+  engine/expr/ob_expr_st_isvalid.cpp
+  engine/expr/ob_expr_st_astext.cpp
+  engine/expr/ob_expr_st_geomfromwkb.cpp
+  engine/expr/ob_expr_priv_st_setsrid.cpp
+  engine/expr/ob_expr_st_geomfromtext.cpp
+  engine/expr/ob_expr_st_geometryfromtext.cpp
+  engine/expr/ob_expr_st_area.cpp
+  engine/expr/ob_expr_st_length.cpp
+  engine/expr/ob_expr_st_distance.cpp
+  engine/expr/ob_expr_st_contains.cpp
+  engine/expr/ob_expr_st_intersects.cpp
+  engine/expr/ob_expr_st_within.cpp
+  engine/expr/ob_expr_st_covers.cpp
+  engine/expr/ob_expr_st_dwithin.cpp
+  engine/expr/ob_expr_priv_st_equals.cpp
+  engine/expr/ob_expr_priv_st_touches.cpp
+  engine/expr/ob_expr_st_crosses.cpp
+  engine/expr/ob_expr_st_overlaps.cpp
+  engine/expr/ob_expr_priv_st_asewkb.cpp
+  engine/expr/ob_expr_st_asewkt.cpp
+  engine/expr/ob_expr_st_geomfromewkb.cpp
+  engine/expr/ob_expr_st_geomfromewkt.cpp
+  engine/expr/ob_expr_priv_st_geogfromtext.cpp
+  engine/expr/ob_expr_priv_st_geographyfromtext.cpp
+  engine/expr/ob_expr_priv_st_iscollection.cpp
+  engine/expr/ob_expr_priv_st_numinteriorrings.cpp
+  engine/expr/ob_expr_st_asgeojson.cpp
+  engine/expr/ob_expr_st_distance_sphere.cpp
+  engine/expr/ob_expr_st_centroid.cpp
+  engine/expr/ob_expr_priv_st_pointonsurface.cpp)
+
 ob_set_subtarget(ob_sql das
   das/ob_domain_id.cpp
   das/ob_das_context.cpp
@@ -311,6 +387,26 @@ ob_set_subtarget(ob_sql engine_dml
   engine/dml/ob_fk_checker.cpp
 )
 
+set(SEEKDB_CORE_GIS_SQL_SOURCES)
+# The full build still needs the shared geometry utility implementation for
+# compatibility with the legacy expression ABI.  It is deliberately omitted
+# from the core-only profile; that profile uses the fail-closed SPI shims
+# instead and keeps the GIS algorithms in plugins/gis.
+if (SEEKDB_ENABLE_CORE_GIS)
+  ob_set_subtarget(ob_sql geo_legacy_utils
+    engine/expr/ob_geo_expr_utils.cpp)
+endif()
+# These adapters are required in both profiles: the operator factory is
+# permanently wired to the plugin SPI, while the legacy implementations have
+# been removed from the core source set.
+ob_set_subtarget(ob_sql geo_plugin_stubs
+  engine/expr/ob_geo_plugin_stubs.cpp
+  engine/expr/ob_expr_transform_plugin.cpp
+  engine/expr/ob_expr_spatial_index_plugin.cpp
+  engine/expr/ob_expr_remaining_gis_plugin.cpp
+  engine/expr/ob_expr_spatial_collection_plugin.cpp
+)
+
 ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_batch_eval_util.cpp
   engine/expr/ob_expr.cpp
@@ -522,34 +618,12 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_embedded_vec.cpp
   engine/expr/ob_expr_topn_filter.cpp
   engine/expr/ob_expr_priv_st_makeenvelope.cpp
-  engine/expr/ob_expr_priv_st_clipbybox2d.cpp
-  engine/expr/ob_expr_priv_st_pointonsurface.cpp
-  engine/expr/ob_expr_priv_st_geometrytype.cpp
-  engine/expr/ob_expr_st_crosses.cpp
-  engine/expr/ob_expr_st_overlaps.cpp
-  engine/expr/ob_expr_st_union.cpp
-  engine/expr/ob_expr_st_length.cpp
-  engine/expr/ob_expr_st_difference.cpp
-  engine/expr/ob_expr_st_asgeojson.cpp
-  engine/expr/ob_expr_st_centroid.cpp
-  engine/expr/ob_expr_st_symdifference.cpp
-  engine/expr/ob_expr_priv_st_asmvtgeom.cpp
-  engine/expr/ob_expr_priv_st_makevalid.cpp
+  ${SEEKDB_CORE_GIS_SQL_SOURCES}
   engine/expr/ob_expr_lock_func.cpp
   engine/expr/ob_expr_extract_value.cpp
   engine/expr/ob_expr_update_xml.cpp
   engine/expr/ob_expr_sql_udt_utils.cpp
   engine/expr/ob_expr_collection_construct.cpp
-  engine/expr/ob_expr_priv_st_numinteriorrings.cpp
-  engine/expr/ob_expr_priv_st_iscollection.cpp
-  engine/expr/ob_expr_priv_st_equals.cpp
-  engine/expr/ob_expr_priv_st_touches.cpp
-  engine/expr/ob_expr_st_dwithin.cpp
-  engine/expr/ob_expr_st_aswkb.cpp
-  engine/expr/ob_expr_priv_st_asewkb.cpp
-  engine/expr/ob_expr_st_distance_sphere.cpp
-  engine/expr/ob_expr_st_contains.cpp
-  engine/expr/ob_expr_st_within.cpp
   engine/expr/ob_expr_sql_mode_convert.cpp
   engine/expr/ob_expr_can_access_trigger.cpp
   engine/expr/ob_expr_mysql_proc_info.cpp
@@ -557,39 +631,12 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_prefix_pattern.cpp
   engine/expr/ob_expr_xml_func_helper.cpp
   engine/expr/ob_expr_multi_mode_func_helper.cpp
-  engine/expr/ob_expr_priv_st_transform.cpp
-  engine/expr/ob_expr_st_covers.cpp
-  engine/expr/ob_expr_st_bestsrid.cpp
-  engine/expr/ob_expr_st_astext.cpp
-  engine/expr/ob_expr_priv_st_setsrid.cpp
-  engine/expr/ob_expr_st_geometryfromtext.cpp
-  engine/expr/ob_expr_st_buffer.cpp
-  engine/expr/ob_expr_st_geomfromewkb.cpp
-  engine/expr/ob_expr_st_geomfromwkb.cpp
-  engine/expr/ob_expr_st_geomfromewkt.cpp
-  engine/expr/ob_expr_priv_st_geogfromtext.cpp
-  engine/expr/ob_expr_priv_st_geographyfromtext.cpp
-  engine/expr/ob_expr_priv_st_geohash.cpp
   engine/expr/ob_expr_priv_st_makepoint.cpp
-  engine/expr/ob_expr_st_asewkt.cpp
-  engine/expr/ob_expr_st_srid.cpp
-  engine/expr/ob_expr_st_distance.cpp
-  engine/expr/ob_expr_st_isvalid.cpp
   engine/expr/ob_expr_errno.cpp
   engine/expr/ob_expr_lob_utils.cpp
   engine/expr/ob_expr_format_bytes.cpp
   engine/expr/ob_expr_format_pico_time.cpp
-  engine/expr/ob_geo_expr_utils.cpp
-  engine/expr/ob_expr_spatial_cellid.cpp
-  engine/expr/ob_expr_spatial_mbr.cpp
   engine/expr/ob_expr_point.cpp
-  engine/expr/ob_expr_priv_st_point.cpp
-  engine/expr/ob_expr_spatial_collection.cpp
-  engine/expr/ob_expr_st_geomfromtext.cpp
-  engine/expr/ob_expr_st_intersects.cpp
-  engine/expr/ob_expr_st_area.cpp
-  engine/expr/ob_expr_st_x.cpp
-  engine/expr/ob_expr_st_transform.cpp
   engine/expr/ob_expr_word_count.cpp
   engine/expr/ob_expr_word_segment.cpp
   engine/expr/ob_expr_wrapper_inner.cpp
@@ -1256,6 +1303,16 @@ ob_set_subtarget(ob_sql session
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)
 
+# Host-side adapters consume only the public, header-only execution SPI.  Keep
+# the include surface local to SQL; plugin targets themselves are validated
+# against their own trusted vendor tree by Plugin.cmake.
+target_include_directories(ob_sql PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(ob_sql_extra PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_compile_definitions(ob_sql PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+target_compile_definitions(ob_sql_extra PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+
 ob_set_subtarget(ob_sql_simd common
   engine/basic/ob_pushdown_filter_simd.cpp
   engine/basic/ob_byte_compare_simd.cpp
@@ -1303,3 +1360,4 @@ if(RET AND NOT RET EQUAL 0)
 endif()
 
 add_subdirectory(parser)
+target_include_directories(ob_sql_server_parser_objects PRIVATE ${PROJECT_SOURCE_DIR}/include)

@@ -210,6 +210,14 @@ int ObDMLService::check_geometry_type(
     ObIAllocator &allocator,
     ObDatum &datum)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(eval_ctx);
+  UNUSED(dml_row);
+  UNUSED(column_info);
+  UNUSED(allocator);
+  UNUSED(datum);
+  return OB_SUCCESS;
+#else
   int ret = OB_SUCCESS;
   ObExpr *expr = dml_row.at(column_info.projector_index_);
   if (!datum.is_null() && expr->obj_meta_.is_geometry()) {
@@ -233,6 +241,7 @@ int ObDMLService::check_geometry_type(
     }
   }
   return ret;
+#endif
 }
 
 int ObDMLService::check_rowkey_is_null(const ObExprPtrIArray &row,

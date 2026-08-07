@@ -3792,6 +3792,9 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
 
 int ObTableScanOp::inner_get_next_spatial_index_row()
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   bool need_ignore_null = false;
   if (OB_ISNULL(domain_index_.dom_rows_)) {
@@ -3878,6 +3881,7 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
     }
   }
   return ret;
+#endif
 }
 
 int ObTableScanOp::init_spatial_index_rows()

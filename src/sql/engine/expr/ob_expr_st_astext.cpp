@@ -16,9 +16,17 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_astext.h"
+#include <cstring>
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "share/geo/ob_geo_to_wkt_visitor.h"
 #include "share/geo/ob_geo_3d.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/extension_spi.h"
+#include "share/rc/ob_module_provider.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -28,6 +36,39 @@ namespace oceanbase
 {
 namespace sql
 {
+
+#if !SEEKDB_ENABLE_CORE_GIS
+namespace
+{
+struct AsTextPluginSink
+{
+  const ObExpr *expr_;
+  ObEvalCtx *ctx_;
+  ObDatum *result_;
+};
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_astext_plugin_result(
+    seekdb_plugin_host_handle_t *host,
+    const seekdb_plugin_execution_result_v1_t *result)
+{
+  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
+      result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
+      nullptr == result->type_id ||
+      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bytes")) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  AsTextPluginSink *sink = reinterpret_cast<AsTextPluginSink *>(host);
+  if (nullptr == sink->expr_ || nullptr == sink->ctx_ || nullptr == sink->result_) {
+    return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  }
+  const int ret = pack_plugin_expr_result(
+      *sink->expr_, *sink->ctx_, *sink->result_,
+      reinterpret_cast<const char *>(result->data),
+      static_cast<int64_t>(result->data_size));
+  return ret == OB_SUCCESS ? SEEKDB_PLUGIN_STATUS_OK : SEEKDB_PLUGIN_STATUS_INTERNAL;
+}
+}
+#endif
 ObExprSTAsText::ObExprSTAsText(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_ASTEXT, N_ST_ASTEXT, MORE_THAN_ZERO, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
@@ -90,6 +131,34 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
                                           ObDatum &res,
                                           const char *func_name)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (expr.arg_cnt_ != 1) return OB_NOT_SUPPORTED;
+  ObDatum *datum = nullptr;
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
+  } else if (datum->is_null()) {
+    res.set_null();
+  } else if (nullptr == share::g_mp) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    const ObString geometry = datum->get_string();
+    AsTextPluginSink sink{&expr, &ctx, &res};
+    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
+    plugin_ctx.struct_size = sizeof(plugin_ctx);
+    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    plugin_ctx.emit_result = emit_astext_plugin_result;
+    seekdb_plugin_execution_value_v1_t argument = {};
+    argument.struct_size = sizeof(argument);
+    argument.type_id = "org.seekdb.gis.geometry";
+    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
+    argument.data_size = static_cast<uint64_t>(geometry.length());
+    const int plugin_ret = share::g_mp->execute_plugin_extension(
+        SEEKDB_PLUGIN_EXTENSION_FUNCTION, func_name,
+        &plugin_ctx, &argument, 1);
+    if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
+  }
+  return ret;
+#else
   int ret = OB_SUCCESS;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -188,8 +257,10 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   }
 
   return ret;
+#endif
 }
 
+#if SEEKDB_ENABLE_CORE_GIS
 int ObExprSTAsText::to_wkt(ObIAllocator &allocator, ObGeometry *geo, ObString &res_wkt, const char *func_name)
 {
   int ret = OB_SUCCESS;
@@ -213,6 +284,7 @@ int ObExprSTAsText::to_wkt(ObIAllocator &allocator, ObGeometry *geo, ObString &r
   }
   return ret;
 }
+#endif
 
 int ObExprSTAsText::eval_st_astext(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {

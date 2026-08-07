@@ -14,9 +14,27 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SHARE
-#include "share/geo/ob_s2adapter.h" // for htonll
 #include "ob_vector_common_util.h"
 #include "observer/ob_inner_sql_connection.h"
+
+namespace {
+// Vector centroid ids are persisted in network byte order.  Keep the
+// endian conversion local so the vector subsystem does not depend on the
+// GIS/S2 adapter merely for htonll/ntohll helpers.
+inline uint64_t vector_htonll(const uint64_t value)
+{
+#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+  return __builtin_bswap64(value);
+#else
+  return value;
+#endif
+}
+
+inline uint64_t vector_ntohll(const uint64_t value)
+{
+  return vector_htonll(value);
+}
+} // namespace
 
 namespace oceanbase {
 namespace share {
@@ -177,10 +195,10 @@ int ObVectorKmeansClusterHelper::get_center_id_from_string(
   } else {
     const ObCenterId *center_id_ptr = reinterpret_cast<const ObCenterId *>(str.ptr());
     if (flag & IVF_PARSE_TABLET_ID) {
-      center_id.tablet_id_ = ntohll(center_id_ptr->tablet_id_);
+      center_id.tablet_id_ = vector_ntohll(center_id_ptr->tablet_id_);
     }
     if (flag & IVF_PARSE_CENTER_ID) {
-      center_id.center_id_ = ntohll(center_id_ptr->center_id_);
+      center_id.center_id_ = vector_ntohll(center_id_ptr->center_id_);
     }
   }
   return ret;
@@ -206,8 +224,8 @@ int ObVectorKmeansClusterHelper::set_center_id_to_string(const ObCenterId &cente
   
   if (OB_SUCC(ret)) {
     ObCenterId tmp;
-    tmp.tablet_id_ = htonll(center_id.tablet_id_);
-    tmp.center_id_ = htonll(center_id.center_id_);
+    tmp.tablet_id_ = vector_htonll(center_id.tablet_id_);
+    tmp.center_id_ = vector_htonll(center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed write data to string", K(ret));
@@ -228,7 +246,7 @@ int ObVectorKmeansClusterHelper::get_pq_center_id_from_string(
   } else {
     const ObPqCenterId *pq_center_id_ptr = reinterpret_cast<const ObPqCenterId *>(str.ptr());
     if (flag & IVF_PARSE_TABLET_ID) {
-      pq_center_id.tablet_id_ = ntohll(pq_center_id_ptr->tablet_id_);
+      pq_center_id.tablet_id_ = vector_ntohll(pq_center_id_ptr->tablet_id_);
     }
     if (flag & IVF_PARSE_M_ID) {
       pq_center_id.m_id_ = ntohl(pq_center_id_ptr->m_id_);
@@ -265,7 +283,7 @@ int ObVectorKmeansClusterHelper::set_pq_center_id_to_string(
   
   if (OB_SUCC(ret)) {
     ObPqCenterId tmp;
-    tmp.tablet_id_ = htonll(pq_center_id.tablet_id_);
+    tmp.tablet_id_ = vector_htonll(pq_center_id.tablet_id_);
     tmp.m_id_ = htonl(pq_center_id.m_id_);
     tmp.center_id_ = htonl(pq_center_id.center_id_);
     if (OB_DOC_ID_COLUMN_BYTE_LENGTH != str.write(reinterpret_cast<const char *>(&tmp), OB_DOC_ID_COLUMN_BYTE_LENGTH)) {
@@ -285,10 +303,10 @@ uint64_t ObVectorKmeansClusterHelper::get_center_prefix(const ObString &center_i
     LOG_WARN("invalid cluster center id str", K(ret), KP(center_id.ptr()), K(center_id.length()));
   } else if (is_pq_centroid) {
     const ObPqCenterId *pq_center_id_ptr = reinterpret_cast<const ObPqCenterId *>(center_id.ptr());
-    prefix = ntohll(pq_center_id_ptr->tablet_id_);
+    prefix = vector_ntohll(pq_center_id_ptr->tablet_id_);
   } else {
     const ObCenterId *center_id_ptr = reinterpret_cast<const ObCenterId *>(center_id.ptr());
-    prefix = ntohll(center_id_ptr->tablet_id_);
+    prefix = vector_ntohll(center_id_ptr->tablet_id_);
   }
   return prefix;
 }

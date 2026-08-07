@@ -9,6 +9,21 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+include(cmake/Plugin.cmake)
+
+# The plugin runtime is the default execution path for optional extensions.
+# Phase 1 intentionally uses the local trusted verifier/loader without
+# signature trust; the runtime remains independently switchable for minimal
+# embedders that do not load any plugins.
+option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
+  "Build the in-process plugin runtime" ON)
+
+# GIS algorithms and codecs live in plugins/gis by default.  Enabling this
+# option is a compatibility profile for deployments that still need the old
+# in-core implementation; it must not be used by the lightweight default.
+option(SEEKDB_ENABLE_CORE_GIS
+  "Build the legacy GIS algorithms and codecs inside the core" OFF)
+
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
@@ -83,6 +98,9 @@ include_directories(${CMAKE_SOURCE_DIR}/rust/sql-nio/include)
 
 add_subdirectory(deps/oblib)
 add_subdirectory(src)
+# The SDK reference module is visible as an explicit target but excluded from
+# normal server/package builds.
+add_subdirectory(plugins)
 
 include(CMakeDependentOption)
 # OB_BUILD_PACKAGE => include tools and build them.
@@ -179,6 +197,16 @@ add_dependencies(oblib_layer_check module_layer_check)
 add_custom_target(oblib_layer_check_strict)
 add_dependencies(oblib_layer_check_strict module_layer_check_strict)
 
+# Plugin code is an ABI consumer, never a core source dependency.  Keep this
+# check separate from the historical module DAG so future plugins share one
+# enforceable boundary from their first commit.
+add_custom_target(plugin_boundary_check
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/cmake/plugin_boundary_check.py
+          ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking seekdb core/SPI/plugin dependency boundary"
+  VERBATIM)
+
 # Wiring: hang the layer check as a seekdb dependency. It has no deps of its own, so it runs in parallel with
 # compilation from the start (2s text scan, zero extra wall-clock); an upward edge fails make seekdb (fail-closed).
 add_dependencies(seekdb module_layer_check)
+add_dependencies(seekdb plugin_boundary_check)

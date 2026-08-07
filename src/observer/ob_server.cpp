@@ -25,12 +25,40 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "observer/ob_server_plugin_runtime.h"
 #include "share/ob_autoincrement_service.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "share/ob_freeze_info_proxy.h"
 namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
+namespace oceanbase { namespace observer {
+int ObServer::execute_plugin_function(
+    const char *service_id,
+    const uint32_t abi_major,
+    const uint32_t required_minor,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_function(service_id, abi_major, required_minor,
+                                           context, arguments, argument_count);
+}
+int ObServer::execute_plugin_extension(
+    const seekdb_plugin_extension_kind_t kind,
+    const char *sql_name,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *arguments,
+    const uint32_t argument_count)
+{
+  return nullptr == plugin_runtime_
+      ? common::OB_NOT_INIT
+      : plugin_runtime_->execute_extension(kind, sql_name, context, arguments,
+                                            argument_count);
+}
+} }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
@@ -195,6 +223,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
 
   if (OB_SUCC(ret) && OB_FAIL(init_config(opts))) {
     LOG_ERROR("init config failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(init_plugin_runtime(opts))) {
+    LOG_ERROR("init plugin runtime bridge failed", KR(ret));
   }
 
 #ifndef _WIN32
@@ -443,6 +474,11 @@ void ObServer::destroy()
   // Cause ObBackupInfo to lock the mutex that has been destroyed by itself, and finally trigger the core
   // This is essentially an implementation problem of repeated destruction of ObBackupInfo (or one of its members). ObServer also adds a layer of defense here.
   FLOG_INFO("[OBSERVER_NOTICE] destroy observer begin");
+
+  // The experimental bridge owns no runtime loader yet.  It does own a
+  // catalog with a non-owning meta_db_pool_ reference, so release it before
+  // any remaining server teardown can reach member destruction.
+  destroy_plugin_runtime();
 
   FLOG_INFO("begin to destroy config manager");
   config_mgr_.destroy();
@@ -767,6 +803,12 @@ int ObServer::start()
       LOG_ERROR("fail to check if timezone usable", KR(ret));
     } else {
       FLOG_INFO("success to check if timezone usable");
+    }
+
+    if (FAILEDx(check_plugin_server_ready())) {
+      LOG_ERROR("plugin catalog did not become safe for server ready", KR(ret));
+    } else {
+      FLOG_INFO("plugin catalog is safe for server ready");
     }
 
     if (FAILEDx(net_frame_.start())) {
@@ -1163,6 +1205,56 @@ int ObServer::init_tz_info_mgr()
     LOG_ERROR("timezone_mgr_ init failed", K_(self_addr), KR(ret));
   }
   return ret;
+}
+
+int ObServer::init_plugin_runtime(const ObServerOptions &opts)
+{
+  int ret = OB_SUCCESS;
+  if (plugin_runtime_) {
+    ret = OB_INIT_TWICE;
+  } else {
+    std::unique_ptr<ObServerPluginRuntime> runtime(
+        new (std::nothrow) ObServerPluginRuntime());
+    if (!runtime) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      std::string plugin_root = "./plugins";
+      if (!opts.base_dir_.empty()) {
+        plugin_root.assign(opts.base_dir_.ptr(), opts.base_dir_.length());
+        plugin_root.append("/plugins");
+      }
+      if (OB_FAIL(runtime->init(&meta_db_pool_, plugin_root))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      plugin_runtime_ = std::move(runtime);
+    }
+  }
+  return ret;
+}
+
+int ObServer::check_plugin_server_ready()
+{
+  int ret = OB_SUCCESS;
+  std::string error;
+  if (!plugin_runtime_) {
+    ret = OB_NOT_INIT;
+    error = "server plugin runtime bridge is not initialized";
+  } else if (OB_FAIL(plugin_runtime_->recover_before_server_ready(error))) {
+  }
+  if (OB_FAIL(ret)) {
+    LOG_ERROR("plugin server-ready gate failed", KR(ret),
+              KCSTRING(error.c_str()));
+  }
+  return ret;
+}
+
+void ObServer::destroy_plugin_runtime() noexcept
+{
+  if (plugin_runtime_) {
+    plugin_runtime_->destroy();
+    plugin_runtime_.reset();
+  }
 }
 
 int ObServer::init_config(const ObServerOptions &opts)

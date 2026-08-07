@@ -20,6 +20,7 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
+#include <memory>
 #include "lib/net/ob_net_util.h"
 #include "lib/task/ob_timer.h"
 #include "lib/random/ob_mysql_random.h"
@@ -70,6 +71,7 @@ namespace observer
 {
 
 class ObServerOptions;
+class ObServerPluginRuntime;
 
 // This the class definition of ObAddr which responds the server
 // itself. It's designed as a singleton in program. This class is
@@ -184,6 +186,9 @@ private:
   ~ObServer();
 
   int init_config(const ObServerOptions &opts);
+  int init_plugin_runtime(const ObServerOptions &opts);
+  int check_plugin_server_ready();
+  void destroy_plugin_runtime() noexcept;
   int init_opts_config(const ObServerOptions &opts, const char *optstr); // init configs from command line
   int init_data_dir_and_redo_dir(const ObServerOptions &opts);
   int init_self_addr();
@@ -278,6 +283,11 @@ private:
 
   // Shared SQLite connection pool for meta database (config and tablet_meta tables)
   share::ObSQLiteConnectionPool meta_db_pool_;
+
+  // Declared after meta_db_pool_ so the bridge (and its non-owning catalog
+  // reference to that pool) is destroyed first.  The opaque type keeps the
+  // optional plugin implementation out of ObServer's public class layout.
+  std::unique_ptr<ObServerPluginRuntime> plugin_runtime_;
 
   // The Oceanbase partition table relating to
   share::ObTabletTableOperator tablet_operator_;
@@ -400,6 +410,19 @@ public:
   rootserver::ObDDLScheduler * ddl_scheduler() override { return mods_ddl_scheduler_; }
   omt::ObAiService * ai_service() override { return mods_ai_service_; }
   share::ObChangeStreamMgr * change_stream_mgr() override { return mods_change_stream_mgr_; }
+  int execute_plugin_function(
+      const char *service_id,
+      uint32_t abi_major,
+      uint32_t required_minor,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
+  int execute_plugin_extension(
+      seekdb_plugin_extension_kind_t kind,
+      const char *sql_name,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *arguments,
+      uint32_t argument_count) override;
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();

@@ -1,5 +1,6 @@
 ob_set_subtarget(ob_server ALONE
   ob_server.cpp
+  ob_server_plugin_runtime.cpp
   ob_service.cpp
 )
 
@@ -293,6 +294,15 @@ ob_set_subtarget(ob_server virtual_table
 )
 
 ob_server_add_target(ob_server)
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  # Keep the feature define private to implementation files.  ObServer's header
+  # always exposes only an opaque pointer, so ON/OFF builds retain one stable
+  # class layout and other core targets cannot observe plugin implementation
+  # types.
+  target_compile_definitions(ob_server PRIVATE
+    SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+  target_link_libraries(ob_server PRIVATE seekdb_plugin_sdk)
+endif()
 
 
 add_library(oceanbase_static

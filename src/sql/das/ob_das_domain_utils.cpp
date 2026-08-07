@@ -152,6 +152,15 @@ int ObDASDomainUtils::generate_spatial_index_rows(
     const ObDASWriteBuffer::DmlRow &dml_row,
     ObDomainIndexRow &spat_rows)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(allocator);
+  UNUSED(das_ctdef);
+  UNUSED(wkb_str);
+  UNUSED(row_projector);
+  UNUSED(dml_row);
+  UNUSED(spat_rows);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   omt::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs_item = NULL;
@@ -234,6 +243,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   }
 
   return ret;
+#endif
 }
 
 int ObDASDomainUtils::build_ft_doc_word_infos(
