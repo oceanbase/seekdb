@@ -19,8 +19,13 @@
 #define private public
 #define protected public
 
+#include "lib/allocator/page_arena.h"
 #include "lib/ob_errno.h"
+#include "share/rc/ob_module_provider.h"
+#include "storage/multi_data_source/compile_utility/compile_mapper.h"
+#include "storage/multi_data_source/mds_ctx.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
+#include "storage/multi_data_source/runtime_utility/mds_factory.h"
 #include "storage/tx/ob_trans_define.h"
 #undef protected
 #undef private
@@ -34,11 +39,36 @@ namespace oceanbase
 {
 namespace unittest
 {
+class TestMdsModuleProvider final : public share::ObIModuleProvider
+{
+public:
+  storage::ObMemstoreFreezer *memstore_freezer() override
+  {
+    // MdsFactory only checks module readiness before copying the context.
+    return reinterpret_cast<storage::ObMemstoreFreezer *>(this);
+  }
+};
+
 class TestTabletCreateMdsCtx : public ::testing::Test
 {
 public:
   TestTabletCreateMdsCtx() = default;
   virtual ~TestTabletCreateMdsCtx() = default;
+
+  void SetUp() override
+  {
+    old_module_provider_ = share::g_mp;
+    share::g_mp = &module_provider_;
+  }
+
+  void TearDown() override
+  {
+    share::g_mp = old_module_provider_;
+  }
+
+protected:
+  TestMdsModuleProvider module_provider_;
+  share::ObIModuleProvider *old_module_provider_ = nullptr;
 };
 
 TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
@@ -63,6 +93,30 @@ TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
   ASSERT_EQ(ctx.writer_.writer_id_, mds_ctx.writer_.writer_id_);
 
   delete [] buffer;
+}
+
+TEST_F(TestTabletCreateMdsCtx, deep_copy_mds_ctx_with_sparse_binding_id)
+{
+  static_assert(mds::BufferCtxBindingTypeId<mds::MdsCtx>::value == 0);
+  static_assert(mds::TupleTypeIdx<mds::BufferCtxTupleHelper, mds::MdsCtx>::value == 1);
+
+  const transaction::ObTransID tx_id{123};
+  mds::MdsCtx source_ctx{mds::MdsWriter{tx_id}};
+  source_ctx.set_binding_type_id(mds::BufferCtxBindingTypeId<mds::MdsCtx>::value);
+  ObArenaAllocator allocator{ObModIds::TEST};
+  mds::BufferCtx *copied_ctx = nullptr;
+
+  ASSERT_EQ(OB_SUCCESS,
+            mds::MdsFactory::deep_copy_buffer_ctx(tx_id, source_ctx, copied_ctx, allocator));
+  ASSERT_NE(nullptr, copied_ctx);
+  mds::MdsCtx *copied_mds_ctx = dynamic_cast<mds::MdsCtx *>(copied_ctx);
+  ASSERT_NE(nullptr, copied_mds_ctx);
+  EXPECT_EQ(source_ctx.get_binding_type_id(), copied_mds_ctx->get_binding_type_id());
+  EXPECT_EQ(source_ctx.get_writer().writer_type_, copied_mds_ctx->get_writer().writer_type_);
+  EXPECT_EQ(source_ctx.get_writer().writer_id_, copied_mds_ctx->get_writer().writer_id_);
+
+  copied_mds_ctx->~MdsCtx();
+  allocator.free(copied_ctx);
 }
 } // namespace unittest
 } // namespace oceanbase

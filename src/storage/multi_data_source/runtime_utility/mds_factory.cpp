@@ -36,7 +36,7 @@ int deepcopy(const transaction::ObTransID &trans_id,
   if (OB_ISNULL(memstore_freezer)) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(ERROR, "server modules are not initialized", KR(ret));
-  } else if (IDX == old_ctx.get_binding_type_id()) {
+  } else {
     using ImplType = GET_CTX_TYPE_BY_TUPLE_IDX(IDX);
     if (BufferCtxBindingTypeId<ImplType>::value == old_ctx.get_binding_type_id()) {
       ImplType *p_impl = nullptr;
@@ -98,6 +98,10 @@ int MdsFactory::deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
     MDS_LOG(WARN, "invalid old_ctx", K(old_ctx.get_binding_type_id()));
   } else if (MDS_FAIL(deepcopy<0>(trans_id, old_ctx, new_ctx, allocator))) {
     MDS_LOG(WARN, "fail to deep copy buffer ctx", K(old_ctx.get_binding_type_id()));
+  } else if (OB_ISNULL(new_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    MDS_LOG(ERROR, "deep copied buffer ctx is null", KR(ret), K(trans_id),
+            K(old_ctx.get_binding_type_id()));
   }
   return ret;
 }
