@@ -77,12 +77,12 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
 DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
         "the maximum memory used by KV cache. 0 derives the limit from effective system memory. "
-        "The automatic value is min(1T, 25% of effective system memory). "
+        "The automatic value is min(1T, 10% of effective system memory). "
         "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the maximum memory used by Memstore. 0 derives the limit from effective system memory. "
-        "The automatic value is 20% of effective system memory. "
+        "The automatic value is 10% of effective system memory. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",

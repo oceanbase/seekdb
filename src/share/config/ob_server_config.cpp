@@ -45,9 +45,9 @@ namespace common
 namespace
 {
 constexpr int64_t MEMORY_BUDGET_PERCENTAGE = 40;
-constexpr int64_t KV_CACHE_MEMORY_PERCENTAGE = 15;
+constexpr int64_t KV_CACHE_MEMORY_PERCENTAGE = 10;
 constexpr int64_t MEMSTORE_MEMORY_PERCENTAGE = 10;
-constexpr int64_t VECTOR_MEMORY_PERCENTAGE = 5;
+constexpr int64_t VECTOR_MEMORY_PERCENTAGE = 10;
 static_assert(MEMORY_BUDGET_PERCENTAGE + KV_CACHE_MEMORY_PERCENTAGE
               + MEMSTORE_MEMORY_PERCENTAGE + VECTOR_MEMORY_PERCENTAGE == 70,
               "default memory percentages must total 70");

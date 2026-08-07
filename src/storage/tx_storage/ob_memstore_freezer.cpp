@@ -1884,7 +1884,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
         mds_limit, trigger_percentage, max_duration, mds_config_changed);
 
     bool vector_config_changed = false;
-    (void)vector_throttle_tool_.update_throttle_config<ObVectorAllocator>(
+    (void)share_resource_throttle_tool_.update_throttle_config<ObVectorAllocator>(
         vector_limit, trigger_percentage, max_duration, vector_config_changed);
 
     if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||

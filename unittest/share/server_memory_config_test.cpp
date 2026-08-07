@@ -75,11 +75,11 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
   EXPECT_EQ(4 * ONE_GIB,
             ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB));
 
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 15),
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
             ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB));
   EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
             ObServerMemoryConfig::resolve_memstore_memory_limit(0, 10 * ONE_GIB));
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 5),
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
             ObServerMemoryConfig::resolve_vector_memory_limit(0, 10 * ONE_GIB));
 
   const int64_t automatic_limit_sum =
