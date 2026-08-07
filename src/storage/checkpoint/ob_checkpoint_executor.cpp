@@ -153,8 +153,9 @@ int ObCheckpointExecutor::get_physical_restore_checkpoint_scn(SCN &checkpoint_sc
   } else {
     checkpoint_scn = MIN(checkpoint_scn, max_callbacked_scn);
     for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; ++i) {
-      // ID services are constrained by the exact ObLSMeta snapshot returned with
-      // this checkpoint. Other handlers restore their state from SSTables.
+      // Both ID services persist their complete state in ObLSMeta, which is copied
+      // together with this checkpoint. All other handlers must constrain the
+      // physical prefix because their state is restored from SSTables.
       if (ObLogBaseType::TIMESTAMP_LOG_BASE_TYPE == i
           || ObLogBaseType::TRANS_ID_LOG_BASE_TYPE == i
           || OB_ISNULL(handlers_[i])) {

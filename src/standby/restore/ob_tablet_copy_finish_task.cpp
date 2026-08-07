@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "standby/restore/ob_tablet_copy_finish_task.h"
-#include "share/ob_structured_event_logger.h"
+#include "standby/ob_standby_observer_adapter.h"
+#include "share/config/ob_server_config.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
-#include "standby/standby_host.h"
 
 namespace oceanbase
 {
@@ -35,8 +35,7 @@ ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
     is_leader_restore_(false),
     src_tablet_meta_(nullptr),
     copy_tablet_ctx_(nullptr),
-    is_only_replace_major_(false),
-    config_(nullptr)
+    is_only_replace_major_(false)
 
 {
 }
@@ -44,15 +43,16 @@ ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
 bool ObTabletCopyFinishTaskParam::is_valid() const
 {
   return OB_NOT_NULL(ls_) && tablet_id_.is_valid() && OB_NOT_NULL(copy_tablet_ctx_)
-      && ObTabletRestoreAction::is_valid(restore_action_) && OB_NOT_NULL(config_)
-      && config_->is_valid();
+      && ObTabletRestoreAction::is_valid(restore_action_);
 }
 
 
 /******************ObTabletCopyFinishTask*********************/
 ObTabletCopyFinishTask::ObTabletCopyFinishTask()
-  : is_inited_(false),
+  : ObITask(TASK_TYPE_STANDBY_RESTORE),
+    is_inited_(false),
     lock_(common::ObLatchIds::BACKUP_LOCK),
+    standby_restore_dag_(nullptr),
     arena_allocator_("TabCopyFinish"),
     minor_tables_handle_(),
     ddl_tables_handle_(),
@@ -81,6 +81,7 @@ int ObTabletCopyFinishTask::init(
     LOG_WARN("failed to set copy tablet status", K(ret));
   } else {
     param_ = param;
+    standby_restore_dag_ = static_cast<ObStandbyRestoreDag *>(this->get_dag());
     is_inited_ = true;
   }
   return ret;
@@ -99,7 +100,7 @@ int ObTabletCopyFinishTask::process()
     // do nothing.
   } else if (OB_DDL_TASK_EXECUTE_TOO_MUCH_TIME == ret ) { // ret=-4192, errsim trigger to test ddl-split orthogonal ls-migration.
     ret = OB_SUCCESS;
-    const int64_t errsim_test_tablet_id = param_.config_->errsim_test_tablet_id_;
+    const int64_t errsim_test_tablet_id = GCONF.errsim_test_tablet_id.get_value();
     if (param_.tablet_id_.is_inner_tablet() || param_.tablet_id_.is_ls_inner_tablet()) {
     } else if (errsim_test_tablet_id > 0 && param_.tablet_id_.id() == errsim_test_tablet_id) {
       LOG_INFO("[ERRSIM] stuck before create table store", K(param_), KPC(this));
@@ -117,6 +118,8 @@ int ObTabletCopyFinishTask::process()
   } else if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet copy finish task do not init", K(ret));
+  } else if (standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed()) {
+    FLOG_INFO("standby restore dag net is already failed, skip physical copy finish task", "tablet_id", param_.tablet_id_, KPC(standby_restore_dag_));
   } else if (OB_FAIL(get_tablet_status(status))) {
     LOG_WARN("failed to get tablet status", K(ret), K(param_));
   } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == status) {
@@ -143,7 +146,6 @@ int ObTabletCopyFinishTask::process()
                           + minor_tables_handle_.get_count()
                           + ddl_tables_handle_.get_count()
                           + major_tables_handle_.get_count();
-  const int64_t ls_id = ObLSID::SYS_LS_ID;
 
   int tmp_ret = OB_SUCCESS;
   char extra_info_str[MAX_ROOTSERVICE_JOB_EXTRA_INFO_LENGTH] = {0};
@@ -158,13 +160,21 @@ int ObTabletCopyFinishTask::process()
     LOG_WARN("failed to print extra info", K(tmp_ret), K(extra_info));
   }
 
-  SERVER_EVENT_ADD("standby_restore", "tablet_copy_finish_task",
-      "tenant_id", OB_SERVER_RUNTIME_ID,
-      "ls_id", ls_id,
-      "tablet_id", param_.tablet_id_.id(),
-      "ret", ret,
-      "sstable_count", sstable_count,
-      "extra_info", extra_info_str);
+  standby::ObStandbyObserverAdapter::report_tablet_copy_finish_task(
+      OB_SERVER_RUNTIME_ID,
+      ObLSID::SYS_LS_ID,
+      param_.tablet_id_.id(),
+      ret,
+      standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed(),
+      sstable_count,
+      extra_info_str);
+
+  if (OB_FAIL(ret)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = ObStandbyRestoreDagUtils::deal_with_fo(ret, standby_restore_dag_))) {
+      LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), K(param_));
+    }
+  }
   return ret;
 }
 
@@ -294,6 +304,16 @@ int ObTabletCopyFinishTask::create_new_table_store_with_minor_()
     } else if (OB_FAIL(ObStandbyRestoreTabletBuilderUtil::build_table_with_minor_tables(param))) {
       LOG_WARN("failed to build table with minor tables", K(ret), K(mds_tables_handle_),
         K(minor_tables_handle_), K(ddl_tables_handle_), K(param_.restore_action_));
+      if (OB_RELEASE_MDS_NODE_ERROR == ret) {
+        //Release mds node failed must do dag net retry.
+        //Because ls still replay and mds may has residue node which makes data incorrect.
+        //So should make ls offline and online
+        int tmp_ret = OB_SUCCESS;
+        const bool need_retry = false;
+        if (OB_SUCCESS != (tmp_ret = standby_restore_dag_->get_standby_restore_dag_net_ctx()->set_result(ret, need_retry))) {
+          LOG_ERROR("failed to set standby restore dag net ctx result", K(tmp_ret), K(ret));
+        }
+      }
     }
   }
   return ret;

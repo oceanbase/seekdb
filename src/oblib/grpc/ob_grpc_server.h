@@ -55,8 +55,8 @@ class ObGrpcServer
 {
 public:
   ObGrpcServer();
-  int register_service(grpc::Service *service);
-  int start(int port, const bool tls_enabled);
+  void register_service(grpc::Service *service);
+  int start(int port);
   void stop();
   void wait();
   bool is_running() const { return NULL != server_.get(); }

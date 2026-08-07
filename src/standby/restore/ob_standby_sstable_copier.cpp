@@ -18,15 +18,16 @@
 
 #include "standby/restore/ob_standby_sstable_copier.h"
 #include "share/ob_server_struct.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "share/rc/ob_server_runtime.h"
 #include "standby/restore/ob_physical_copy_task.h"
 #include "standby/restore/ob_restore_helper.h"
-#include "standby/standby_host.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "standby/restore/ob_tablet_copy_finish_task.h"
 #include "standby/restore/ob_sstable_copy_finish_task.h"
 #include "standby/ob_standby_grpc.h"
 #include "standby/ob_standby_palf_base_info.h"
+#include "share/config/ob_server_config.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
@@ -41,6 +42,76 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+
+class ObStandaloneStandbyRestoreDagNetCtx final : public ObIStandbyRestoreDagNetCtx
+{
+public:
+  ObStandaloneStandbyRestoreDagNetCtx() : ObIStandbyRestoreDagNetCtx() {}
+  virtual ~ObStandaloneStandbyRestoreDagNetCtx() = default;
+  virtual int fill_comment(char *buf, const int64_t buf_len) const override
+  {
+    int64_t pos = 0;
+    return databuff_printf(buf, buf_len, pos, "standby_sstable_copy");
+  }
+  virtual DagNetCtxType get_dag_net_ctx_type() override { return DagNetCtxType::LS_RESTORE; }
+  virtual bool is_valid() const override { return true; }
+  virtual int check_allow_retry(bool &allow_retry) override
+  {
+    allow_retry = false;
+    return OB_SUCCESS;
+  }
+  virtual int check_allow_retry_with_stop(bool &allow_retry) override
+  {
+    allow_retry = false;
+    return OB_SUCCESS;
+  }
+};
+
+class ObStandaloneStandbyRestoreDag final : public ObStandbyRestoreDag
+{
+public:
+  explicit ObStandaloneStandbyRestoreDag(ObIStandbyRestoreDagNetCtx *ctx)
+      : ObStandbyRestoreDag(ObDagType::DAG_TYPE_STANDBY_RESTORE)
+  {
+    standby_restore_dag_net_ctx_ = ctx;
+  }
+  virtual ~ObStandaloneStandbyRestoreDag() = default;
+  virtual bool operator == (const share::ObIDag &other) const override
+  {
+    return this == &other;
+  }
+  virtual uint64_t hash() const override
+  {
+    return reinterpret_cast<uint64_t>(this);
+  }
+  virtual int fill_info_param(compaction::ObIBasicInfoParam *&out_param, ObIAllocator &allocator) const override
+  {
+    UNUSED(allocator);
+    out_param = nullptr;
+    return OB_SUCCESS;
+  }
+  virtual int fill_dag_key(char *buf, const int64_t buf_len) const override
+  {
+    int64_t pos = 0;
+    return databuff_printf(buf, buf_len, pos, "standby_sstable_copy");
+  }
+};
+
+int init_standalone_dag(ObStandaloneStandbyRestoreDag &dag)
+{
+  int ret = OB_SUCCESS;
+  ObDagId dag_id;
+  dag_id.init(GCONF.self_addr_);
+  if (OB_FAIL(dag.set_dag_id(dag_id))) {
+    LOG_WARN("failed to set standalone standby restore dag id", K(ret), K(dag_id));
+  }
+  return ret;
+}
+
+} // namespace
+
 ObStandbySSTableCopier::CopyTabletCtx::CopyTabletCtx()
     : status_(ObCopyTabletStatus::MAX_STATUS),
       extra_info_()
@@ -79,7 +150,6 @@ ObStandbySSTableCopier::ObStandbySSTableCopier()
       replay_base_prepared_(false),
       src_(),
       bandwidth_throttle_(nullptr),
-      config_(nullptr),
       source_ls_meta_(),
       physical_checkpoint_scn_(),
       ls_view_helper_()
@@ -88,20 +158,18 @@ ObStandbySSTableCopier::ObStandbySSTableCopier()
 
 int ObStandbySSTableCopier::init(
     const common::ObAddr &src,
-    common::ObInOutBandwidthThrottle *bandwidth_throttle,
-    const standby::StandbyConfig &config)
+    common::ObInOutBandwidthThrottle *bandwidth_throttle)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("standby sstable copier init twice", K(ret));
-  } else if (!src.is_valid() || OB_ISNULL(bandwidth_throttle) || !config.is_valid()) {
+  } else if (!src.is_valid() || OB_ISNULL(bandwidth_throttle)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby sstable copier argument", K(ret), K(src), KP(bandwidth_throttle));
   } else {
     src_ = src;
     bandwidth_throttle_ = bandwidth_throttle;
-    config_ = &config;
     is_inited_ = true;
   }
   return ret;
@@ -139,7 +207,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("source returned invalid restore checkpoint", K(ret), K(source_ls_meta_));
   } else if (FALSE_IT(arg.replay_start_scn_ = restore_checkpoint_scn)) {
-  } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
+  } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US))) {
     LOG_WARN("failed to init grpc client for replay base", K(ret), K_(src));
   } else if (OB_FAIL(client.fetch_standby_palf_base_info(arg, result))) {
     LOG_WARN("failed to fetch source palf replay base", K(ret), K_(src), K(arg));
@@ -195,11 +263,11 @@ int ObStandbySSTableCopier::init_helper_(ObStandbyRestoreHelper &helper) const
 {
   int ret = OB_SUCCESS;
   ObTaskId task_id;
-  task_id.init(config_->self_addr_);
+  task_id.init(GCONF.self_addr_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby sstable copier not init", K(ret));
-  } else if (OB_FAIL(helper.init(src_, task_id, bandwidth_throttle_, *config_))) {
+  } else if (OB_FAIL(helper.init(src_, task_id, bandwidth_throttle_))) {
     LOG_WARN("failed to init standby restore helper", K(ret), K_(src), K(task_id));
   }
   return ret;
@@ -463,7 +531,7 @@ int ObStandbySSTableCopier::finish_ls_restore_(
     if (OB_FAIL(ls->set_restore_status(
                    ObRestoreStatus(ObRestoreStatus::Status::NONE)))) {
       LOG_WARN("failed to finish standby ls restore status", K(ret), K(restore_checkpoint_scn));
-    } else if (OB_FAIL(ls->online_in_replay_mode_without_lock())) {
+    } else if (OB_FAIL(ls->online_for_physical_restore_without_lock())) {
       LOG_WARN("failed to online standby restored ls", K(ret), K(restore_checkpoint_scn));
     } else {
       LOG_INFO("standby ls restore finished", K(restore_checkpoint_scn));
@@ -482,14 +550,13 @@ int ObStandbySSTableCopier::copy_tablet_(
   ObArray<ObITable::TableKey> table_keys;
   const ObMigrationTabletParam *src_tablet_meta = nullptr;
   CopyTabletCtx copy_tablet_ctx;
-  ObTaskId copy_id;
+  ObStandaloneStandbyRestoreDagNetCtx standby_restore_ctx;
+  ObStandaloneStandbyRestoreDag standby_restore_dag(&standby_restore_ctx);
   ObTabletCopyFinishTask tablet_finish_task;
   ObTabletCopyFinishTaskParam tablet_param;
   ObStandbyRestoreHelper macro_helper;
   ObStandbyRestoreCopySSTableParam copy_sstable_param;
   ObStandbyRestoreCopySSTableInfoMgr copy_sstable_info_mgr;
-  copy_id.init(config_->self_addr_);
-  copy_sstable_param.helper_ = &macro_helper;
 
   if (OB_ISNULL(ls) || !tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -502,11 +569,11 @@ int ObStandbySSTableCopier::copy_tablet_(
     LOG_WARN("failed to get source tablet meta", K(ret), K(tablet_id));
   } else if (OB_FAIL(table_info_mgr.get_table_keys(tablet_id, table_keys))) {
     LOG_WARN("failed to get copy table keys", K(ret), K(tablet_id));
-  } else if (!copy_id.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to initialize standby copy id", K(ret), K(copy_id));
+  } else if (OB_FAIL(init_standalone_dag(standby_restore_dag))) {
+    LOG_WARN("failed to init standalone standby restore dag", K(ret));
   } else if (OB_FAIL(init_helper_(macro_helper))) {
     LOG_WARN("failed to init macro helper", K(ret));
+  } else if (FALSE_IT(copy_sstable_param.helper_ = &macro_helper)) {
   } else if (OB_FAIL(copy_sstable_param.copy_table_key_array_.assign(table_keys))) {
     LOG_WARN("failed to assign copy table keys", K(ret), K(tablet_id), K(table_keys));
   } else if (OB_FAIL(copy_sstable_info_mgr.init(copy_sstable_param))) {
@@ -523,7 +590,7 @@ int ObStandbySSTableCopier::copy_tablet_(
     tablet_param.src_tablet_meta_ = src_tablet_meta;
     tablet_param.copy_tablet_ctx_ = &copy_tablet_ctx;
     tablet_param.is_only_replace_major_ = false;
-    tablet_param.config_ = config_;
+    tablet_finish_task.set_dag(standby_restore_dag);
     if (OB_FAIL(tablet_finish_task.init(tablet_param))) {
       LOG_WARN("failed to init tablet finish task", K(ret), K(tablet_param));
     }
@@ -538,8 +605,7 @@ int ObStandbySSTableCopier::copy_tablet_(
                    table_keys.at(i), macro_range_info))) {
       LOG_WARN("failed to get macro range info", K(ret), K(tablet_id), K(table_keys.at(i)));
     } else if (OB_FAIL(copy_sstable_(ls, tablet_id, sstable_param, macro_range_info,
-                   macro_helper, copy_tablet_ctx, tablet_finish_task,
-                   copy_id))) {
+                   macro_helper, copy_tablet_ctx, tablet_finish_task))) {
       LOG_WARN("failed to copy sstable", K(ret), K(tablet_id), K(table_keys.at(i)));
     }
   }
@@ -561,16 +627,19 @@ int ObStandbySSTableCopier::copy_sstable_(
     const ObCopySSTableMacroRangeInfo &macro_range_info,
     ObStandbyRestoreHelper &helper,
     CopyTabletCtx &copy_tablet_ctx,
-    ObTabletCopyFinishTask &tablet_finish_task,
-    const ObTaskId &copy_id)
+    ObTabletCopyFinishTask &tablet_finish_task)
 {
   int ret = OB_SUCCESS;
+  ObStandaloneStandbyRestoreDagNetCtx standby_restore_ctx;
+  ObStandaloneStandbyRestoreDag standby_restore_dag(&standby_restore_ctx);
   ObSSTableCopyFinishTask sstable_finish_task;
   ObPhysicalCopyTaskInitParam init_param;
 
   if (OB_ISNULL(ls) || OB_ISNULL(sstable_param) || !macro_range_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(ls), K(tablet_id), KP(sstable_param), K(macro_range_info));
+  } else if (OB_FAIL(init_standalone_dag(standby_restore_dag))) {
+    LOG_WARN("failed to init standalone standby restore dag", K(ret));
   } else {
     init_param.tenant_id_ = OB_SERVER_RUNTIME_ID;
     init_param.ls_id_ = ObLSID(ObLSID::SYS_LS_ID);
@@ -579,11 +648,11 @@ int ObStandbySSTableCopier::copy_sstable_(
     init_param.tablet_copy_finish_task_ = &tablet_finish_task;
     init_param.ls_ = ls;
     init_param.helper_ = &helper;
-    init_param.copy_id_ = copy_id;
     init_param.extra_info_ = &copy_tablet_ctx.extra_info_;
     if (OB_FAIL(init_param.sstable_macro_range_info_.assign(macro_range_info))) {
       LOG_WARN("failed to assign macro range info", K(ret), K(macro_range_info));
     } else {
+      sstable_finish_task.set_dag(standby_restore_dag);
       if (OB_FAIL(sstable_finish_task.init(init_param))) {
         LOG_WARN("failed to init sstable finish task", K(ret), K(macro_range_info), KPC(sstable_param));
       }
@@ -592,6 +661,7 @@ int ObStandbySSTableCopier::copy_sstable_(
 
   while (OB_SUCC(ret)) {
     ObPhysicalCopyTask physical_task;
+    physical_task.set_dag(standby_restore_dag);
     if (OB_FAIL(physical_task.init(sstable_finish_task.get_copy_ctx(), &sstable_finish_task))) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;

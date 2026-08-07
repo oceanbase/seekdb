@@ -54,8 +54,7 @@ class ObAllVirtualServer : public common::ObVirtualTableScannerIterator
     SWITCHOVER_STATUS,
     LOG_RESTORE_SOURCE,
     SYNC_SCN,
-    READABLE_SCN,
-    PENDING_ROLE
+    READABLE_SCN
   };
 
 public:
@@ -70,7 +69,6 @@ private:
   common::ObServerConfig *config_;
   char role_buf_[64];
   char switchover_status_buf_[128];
-  char pending_role_buf_[64];
   char log_restore_source_buf_[1024];
 
 private:

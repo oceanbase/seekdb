@@ -66,6 +66,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "ob_server_schema_updater.h",
     "ob_server_utils.h",
     "ob_service.h",
+    "ob_standby_observer_hooks.h",
     "ob_signal_handle.h",
     "ob_srv_deliver.h",
     "ob_srv_network_frame.h",

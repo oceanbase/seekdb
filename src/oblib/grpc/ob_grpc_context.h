@@ -55,6 +55,7 @@ namespace obgrpc
 
 grpc::Status ob_error_to_grpc_status(int ob_ret);
 int extract_error_from_grpc_status(const grpc::Status &status, bool *is_ob_error = nullptr);
+bool ob_grpc_is_rpc_tls_enabled();
 
 bool read_file_content(const std::string &path, std::string &content);
 std::shared_ptr<grpc::ServerCredentials> create_server_credentials(
@@ -93,7 +94,7 @@ template <typename Service>
 class ObGrpcClient {
 public:
   ObGrpcClient() {}
-  int init(const common::ObAddr &addr, int64_t timeout, const bool tls_enabled);
+  int init(const common::ObAddr &addr, int64_t timeout);
   int translate_error(const grpc::Status &status);
 
   ObGrpcContext ctx_;
@@ -102,10 +103,7 @@ public:
 };
 
 template <typename Service>
-int ObGrpcClient<Service>::init(
-    const common::ObAddr &addr,
-    int64_t timeout,
-    const bool tls_enabled)
+int ObGrpcClient<Service>::init(const common::ObAddr &addr, int64_t timeout)
 {
   int ret = OB_SUCCESS;
   char addr_str[common::MAX_IP_PORT_LENGTH] = {0};
@@ -122,7 +120,7 @@ int ObGrpcClient<Service>::init(
     channel_args.SetInt(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH, MAX_MESSAGE_SIZE);
     channel_args.SetInt(GRPC_ARG_MAX_SEND_MESSAGE_LENGTH, MAX_MESSAGE_SIZE);
     std::shared_ptr<grpc::ChannelCredentials> creds;
-    if (tls_enabled) {
+    if (ob_grpc_is_rpc_tls_enabled()) {
       creds = create_client_credentials();
       if (!creds) {
         ret = OB_INIT_FAIL;

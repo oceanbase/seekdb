@@ -1097,21 +1097,17 @@ bool ObSQLUtils::is_readonly_stmt(ParseResult &result)
                || T_VARIABLE_SET == type
                || T_SET_NAMES == type //read only not restrict it
                || T_SET_CHARSET == type  //read only not restrict it
+               || T_SWITCHOVER_TO_STANDBY == type
+               || T_SWITCHOVER_TO_PRIMARY == type
+               || T_ACTIVATE_STANDBY == type
+               || T_ALTER_SYSTEM_SET_PARAMETER == type
+               || T_ALTER_SYSTEM_RESET_PARAMETER == type
+               || T_ALTER_SYSTEM_SETTP == type
                || T_SET_ROLE == type) {
       ret = true;
     }
   }
   return ret;
-}
-
-bool ObSQLUtils::is_allowed_on_standby(const ObItemType stmt_type)
-{
-  return T_SWITCHOVER_TO_STANDBY == stmt_type
-      || T_SWITCHOVER_TO_PRIMARY == stmt_type
-      || T_ACTIVATE_STANDBY == stmt_type
-      || T_ALTER_SYSTEM_SET_PARAMETER == stmt_type
-      || T_ALTER_SYSTEM_RESET_PARAMETER == stmt_type
-      || T_ALTER_SYSTEM_SETTP == stmt_type;
 }
 
 int ObSQLUtils::make_field_name(const char *src,

@@ -24,39 +24,15 @@ namespace oceanbase
 {
 namespace standby
 {
-class ObStandbyLogSyncService;
-class ObStandbySchemaRefreshTrigger;
-class IStandbyHost;
-class StandbyStateStore;
-struct StandbyConfig;
 
 class ObStandbyRoleTransitionService final : public share::ObITenantRoleTransitionService
 {
 public:
-  ObStandbyRoleTransitionService()
-      : lock_(),
-        log_sync_service_(nullptr),
-        schema_refresh_trigger_(nullptr),
-        state_store_(nullptr),
-        operation_timeout_us_(0),
-        host_(nullptr)
-  {}
-  int init(ObStandbyLogSyncService &log_sync_service,
-           ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
-           StandbyStateStore &state_store,
-           const StandbyConfig &config,
-           IStandbyHost &host);
-  void destroy();
+  ObStandbyRoleTransitionService() : lock_() {}
   int execute(const share::ObTenantRoleTransitionOp op, const bool is_verify) override;
-  int resume_pending_promotion();
 
 private:
   lib::ObMutex lock_;
-  ObStandbyLogSyncService *log_sync_service_;
-  ObStandbySchemaRefreshTrigger *schema_refresh_trigger_;
-  StandbyStateStore *state_store_;
-  int64_t operation_timeout_us_;
-  IStandbyHost *host_;
 };
 
 } // namespace standby

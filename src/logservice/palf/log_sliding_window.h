@@ -103,9 +103,7 @@ public:
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn);
-  virtual int submit_imported_group(const LSN &source_lsn,
-                                    const share::SCN &source_scn,
-                                    const char *buf,
+  virtual int submit_imported_group(const char *buf,
                                     const int64_t buf_len);
   virtual int after_flush_log(const FlushLogCbCtx &flush_cb_ctx);
   virtual int after_rebuild(const LSN &lsn);

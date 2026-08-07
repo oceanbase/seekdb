@@ -73,11 +73,9 @@ public:
 
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
-
-  int fence_local_transactions(const int64_t deadline_us);
-  int fence_local_append(const int64_t deadline_us);
-  int prepare_local_append(const int64_t deadline_us);
-  int activate_local_append();
+  // Switch how the single local log stream applies durable log entries.
+  int switch_to_local_append_mode();
+  int switch_to_local_replay_mode();
 
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
@@ -141,7 +139,6 @@ private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_;
-  bool boot_append_mode_;
   ObLS *ls_;
 
   common::ObConcurrentFIFOAllocator ls_allocator_;

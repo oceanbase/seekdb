@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_standby_restore_reader.h"
+#include "share/config/ob_server_config.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -190,7 +191,6 @@ ObCopyMacroBlockObProducer::ObCopyMacroBlockObProducer()
   : is_inited_(false),
     copy_macro_range_info_(),
     data_version_(0),
-    io_timeout_ms_(0),
     macro_idx_(0),
     handle_idx_(0),
     prefetch_meta_time_(0),
@@ -223,8 +223,7 @@ int ObCopyMacroBlockObProducer::init(
     const ObITable::TableKey &table_key,
     const ObCopyMacroRangeInfo &copy_macro_range_info,
     const int64_t data_version,
-    const share::SCN backfill_tx_scn,
-    const int64_t io_timeout_ms)
+    const share::SCN backfill_tx_scn)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = nullptr;
@@ -240,7 +239,7 @@ int ObCopyMacroBlockObProducer::init(
   } else if (!ls_id.is_valid() || !table_key.is_valid()
       || !copy_macro_range_info.is_valid()
       || data_version < obcall::ObCopyMacroBlockRangeArg::DISABLE_MACRO_BLOCK_REUSE_DATA_VERSION
-      || !backfill_tx_scn.is_valid() || io_timeout_ms <= 0) {
+      || !backfill_tx_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(ls_id), K(table_key),
         K(copy_macro_range_info), K(data_version), K(backfill_tx_scn));
@@ -286,7 +285,6 @@ int ObCopyMacroBlockObProducer::init(
       LOG_WARN("failed to open second meta iterator", K(ret), K(ls_id), K(table_key), K(copy_macro_range_info));
     } else {
       data_version_ = data_version;
-      io_timeout_ms_ = io_timeout_ms;
       macro_idx_ = -1;
       handle_idx_ = 0;
       is_inited_ = true;
@@ -415,7 +413,7 @@ int ObCopyMacroBlockObProducer::get_read_info_(
     read_info.size_ = sstable_->is_small_sstable() ? macro_meta.nested_size_ : sstable_->get_macro_read_size();
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    read_info.io_timeout_ms_ = io_timeout_ms_;
+    read_info.io_timeout_ms_ = (GCONF._data_storage_io_timeout / 1000L);
     read_info.buf_ = io_buf_[handle_idx_];
     read_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_WHOLE_SCANNER_IO);
     if (OB_UNLIKELY(!read_info.is_valid())) {

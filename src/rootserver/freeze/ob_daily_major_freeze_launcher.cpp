@@ -19,6 +19,7 @@
 #include "rootserver/freeze/ob_daily_major_freeze_launcher.h"
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
+#include "share/ob_server_struct.h"
 #include "share/ob_tablet_checksum_operator.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
@@ -153,6 +154,8 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
+  } else if (GCTX.is_standby_server()) {
+    LOG_INFO("skip daily major freeze for standby server");
   } else if (GCONF.major_freeze_duty_time.disable()) {
     LOG_INFO("major_freeze_duty_time is disabled, can not launch major freeze by duty");
   } else {

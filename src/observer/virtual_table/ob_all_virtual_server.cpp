@@ -18,6 +18,7 @@
 #include "share/rc/ob_server_runtime.h"
 
 #include "observer/ob_service.h"
+#include "grpc/ob_grpc_context.h"
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
 #include "share/ob_server_struct.h"
@@ -39,7 +40,6 @@ ObAllVirtualServer::ObAllVirtualServer()
   ip_buf_[0] = '\0';
   role_buf_[0] = '\0';
   switchover_status_buf_[0] = '\0';
-  pending_role_buf_[0] = '\0';
   log_restore_source_buf_[0] = '\0';
 }
 
@@ -49,7 +49,6 @@ ObAllVirtualServer::~ObAllVirtualServer()
   ip_buf_[0] = '\0';
   role_buf_[0] = '\0';
   switchover_status_buf_[0] = '\0';
-  pending_role_buf_[0] = '\0';
   log_restore_source_buf_[0] = '\0';
   config_ = nullptr;
 }
@@ -87,38 +86,31 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     const int64_t data_disk_allocated =
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
     const char *data_disk_health_status = device_health_status_to_str(dhs);
-    const share::ObServerRole::Role active_role = share::server_role();
     share::ObServerInfo server_info;
-    const share::IServerRoleStateProvider *role_state_provider =
-        share::server_service<share::IServerRoleStateProvider>();
-    const int load_info_ret = nullptr == role_state_provider
-        ? OB_NOT_INIT
-        : role_state_provider->get_server_info(server_info);
+    const int load_info_ret = share::ObServerInfoProxy::load_server_info(
+        GCTX.config_mgr_, GCTX.server_role_, server_info);
 
     role_buf_[0] = '\0';
     switchover_status_buf_[0] = '\0';
-    pending_role_buf_[0] = '\0';
-    switch (active_role) {
-      case share::ObServerRole::PRIMARY_ROLE:
-        snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
-        break;
-      case share::ObServerRole::STANDBY_ROLE:
-        snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
-        break;
-      default:
-        snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
-        break;
-    }
     if (OB_SUCCESS == load_info_ret && server_info.is_valid()) {
+      switch (server_info.get_server_role().value()) {
+        case share::ObServerRole::PRIMARY_ROLE:
+          snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
+          break;
+        case share::ObServerRole::STANDBY_ROLE:
+          snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
+          break;
+        default:
+          snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
+          break;
+      }
       snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "%s",
                server_info.get_switchover_status().to_str());
-      snprintf(pending_role_buf_, sizeof(pending_role_buf_), "%s",
-               server_info.get_pending_role().to_str());
     } else {
       if (OB_SUCCESS != load_info_ret) {
       }
+      snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
       snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "UNKNOWN");
-      snprintf(pending_role_buf_, sizeof(pending_role_buf_), "UNKNOWN");
     }
 
     log_restore_source_buf_[0] = '\0';
@@ -140,7 +132,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (share::ObServerRole::STANDBY_ROLE == active_role) {
+    } else if (server_info.is_standby()) {
       logservice::ObLogService *log_service =
           share::server_service<logservice::ObLogService>();
       share::SCN replay_scn;
@@ -153,7 +145,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
         sync_scn_val = replay_scn.get_val_for_inner_table_field();
         readable_scn_val = readable_scn.get_val_for_inner_table_field();
       }
-    } else if (share::ObServerRole::PRIMARY_ROLE == active_role) {
+    } else if (server_info.is_primary()) {
       share::SCN decided_scn;
       if (OB_FAIL(ls->get_max_decided_scn(decided_scn))) {
       } else {
@@ -229,10 +221,11 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.log_disk_in_use_);
           break;
         case RPC_CERT_EXPIRE_TIME:
-          cur_row_.cells_[i].set_int(GCTX.ssl_key_expired_time_);
+          cur_row_.cells_[i].set_int(obgrpc::ob_grpc_is_rpc_tls_enabled()
+              ? obgrpc::get_rpc_cert_expire_time() : 0);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(GCONF.enable_rpc_tls);
+          cur_row_.cells_[i].set_int(obgrpc::ob_grpc_is_rpc_tls_enabled());
           break;
         case MEMORY_LIMIT:
           // Keep the legacy column name for virtual-table compatibility.
@@ -250,10 +243,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           break;
         case SWITCHOVER_STATUS:
           cur_row_.cells_[i].set_varchar(switchover_status_buf_);
-          cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          break;
-        case PENDING_ROLE:
-          cur_row_.cells_[i].set_varchar(pending_role_buf_);
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           break;
         case LOG_RESTORE_SOURCE:

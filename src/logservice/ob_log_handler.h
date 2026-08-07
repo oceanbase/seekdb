@@ -156,9 +156,19 @@ public:
                      palf::LSN &lsn,
                      share::SCN &scn) override final;
 
-  int append_imported_group(const palf::LSN &source_lsn,
-                            const share::SCN &source_scn,
-                            const void *buffer,
+  int append_imported_log(const void *buffer,
+                          const int64_t nbytes,
+                          const share::SCN &ref_scn,
+                          AppendCb *cb,
+                          palf::LSN &lsn,
+                          share::SCN &scn);
+  int append_imported_big_log(const void *buffer,
+                              const int64_t nbytes,
+                              const share::SCN &ref_scn,
+                              AppendCb *cb,
+                              palf::LSN &lsn,
+                              share::SCN &scn);
+  int append_imported_group(const void *buffer,
                             const int64_t nbytes);
   void set_local_append_enabled(const bool enabled)
   {
@@ -237,7 +247,7 @@ public:
   // @desc: query coarse lsn by ts(ns), that means there is a LogGroupEntry in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming
-  // Note that result_lsn is a readable coarse lower bound for the located log.
+  // Note that result_lsn points to the readable beginning of the located log file.
   // @params [in] scn: timestamp(nano second)
   // @params [out] result_lsn: the lower bound lsn which includes scn
   // @return
@@ -282,8 +292,8 @@ public:
   //   OB_SUCCESS
   //   OB_NOT_INIT
   //   OB_ENTRY_NOT_EXIST: parent is invalid
-  // PalfBaseInfo include the 'base_lsn' and the 'prev_log_info' of sliding window.
-  // @param[in] const LSN&, base_lsn of ls.
+  // PalfBaseInfo includes the exact base_lsn and the previous log info of the sliding window.
+  // @param[in] const LSN&, exact base_lsn of ls.
   // @param[out] PalfBaseInfo&, palf_base_info
   // retval:
   //   OB_SUCCESS

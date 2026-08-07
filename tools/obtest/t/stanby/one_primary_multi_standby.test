@@ -192,34 +192,28 @@ db_s2.check_until_timeout select count(*) from test_multi_standby where id = 5, 
 --enable_query_log
 --enable_result_log
 
-# prepare 主库切换为备库，当前进程仍保持 PRIMARY active role
+# 执行主库切换为备库
 connection conn_sys_p;
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 
 --disable_query_log
 --disable_result_log
 
-# 验证 active role 未改变，pending role 已持久化
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+# 验证主库已切换为备库
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
 
 --enable_query_log
 --enable_result_log
 
-# 备库1在线成为主库；旧主仍在线但已 fencing
+# 执行备库1切换为主库
 connection conn_sys_s1;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
 --disable_query_log
 --disable_result_log
 
-# 验证 active role 已在线切换
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
-
-# 外部编排者只重启旧主为备库
-db_p.force_stop;
-db_p.nstart;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# 验证备库1已切换为主库
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
 
 --enable_query_log
 --enable_result_log
@@ -297,34 +291,28 @@ db_s2.check_until_timeout select count(*) from test_multi_standby where id = 7, 
 --enable_query_log
 --enable_result_log
 
-# prepare 新主库（db_s1）切换为备库
+# 执行新主库（db_s1）切换为备库
 connection conn_sys_s1;
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 
 --disable_query_log
 --disable_result_log
 
-# 验证 active role 未改变，pending role 已持久化
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+# 验证 db_s1 已切换为备库
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
 
 --enable_query_log
 --enable_result_log
 
-# 原主库（db_p）在线成为主库
+# 执行原主库（db_p）切换为主库
 connection conn_sys_p;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
 --disable_query_log
 --disable_result_log
 
-# 验证 active role 已在线切换
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
-
-# 外部编排者只重启原主为备库
-db_s1.force_stop;
-db_s1.nstart;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-ob_connect(conn_sys_s1, db_s1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# 验证 db_p 已切换为主库
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
 
 --enable_query_log
 --enable_result_log
@@ -379,18 +367,15 @@ db_s2.check_until_timeout select count(*) from test_multi_standby where id = 9, 
 --enable_query_log
 --enable_result_log
 
-# 故障主库先停止并永久退出拓扑
-db_p.force_stop;
-
-# 备库2（db_s2）在线 failover 为主库
+# 执行备库2（db_s2）failover 为主库
 connection conn_sys_s2;
 ALTER SYSTEM ACTIVATE STANDBY;
 
 --disable_query_log
 --disable_result_log
 
-# 验证 active role 已在线切换，同一连接保持可用
-db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+# 验证 db_s2 已 failover 为主库
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
 
 --enable_query_log
 --enable_result_log
@@ -402,7 +387,10 @@ insert into test_multi_standby values(10, 'after_failover', 1000);
 --disable_query_log
 --disable_result_log
 
-# 其他备库仍是旧拓扑上的 STANDBY，等待外部系统重新配置
+# 验证原主库（db_p）状态（failover 后应该还是 PRIMARY）
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+
+# 验证备库1（db_s1）状态（应该还是 STANDBY）
 db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
 
 --enable_query_log
@@ -412,6 +400,11 @@ db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_st
 connection conn_sys_s2;
 select count(*) from test_multi_standby;
 # 10
+
+# 验证原主库（db_p）数据（failover 后独立运行）
+connection conn_sys_p;
+select count(*) from test_multi_standby;
+# 9
 
 # 验证备库1（db_s1）数据（failover 后独立运行）
 connection conn_sys_s1;

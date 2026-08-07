@@ -14,21 +14,30 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
-#define OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#ifndef OCEANBASE_STANDBY_OB_STANDBY_BOOTSTRAP_POLICY_H_
+#define OCEANBASE_STANDBY_OB_STANDBY_BOOTSTRAP_POLICY_H_
+
+#include "share/scn.h"
 
 namespace oceanbase
 {
-namespace obgrpc
-{
-class ObGrpcServer;
-}
 namespace standby
 {
 
-void register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server);
+class ObStandbyBootstrapPolicy
+{
+public:
+  static bool need_located_replay_start_log(
+      const share::SCN &replay_start_scn,
+      const share::SCN &source_end_scn)
+  {
+    return replay_start_scn.is_valid()
+        && source_end_scn.is_valid()
+        && !(source_end_scn < replay_start_scn);
+  }
+};
 
 } // namespace standby
 } // namespace oceanbase
 
-#endif // OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#endif /* OCEANBASE_STANDBY_OB_STANDBY_BOOTSTRAP_POLICY_H_ */

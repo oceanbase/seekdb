@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_standby_restore_tablet_builder.h"
 #include "standby/restore/ob_restore_helper.h"
-#include "share/ob_structured_event_logger.h"
+#include "standby/ob_standby_observer_adapter.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 
@@ -540,7 +540,7 @@ int ObStandbyRestoreCopySSTableInfoMgr::build_sstable_macro_range_info_map_()
     void *buf = nullptr;
     ObCopySSTableMacroRangeInfo *sstable_macro_range_info_ptr = nullptr;
     ObArenaAllocator allocator("CopySStable");
-    restore::ObStandbyRestoreHelper *helper = nullptr;
+    restore::ObIRestoreHelper *helper = nullptr;
     if (OB_FAIL(param_.helper_->copy_for_task(allocator, helper))) {
       LOG_WARN("failed to copy helper", K(ret), K(param_));
     } else if (OB_ISNULL(helper)) {
@@ -789,20 +789,20 @@ int ObStandbyRestoreTabletBuilderUtil::inner_update_tablet_table_store_with_majo
               major_sstables_param.has_truncate_info_)))) {
       LOG_WARN("failed to init with compaction info", KR(ret));
     } else if (tablet_storage_schema->get_schema_version() < major_sstables_param.storage_schema_.get_schema_version()) {
-      SERVER_EVENT_ADD("standby_restore", "schema_change_need_merge_tablet_meta",
-          "tenant_id", OB_SERVER_RUNTIME_ID,
-          "tablet_id", tablet_id.id(),
-          "old_schema_version", tablet_storage_schema->get_schema_version(),
-          "new_schema_version", major_sstables_param.storage_schema_.get_schema_version());
+      standby::ObStandbyObserverAdapter::report_schema_change_need_merge_tablet_meta(
+          OB_SERVER_RUNTIME_ID,
+          tablet_id.id(),
+          tablet_storage_schema->get_schema_version(),
+          major_sstables_param.storage_schema_.get_schema_version());
     }
 #ifdef ERRSIM
-    SERVER_EVENT_ADD("standby_restore", "update_major_tablet_table_store",
-        "tablet_id", tablet_id.id(),
-        "old_multi_version_start", tablet->get_multi_version_start(),
-        "new_multi_version_start", update_multi_version_start,
-        "old_snapshot_version", tablet->get_snapshot_version(),
-        "new_snapshot_version", table->get_key().get_snapshot_version(),
-        "has_truncate_info", major_sstables_param.has_truncate_info_);
+    standby::ObStandbyObserverAdapter::report_update_major_tablet_table_store(
+        tablet_id.id(),
+        tablet->get_multi_version_start(),
+        update_multi_version_start,
+        tablet->get_snapshot_version(),
+        table->get_key().get_snapshot_version(),
+        major_sstables_param.has_truncate_info_);
 #endif
 
 
