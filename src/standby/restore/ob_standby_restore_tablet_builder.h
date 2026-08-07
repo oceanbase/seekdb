@@ -27,7 +27,7 @@ namespace oceanbase
 {
 namespace restore
 {
-class ObStandbyRestoreHelper;
+class ObIRestoreHelper;
 }
 
 namespace share
@@ -127,7 +127,7 @@ struct ObStandbyRestoreCopySSTableParam final
   TO_STRING_KV(K_(copy_table_key_array), KP_(helper));
 
   common::ObArray<ObITable::TableKey> copy_table_key_array_;
-  restore::ObStandbyRestoreHelper *helper_;
+  restore::ObIRestoreHelper *helper_;
   DISALLOW_COPY_AND_ASSIGN(ObStandbyRestoreCopySSTableParam);
 };
 

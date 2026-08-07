@@ -405,6 +405,7 @@ OBSERVER_RETRIEVAL_COMPOSITION_SOURCES = [
 OBSERVER_STANDALONE_SOURCES = [
     struct(path = "src/observer/ob_server.cpp", language = "c++", kind = "source"),
     struct(path = "src/observer/ob_service.cpp", language = "c++", kind = "source"),
+    struct(path = "src/observer/ob_standby_observer_hooks.cpp", language = "c++", kind = "source"),
 ]
 
 OBSERVER_IGNORED_SOURCES = [

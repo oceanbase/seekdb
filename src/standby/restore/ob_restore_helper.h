@@ -24,52 +24,112 @@
 #include "lib/allocator/page_arena.h"
 #include "storage/tablet/ob_tablet_meta.h"            // ObMigrationTabletParam
 #include "storage/tablet/ob_tablet_create_sstable_param.h" // blocksstable::ObMigrationSSTableParam
+#include "ob_standby_restore_dag.h"
 #include "ob_standby_restore_reader.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "standby/restore/ob_restore_helper_ctx.h"
 
 namespace oceanbase
 {
-namespace standby
-{
-struct StandbyConfig;
-}
 namespace restore
 {
-class ObStandbyRestoreHelper
+struct ObRestoreTaskType
+{
+  enum TYPE
+  {
+    STANDBY_RESTORE_TASK = 0,
+    MAX_RESTORE_TASK_TYPE,
+  };
+  static const char *get_str(const TYPE &type);
+  static bool is_valid(const TYPE &type) { return type >= 0 && type < MAX_RESTORE_TASK_TYPE; }
+};
+
+struct ObRestoreTask final
 {
 public:
-  ObStandbyRestoreHelper();
-  ~ObStandbyRestoreHelper();
+  ObRestoreTask();
+  ~ObRestoreTask();
+  void reset();
   bool is_valid() const;
-  void destroy();
-  int copy_for_task(common::ObIAllocator &allocator, ObStandbyRestoreHelper *&helper) const;
-  int init(
-      const common::ObAddr &src,
-      const share::ObTaskId &task_id,
-      common::ObInOutBandwidthThrottle *bandwidth_throttle,
-      const standby::StandbyConfig &config);
-  const standby::StandbyConfig &get_config() const { return *config_; }
-  int check_restore_precondition();
-  int init_for_ls_view();
-  int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
-  int fetch_ls_meta(ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn);
-  int init_for_build_tablets_sstable_info(const common::ObIArray<ObTabletHandle> &tablet_handle_array);
-  int fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header);
-  int fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info);
+  bool is_standby_restore() const { return ObRestoreTaskType::STANDBY_RESTORE_TASK == type_; }
+  TO_STRING_KV(K_(task_id), K_(type), K_(src_info));
+public:
+  share::ObTaskId task_id_;
+  ObRestoreTaskType::TYPE type_;
+  common::ObAddr src_info_;
+};
+
+class ObIRestoreHelper
+{
+public:
+  ObIRestoreHelper() {}
+  virtual ~ObIRestoreHelper() {}
+  virtual bool is_valid() const { return false; }
+  virtual void destroy() = 0;
+public:
+  virtual int copy_for_task(common::ObIAllocator &allocator, ObIRestoreHelper *&helper) const = 0;
+  virtual bool is_standby_restore_helper() const { return false; }
+  virtual bool is_leader_restore() const = 0;
+  virtual int check_restore_precondition() = 0;
+  virtual int init_for_ls_view() = 0;
+  virtual int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info) = 0;
+  virtual int fetch_ls_meta(ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn) = 0;
+  virtual int init_for_build_tablets_sstable_info(
+      const common::ObIArray<ObTabletHandle> &tablet_handle_array) = 0;
+  virtual int fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header) = 0;
+  virtual int fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info) = 0;
   // Build sstable macro range info for copy chain. The helper is responsible for iterating
   // and returning range info for each sstable key in the input list.
-  int init_for_sstable_macro_range(const common::ObIArray<storage::ObITable::TableKey> &copy_table_key_array);
-  int fetch_next_sstable_macro_range_info(storage::ObCopySSTableMacroRangeInfo &sstable_macro_range_info);
+  virtual int init_for_sstable_macro_range(const common::ObIArray<storage::ObITable::TableKey> &copy_table_key_array) = 0;
+  virtual int fetch_next_sstable_macro_range_info(storage::ObCopySSTableMacroRangeInfo &sstable_macro_range_info) = 0;
   // Macro block copy iteration for a single sstable range.
-  int init_for_macro_block_copy(
+  virtual int init_for_macro_block_copy(
       const storage::ObITable::TableKey &copy_table_key,
       const storage::ObCopyMacroRangeInfo &macro_range_info,
       const share::SCN &backfill_tx_scn,
-      const int64_t data_version);
-  int fetch_next_macro_block(storage::ObICopyMacroBlockReader::CopyMacroBlockReadData &read_data);
-  int init_for_fetch_tablet_meta(const common::ObIArray<common::ObTabletID> &tablet_id_array);
-  int fetch_tablet_meta(obcall::ObCopyTabletInfo &tablet_info);
-  TO_STRING_KV(K_(is_inited), K_(task_id), K_(src));
+      const int64_t data_version) = 0;
+  virtual int fetch_next_macro_block(storage::ObICopyMacroBlockReader::CopyMacroBlockReadData &read_data) = 0;
+  virtual int init_for_fetch_tablet_meta(const common::ObIArray<common::ObTabletID> &tablet_id_array) = 0;
+  virtual int fetch_tablet_meta(obcall::ObCopyTabletInfo &tablet_info) = 0;
+  DECLARE_VIRTUAL_TO_STRING;
+  DISALLOW_COPY_AND_ASSIGN(ObIRestoreHelper);
+};
+
+class ObStandbyRestoreHelper : public ObIRestoreHelper
+{
+public:
+  ObStandbyRestoreHelper();
+  virtual ~ObStandbyRestoreHelper();
+  virtual bool is_valid() const override;
+  virtual void destroy() override;
+  virtual int copy_for_task(common::ObIAllocator &allocator, ObIRestoreHelper *&helper) const override;
+  int init(
+      const common::ObAddr &src,
+      const share::ObTaskId &task_id,
+      common::ObInOutBandwidthThrottle *bandwidth_throttle);
+  bool is_standby_restore_helper() const override { return true; }
+  bool is_leader_restore() const override { return false; }
+  virtual int check_restore_precondition() override;
+  virtual int init_for_ls_view() override;
+  virtual int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info) override;
+  virtual int fetch_ls_meta(ObLSMeta &ls_meta, share::SCN &physical_checkpoint_scn) override;
+  virtual int init_for_build_tablets_sstable_info(const common::ObIArray<ObTabletHandle> &tablet_handle_array) override;
+  virtual int fetch_next_tablet_sstable_header(obcall::ObCopyTabletSSTableHeader &copy_header) override;
+  virtual int fetch_next_sstable_meta(obcall::ObCopyTabletSSTableInfo &sstable_info) override;
+  // Build sstable macro range info for copy chain. The helper is responsible for iterating
+  // and returning range info for each sstable key in the input list.
+  virtual int init_for_sstable_macro_range(const common::ObIArray<storage::ObITable::TableKey> &copy_table_key_array) override;
+  virtual int fetch_next_sstable_macro_range_info(storage::ObCopySSTableMacroRangeInfo &sstable_macro_range_info) override;
+  // Macro block copy iteration for a single sstable range.
+  virtual int init_for_macro_block_copy(
+      const storage::ObITable::TableKey &copy_table_key,
+      const storage::ObCopyMacroRangeInfo &macro_range_info,
+      const share::SCN &backfill_tx_scn,
+      const int64_t data_version) override;
+  virtual int fetch_next_macro_block(storage::ObICopyMacroBlockReader::CopyMacroBlockReadData &read_data) override;
+  virtual int init_for_fetch_tablet_meta(const common::ObIArray<common::ObTabletID> &tablet_id_array) override;
+  virtual int fetch_tablet_meta(obcall::ObCopyTabletInfo &tablet_info) override;
+  VIRTUAL_TO_STRING_KV(K_(is_inited), K_(task_id), K_(src));
 private:
   int create_ctx_(const ObRestoreHelperCtxType ctx_type);
   int get_ls_view_rpc_timeout_(int64_t &rpc_timeout_us);
@@ -95,7 +155,6 @@ private:
   share::ObTaskId task_id_;
   common::ObAddr src_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
-  const standby::StandbyConfig *config_;
   ObIRestoreHelperCtx *ctx_;
   common::ObArenaAllocator ctx_allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObStandbyRestoreHelper);

@@ -118,6 +118,9 @@ db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 let $primary_end_scn_after = deploy_get_value(db_p.select select max(end_scn) as end_scn from oceanbase.__all_virtual_log_stat, end_scn, 1);
 let $primary_sync_scn_after = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', sync_scn, 1);
 
+# Allow one gRPC deadline to elapse before checking externally visible sync state.
+--sleep 12
+
 --enable_query_log
 --enable_result_log
 

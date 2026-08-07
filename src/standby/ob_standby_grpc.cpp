@@ -23,13 +23,9 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_time_utility.h"
-#include "share/ob_server_info.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/ob_standby_grpc_stream_util.h"
-#include "standby/ob_standby_source_util.h"
-#include "standby/control/standby_state_store.h"
 #include "standby/restore/ob_standby_restore_reader.h"
-#include "standby/standby_host.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "common/ob_version_def.h"
@@ -49,20 +45,11 @@ namespace oceanbase
 namespace standby
 {
 
-class StandbyGrpcService final : public standbyservice::StandbyService::Service
+class ObStandbyGrpcServiceImpl final : public standbyservice::StandbyService::Service
 {
 public:
-  StandbyGrpcService(
-      const StandbyConfig &config,
-      StandbyStateStore &state_store,
-      IStandbyHost &host)
-    : self_addr_(config.self_addr_),
-      io_timeout_ms_(config.io_timeout_ms_),
-      rpc_tls_enabled_(config.rpc_tls_enabled_),
-      state_store_(state_store),
-      host_(host)
-  {}
-  virtual ~StandbyGrpcService() {}
+  ObStandbyGrpcServiceImpl() {}
+  virtual ~ObStandbyGrpcServiceImpl() {}
 
   grpc::Status fetch_ls_view(grpc::ServerContext* context,
                              const standbyservice::FetchLSViewReq* request,
@@ -99,52 +86,12 @@ public:
   grpc::Status fetch_log(grpc::ServerContext* context,
                          const standbyservice::FetchLogReq* request,
                          grpc::ServerWriter<standbyservice::FetchLogRes>* writer) override;
-
-  grpc::Status get_promotion_boundary(
-      grpc::ServerContext* context,
-      const standbyservice::GetPromotionBoundaryReq* request,
-      standbyservice::GetPromotionBoundaryRes* response) override;
-
-private:
-  common::ObAddr self_addr_;
-  int64_t io_timeout_ms_;
-  bool rpc_tls_enabled_;
-  StandbyStateStore &state_store_;
-  IStandbyHost &host_;
 };
 
-int create_and_register_standby_grpc_service(
-    obgrpc::ObGrpcServer &grpc_server,
-    const StandbyConfig &config,
-    StandbyStateStore &state_store,
-    IStandbyHost &host,
-    StandbyGrpcService *&service)
+void register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server)
 {
-  int ret = OB_SUCCESS;
-  service = nullptr;
-  StandbyGrpcService *new_service = nullptr;
-  if (!config.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid standby gRPC service config", KR(ret));
-  } else if (OB_ISNULL(new_service = OB_NEW(
-      StandbyGrpcService, "StandbyGrpc", config, state_store, host))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate standby gRPC service", KR(ret));
-  } else if (OB_FAIL(grpc_server.register_service(new_service))) {
-    LOG_WARN("failed to register standby gRPC service", KR(ret));
-    OB_DELETE(StandbyGrpcService, "StandbyGrpc", new_service);
-  } else {
-    service = new_service;
-  }
-  return ret;
-}
-
-void destroy_standby_grpc_service(StandbyGrpcService *&service)
-{
-  if (nullptr != service) {
-    OB_DELETE(StandbyGrpcService, "StandbyGrpc", service);
-    service = nullptr;
-  }
+  static ObStandbyGrpcServiceImpl standby_grpc_service;
+  grpc_server.register_service(&standby_grpc_service);
 }
 
 ObStandbyLSViewTabletCountResult::ObStandbyLSViewTabletCountResult()
@@ -161,106 +108,7 @@ ObStandbyLSViewMeta::ObStandbyLSViewMeta()
 
 OB_SERIALIZE_MEMBER(ObStandbyLSViewMeta, ls_meta_, physical_checkpoint_scn_);
 
-StandbyPromotionBoundary::StandbyPromotionBoundary()
-  : origin_(), cutover_scn_(), source_chain_()
-{
-}
-
-bool StandbyPromotionBoundary::is_valid() const
-{
-  bool valid = origin_.is_valid()
-      && cutover_scn_.is_valid()
-      && source_chain_.count() <= MAX_PROMOTION_BOUNDARY_HOPS;
-  for (int64_t i = 0; valid && i < source_chain_.count(); ++i) {
-    const SourceHop &hop = source_chain_.at(i);
-    // A configured source is a routing endpoint. It may be an alias of the
-    // callee's advertised address, so it cannot be used as node identity.
-    valid = hop.is_valid();
-    for (int64_t j = 0; valid && j < i; ++j) {
-      valid = hop.relay_ != source_chain_.at(j).relay_;
-    }
-  }
-  return valid;
-}
-
-bool StandbyPromotionBoundary::is_same_as(
-    const StandbyPromotionBoundary &other) const
-{
-  bool same = origin_ == other.origin_
-      && cutover_scn_ == other.cutover_scn_
-      && source_chain_.count() == other.source_chain_.count();
-  for (int64_t i = 0; same && i < source_chain_.count(); ++i) {
-    same = source_chain_.at(i).is_same_as(other.source_chain_.at(i));
-  }
-  return same;
-}
-
-int StandbyPromotionBoundary::add_source_hop(
-    const common::ObAddr &relay,
-    const common::ObAddr &source,
-    const int64_t source_version)
-{
-  int ret = OB_SUCCESS;
-  const SourceHop hop(relay, source, source_version);
-  if (!is_valid() || !hop.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (source_chain_.count() >= MAX_PROMOTION_BOUNDARY_HOPS) {
-    ret = OB_SIZE_OVERFLOW;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < source_chain_.count(); ++i) {
-      if (relay == source_chain_.at(i).relay_) {
-        ret = OB_INVALID_ARGUMENT;
-      }
-    }
-    if (OB_SUCC(ret) && OB_FAIL(source_chain_.push_back(hop))) {
-      LOG_WARN("failed to append promotion source hop", K(ret), K(hop));
-    }
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundary::SourceHop,
-    relay_, source_, source_version_);
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundary,
-    origin_, cutover_scn_, source_chain_);
-
-bool StandbyPromotionBoundaryRequest::is_valid() const
-{
-  bool valid = visited_.count() <= MAX_PROMOTION_BOUNDARY_HOPS;
-  for (int64_t i = 0; valid && i < visited_.count(); ++i) {
-    valid = visited_.at(i).is_valid();
-    for (int64_t j = 0; valid && j < i; ++j) {
-      valid = visited_.at(i) != visited_.at(j);
-    }
-  }
-  return valid;
-}
-
-bool StandbyPromotionBoundaryRequest::contains(const common::ObAddr &addr) const
-{
-  bool found = false;
-  for (int64_t i = 0; !found && i < visited_.count(); ++i) {
-    found = visited_.at(i) == addr;
-  }
-  return found;
-}
-
-int StandbyPromotionBoundaryRequest::add_visited(const common::ObAddr &addr)
-{
-  int ret = OB_SUCCESS;
-  if (!addr.is_valid() || contains(addr)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (visited_.count() >= MAX_PROMOTION_BOUNDARY_HOPS) {
-    ret = OB_SIZE_OVERFLOW;
-  } else if (OB_FAIL(visited_.push_back(addr))) {
-    LOG_WARN("failed to extend promotion boundary path", K(ret), K(addr), K_(visited));
-  }
-  return ret;
-}
-
-OB_SERIALIZE_MEMBER(StandbyPromotionBoundaryRequest, visited_);
-
-grpc::Status StandbyGrpcService::fetch_ls_view(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_ls_view(
     grpc::ServerContext* context,
     const FetchLSViewReq* request,
     grpc::ServerWriter<FetchLSViewRes>* writer)
@@ -332,9 +180,11 @@ grpc::Status StandbyGrpcService::fetch_ls_view(
     } else {
       ObStandbyLSViewMeta ls_view_meta;
       ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
-      if (OB_FAIL(ls->get_physical_restore_base(
-              ls_view_meta.ls_meta_, ls_view_meta.physical_checkpoint_scn_))) {
-        LOG_WARN("failed to get physical restore base", K(ret), K(ls_id));
+      if (OB_FAIL(ls->get_ls_meta(ls_view_meta.ls_meta_))) {
+        LOG_WARN("failed to get ls meta", K(ret), K(ls_id));
+      } else if (OB_FAIL(ls->get_physical_restore_checkpoint_scn(
+                     ls_view_meta.physical_checkpoint_scn_))) {
+        LOG_WARN("failed to get physical restore checkpoint", K(ret), K(ls_id));
       } else if (!ls_view_meta.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid standby ls view meta", K(ret), K(ls_view_meta));
@@ -383,7 +233,7 @@ grpc::Status StandbyGrpcService::fetch_ls_view(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::get_ls_view_tablet_count(
+grpc::Status ObStandbyGrpcServiceImpl::get_ls_view_tablet_count(
     grpc::ServerContext* context,
     const standbyservice::GetLSViewTabletCountReq* request,
     standbyservice::GetLSViewTabletCountRes* response)
@@ -425,7 +275,7 @@ grpc::Status StandbyGrpcService::get_ls_view_tablet_count(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_tablet_info(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_info(
     grpc::ServerContext* context,
     const FetchTabletInfoReq* request,
     grpc::ServerWriter<FetchTabletInfoRes>* writer)
@@ -494,7 +344,7 @@ grpc::Status StandbyGrpcService::fetch_tablet_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_tablet_sstable_info(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_sstable_info(
     grpc::ServerContext* context,
     const FetchTabletSSTableInfoReq* request,
     grpc::ServerWriter<FetchTabletSSTableInfoRes>* writer)
@@ -553,7 +403,7 @@ grpc::Status StandbyGrpcService::fetch_tablet_sstable_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_sstable_macro_info(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_sstable_macro_info(
     grpc::ServerContext* context,
     const FetchSSTableMacroInfoReq* request,
     grpc::ServerWriter<FetchSSTableMacroInfoRes>* writer)
@@ -605,7 +455,7 @@ grpc::Status StandbyGrpcService::fetch_sstable_macro_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_macro_block(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_macro_block(
     grpc::ServerContext* context,
     const FetchMacroBlockReq* request,
     grpc::ServerWriter<FetchMacroBlockRes>* writer)
@@ -626,7 +476,7 @@ grpc::Status StandbyGrpcService::fetch_macro_block(
       FetchMacroBlockRes header_response;
       FetchMacroBlockRes data_response;
       if (OB_FAIL(producer.init(arg.ls_id_, arg.table_key_,
-          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_, io_timeout_ms_))) {
+          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_))) {
         LOG_ERROR("failed to init copy macro block ob producer", K(ret), K(arg));
       }
       common::ObArenaAllocator header_allocator("MacroBlkHeader");
@@ -679,7 +529,7 @@ grpc::Status StandbyGrpcService::fetch_macro_block(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::check_restore_precondition(
+grpc::Status ObStandbyGrpcServiceImpl::check_restore_precondition(
     grpc::ServerContext* context,
     const standbyservice::CheckRestorePreconditionReq* request,
     standbyservice::CheckRestorePreconditionRes* response)
@@ -760,7 +610,7 @@ grpc::Status StandbyGrpcService::check_restore_precondition(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_standby_palf_base_info(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_standby_palf_base_info(
     grpc::ServerContext* context,
     const standbyservice::FetchStandbyPalfBaseInfoReq* request,
     standbyservice::FetchStandbyPalfBaseInfoRes* response)
@@ -786,34 +636,29 @@ grpc::Status StandbyGrpcService::fetch_standby_palf_base_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::fetch_log(
+grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
     grpc::ServerContext *context,
     const standbyservice::FetchLogReq *request,
     grpc::ServerWriter<standbyservice::FetchLogRes> *writer)
 {
   int ret = OB_SUCCESS;
   static const int64_t MAX_FETCH_BYTES = 64L * 1024L * 1024L;
-  if (OB_ISNULL(context) || OB_ISNULL(request) || OB_ISNULL(writer)) {
+  share::SCN start_scn = share::SCN::base_scn();
+  int64_t sent_bytes = 0;
+
+  if (OB_ISNULL(context) || OB_ISNULL(request) || OB_ISNULL(writer)
+      || request->max_bytes() > MAX_FETCH_BYTES) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fetch log request", K(ret), KP(context), KP(request), KP(writer));
-    return obgrpc::ob_error_to_grpc_status(ret);
-  }
-
-  const palf::LSN start_lsn(request->start_lsn());
-  int64_t sent_bytes = 0;
-  if (request->max_bytes() > MAX_FETCH_BYTES) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fetch log request is too large", K(ret), "max_bytes", request->max_bytes());
-  } else if (request->max_bytes() > 0 && !start_lsn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch log start lsn", K(ret), K(start_lsn));
+  } else if (request->start_scn() > 0
+             && OB_FAIL(start_scn.convert_for_logservice(request->start_scn()))) {
+    LOG_WARN("invalid fetch log start scn", K(ret), "start_scn", request->start_scn());
   } else {
     SERVER_MODULE_SCOPE {
       ObLSService *ls_service = share::server_service<ObLSService>();
       ObLS *ls = nullptr;
       logservice::ObLogHandler *log_handler = nullptr;
-      palf::LSN begin_lsn;
-      palf::LSN end_lsn;
+      palf::LSN start_lsn;
       palf::PalfGroupBufferIterator iterator;
       if (OB_ISNULL(ls_service)) {
         ret = OB_ERR_UNEXPECTED;
@@ -824,24 +669,31 @@ grpc::Status StandbyGrpcService::fetch_log(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("log stream or handler is null", K(ret), KP(ls), KP(log_handler));
       } else if (request->max_bytes() > 0
-                 && OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
-        LOG_WARN("failed to get source log begin lsn", K(ret), K(start_lsn));
-      } else if (request->max_bytes() > 0
-                 && OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-        LOG_WARN("failed to get source log end lsn", K(ret), K(start_lsn));
-      } else if (request->max_bytes() > 0 && start_lsn < begin_lsn) {
-        ret = OB_ERR_OUT_OF_LOWER_BOUND;
-        LOG_ERROR("standby requested logs older than the retained source history",
-            K(ret), K(start_lsn), K(begin_lsn));
-      } else if (request->max_bytes() > 0 && start_lsn > end_lsn) {
-        ret = OB_ERR_OUT_OF_UPPER_BOUND;
-        LOG_ERROR("standby requested logs beyond the source end",
-            K(ret), K(start_lsn), K(end_lsn));
+                 && OB_FAIL(log_handler->locate_by_scn_coarsely(start_scn, start_lsn))) {
+        if (OB_ENTRY_NOT_EXIST == ret || OB_ERR_OUT_OF_UPPER_BOUND == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_ERR_OUT_OF_LOWER_BOUND == ret) {
+          palf::PalfBaseInfo begin_base_info;
+          if (OB_FAIL(log_handler->get_begin_lsn(start_lsn))) {
+            LOG_WARN("failed to get source log begin lsn", K(ret), K(start_scn));
+          } else if (OB_FAIL(log_handler->get_palf_base_info(start_lsn, begin_base_info))) {
+            LOG_WARN("failed to get source log begin base info", K(ret), K(start_scn), K(start_lsn));
+          } else if (begin_base_info.prev_log_info_.scn_ != start_scn) {
+            ret = OB_ERR_OUT_OF_LOWER_BOUND;
+            LOG_ERROR("standby requested logs older than the retained source history",
+                K(ret), K(start_scn), K(start_lsn), K(begin_base_info));
+          }
+        } else {
+          LOG_WARN("failed to locate fetch log start scn", K(ret), K(start_scn));
+        }
       }
-      if (OB_SUCC(ret) && request->max_bytes() > 0 && start_lsn < end_lsn
+      if (OB_SUCC(ret) && request->max_bytes() > 0 && start_lsn.is_valid()
           && OB_FAIL(log_handler->seek(start_lsn, iterator))) {
-        LOG_ERROR("source log range contains an unreadable gap",
-            K(ret), K(start_lsn), K(begin_lsn), K(end_lsn));
+        if (OB_ENTRY_NOT_EXIST == ret || OB_ERR_OUT_OF_UPPER_BOUND == ret) {
+          ret = OB_SUCCESS;
+        } else {
+          LOG_WARN("failed to seek fetch log iterator", K(ret), K(start_scn), K(start_lsn));
+        }
       }
       while (OB_SUCC(ret) && iterator.is_inited()
              && sent_bytes < static_cast<int64_t>(request->max_bytes())) {
@@ -861,6 +713,7 @@ grpc::Status StandbyGrpcService::fetch_log(
           LOG_WARN("failed to read source log group", K(ret));
         } else if (FALSE_IT(size = group_entry.get_group_entry_size())) {
         } else if (FALSE_IT(log_scn = group_entry.get_scn())) {
+        } else if (log_scn <= start_scn) {
         } else {
           standbyservice::FetchLogRes response;
           response.set_buf(buf, size);
@@ -892,134 +745,9 @@ grpc::Status StandbyGrpcService::fetch_log(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status StandbyGrpcService::get_promotion_boundary(
-    grpc::ServerContext *context,
-    const standbyservice::GetPromotionBoundaryReq *request,
-    standbyservice::GetPromotionBoundaryRes *response)
-{
-  int ret = OB_SUCCESS;
-  StandbyPromotionBoundaryRequest boundary_request;
-  StandbyPromotionBoundary boundary;
-  UNUSED(context);
-  if (OB_ISNULL(request) || OB_ISNULL(response)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(deserialize_proto_to_ob(*request, boundary_request))) {
-    LOG_WARN("failed to deserialize promotion boundary request", K(ret));
-  } else if (!boundary_request.is_valid()
-             || boundary_request.contains(self_addr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid or cyclic promotion boundary request",
-        K(ret), K(boundary_request), K_(self_addr));
-  } else if (OB_FAIL(boundary_request.add_visited(self_addr_))) {
-    LOG_WARN("promotion boundary path is too deep", K(ret), K(boundary_request));
-  } else {
-    SERVER_MODULE_SCOPE {
-      share::ObServerInfo server_info;
-      if (OB_FAIL(state_store_.load(server_info))) {
-        LOG_WARN("failed to load source role transition state", K(ret));
-      } else if (server_info.is_primary()) {
-        ObLSService *ls_service = share::server_service<ObLSService>();
-        ObLS *ls = nullptr;
-        share::SCN source_end_scn;
-        if (OB_ISNULL(ls_service)) {
-          ret = OB_NOT_INIT;
-        } else if (OB_FAIL(ls_service->get_ls(ls))) {
-          LOG_WARN("failed to get source log stream", K(ret));
-        } else if (OB_ISNULL(ls)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(ls->get_end_scn(source_end_scn))) {
-          LOG_WARN("failed to get source end scn", K(ret));
-        } else if (!server_info.has_pending_role()
-                   || !server_info.get_pending_role().is_standby()
-                   || !server_info.is_preparing_status()
-                   || !server_info.get_cutover_scn().is_valid()
-                   || source_end_scn != server_info.get_cutover_scn()) {
-          ret = OB_STATE_NOT_MATCH;
-          LOG_WARN("primary is not durably fenced for switchover",
-              K(ret), K(server_info), K(source_end_scn));
-        } else {
-          boundary.origin_ = self_addr_;
-          boundary.cutover_scn_ = server_info.get_cutover_scn();
-        }
-      } else if (!server_info.is_standby()
-                 || server_info.has_pending_role()) {
-        ret = OB_STATE_NOT_MATCH;
-        LOG_WARN("only a stable standby may relay a promotion boundary",
-            K(ret), K(server_info));
-      } else {
-        common::ObArenaAllocator before_allocator("BoundarySrc");
-        common::ObArenaAllocator after_allocator("BoundaryChk");
-        common::ObString source_before;
-        common::ObString source_after;
-        common::ObAddr source_addr;
-        common::ObAddr source_addr_after;
-        int64_t source_version = 0;
-        int64_t source_version_after = 0;
-        ObStandbyGrpcClient client;
-        if (OB_FAIL(host_.load_log_restore_source(
-            before_allocator, source_before, source_version))) {
-          LOG_WARN("failed to load relay source", K(ret));
-        } else if (source_before.empty()) {
-          ret = OB_ENTRY_NOT_EXIST;
-        } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
-            source_before, source_addr))) {
-          LOG_WARN("failed to parse relay source", K(ret), K(source_before));
-        } else if (boundary_request.contains(source_addr)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("promotion boundary source chain contains a cycle",
-              K(ret), K(source_addr), K(boundary_request));
-        } else if (OB_FAIL(client.init(
-            source_addr, io_timeout_ms_ * 1000L, rpc_tls_enabled_))) {
-          LOG_WARN("failed to connect promotion boundary source", K(ret), K(source_addr));
-        } else if (OB_FAIL(client.get_promotion_boundary(boundary_request, boundary))) {
-          LOG_WARN("failed to relay promotion boundary", K(ret), K(source_addr));
-        } else if (OB_FAIL(host_.load_log_restore_source(
-            after_allocator, source_after, source_version_after))) {
-          LOG_WARN("failed to recheck relay source", K(ret));
-        } else if (source_after.empty()) {
-          ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("relay source was removed while resolving promotion boundary", K(ret));
-        } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
-            source_after, source_addr_after))) {
-          LOG_WARN("failed to parse reloaded relay source", K(ret), K(source_after));
-        } else if (source_version != source_version_after
-                   || source_before.compare(source_after) != 0
-                   || source_addr != source_addr_after) {
-          ret = OB_STATE_NOT_MATCH;
-          LOG_WARN("relay source changed while resolving promotion boundary",
-              K(ret), K(source_version), K(source_version_after),
-              K(source_before), K(source_after));
-        } else {
-          share::ObServerInfo rechecked_server_info;
-          if (OB_FAIL(state_store_.load(rechecked_server_info))) {
-            LOG_WARN("failed to recheck relay role", K(ret));
-          } else if (!rechecked_server_info.is_standby()
-                     || rechecked_server_info.has_pending_role()) {
-            ret = OB_STATE_NOT_MATCH;
-            LOG_WARN("relay role changed while resolving promotion boundary",
-                K(ret), K(rechecked_server_info));
-          } else if (OB_FAIL(boundary.add_source_hop(
-              self_addr_, source_addr, source_version))) {
-            LOG_WARN("failed to record stable promotion relay",
-                K(ret), K_(self_addr), K(source_addr), K(source_version));
-          }
-        }
-      }
-      if (OB_SUCC(ret) && !boundary.is_valid()) {
-        ret = OB_INVALID_DATA;
-        LOG_WARN("resolved invalid promotion boundary", K(ret), K(boundary));
-      } else if (OB_SUCC(ret) && OB_FAIL(serialize_ob_to_proto(boundary, response))) {
-        LOG_WARN("failed to serialize promotion boundary", K(ret), K(boundary));
-      }
-    }
-  }
-  return obgrpc::ob_error_to_grpc_status(ret);
-}
-
 int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
-    bool rpc_tls_enabled,
     const obcall::ObCopyTabletsSSTableInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx)
@@ -1034,7 +762,7 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1069,7 +797,6 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
 int ObStandbyGrpcClient::init_sstable_macro_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
-    bool rpc_tls_enabled,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx)
@@ -1084,7 +811,7 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1119,7 +846,6 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
 int ObStandbyGrpcClient::init_macro_block_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
-    bool rpc_tls_enabled,
     const obcall::ObCopyMacroBlockRangeArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx)
@@ -1134,7 +860,7 @@ int ObStandbyGrpcClient::init_macro_block_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1169,7 +895,6 @@ int ObStandbyGrpcClient::init_macro_block_stream(
 int ObStandbyGrpcClient::init_tablet_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
-    bool rpc_tls_enabled,
     const obcall::ObCopyTabletInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx)
@@ -1184,7 +909,7 @@ int ObStandbyGrpcClient::init_tablet_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1227,10 +952,7 @@ ObStandbyGrpcClient::~ObStandbyGrpcClient()
 {
 }
 
-int ObStandbyGrpcClient::init(
-    const common::ObAddr& addr,
-    int64_t timeout,
-    bool rpc_tls_enabled)
+int ObStandbyGrpcClient::init(const common::ObAddr& addr, int64_t timeout)
 {
   int ret = OB_SUCCESS;
 
@@ -1241,7 +963,7 @@ int ObStandbyGrpcClient::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid addr", K(ret), K(addr));
   } else {
-    ret = grpc_client_.init(addr, timeout, rpc_tls_enabled);
+    ret = grpc_client_.init(addr, timeout);
     if (OB_SUCC(ret)) {
       is_inited_ = true;
       LOG_INFO("ObStandbyGrpcClient init success", K(addr), K(timeout));
@@ -1338,7 +1060,7 @@ int ObStandbyGrpcClient::fetch_standby_palf_base_info(
 }
 
 int ObStandbyGrpcClient::fetch_log(
-    const palf::LSN &start_lsn,
+    const share::SCN &start_scn,
     const int64_t max_bytes,
     const std::function<int(const char *, int64_t, const palf::LSN &,
                             const share::SCN &)> &consume_log)
@@ -1346,14 +1068,14 @@ int ObStandbyGrpcClient::fetch_log(
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (!start_lsn.is_valid() || max_bytes <= 0 || !consume_log) {
+  } else if (!start_scn.is_valid() || max_bytes <= 0 || !consume_log) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch log argument", K(ret), K(start_lsn), K(max_bytes));
+    LOG_WARN("invalid fetch log argument", K(ret), K(start_scn), K(max_bytes));
   } else {
     standbyservice::FetchLogReq request;
     standbyservice::FetchLogRes response;
     grpc::ClientContext context;
-    request.set_start_lsn(start_lsn.val_);
+    request.set_start_scn(start_scn.get_val_for_logservice());
     request.set_max_bytes(max_bytes);
     grpc_client_.ctx_.set_grpc_context(context);
     std::unique_ptr<grpc::ClientReader<standbyservice::FetchLogRes>> reader(
@@ -1379,47 +1101,43 @@ int ObStandbyGrpcClient::fetch_log(
               K(log_scn), "size", response.size());
         }
       }
-      if (OB_FAIL(ret)) {
-        context.TryCancel();
-      }
       const grpc::Status status = reader->Finish();
       if (OB_SUCC(ret) && OB_FAIL(grpc_client_.translate_error(status))) {
         LOG_WARN("fetch log stream failed", K(ret));
+      } else if (OB_FAIL(ret)) {
+        context.TryCancel();
       }
     }
   }
   return ret;
 }
 
-int ObStandbyGrpcClient::get_promotion_boundary(
-    const StandbyPromotionBoundaryRequest &boundary_request,
-    StandbyPromotionBoundary &boundary)
+int ObStandbyGrpcClient::get_log_end_scn(share::SCN &end_scn)
 {
   int ret = OB_SUCCESS;
-  boundary = StandbyPromotionBoundary();
+  end_scn.reset();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (!boundary_request.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
-    standbyservice::GetPromotionBoundaryReq request;
-    standbyservice::GetPromotionBoundaryRes response;
+    standbyservice::FetchLogReq request;
+    standbyservice::FetchLogRes response;
     grpc::ClientContext context;
-    if (OB_FAIL(serialize_ob_to_proto(boundary_request, &request))) {
-      LOG_WARN("failed to serialize promotion boundary request",
-          K(ret), K(boundary_request));
-    } else {
-      grpc_client_.ctx_.set_grpc_context(context);
-      const grpc::Status status = grpc_client_.stub_->get_promotion_boundary(
-          &context, request, &response);
-      if (OB_FAIL(grpc_client_.translate_error(status))) {
-        LOG_WARN("get source promotion boundary failed", K(ret));
-      } else if (OB_FAIL(deserialize_proto_to_ob(response, boundary))) {
-        LOG_WARN("failed to deserialize source promotion boundary", K(ret));
-      } else if (!boundary.is_valid()) {
-        ret = OB_INVALID_DATA;
-        LOG_WARN("source returned invalid promotion boundary", K(ret), K(boundary));
-      }
+    request.set_start_scn(share::SCN::base_scn().get_val_for_logservice());
+    request.set_max_bytes(0);
+    grpc_client_.ctx_.set_grpc_context(context);
+    std::unique_ptr<grpc::ClientReader<standbyservice::FetchLogRes>> reader(
+        grpc_client_.stub_->fetch_log(&context, request));
+    if (OB_ISNULL(reader)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (!reader->Read(&response) || response.size() != 0) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("missing source log boundary frame", K(ret));
+    } else if (OB_FAIL(end_scn.convert_for_logservice(response.end_scn()))) {
+      LOG_WARN("invalid source log end scn", K(ret), "end_scn", response.end_scn());
+    }
+    const grpc::Status status = reader->Finish();
+    if (OB_SUCC(ret) && OB_FAIL(grpc_client_.translate_error(status))) {
+      LOG_WARN("get source log end scn failed", K(ret));
     }
   }
   return ret;
@@ -1626,7 +1344,6 @@ int ObStandbyGrpcClient::translate_error(const grpc::Status &status)
 int ObStandbyGrpcClient::init_ls_view_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
-    bool rpc_tls_enabled,
     common::ObIAllocator &allocator,
     ObLSMeta &ls_meta,
     share::SCN &physical_checkpoint_scn,
@@ -1642,7 +1359,7 @@ int ObStandbyGrpcClient::init_ls_view_stream(
       LOG_WARN("failed to alloc grpc client", K(ret));
     } else {
       grpc_client = new (buf) ObStandbyGrpcClient();
-      if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
+      if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
         LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
       } else {
         void *ctx_buf = nullptr;

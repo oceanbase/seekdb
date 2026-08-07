@@ -2,9 +2,9 @@
 #    @nijia.nj
 # CASE_DESC:
 #    Basic test cases for primary-standby cluster switchover and failover
-#    Note: Standby promotion takes effect online. Primary demotion is fenced
-#          online and takes effect after restart; a failed old primary is not
-#          rejoined.
+#    Note: This case tests unidirectional synchronization:
+#          After primary cluster switches to standby, the old primary will NOT continue
+#          to synchronize from the new primary (its sync_scn will not advance).
 #    Test cases:
 #    1. Primary cluster switchover to standby (with verify)
 #    2. Standby cluster switchover to primary (with verify)
@@ -42,51 +42,27 @@ ALTER SYSTEM SWITCHOVER TO STANDBY VERIFY;
 db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 # PRIMARY
 
-# 在旧主停机前写入新上游，供重启后的备库接续日志
-let $db_s_svr_ip = deploy_get_value(db_s.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
-let $db_s_rpc_port = deploy_get_value(db_s.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
-eval alter system set log_restore_source = '$db_s_svr_ip:$db_s_rpc_port';
-
-# prepare 只禁止写入并持久化 pending role，当前进程仍是 PRIMARY
+# 执行主库集群切换为备库（实际切换）
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 
-# 验证 active role 未改变，pending role 已持久化
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
-db_p.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
-# PRIMARY STANDBY PREPARING
+# 验证主库集群已切换为备库
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
+# STANDBY
+
+# 主库切换为备库后，获取最终的 sync_scn 位点
+let $db_p_final_scn = deploy_get_value(db_p.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'STANDBY', sync_scn, 1);
+
+# 验证单向同步：主库切换为备库后，旧主库不会从新主库继续同步（点位不再推进）
+sleep 5;
+db_p.mysql_p select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn = $db_p_final_scn;
+# 1
 
 # 验证备库不能执行 DDL 和 INSERT
-ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 --error 4688
 create table test_table_standby(a int);
 --error 4688
 insert into test_table_primary values(2, 2);
-
-# 在恢复期间开始的事务必须在 promotion 后保持只读
-db_s.check_until_timeout select count(*) from test_table_primary where a = 1 and b = 1, 1, 120;
-connection conn_sys_s;
-start transaction;
-select count(*) from test_table_primary;
-
-# 使用另一条管理连接在线 promotion；旧主仍在线但已被 fencing
-ob_connect(conn_admin_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_admin_s;
-ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
-
-# promotion 不断开已有读连接，旧事务仍只读；下一事务立即可写
-connection conn_sys_s;
---error 1792
-insert into test_table_primary values(2, 2);
-rollback;
-start transaction;
-insert into test_table_primary values(2, 2);
-commit;
-
-# 外部编排者只需停止旧主，再按 pending role 重启为备库
-db_p.force_stop;
-db_p.nstart;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 
 --echo Case 1 completed: Primary cluster successfully switched to standby
 
@@ -95,23 +71,34 @@ db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 #################################################################################################
 --echo ========== Case 2: Standby Cluster Switchover to Primary ==========
 
-# Case 1 已在线使 db_s 进入 PRIMARY；这里验证同一连接仍可用，且
-# VERIFY 和重复 promotion 都是幂等的。
+# 等待备库集群状态稳定
+sleep 5;
+
+# 检查备库（db_s）能否同步到原主库切换为备库后的最终位点（使用 Case 1 中的 $db_p_final_scn）
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $db_p_final_scn, 1, 60;
+
+# 验证备库不能执行 DDL 和 INSERT
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_sys_s;
+--error 4688
+create table test_table_standby_s(a int);
+--error 4688
+insert into test_table_primary values(3, 3);
 
 # 使用 VERIFY 选项检查是否可以切换（不实际切换）
 ALTER SYSTEM SWITCHOVER TO PRIMARY VERIFY;
 
-# 验证 active role 未改变
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
-# PRIMARY INVALID NORMAL
+# 验证角色未改变（VERIFY 不会实际切换）
+db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
+# STANDBY
 
-# 角色已在 Case 1 在线生效，重复执行只验证幂等性
+# 执行备库集群切换为主库（实际切换）
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
-# PRIMARY INVALID NORMAL
+
+# 验证备库集群已切换为主库
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
+# PRIMARY
 
 # 验证新主库可以执行 DDL 和 INSERT
 create table if not exists test_table_new_primary(a int primary key, b int);
@@ -124,8 +111,9 @@ insert into test_table_new_primary values(1, 1);
 #################################################################################################
 --echo ========== Case 3: Standby Cluster Failover to Primary ==========
 
-# Case 2 结束时，db_p 是 STANDBY，db_s 是 PRIMARY。
-# Failover 的外部前置条件是旧主已经停止且永久退出拓扑。
+# Case 2 结束时，db_p 已经是 STANDBY，可以直接测试 failover
+# 注意：Case 1 已验证 db_p 切换为备库后不会继续同步（单向同步），
+#       所以这里不需要检查 db_p 与 db_s 的同步位点
 # 等待状态稳定
 sleep 5;
 
@@ -137,7 +125,6 @@ db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 # 验证备库不能执行 DDL 和 INSERT
 # 注意：使用 Case 1 中已存在的表 test_table_primary（db_p 切换为备库前就存在），
 #       因为 db_p 停止同步后看不到 Case 2 中 db_s 创建的新表
-ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_sys_p;
 --error 4688
 create table test_table_standby_failover(a int);
@@ -151,18 +138,27 @@ ALTER SYSTEM ACTIVATE STANDBY VERIFY;
 db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 # STANDBY
 
-# 停止故障旧主后，备库在线 failover
-db_s.force_stop;
+# 执行备库 failover（激活为主库）
 ALTER SYSTEM ACTIVATE STANDBY;
 
-# 验证 active role 已在线切换，连接未重建
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+# 验证备库已 failover 为主库
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
+# PRIMARY
 
 # 验证新主库（failover 后）可以执行 DDL 和 INSERT
 create table if not exists test_table_failover_primary(a int primary key, b int);
 insert into test_table_failover_primary values(1, 1);
 
-# 故障旧主不重返拓扑，也不再验证其可写性
+# 验证原主库状态（failover 后应该还是 PRIMARY）
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
+db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
+# PRIMARY
+
+# 验证原主库可以执行 DDL 和 INSERT
+connection conn_sys_s;
+create table if not exists test_table_original_primary(a int primary key, b int);
+insert into test_table_original_primary values(1, 1);
 
 --echo Case 3 completed: Standby cluster successfully failed over to primary
 

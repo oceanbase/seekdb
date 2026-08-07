@@ -33,8 +33,13 @@ public:
   {
     INVALID_STATUS = 0,
     NORMAL_STATUS = 1,
-    PREPARING_STATUS = 2,
-    MAX_STATUS = 3
+    SWITCHING_TO_PRIMARY_STATUS = 2,
+    PREPARE_SWITCHING_TO_STANDBY_STATUS = 3,
+    SWITCHING_TO_STANDBY_STATUS = 4,
+    PREPARE_SWITCHING_TO_PRIMARY_STATUS = 5,
+    PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS = 6,
+    FLASHBACK_STATUS = 7,
+    MAX_STATUS = 8
   };
 public:
   ObServerSwitchoverStatus() : value_(INVALID_STATUS) {}
@@ -64,7 +69,12 @@ public:
   bool is_##STATUS_NAME##_status() const { return STATUS_VALUE == value_; };
 
 IS_SWITCHOVER_STATUS(NORMAL_STATUS, normal)
-IS_SWITCHOVER_STATUS(PREPARING_STATUS, preparing)
+IS_SWITCHOVER_STATUS(SWITCHING_TO_PRIMARY_STATUS, switching_to_primary)
+IS_SWITCHOVER_STATUS(PREPARE_SWITCHING_TO_STANDBY_STATUS, prepare_switching_to_standby)
+IS_SWITCHOVER_STATUS(SWITCHING_TO_STANDBY_STATUS, switching_to_standby)
+IS_SWITCHOVER_STATUS(PREPARE_SWITCHING_TO_PRIMARY_STATUS, prepare_switching_to_primary)
+IS_SWITCHOVER_STATUS(PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS, prepare_flashback_for_failover_to_primary)
+IS_SWITCHOVER_STATUS(FLASHBACK_STATUS, flashback)
 #undef IS_SWITCHOVER_STATUS
 
   TO_STRING_KV("switchover_status", to_str(), K_(value));
@@ -75,7 +85,12 @@ private:
 
 static const ObServerSwitchoverStatus INVALID_SWITCHOVER_STATUS(ObServerSwitchoverStatus::INVALID_STATUS);
 static const ObServerSwitchoverStatus NORMAL_SWITCHOVER_STATUS(ObServerSwitchoverStatus::NORMAL_STATUS);
-static const ObServerSwitchoverStatus PREPARING_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARING_STATUS);
+static const ObServerSwitchoverStatus SWITCHING_TO_PRIMARY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::SWITCHING_TO_PRIMARY_STATUS);
+static const ObServerSwitchoverStatus PREP_SWITCHING_TO_STANDBY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARE_SWITCHING_TO_STANDBY_STATUS);
+static const ObServerSwitchoverStatus SWITCHING_TO_STANDBY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::SWITCHING_TO_STANDBY_STATUS);
+static const ObServerSwitchoverStatus PREP_SWITCHING_TO_PRIMARY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARE_SWITCHING_TO_PRIMARY_STATUS);
+static const ObServerSwitchoverStatus PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS);
+static const ObServerSwitchoverStatus FLASHBACK_SWITCHOVER_STATUS(ObServerSwitchoverStatus::FLASHBACK_STATUS);
 
 }  // share
 }  // oceanbase

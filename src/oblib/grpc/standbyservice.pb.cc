@@ -229,7 +229,7 @@ struct FetchStandbyPalfBaseInfoResDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT FetchStandbyPalfBaseInfoResDefaultTypeInternal _FetchStandbyPalfBaseInfoRes_default_instance_;
 constexpr FetchLogReq::FetchLogReq(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : start_lsn_(uint64_t{0u})
+  : start_scn_(uint64_t{0u})
   , max_bytes_(uint64_t{0u}){}
 struct FetchLogReqDefaultTypeInternal {
   constexpr FetchLogReqDefaultTypeInternal()
@@ -255,34 +255,8 @@ struct FetchLogResDefaultTypeInternal {
   };
 };
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT FetchLogResDefaultTypeInternal _FetchLogRes_default_instance_;
-constexpr GetPromotionBoundaryReq::GetPromotionBoundaryReq(
-  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : buf_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
-  , size_(uint64_t{0u}){}
-struct GetPromotionBoundaryReqDefaultTypeInternal {
-  constexpr GetPromotionBoundaryReqDefaultTypeInternal()
-    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
-  ~GetPromotionBoundaryReqDefaultTypeInternal() {}
-  union {
-    GetPromotionBoundaryReq _instance;
-  };
-};
-PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT GetPromotionBoundaryReqDefaultTypeInternal _GetPromotionBoundaryReq_default_instance_;
-constexpr GetPromotionBoundaryRes::GetPromotionBoundaryRes(
-  ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : buf_(&::PROTOBUF_NAMESPACE_ID::internal::fixed_address_empty_string)
-  , size_(uint64_t{0u}){}
-struct GetPromotionBoundaryResDefaultTypeInternal {
-  constexpr GetPromotionBoundaryResDefaultTypeInternal()
-    : _instance(::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized{}) {}
-  ~GetPromotionBoundaryResDefaultTypeInternal() {}
-  union {
-    GetPromotionBoundaryRes _instance;
-  };
-};
-PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT GetPromotionBoundaryResDefaultTypeInternal _GetPromotionBoundaryRes_default_instance_;
 }  // namespace standbyservice
-static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_standbyservice_2eproto[20];
+static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_standbyservice_2eproto[18];
 static const ::PROTOBUF_NAMESPACE_ID::EnumDescriptor* file_level_enum_descriptors_standbyservice_2eproto[1];
 static constexpr ::PROTOBUF_NAMESPACE_ID::ServiceDescriptor const** file_level_service_descriptors_standbyservice_2eproto = nullptr;
 
@@ -422,7 +396,7 @@ const uint32_t TableStruct_standbyservice_2eproto::offsets[] PROTOBUF_SECTION_VA
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, start_lsn_),
+  PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, start_scn_),
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, max_bytes_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogRes, _internal_metadata_),
@@ -434,22 +408,6 @@ const uint32_t TableStruct_standbyservice_2eproto::offsets[] PROTOBUF_SECTION_VA
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogRes, size_),
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogRes, source_lsn_),
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogRes, end_scn_),
-  ~0u,  // no _has_bits_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryReq, _internal_metadata_),
-  ~0u,  // no _extensions_
-  ~0u,  // no _oneof_case_
-  ~0u,  // no _weak_field_map_
-  ~0u,  // no _inlined_string_donated_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryReq, buf_),
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryReq, size_),
-  ~0u,  // no _has_bits_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryRes, _internal_metadata_),
-  ~0u,  // no _extensions_
-  ~0u,  // no _oneof_case_
-  ~0u,  // no _weak_field_map_
-  ~0u,  // no _inlined_string_donated_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryRes, buf_),
-  PROTOBUF_FIELD_OFFSET(::standbyservice::GetPromotionBoundaryRes, size_),
 };
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, -1, sizeof(::standbyservice::FetchLSViewReq)},
@@ -470,8 +428,6 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOB
   { 121, -1, -1, sizeof(::standbyservice::FetchStandbyPalfBaseInfoRes)},
   { 129, -1, -1, sizeof(::standbyservice::FetchLogReq)},
   { 137, -1, -1, sizeof(::standbyservice::FetchLogRes)},
-  { 147, -1, -1, sizeof(::standbyservice::GetPromotionBoundaryReq)},
-  { 155, -1, -1, sizeof(::standbyservice::GetPromotionBoundaryRes)},
 };
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
@@ -493,8 +449,6 @@ static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] =
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::standbyservice::_FetchStandbyPalfBaseInfoRes_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::standbyservice::_FetchLogReq_default_instance_),
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::standbyservice::_FetchLogRes_default_instance_),
-  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::standbyservice::_GetPromotionBoundaryReq_default_instance_),
-  reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&::standbyservice::_GetPromotionBoundaryRes_default_instance_),
 };
 
 const char descriptor_table_protodef_standbyservice_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
@@ -522,45 +476,40 @@ const char descriptor_table_protodef_standbyservice_2eproto[] PROTOBUF_SECTION_V
   "ndbyPalfBaseInfoReq\022\013\n\003buf\030\001 \001(\014\022\014\n\004size"
   "\030\002 \001(\004\"8\n\033FetchStandbyPalfBaseInfoRes\022\013\n"
   "\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004\"3\n\013FetchLogReq\022"
-  "\021\n\tstart_lsn\030\001 \001(\004\022\021\n\tmax_bytes\030\002 \001(\004\"M\n"
+  "\021\n\tstart_scn\030\001 \001(\004\022\021\n\tmax_bytes\030\002 \001(\004\"M\n"
   "\013FetchLogRes\022\013\n\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004\022"
-  "\022\n\nsource_lsn\030\003 \001(\004\022\017\n\007end_scn\030\004 \001(\004\"4\n\027"
-  "GetPromotionBoundaryReq\022\013\n\003buf\030\001 \001(\014\022\014\n\004"
-  "size\030\002 \001(\004\"4\n\027GetPromotionBoundaryRes\022\013\n"
-  "\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004*<\n\024FetchLSViewE"
-  "ntryType\022\023\n\017LS_META_PACKAGE\020\000\022\017\n\013TABLET_"
-  "INFO\020\0012\235\010\n\016StandbyService\022Q\n\rfetch_ls_vi"
-  "ew\022\036.standbyservice.FetchLSViewReq\032\036.sta"
-  "ndbyservice.FetchLSViewRes0\001\022]\n\021fetch_ta"
-  "blet_info\022\".standbyservice.FetchTabletIn"
-  "foReq\032\".standbyservice.FetchTabletInfoRe"
-  "s0\001\022s\n\031fetch_tablet_sstable_info\022).stand"
-  "byservice.FetchTabletSSTableInfoReq\032).st"
-  "andbyservice.FetchTabletSSTableInfoRes0\001"
-  "\022p\n\030fetch_sstable_macro_info\022(.standbyse"
-  "rvice.FetchSSTableMacroInfoReq\032(.standby"
-  "service.FetchSSTableMacroInfoRes0\001\022]\n\021fe"
-  "tch_macro_block\022\".standbyservice.FetchMa"
-  "croBlockReq\032\".standbyservice.FetchMacroB"
-  "lockRes0\001\022l\n\030get_ls_view_tablet_count\022\'."
-  "standbyservice.GetLSViewTabletCountReq\032\'"
-  ".standbyservice.GetLSViewTabletCountRes\022"
-  "v\n\032check_restore_precondition\022+.standbys"
-  "ervice.CheckRestorePreconditionReq\032+.sta"
-  "ndbyservice.CheckRestorePreconditionRes\022"
-  "x\n\034fetch_standby_palf_base_info\022+.standb"
-  "yservice.FetchStandbyPalfBaseInfoReq\032+.s"
-  "tandbyservice.FetchStandbyPalfBaseInfoRe"
-  "s\022G\n\tfetch_log\022\033.standbyservice.FetchLog"
-  "Req\032\033.standbyservice.FetchLogRes0\001\022j\n\026ge"
-  "t_promotion_boundary\022\'.standbyservice.Ge"
-  "tPromotionBoundaryReq\032\'.standbyservice.G"
-  "etPromotionBoundaryResb\006proto3"
+  "\022\n\nsource_lsn\030\003 \001(\004\022\017\n\007end_scn\030\004 \001(\004*<\n\024"
+  "FetchLSViewEntryType\022\023\n\017LS_META_PACKAGE\020"
+  "\000\022\017\n\013TABLET_INFO\020\0012\261\007\n\016StandbyService\022Q\n"
+  "\rfetch_ls_view\022\036.standbyservice.FetchLSV"
+  "iewReq\032\036.standbyservice.FetchLSViewRes0\001"
+  "\022]\n\021fetch_tablet_info\022\".standbyservice.F"
+  "etchTabletInfoReq\032\".standbyservice.Fetch"
+  "TabletInfoRes0\001\022s\n\031fetch_tablet_sstable_"
+  "info\022).standbyservice.FetchTabletSSTable"
+  "InfoReq\032).standbyservice.FetchTabletSSTa"
+  "bleInfoRes0\001\022p\n\030fetch_sstable_macro_info"
+  "\022(.standbyservice.FetchSSTableMacroInfoR"
+  "eq\032(.standbyservice.FetchSSTableMacroInf"
+  "oRes0\001\022]\n\021fetch_macro_block\022\".standbyser"
+  "vice.FetchMacroBlockReq\032\".standbyservice"
+  ".FetchMacroBlockRes0\001\022l\n\030get_ls_view_tab"
+  "let_count\022\'.standbyservice.GetLSViewTabl"
+  "etCountReq\032\'.standbyservice.GetLSViewTab"
+  "letCountRes\022v\n\032check_restore_preconditio"
+  "n\022+.standbyservice.CheckRestorePrecondit"
+  "ionReq\032+.standbyservice.CheckRestorePrec"
+  "onditionRes\022x\n\034fetch_standby_palf_base_i"
+  "nfo\022+.standbyservice.FetchStandbyPalfBas"
+  "eInfoReq\032+.standbyservice.FetchStandbyPa"
+  "lfBaseInfoRes\022G\n\tfetch_log\022\033.standbyserv"
+  "ice.FetchLogReq\032\033.standbyservice.FetchLo"
+  "gRes0\001b\006proto3"
   ;
 static ::PROTOBUF_NAMESPACE_ID::internal::once_flag descriptor_table_standbyservice_2eproto_once;
 const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_standbyservice_2eproto = {
-  false, false, 2310, descriptor_table_protodef_standbyservice_2eproto, "standbyservice.proto",
-  &descriptor_table_standbyservice_2eproto_once, nullptr, 0, 20,
+  false, false, 2094, descriptor_table_protodef_standbyservice_2eproto, "standbyservice.proto",
+  &descriptor_table_standbyservice_2eproto_once, nullptr, 0, 18,
   schemas, file_default_instances, TableStruct_standbyservice_2eproto::offsets,
   file_level_metadata_standbyservice_2eproto, file_level_enum_descriptors_standbyservice_2eproto, file_level_service_descriptors_standbyservice_2eproto,
 };
@@ -4225,17 +4174,17 @@ FetchLogReq::FetchLogReq(::PROTOBUF_NAMESPACE_ID::Arena* arena,
 FetchLogReq::FetchLogReq(const FetchLogReq& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  ::memcpy(&start_lsn_, &from.start_lsn_,
+  ::memcpy(&start_scn_, &from.start_scn_,
     static_cast<size_t>(reinterpret_cast<char*>(&max_bytes_) -
-    reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
+    reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
   // @@protoc_insertion_point(copy_constructor:standbyservice.FetchLogReq)
 }
 
 inline void FetchLogReq::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
-    reinterpret_cast<char*>(&start_lsn_) - reinterpret_cast<char*>(this)),
+    reinterpret_cast<char*>(&start_scn_) - reinterpret_cast<char*>(this)),
     0, static_cast<size_t>(reinterpret_cast<char*>(&max_bytes_) -
-    reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
+    reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
 }
 
 FetchLogReq::~FetchLogReq() {
@@ -4265,9 +4214,9 @@ void FetchLogReq::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&start_lsn_, 0, static_cast<size_t>(
+  ::memset(&start_scn_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&max_bytes_) -
-      reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
+      reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4277,10 +4226,10 @@ const char* FetchLogReq::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID
     uint32_t tag;
     ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
     switch (tag >> 3) {
-      // uint64 start_lsn = 1;
+      // uint64 start_scn = 1;
       case 1:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
-          start_lsn_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          start_scn_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -4322,10 +4271,10 @@ uint8_t* FetchLogReq::_InternalSerialize(
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // uint64 start_lsn = 1;
-  if (this->_internal_start_lsn() != 0) {
+  // uint64 start_scn = 1;
+  if (this->_internal_start_scn() != 0) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_start_lsn(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_start_scn(), target);
   }
 
   // uint64 max_bytes = 2;
@@ -4350,9 +4299,9 @@ size_t FetchLogReq::ByteSizeLong() const {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // uint64 start_lsn = 1;
-  if (this->_internal_start_lsn() != 0) {
-    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_start_lsn());
+  // uint64 start_scn = 1;
+  if (this->_internal_start_scn() != 0) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_start_scn());
   }
 
   // uint64 max_bytes = 2;
@@ -4382,8 +4331,8 @@ void FetchLogReq::MergeFrom(const FetchLogReq& from) {
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from._internal_start_lsn() != 0) {
-    _internal_set_start_lsn(from._internal_start_lsn());
+  if (from._internal_start_scn() != 0) {
+    _internal_set_start_scn(from._internal_start_scn());
   }
   if (from._internal_max_bytes() != 0) {
     _internal_set_max_bytes(from._internal_max_bytes());
@@ -4408,9 +4357,9 @@ void FetchLogReq::InternalSwap(FetchLogReq* other) {
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(FetchLogReq, max_bytes_)
       + sizeof(FetchLogReq::max_bytes_)
-      - PROTOBUF_FIELD_OFFSET(FetchLogReq, start_lsn_)>(
-          reinterpret_cast<char*>(&start_lsn_),
-          reinterpret_cast<char*>(&other->start_lsn_));
+      - PROTOBUF_FIELD_OFFSET(FetchLogReq, start_scn_)>(
+          reinterpret_cast<char*>(&start_scn_),
+          reinterpret_cast<char*>(&other->start_scn_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata FetchLogReq::GetMetadata() const {
@@ -4699,454 +4648,6 @@ void FetchLogRes::InternalSwap(FetchLogRes* other) {
       file_level_metadata_standbyservice_2eproto[17]);
 }
 
-// ===================================================================
-
-class GetPromotionBoundaryReq::_Internal {
- public:
-};
-
-GetPromotionBoundaryReq::GetPromotionBoundaryReq(::PROTOBUF_NAMESPACE_ID::Arena* arena,
-                         bool is_message_owned)
-  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
-  SharedCtor();
-  if (!is_message_owned) {
-    RegisterArenaDtor(arena);
-  }
-  // @@protoc_insertion_point(arena_constructor:standbyservice.GetPromotionBoundaryReq)
-}
-GetPromotionBoundaryReq::GetPromotionBoundaryReq(const GetPromotionBoundaryReq& from)
-  : ::PROTOBUF_NAMESPACE_ID::Message() {
-  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  buf_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-    buf_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
-  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  if (!from._internal_buf().empty()) {
-    buf_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, from._internal_buf(),
-      GetArenaForAllocation());
-  }
-  size_ = from.size_;
-  // @@protoc_insertion_point(copy_constructor:standbyservice.GetPromotionBoundaryReq)
-}
-
-inline void GetPromotionBoundaryReq::SharedCtor() {
-buf_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  buf_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
-#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-size_ = uint64_t{0u};
-}
-
-GetPromotionBoundaryReq::~GetPromotionBoundaryReq() {
-  // @@protoc_insertion_point(destructor:standbyservice.GetPromotionBoundaryReq)
-  if (GetArenaForAllocation() != nullptr) return;
-  SharedDtor();
-  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
-}
-
-inline void GetPromotionBoundaryReq::SharedDtor() {
-  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
-  buf_.DestroyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-}
-
-void GetPromotionBoundaryReq::ArenaDtor(void* object) {
-  GetPromotionBoundaryReq* _this = reinterpret_cast< GetPromotionBoundaryReq* >(object);
-  (void)_this;
-}
-void GetPromotionBoundaryReq::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
-}
-void GetPromotionBoundaryReq::SetCachedSize(int size) const {
-  _cached_size_.Set(size);
-}
-
-void GetPromotionBoundaryReq::Clear() {
-// @@protoc_insertion_point(message_clear_start:standbyservice.GetPromotionBoundaryReq)
-  uint32_t cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  buf_.ClearToEmpty();
-  size_ = uint64_t{0u};
-  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
-}
-
-const char* GetPromotionBoundaryReq::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
-#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
-  while (!ctx->Done(&ptr)) {
-    uint32_t tag;
-    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
-    switch (tag >> 3) {
-      // bytes buf = 1;
-      case 1:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
-          auto str = _internal_mutable_buf();
-          ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
-          CHK_(ptr);
-        } else
-          goto handle_unusual;
-        continue;
-      // uint64 size = 2;
-      case 2:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
-          size_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
-          CHK_(ptr);
-        } else
-          goto handle_unusual;
-        continue;
-      default:
-        goto handle_unusual;
-    }  // switch
-  handle_unusual:
-    if ((tag == 0) || ((tag & 7) == 4)) {
-      CHK_(ptr);
-      ctx->SetLastTag(tag);
-      goto message_done;
-    }
-    ptr = UnknownFieldParse(
-        tag,
-        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
-        ptr, ctx);
-    CHK_(ptr != nullptr);
-  }  // while
-message_done:
-  return ptr;
-failure:
-  ptr = nullptr;
-  goto message_done;
-#undef CHK_
-}
-
-uint8_t* GetPromotionBoundaryReq::_InternalSerialize(
-    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
-  // @@protoc_insertion_point(serialize_to_array_start:standbyservice.GetPromotionBoundaryReq)
-  uint32_t cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  // bytes buf = 1;
-  if (!this->_internal_buf().empty()) {
-    target = stream->WriteBytesMaybeAliased(
-        1, this->_internal_buf(), target);
-  }
-
-  // uint64 size = 2;
-  if (this->_internal_size() != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(2, this->_internal_size(), target);
-  }
-
-  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
-        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:standbyservice.GetPromotionBoundaryReq)
-  return target;
-}
-
-size_t GetPromotionBoundaryReq::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:standbyservice.GetPromotionBoundaryReq)
-  size_t total_size = 0;
-
-  uint32_t cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  // bytes buf = 1;
-  if (!this->_internal_buf().empty()) {
-    total_size += 1 +
-      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::BytesSize(
-        this->_internal_buf());
-  }
-
-  // uint64 size = 2;
-  if (this->_internal_size() != 0) {
-    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_size());
-  }
-
-  return MaybeComputeUnknownFieldsSize(total_size, &_cached_size_);
-}
-
-const ::PROTOBUF_NAMESPACE_ID::Message::ClassData GetPromotionBoundaryReq::_class_data_ = {
-    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSizeCheck,
-    GetPromotionBoundaryReq::MergeImpl
-};
-const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetPromotionBoundaryReq::GetClassData() const { return &_class_data_; }
-
-void GetPromotionBoundaryReq::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message* to,
-                      const ::PROTOBUF_NAMESPACE_ID::Message& from) {
-  static_cast<GetPromotionBoundaryReq *>(to)->MergeFrom(
-      static_cast<const GetPromotionBoundaryReq &>(from));
-}
-
-
-void GetPromotionBoundaryReq::MergeFrom(const GetPromotionBoundaryReq& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:standbyservice.GetPromotionBoundaryReq)
-  GOOGLE_DCHECK_NE(&from, this);
-  uint32_t cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  if (!from._internal_buf().empty()) {
-    _internal_set_buf(from._internal_buf());
-  }
-  if (from._internal_size() != 0) {
-    _internal_set_size(from._internal_size());
-  }
-  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-}
-
-void GetPromotionBoundaryReq::CopyFrom(const GetPromotionBoundaryReq& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:standbyservice.GetPromotionBoundaryReq)
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool GetPromotionBoundaryReq::IsInitialized() const {
-  return true;
-}
-
-void GetPromotionBoundaryReq::InternalSwap(GetPromotionBoundaryReq* other) {
-  using std::swap;
-  auto* lhs_arena = GetArenaForAllocation();
-  auto* rhs_arena = other->GetArenaForAllocation();
-  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
-      &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
-      &buf_, lhs_arena,
-      &other->buf_, rhs_arena
-  );
-  swap(size_, other->size_);
-}
-
-::PROTOBUF_NAMESPACE_ID::Metadata GetPromotionBoundaryReq::GetMetadata() const {
-  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
-      &descriptor_table_standbyservice_2eproto_getter, &descriptor_table_standbyservice_2eproto_once,
-      file_level_metadata_standbyservice_2eproto[18]);
-}
-
-// ===================================================================
-
-class GetPromotionBoundaryRes::_Internal {
- public:
-};
-
-GetPromotionBoundaryRes::GetPromotionBoundaryRes(::PROTOBUF_NAMESPACE_ID::Arena* arena,
-                         bool is_message_owned)
-  : ::PROTOBUF_NAMESPACE_ID::Message(arena, is_message_owned) {
-  SharedCtor();
-  if (!is_message_owned) {
-    RegisterArenaDtor(arena);
-  }
-  // @@protoc_insertion_point(arena_constructor:standbyservice.GetPromotionBoundaryRes)
-}
-GetPromotionBoundaryRes::GetPromotionBoundaryRes(const GetPromotionBoundaryRes& from)
-  : ::PROTOBUF_NAMESPACE_ID::Message() {
-  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  buf_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-  #ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-    buf_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
-  #endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  if (!from._internal_buf().empty()) {
-    buf_.Set(::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::EmptyDefault{}, from._internal_buf(),
-      GetArenaForAllocation());
-  }
-  size_ = from.size_;
-  // @@protoc_insertion_point(copy_constructor:standbyservice.GetPromotionBoundaryRes)
-}
-
-inline void GetPromotionBoundaryRes::SharedCtor() {
-buf_.UnsafeSetDefault(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-#ifdef PROTOBUF_FORCE_COPY_DEFAULT_STRING
-  buf_.Set(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(), "", GetArenaForAllocation());
-#endif // PROTOBUF_FORCE_COPY_DEFAULT_STRING
-size_ = uint64_t{0u};
-}
-
-GetPromotionBoundaryRes::~GetPromotionBoundaryRes() {
-  // @@protoc_insertion_point(destructor:standbyservice.GetPromotionBoundaryRes)
-  if (GetArenaForAllocation() != nullptr) return;
-  SharedDtor();
-  _internal_metadata_.Delete<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
-}
-
-inline void GetPromotionBoundaryRes::SharedDtor() {
-  GOOGLE_DCHECK(GetArenaForAllocation() == nullptr);
-  buf_.DestroyNoArena(&::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited());
-}
-
-void GetPromotionBoundaryRes::ArenaDtor(void* object) {
-  GetPromotionBoundaryRes* _this = reinterpret_cast< GetPromotionBoundaryRes* >(object);
-  (void)_this;
-}
-void GetPromotionBoundaryRes::RegisterArenaDtor(::PROTOBUF_NAMESPACE_ID::Arena*) {
-}
-void GetPromotionBoundaryRes::SetCachedSize(int size) const {
-  _cached_size_.Set(size);
-}
-
-void GetPromotionBoundaryRes::Clear() {
-// @@protoc_insertion_point(message_clear_start:standbyservice.GetPromotionBoundaryRes)
-  uint32_t cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  buf_.ClearToEmpty();
-  size_ = uint64_t{0u};
-  _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
-}
-
-const char* GetPromotionBoundaryRes::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID::internal::ParseContext* ctx) {
-#define CHK_(x) if (PROTOBUF_PREDICT_FALSE(!(x))) goto failure
-  while (!ctx->Done(&ptr)) {
-    uint32_t tag;
-    ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
-    switch (tag >> 3) {
-      // bytes buf = 1;
-      case 1:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 10)) {
-          auto str = _internal_mutable_buf();
-          ptr = ::PROTOBUF_NAMESPACE_ID::internal::InlineGreedyStringParser(str, ptr, ctx);
-          CHK_(ptr);
-        } else
-          goto handle_unusual;
-        continue;
-      // uint64 size = 2;
-      case 2:
-        if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 16)) {
-          size_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
-          CHK_(ptr);
-        } else
-          goto handle_unusual;
-        continue;
-      default:
-        goto handle_unusual;
-    }  // switch
-  handle_unusual:
-    if ((tag == 0) || ((tag & 7) == 4)) {
-      CHK_(ptr);
-      ctx->SetLastTag(tag);
-      goto message_done;
-    }
-    ptr = UnknownFieldParse(
-        tag,
-        _internal_metadata_.mutable_unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(),
-        ptr, ctx);
-    CHK_(ptr != nullptr);
-  }  // while
-message_done:
-  return ptr;
-failure:
-  ptr = nullptr;
-  goto message_done;
-#undef CHK_
-}
-
-uint8_t* GetPromotionBoundaryRes::_InternalSerialize(
-    uint8_t* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
-  // @@protoc_insertion_point(serialize_to_array_start:standbyservice.GetPromotionBoundaryRes)
-  uint32_t cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  // bytes buf = 1;
-  if (!this->_internal_buf().empty()) {
-    target = stream->WriteBytesMaybeAliased(
-        1, this->_internal_buf(), target);
-  }
-
-  // uint64 size = 2;
-  if (this->_internal_size() != 0) {
-    target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(2, this->_internal_size(), target);
-  }
-
-  if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
-        _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
-  }
-  // @@protoc_insertion_point(serialize_to_array_end:standbyservice.GetPromotionBoundaryRes)
-  return target;
-}
-
-size_t GetPromotionBoundaryRes::ByteSizeLong() const {
-// @@protoc_insertion_point(message_byte_size_start:standbyservice.GetPromotionBoundaryRes)
-  size_t total_size = 0;
-
-  uint32_t cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
-  // bytes buf = 1;
-  if (!this->_internal_buf().empty()) {
-    total_size += 1 +
-      ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::BytesSize(
-        this->_internal_buf());
-  }
-
-  // uint64 size = 2;
-  if (this->_internal_size() != 0) {
-    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_size());
-  }
-
-  return MaybeComputeUnknownFieldsSize(total_size, &_cached_size_);
-}
-
-const ::PROTOBUF_NAMESPACE_ID::Message::ClassData GetPromotionBoundaryRes::_class_data_ = {
-    ::PROTOBUF_NAMESPACE_ID::Message::CopyWithSizeCheck,
-    GetPromotionBoundaryRes::MergeImpl
-};
-const ::PROTOBUF_NAMESPACE_ID::Message::ClassData*GetPromotionBoundaryRes::GetClassData() const { return &_class_data_; }
-
-void GetPromotionBoundaryRes::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message* to,
-                      const ::PROTOBUF_NAMESPACE_ID::Message& from) {
-  static_cast<GetPromotionBoundaryRes *>(to)->MergeFrom(
-      static_cast<const GetPromotionBoundaryRes &>(from));
-}
-
-
-void GetPromotionBoundaryRes::MergeFrom(const GetPromotionBoundaryRes& from) {
-// @@protoc_insertion_point(class_specific_merge_from_start:standbyservice.GetPromotionBoundaryRes)
-  GOOGLE_DCHECK_NE(&from, this);
-  uint32_t cached_has_bits = 0;
-  (void) cached_has_bits;
-
-  if (!from._internal_buf().empty()) {
-    _internal_set_buf(from._internal_buf());
-  }
-  if (from._internal_size() != 0) {
-    _internal_set_size(from._internal_size());
-  }
-  _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-}
-
-void GetPromotionBoundaryRes::CopyFrom(const GetPromotionBoundaryRes& from) {
-// @@protoc_insertion_point(class_specific_copy_from_start:standbyservice.GetPromotionBoundaryRes)
-  if (&from == this) return;
-  Clear();
-  MergeFrom(from);
-}
-
-bool GetPromotionBoundaryRes::IsInitialized() const {
-  return true;
-}
-
-void GetPromotionBoundaryRes::InternalSwap(GetPromotionBoundaryRes* other) {
-  using std::swap;
-  auto* lhs_arena = GetArenaForAllocation();
-  auto* rhs_arena = other->GetArenaForAllocation();
-  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
-  ::PROTOBUF_NAMESPACE_ID::internal::ArenaStringPtr::InternalSwap(
-      &::PROTOBUF_NAMESPACE_ID::internal::GetEmptyStringAlreadyInited(),
-      &buf_, lhs_arena,
-      &other->buf_, rhs_arena
-  );
-  swap(size_, other->size_);
-}
-
-::PROTOBUF_NAMESPACE_ID::Metadata GetPromotionBoundaryRes::GetMetadata() const {
-  return ::PROTOBUF_NAMESPACE_ID::internal::AssignDescriptors(
-      &descriptor_table_standbyservice_2eproto_getter, &descriptor_table_standbyservice_2eproto_once,
-      file_level_metadata_standbyservice_2eproto[19]);
-}
-
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace standbyservice
 PROTOBUF_NAMESPACE_OPEN
@@ -5203,12 +4704,6 @@ template<> PROTOBUF_NOINLINE ::standbyservice::FetchLogReq* Arena::CreateMaybeMe
 }
 template<> PROTOBUF_NOINLINE ::standbyservice::FetchLogRes* Arena::CreateMaybeMessage< ::standbyservice::FetchLogRes >(Arena* arena) {
   return Arena::CreateMessageInternal< ::standbyservice::FetchLogRes >(arena);
-}
-template<> PROTOBUF_NOINLINE ::standbyservice::GetPromotionBoundaryReq* Arena::CreateMaybeMessage< ::standbyservice::GetPromotionBoundaryReq >(Arena* arena) {
-  return Arena::CreateMessageInternal< ::standbyservice::GetPromotionBoundaryReq >(arena);
-}
-template<> PROTOBUF_NOINLINE ::standbyservice::GetPromotionBoundaryRes* Arena::CreateMaybeMessage< ::standbyservice::GetPromotionBoundaryRes >(Arena* arena) {
-  return Arena::CreateMessageInternal< ::standbyservice::GetPromotionBoundaryRes >(arena);
 }
 PROTOBUF_NAMESPACE_CLOSE
 

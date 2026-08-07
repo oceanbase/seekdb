@@ -90,6 +90,7 @@ ALLOWED_MODULE_DEPS = {
         "share",
     ],
     "standby": [
+        "data_plane",
         "logservice",
         "oblib",
         "share",
@@ -110,7 +111,6 @@ UNITTEST_MODULE_ROOTS = {
     "query": "unittest/query",
     "rootserver": "unittest/rootserver",
     "share": "unittest/share",
-    "standby": "unittest/standby",
     "sql": "unittest/sql",
     "storage": "unittest/storage",
 }
@@ -140,9 +140,6 @@ UNITTEST_ALLOWED_DIRECT_MODULE_DEPS = {
         "oblib",
     ],
     "share": [
-        "oblib",
-    ],
-    "standby": [
         "oblib",
     ],
     "sql": [

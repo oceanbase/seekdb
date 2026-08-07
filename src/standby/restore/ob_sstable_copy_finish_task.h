@@ -18,7 +18,7 @@
 #define OCEABASE_STORAGE_SSTABLE_COPY_FINISH_TASK_
 
 #include "lib/thread/ob_dynamic_thread_pool.h"
-#include "share/ob_define.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
@@ -27,13 +27,14 @@
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "ob_standby_restore_storage_struct.h"
 #include "ob_storage_restore_struct.h"
+#include "ob_standby_restore_dag.h"
 #include "standby/restore/ob_physical_copy_ctx.h"
 
 namespace oceanbase
 {
 namespace restore
 {
-class ObStandbyRestoreHelper;
+class ObIRestoreHelper;
 }
 namespace storage
 {
@@ -55,7 +56,6 @@ struct ObPhysicalCopyTaskInitParam final
                KP_(tablet_copy_finish_task),
                KP_(ls),
                KP_(helper),
-               K_(copy_id),
                KPC_(extra_info));
 
 
@@ -66,8 +66,7 @@ struct ObPhysicalCopyTaskInitParam final
   ObCopySSTableMacroRangeInfo sstable_macro_range_info_;
   ObTabletCopyFinishTask *tablet_copy_finish_task_;
   ObLS *ls_;
-  restore::ObStandbyRestoreHelper *helper_;
-  share::ObTaskId copy_id_;
+  restore::ObIRestoreHelper *helper_;
   ObCopyTabletRecordExtraInfo *extra_info_;
 
 private:
@@ -145,7 +144,7 @@ private:
 };
 
 
-class ObSSTableCopyFinishTask
+class ObSSTableCopyFinishTask : public share::ObITask
 {
 public:
   ObSSTableCopyFinishTask();
@@ -166,7 +165,7 @@ public:
   int64_t get_next_copy_task_id();
   int64_t get_max_next_copy_task_id();
 
-  int process();
+  virtual int process() override;
 
 
   VIRTUAL_TO_STRING_KV(K("ObSSTableCopyFinishTask"), KP(this), K(copy_ctx_));

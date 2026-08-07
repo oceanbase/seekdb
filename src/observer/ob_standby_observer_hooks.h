@@ -14,21 +14,21 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STANDBY_GRPC_SERVICE_H_
-#define OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#ifndef OCEANBASE_OBSERVER_OB_STANDBY_OBSERVER_HOOKS_H_
+#define OCEANBASE_OBSERVER_OB_STANDBY_OBSERVER_HOOKS_H_
 
 namespace oceanbase
 {
-namespace obgrpc
-{
-class ObGrpcServer;
-}
-namespace standby
+namespace observer
 {
 
-void register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server);
+using ObStandbyObserverHook = void (*)();
 
-} // namespace standby
+int register_standby_observer_hooks(
+    ObStandbyObserverHook stop_server,
+    ObStandbyObserverHook reset_max_id_cache);
+
+} // namespace observer
 } // namespace oceanbase
 
-#endif // OCEANBASE_STANDBY_GRPC_SERVICE_H_
+#endif /* OCEANBASE_OBSERVER_OB_STANDBY_OBSERVER_HOOKS_H_ */

@@ -61,6 +61,10 @@ public:
   // the tail unaligned part to head
   void truncate_buf();
   void reset_buf();
+  bool is_aligned_with(const offset_t offset) const
+  {
+    return !need_align_() || buf_write_offset_ == offset % align_size_;
+  }
 
   TO_STRING_KV(K_(buf_write_offset), K_(buf_padding_size), K_(align_size), K_(aligned_buf_size),
       K_(aligned_used_ts), K_(truncate_used_ts));

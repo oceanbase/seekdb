@@ -23,19 +23,18 @@ namespace oceanbase
 {
 namespace standby
 {
-struct StandbyConfig;
-class IStandbyHost;
+
+typedef int (*ObStandbySubmitSchemaRefreshTask)(const int64_t schema_version);
 
 class ObStandbySchemaRefreshTrigger : public common::ObTimerTask
 {
 public:
   ObStandbySchemaRefreshTrigger()
-    : timer_(), config_(nullptr), host_(nullptr),
-      is_inited_(false), is_scheduled_(false)
+    : timer_(), submit_schema_refresh_task_(nullptr), is_inited_(false), is_scheduled_(false)
   {}
   virtual ~ObStandbySchemaRefreshTrigger() {}
 
-  int init(const StandbyConfig &config, IStandbyHost &host);
+  int init(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task);
   int start();
   int stop();
   int wait();
@@ -49,8 +48,7 @@ private:
   static const int64_t DEFAULT_IDLE_TIME = 1000 * 1000;  // 1s
 
   common::ObTimer timer_;
-  const StandbyConfig *config_;
-  IStandbyHost *host_;
+  ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task_;
   bool is_inited_;
   bool is_scheduled_;
 };

@@ -372,7 +372,18 @@ int LogBlockHandler::inner_write_once_(const offset_t offset,
   int64_t aligned_buf_len = buf_len;
 
   offset_t aligned_block_offset = offset;
-  if (OB_FAIL(dio_aligned_buf_.align_buf(buf, buf_len, aligned_buf,
+  if (!dio_aligned_buf_.is_aligned_with(offset)) {
+    dio_aligned_buf_.reset_buf();
+    if (!dio_aligned_buf_.is_aligned_with(offset)
+        && OB_FAIL(inner_load_data_(offset))) {
+      PALF_LOG(ERROR, "failed to load DIO prefix for unaligned write", K(ret), K(offset));
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(!dio_aligned_buf_.is_aligned_with(offset))) {
+    ret = OB_ERR_UNEXPECTED;
+    PALF_LOG(ERROR, "DIO buffer does not match write offset", K(ret), K(offset), K_(dio_aligned_buf));
+  } else if (OB_FAIL(dio_aligned_buf_.align_buf(buf, buf_len, aligned_buf,
       aligned_buf_len, aligned_block_offset))) {
   } else if (OB_FAIL(inner_write_impl_(io_fd_, aligned_buf, aligned_buf_len, aligned_block_offset))){
   } else {

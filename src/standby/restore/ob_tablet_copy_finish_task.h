@@ -18,6 +18,7 @@
 #define OCEABASE_STORAGE_TABLET_COPY_FINISH_TASK_
 
 #include "lib/thread/ob_dynamic_thread_pool.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
@@ -26,13 +27,10 @@
 #include "ob_standby_restore_reader.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "ob_storage_restore_struct.h"
+#include "ob_standby_restore_dag.h"
 
 namespace oceanbase
 {
-namespace standby
-{
-struct StandbyConfig;
-}
 namespace storage
 {
 
@@ -52,19 +50,18 @@ struct ObTabletCopyFinishTaskParam final
   const ObMigrationTabletParam *src_tablet_meta_;
   ObICopyTabletCtx *copy_tablet_ctx_;
   bool is_only_replace_major_;
-  const standby::StandbyConfig *config_;
 };
 
 struct ObICopyTabletCtx;
 struct ObPhysicalCopyCtx;
-class ObTabletCopyFinishTask final
+class ObTabletCopyFinishTask final : public share::ObITask
 {
 public:
   ObTabletCopyFinishTask();
   virtual ~ObTabletCopyFinishTask();
   int init(
       const ObTabletCopyFinishTaskParam &param);
-  int process();
+  virtual int process() override;
   VIRTUAL_TO_STRING_KV(K("ObTabletCopyFinishTask"), KP(this));
   int add_sstable(ObTableHandleV2 &table_handle);
   int add_sstable(ObTableHandleV2 &table_handle, const int64_t last_meta_macro_seq);
@@ -94,6 +91,7 @@ private:
 private:
   bool is_inited_;
   common::SpinRWLock lock_;
+  ObStandbyRestoreDag *standby_restore_dag_;
   common::ObArenaAllocator arena_allocator_;
   ObTablesHandleArray minor_tables_handle_;
   ObTablesHandleArray ddl_tables_handle_;

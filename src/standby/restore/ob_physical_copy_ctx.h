@@ -18,7 +18,7 @@
 #define OCEABASE_STORAGE_PHYSICAL_COPY_CTX_
 
 #include "lib/thread/ob_dynamic_thread_pool.h"
-#include "share/ob_define.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
@@ -26,13 +26,14 @@
 #include "ob_standby_restore_reader.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "ob_storage_restore_struct.h"
+#include "ob_standby_restore_dag.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 
 namespace oceanbase
 {
 namespace restore
 {
-class ObStandbyRestoreHelper;
+class ObIRestoreHelper;
 }
 namespace storage
 {
@@ -97,7 +98,7 @@ struct ObPhysicalCopyCtx final
                K_(ls_id),
                K_(tablet_id),
                KP_(helper),
-               K_(copy_id),
+               KP_(standby_restore_dag),
                KP_(sstable_index_builder),
                K_(table_key),
                K_(total_macro_count),
@@ -109,8 +110,8 @@ struct ObPhysicalCopyCtx final
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
-  restore::ObStandbyRestoreHelper *helper_;
-  share::ObTaskId copy_id_;
+  restore::ObIRestoreHelper *helper_;
+  ObStandbyRestoreDag *standby_restore_dag_;
   ObSSTableIndexBuilder *sstable_index_builder_;
   ObITable::TableKey table_key_;
   int total_macro_count_; // total macro block count of single sstable

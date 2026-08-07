@@ -47,7 +47,9 @@
 #include "common/ob_data_version_mgr.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "share/ob_server_info.h"  // ObServerInfoProxy
 #include "share/ob_server_struct.h"    // GCTX
+#include "share/ob_standby_source_util.h"
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "storage/ls/ob_ls.h"
 #include "storage/tx/ob_trans_service.h"
@@ -57,6 +59,7 @@
 #include "sql/pl/ob_pl_package_manager.h"
 #include "share/ob_rpc_struct.h"  // ObCreateLSArg
 #include "share/schema/ob_multi_version_schema_service.h"  // hook registration
+#include "standby/ob_standby_service.h"
 
 namespace oceanbase
 {
@@ -71,6 +74,23 @@ using namespace palf;
 
 namespace observer
 {
+
+namespace
+{
+int submit_standby_schema_refresh_task(const int64_t schema_version)
+{
+  int ret = OB_SUCCESS;
+  ObService *ob_service = share::server_service<ObService>();
+  if (OB_ISNULL(ob_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ob service is not ready for standby schema refresh", KR(ret), K(schema_version));
+  } else if (OB_FAIL(ob_service->submit_async_refresh_schema_task(schema_version))) {
+    LOG_WARN("failed to submit standby schema refresh task", KR(ret), K(schema_version));
+  }
+  return ret;
+}
+} // namespace
+
 
 ObSchemaReleaseTimeTask::ObSchemaReleaseTimeTask()
 : schema_updater_(nullptr), timer_(), is_inited_(false)
@@ -166,7 +186,8 @@ ObService::ObService(
     gctx_(gctx),
     change_stream_service_(change_stream_service),
     schema_release_task_(),
-    telemetry_task_()
+    telemetry_task_(),
+    need_bootstrap_(false)
 {
 }
 
@@ -181,7 +202,8 @@ int ObService::wait_until_change_stream_refreshed(
   return change_stream_service_.wait_until_refreshed(mysql_proxy, timeout_us);
 }
 
-int ObService::init(common::ObMySQLProxy &sql_proxy)
+int ObService::init(common::ObMySQLProxy &sql_proxy,
+                    bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] init ob_service begin");
@@ -208,10 +230,13 @@ int ObService::init(common::ObMySQLProxy &sql_proxy)
     FLOG_WARN("init tsc timestamp failed", KR(ret));
   } else if (OB_FAIL(schema_release_task_.init(schema_updater_))) {
     FLOG_WARN("init schema release task failed", KR(ret));
+  } else if (OB_FAIL(standby::ObStandbyService::init(submit_standby_schema_refresh_task))) {
+    FLOG_WARN("init standby service failed", KR(ret));
   } else {
+    need_bootstrap_ = need_bootstrap;
     inited_ = true;
   }
-  FLOG_INFO("[OBSERVICE_NOTICE] init ob_service finish", KR(ret), K_(inited));
+  FLOG_INFO("[OBSERVICE_NOTICE] init ob_service finish", KR(ret), K_(inited), K_(need_bootstrap));
   if (OB_FAIL(ret)) {
     LOG_DBA_ERROR(OB_ERR_OBSERVICE_START, "msg", "observice init() has failure", KR(ret));
   }
@@ -225,6 +250,49 @@ int ObService::start()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("ob_service is not inited", KR(ret), K_(inited));
+  } else if (need_bootstrap_) {
+    if (OB_FAIL(share::ObServerInfoProxy::init_server_info_from_role(
+        GCTX.config_mgr_,
+        GCTX.server_role_))) {
+      LOG_ERROR("failed to initialize server role state before bootstrap", KR(ret), K(GCTX.server_role_));
+    } else if (standby::ObStandbyService::startup_profile(GCTX.is_embedded_mode()).bootstrap_from_source_) {
+      if (OB_FAIL(standby::ObStandbyService::bootstrap())) {
+        LOG_ERROR("standby bootstrap failed", KR(ret));
+      }
+    } else if (OB_FAIL(bootstrap())) {
+      LOG_ERROR("bootstrap failed", KR(ret));
+    }
+    if (OB_SUCC(ret)) {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = telemetry_task_.report())) {
+        FLOG_WARN("fail to report bootstrap telemetry synchronously", KR(tmp_ret));
+      }
+    }
+    need_bootstrap_ = false;
+  } else {
+    // Restore the persisted role after a normal restart.
+    share::ObServerInfo server_info;
+    if (OB_FAIL(share::ObServerInfoProxy::load_server_info(
+        GCTX.config_mgr_, GCTX.server_role_, server_info))) {
+      LOG_ERROR("failed to load server role state on restart",
+               KR(ret));
+    } else {
+      if (server_info.is_primary()) {
+        GCTX.server_role_ = share::ObServerRole::PRIMARY_ROLE;
+      } else if (server_info.is_standby()) {
+        GCTX.server_role_ = share::ObServerRole::STANDBY_ROLE;
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("invalid persisted server role", KR(ret), K(server_info));
+      }
+      if (OB_SUCC(ret)) {
+        share::set_server_role(GCTX.server_role_);
+        LOG_INFO("restored server role state", K(server_info), K(GCTX.server_role_));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(standby::ObStandbyService::activate_current_role())) {
+    LOG_ERROR("failed to activate current server role", KR(ret), K(GCTX.server_role_));
   }
   FLOG_INFO("[OBSERVICE_NOTICE] start ob_service end", KR(ret));
   if (OB_FAIL(ret)) {
@@ -258,6 +326,8 @@ void ObService::stop()
     schema_updater_.stop();
     FLOG_INFO("schema updater stopped");
 
+    (void)standby::ObStandbyService::stop();
+
   }
   FLOG_INFO("[OBSERVICE_NOTICE] observice finish stop", K_(stopped));
 }
@@ -274,6 +344,8 @@ void ObService::wait()
     FLOG_INFO("begin to wait schema updater");
     schema_updater_.wait();
     FLOG_INFO("wait schema updater success");
+
+    (void)standby::ObStandbyService::wait();
 
   }
   FLOG_INFO("[OBSERVICE_NOTICE] wait ob_service end");
@@ -294,6 +366,7 @@ int ObService::destroy()
     schema_updater_.destroy();
     FLOG_INFO("schema updater destroyed");
 
+    standby::ObStandbyService::destroy();
   }
   FLOG_INFO("[OBSERVICE_NOTICE] destroy ob_service end", KR(ret));
   return ret;
@@ -737,6 +810,9 @@ int ObService::bootstrap()
   } else if (!inited_) {
     ret = OB_NOT_INIT;
     BOOTSTRAP_LOG(WARN, "not init", K(ret));
+  } else if (!need_bootstrap_) {
+    ret = OB_ERR_UNEXPECTED;
+    BOOTSTRAP_LOG(INFO, "no need to bootstrap", K(ret));
   } else if (OB_ISNULL(
                  share::server_service<rootserver::ObLocalManagementService>())) {
     ret = OB_INVALID_ARGUMENT;
@@ -765,11 +841,6 @@ int ObService::bootstrap()
   }
 
   return ret;
-}
-
-int ObService::report_bootstrap_telemetry()
-{
-  return telemetry_task_.report();
 }
 
 int ObService::get_server_resource_info(share::ObServerResourceInfo &resource_info)

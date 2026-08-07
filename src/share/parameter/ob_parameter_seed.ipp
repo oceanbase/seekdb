@@ -1146,9 +1146,9 @@ DEF_PARAM(log_restore_source, STR, OB_CLUSTER_PARAMETER, "",
         "standby log source in ip:rpc_port form",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// Persisted boot role and restart preparation state.
-// format: "active_role:pending_role:transition_status:cutover_scn"
-// example: "PRIMARY:INVALID:NORMAL:0"
+// Persisted server role and switchover state.
+// format: "server_role:switchover_status"
+// example: "PRIMARY:NORMAL" or "STANDBY:SWITCHING TO PRIMARY"
 DEF_PARAM(server_role_info, STR, OB_CLUSTER_PARAMETER, "",
-        "server role state, format: active_role:pending_role:transition_status:cutover_scn",
+        "server role state, format: server_role:switchover_status",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

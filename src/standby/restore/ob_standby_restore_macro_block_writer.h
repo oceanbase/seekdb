@@ -23,8 +23,8 @@
 #include "storage/blocksstable/ob_macro_block_checker.h"
 #include "ob_standby_restore_reader.h"
 #include "ob_physical_copy_task.h"
-#include "share/ob_define.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
+#include "standby/restore/ob_standby_restore_dag.h"
 
 namespace oceanbase
 {
@@ -41,7 +41,7 @@ public:
   };
   ObIStandbyRestoreMacroBlockWriter() {}
   virtual ~ObIStandbyRestoreMacroBlockWriter() {}
-  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx) = 0;
+  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx, ObIStandbyRestoreDagNetCtx &standby_restore_dag_net_ctx) = 0;
   virtual Type get_type() const = 0;
 };
 
@@ -56,15 +56,14 @@ public:
       const uint64_t tenant_id,
       const share::ObLSID &ls_id,
       const common::ObTabletID &tablet_id,
-      const share::ObTaskId &copy_id,
+      const ObDagId &dag_id,
       const ObMigrationSSTableParam *sstable_param,
       ObICopyMacroBlockReader *reader,
       ObIndexBlockRebuilder *index_block_rebuilder,
-      ObCopyTabletRecordExtraInfo *extra_info,
-      const int64_t io_timeout_ms
+      ObCopyTabletRecordExtraInfo *extra_info
   );
 
-  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx) override;
+  virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx, ObIStandbyRestoreDagNetCtx &standby_restore_dag_net_ctx) override;
 
 protected:
   virtual int check_sstable_param_for_init_(const ObMigrationSSTableParam *sstable_param) const = 0;
@@ -92,13 +91,12 @@ protected:
   uint64_t tenant_id_;
   share::ObLSID ls_id_;
   common::ObTabletID tablet_id_;
-  share::ObTaskId copy_id_;
+  ObDagId dag_id_;
   const ObMigrationSSTableParam *sstable_param_;
   ObICopyMacroBlockReader *reader_;
   ObIndexBlockRebuilder *index_block_rebuilder_;
   blocksstable::ObSSTableMacroBlockChecker macro_checker_;
   ObCopyTabletRecordExtraInfo *extra_info_;
-  int64_t io_timeout_ms_;
 };
 
 class ObStandbyRestoreLocalMacroBlockWriter final : public ObStandbyRestoreMacroBlockWriter

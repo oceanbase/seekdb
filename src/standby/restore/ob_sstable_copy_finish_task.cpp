@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_copy_finish_task.h"
+#include "share/config/ob_server_config.h"
 #include "standby/restore/ob_restore_helper.h"
-#include "standby/standby_host.h"
 #include "standby/restore/ob_standby_restore_macro_block_writer.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -45,7 +45,6 @@ ObPhysicalCopyTaskInitParam::ObPhysicalCopyTaskInitParam()
     tablet_copy_finish_task_(nullptr),
     ls_(nullptr),
     helper_(nullptr),
-    copy_id_(),
     extra_info_(nullptr)
 {
 }
@@ -64,8 +63,7 @@ bool ObPhysicalCopyTaskInitParam::is_valid() const
              && sstable_macro_range_info_.is_valid()
              && OB_NOT_NULL(tablet_copy_finish_task_)
              && OB_NOT_NULL(ls_)
-             && OB_NOT_NULL(helper_)
-             && copy_id_.is_valid();
+             && OB_NOT_NULL(helper_);
 
   return bool_ret;
 }
@@ -247,7 +245,8 @@ int ObCopiedSSTableCreator::check_sstable_param_for_init_(const ObMigrationSSTab
 
 // ObSSTableCopyFinishTask
 ObSSTableCopyFinishTask::ObSSTableCopyFinishTask()
-  : is_inited_(false),
+  : ObITask(TASK_TYPE_STANDBY_RESTORE),
+    is_inited_(false),
     next_copy_task_id_(0),
     copy_ctx_(),
     lock_(common::ObLatchIds::BACKUP_LOCK),
@@ -269,6 +268,7 @@ int ObSSTableCopyFinishTask::init(const ObPhysicalCopyTaskInitParam &init_param)
 {
   int ret = OB_SUCCESS;
   ObLSService *ls_service = nullptr;
+  ObStandbyRestoreDag *standby_restore_dag = nullptr;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -279,6 +279,7 @@ int ObSSTableCopyFinishTask::init(const ObPhysicalCopyTaskInitParam &init_param)
   } else if (OB_ISNULL(ls_service = share::server_service<ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service should not be NULL", K(ret), KP(ls_service));
+  } else if (FALSE_IT(standby_restore_dag = static_cast<ObStandbyRestoreDag *>(this->get_dag()))) {
   } else if (OB_FAIL(sstable_macro_range_info_.assign(init_param.sstable_macro_range_info_))) {
     LOG_WARN("failed to assign sstable macro range info", K(ret), K(init_param));
   } else if (OB_FAIL(init_param.helper_->copy_for_task(copy_ctx_.allocator_, copy_ctx_.helper_))) {
@@ -290,7 +291,7 @@ int ObSSTableCopyFinishTask::init(const ObPhysicalCopyTaskInitParam &init_param)
     copy_ctx_.tenant_id_ = init_param.tenant_id_;
     copy_ctx_.ls_id_ = init_param.ls_id_;
     copy_ctx_.tablet_id_ = init_param.tablet_id_;
-    copy_ctx_.copy_id_ = init_param.copy_id_;
+    copy_ctx_.standby_restore_dag_ = standby_restore_dag;
     copy_ctx_.sstable_index_builder_ = &sstable_index_builder_;
     copy_ctx_.table_key_ = init_param.sstable_param_->table_key_;
     copy_ctx_.extra_info_ = init_param.extra_info_;
@@ -410,6 +411,8 @@ int ObSSTableCopyFinishTask::process()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("sstable copy finish task do not init", K(ret));
+  } else if (copy_ctx_.standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed()) {
+    FLOG_INFO("standby restore dag net is already failed, skip physical copy finish task", K(copy_ctx_));
   } else if (OB_FAIL(tablet_copy_finish_task_->get_tablet_status(status))) {
     LOG_WARN("failed to get tablet status", K(ret), K(copy_ctx_));
   } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == status) {
@@ -426,7 +429,7 @@ int ObSSTableCopyFinishTask::process()
 
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
-    if (copy_ctx_.helper_->get_config().errsim_migration_tablet_id_ == copy_ctx_.tablet_id_.id()
+    if (GCONF.errsim_migration_tablet_id.get_value() == copy_ctx_.tablet_id_.id()
       && ObITable::is_major_sstable(copy_ctx_.table_key_.table_type_)
     ) {
       // inject error when finish copying 3rd major sstable
@@ -448,6 +451,12 @@ int ObSSTableCopyFinishTask::process()
     }
   }
 
+  if (OB_FAIL(ret)) {
+    int tmp_ret = OB_SUCCESS;
+    if (OB_SUCCESS != (tmp_ret = ObStandbyRestoreDagUtils::deal_with_fo(ret, copy_ctx_.standby_restore_dag_))) {
+      LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), K(copy_ctx_));
+    }
+  }
   return ret;
 }
 

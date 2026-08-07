@@ -5521,8 +5521,7 @@ int ObResolverUtils::set_parallel_info(sql::ObSQLSessionInfo &session_info,
 int ObResolverUtils::wait_for_sys_package_ready(ObSQLSessionInfo &session_info)
 {
   int ret = OB_SUCCESS;
-  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_
-      && session_info.is_user_session() && share::server_is_write_enabled()) {
+  if (GCONF._enable_async_load_sys_package && !GCTX.sys_package_ready_ && session_info.is_user_session() && !GCTX.is_standby_server()) {
     const int64_t retry_interval_us = 100L * 1000L; // 100ms
     bool waited = false;
     while (!GCTX.sys_package_ready_ && OB_SUCC(ret)) {
