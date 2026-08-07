@@ -29,6 +29,10 @@ c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 select * from t1 order by negative_inner_product(c2, '{13:1, 14:1}') approx limit 2;
 c1	c2
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+3	{3:0.3,4:0.4,5:0.5}
+2	{2:0.2,3:0.3,4:0.4}
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
@@ -158,6 +162,10 @@ c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 select * from t1 order by negative_inner_product(c2, '{13:1, 14:1}') approx limit 2;
 c1	c2
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+3	{3:0.3,4:0.4,5:0.5}
+2	{2:0.2,3:0.3,4:0.4}
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
@@ -276,6 +284,10 @@ c1	c2
 select * from t1 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
 10	{10:1,11:1.1,12:1.2}
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+3	{3:0.3,4:0.4,5:0.5}
+2	{2:0.2,3:0.3,4:0.4}
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
@@ -420,6 +432,17 @@ c1	c2
 select * from t1 order by negative_inner_product(c2, '{12:1.2, 13:1.3}') approx limit 4 parameters(drop_ratio_search=0);
 c1	c2
 10	{10:1,11:1.1,12:1.2}
+select  * from t1 order by negative_inner_product(c2, '{3:0.3, 4:0.4}') approx limit 4;
+c1	c2
+4	{4:0.4,5:0.5,6:0.6}
+3	{3:0.3,4:0.4,5:0.5}
+2	{2:0.2,3:0.3,4:0.4}
+select  * from t1 order by negative_inner_product(c2, '{3:0.3, 4:0.4}') approx limit 4 parameters(drop_ratio_search=0);
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+3	{3:0.3,4:0.4,5:0.5}
+4	{4:0.4,5:0.5,6:0.6}
+1	{1:0.1,2:0.2,3:0.3}
 select /*+ parallel(8)*/ * from t1 where c1 <=5 order by negative_inner_product(c2, '{3:0.3, 4:0.4}') approx limit 4;
 c1	c2
 3	{3:0.3,4:0.4,5:0.5}
@@ -527,6 +550,10 @@ c1	c2
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{13:1, 14:1}') approx limit 2;
 c1	c2
 select * from t1 where c1 <= 5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+3	{3:0.3,4:0.4,5:0.5}
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 3	{3:0.3,4:0.4,5:0.5}
@@ -674,6 +701,10 @@ select * from t1 where c1 <= 5 order by negative_inner_product(c2, '{3:1, 4:1}')
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 3	{3:0.3,4:0.4,5:0.5}
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+3	{3:0.3,4:0.4,5:0.5}
 select /*+ parallel(8)*/ negative_inner_product(c2, '{3:1, 4:1}') from t1 where c1 <=5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 negative_inner_product(c2, '{3:1, 4:1}')
 -0.7000000178813934
@@ -815,6 +846,10 @@ c1	c2
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
 select * from t1 where c1 <= 5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+3	{3:0.3,4:0.4,5:0.5}
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 3	{3:0.3,4:0.4,5:0.5}
@@ -987,6 +1022,30 @@ c1	c2	c3
 43	88	{3:0.3,4:0.4,5:0.5}
 42	35	{2:0.2,3:0.3,4:0.4}
 select * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
+c1	c2	c3
+72	37	{2:0.2,3:0.3,4:0.4}
+73	46	{3:0.3,4:0.4,5:0.5}
+23	36	{3:0.3,4:0.4,5:0.5}
+22	41	{2:0.2,3:0.3,4:0.4}
+3	80	{3:0.3,4:0.4,5:0.5}
+2	98	{2:0.2,3:0.3,4:0.4}
+43	88	{3:0.3,4:0.4,5:0.5}
+42	35	{2:0.2,3:0.3,4:0.4}
+4	75	{4:0.4,5:0.5,6:0.6}
+24	1	{4:0.4,5:0.5,6:0.6}
+select  * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
+c1	c2	c3
+72	37	{2:0.2,3:0.3,4:0.4}
+73	46	{3:0.3,4:0.4,5:0.5}
+23	36	{3:0.3,4:0.4,5:0.5}
+22	41	{2:0.2,3:0.3,4:0.4}
+3	80	{3:0.3,4:0.4,5:0.5}
+2	98	{2:0.2,3:0.3,4:0.4}
+43	88	{3:0.3,4:0.4,5:0.5}
+42	35	{2:0.2,3:0.3,4:0.4}
+4	75	{4:0.4,5:0.5,6:0.6}
+24	1	{4:0.4,5:0.5,6:0.6}
+select/*+ index(t1 idx1) */ * from t1 where c1 < 100 order by negative_inner_product(c3, '{3:1, 4:1}') APPROXIMATE limit 10;
 c1	c2	c3
 72	37	{2:0.2,3:0.3,4:0.4}
 73	46	{3:0.3,4:0.4,5:0.5}
@@ -1494,6 +1553,8 @@ create index idx1 on t1(c2);
 create index idx2 on t1(c3);
 select * from t1 where c2 > 5 and c3 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 c1	c2	c3	v
+select  * from t1 where c2 > 5 and c3 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
+c1	c2	c3	v
 select /*+index(t1 primary) */ * from t1 where c1 < 6 order by negative_inner_product(v, '{3:1, 4:1}') APPROXIMATE limit 5;
 c1	c2	c3	v
 3	3	8	{3:0.3,4:0.4,5:0.5}
@@ -1784,6 +1845,10 @@ c1	c2
 select * from t1 where c1 < 3 order by negative_inner_product(c2, '{12:1, 13:1}') approx limit 2;
 c1	c2
 select * from t1 where c1 <= 5 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
+c1	c2
+2	{2:0.2,3:0.3,4:0.4}
+3	{3:0.3,4:0.4,5:0.5}
+select  * from t1 order by negative_inner_product(c2, '{3:1, 4:1}') approx limit 2;
 c1	c2
 2	{2:0.2,3:0.3,4:0.4}
 3	{3:0.3,4:0.4,5:0.5}

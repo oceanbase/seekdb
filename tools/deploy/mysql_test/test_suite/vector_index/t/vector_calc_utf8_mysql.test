@@ -72,6 +72,7 @@ select l2_distance(c1, '[1,1,1]') + cosine_distance(c2, '[1,2,3]') from test;
 select c1, l2_distance(c1, '[1,1,1]') from test1;
 select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 select /*+parallel(2)*/test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
+select test1.id, test1.c1, test.c1, l2_distance(test1.c1, test.c1) from test1,test where test1.id = test.id and test.id = 2;
 
 #########################################################################
 # test arith (+/-/*)
@@ -84,6 +85,7 @@ select c1 / 0, [2,3,4] + [1,2,3] from test;
 select c1 + [1,1,1] from test1;
 select test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
 select /*+parallel(2)*/test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
+select test1.c1, test.c1, test1.c1+test.c1 from test1,test where test1.id = test.id && test.id = 2;
 
 # need fix
 #select [1,2,3] + '[1.12,1000.0001, -1.2222]', [1,2,3] - NULL, '[1.2,0.221,0.666]' * [1.11,3.33,5.55], NULL + [11,13.3,2,1.2];
@@ -120,6 +122,7 @@ select c1 from test1 where c1 > [1,2,3] && c1 < [3,4,5];
 select test1.c1, test.c1 from test1, test;
 select test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
 select /*+parallel(2)*/test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
+select test1.c1, test.c1 from test1, test where test.c1 + test1.c1 = [2,0,2];
 
 #########################################################################
 # test others
@@ -181,6 +184,8 @@ select sum(c1),avg(c1),count(c1) from test where id = 10;
 select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test group by id order by id;
 select /*+parallel(2)*/sum(c1),avg(c1),count(c1) from test1 group by id order by id;
 
+select  sum(c1),avg(c1),count(c1) from test group by id order by id;
+select  sum(c1),avg(c1),count(c1) from test1 group by id order by id;
 
 # 计划CASE WHEN t.c1 IS NOT NULL THEN 1 ELSE 0 END
 create table t (id int primary key, c1 vector(3));

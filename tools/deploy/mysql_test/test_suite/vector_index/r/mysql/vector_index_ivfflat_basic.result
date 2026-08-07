@@ -194,6 +194,9 @@ insert into t1 values(1, [1,1,1]);
 select c2,123 from t1 for update;
 c2	123
 [1,1,1]	123
+select  c2,123 from t1 for update;
+c2	123
+[1,1,1]	123
 drop table t1;
 # 单分区先建混合向量索引
 drop table if exists hhst1;
