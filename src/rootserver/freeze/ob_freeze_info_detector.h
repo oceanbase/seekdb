@@ -84,6 +84,8 @@ private:
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;
+  uint64_t core_table_change_seq_;
+  uint64_t freeze_info_change_seq_;
   common::ObTimer timer_;
 
 private:

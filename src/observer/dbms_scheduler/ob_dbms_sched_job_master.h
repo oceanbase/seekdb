@@ -95,7 +95,9 @@ public:
       schema_service_(NULL),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
-      wait_vector_(0, NULL, ObModIds::VECTOR) {}
+      wait_vector_(0, NULL, ObModIds::VECTOR),
+      scheduler_job_table_change_seq_(0),
+      has_loaded_primary_jobs_(false) {}
 
   virtual ~ObDBMSSchedJobMaster() { alive_jobs_.destroy(); };
 
@@ -106,7 +108,7 @@ public:
   int start();
   int stop();
   bool is_stop() { return stoped_; }
-  bool is_leader() { return is_leader_; }
+  bool is_leader() { return ATOMIC_LOAD(&is_leader_); }
   int scheduler();
   int destroy();
   void wakeup();
@@ -126,6 +128,8 @@ public:
   int64_t calc_next_date(ObDBMSSchedJobInfo &job_info);
   int64_t run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJobKey *job_key, int64_t next_date);
 private:
+  int64_t get_reconcile_deadline_(ObDBMSSchedJobInfo &job_info) const;
+
   const static int MAX_READY_JOBS_CAPACITY = 1024 * 1024;
   const static int MIN_SCHEDULER_INTERVAL = 1 * 1000 * 1000;
   const static int CHECK_NEW_INTERVAL = 20 * 1000 * 1000;
@@ -146,8 +150,10 @@ private:
 
   common::hash::ObHashSet<int64_t> alive_jobs_;
 
-  // wait list
+  // wait list; owned and mutated only by the scheduler thread.
   common::ObSortedVector<ObDBMSSchedJobKey *> wait_vector_;
+  uint64_t scheduler_job_table_change_seq_;
+  bool has_loaded_primary_jobs_;
   void clear_wait_vector();
   inline static bool compare_job_key(
     const ObDBMSSchedJobKey *lhs, const ObDBMSSchedJobKey *rhs);

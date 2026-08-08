@@ -25,6 +25,8 @@
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "rootserver/ob_thread_idling.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/rc/ob_server_runtime.h"
@@ -42,6 +44,7 @@ ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
     major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
     major_scheduler_idling_(nullptr),
     last_schedule_ts_(0), need_immediate_run_(true),
+    core_table_change_seq_(0), freeze_info_change_seq_(0),
     timer_()
 {}
 
@@ -70,6 +73,14 @@ int ObMajorMergeInfoDetector::init(
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
       LOG_WARN("init freeze info detector timer failed", KR(ret));
+    } else if (OB_FAIL(
+        ObInternalTableChangeNotifier::get_instance().register_table(
+            OB_ALL_CORE_TABLE_TID))) {
+      LOG_WARN("register core table change tracking failed", KR(ret));
+    } else if (OB_FAIL(
+        ObInternalTableChangeNotifier::get_instance().register_table(
+            OB_ALL_FREEZE_INFO_TID))) {
+      LOG_WARN("register freeze info change tracking failed", KR(ret));
     } else {
       is_inited_ = true;
       LOG_INFO("freeze info detector init succ");
@@ -298,12 +309,39 @@ int ObMajorMergeInfoDetector::try_reload_freeze_info()
 {
   int ret = OB_SUCCESS;
   if (!is_primary_service()) {
+    ObInternalTableChangeNotifier &notifier =
+        ObInternalTableChangeNotifier::get_instance();
+    uint64_t target_core_seq = 0;
+    uint64_t target_freeze_seq = 0;
+    int seq_ret = OB_SUCCESS;
+    bool changed = false;
+
+    seq_ret = notifier.get_change_seq(
+        OB_ALL_CORE_TABLE_TID, target_core_seq);
+    if (OB_SUCCESS == seq_ret) {
+      seq_ret = notifier.get_change_seq(
+          OB_ALL_FREEZE_INFO_TID, target_freeze_seq);
+    }
+    if (OB_SUCCESS != seq_ret) {
+      LOG_WARN("fail to get freeze table change sequence, fallback to reload",
+          KR(seq_ret));
+    }
+    changed = OB_SUCCESS != seq_ret
+        || target_core_seq != core_table_change_seq_
+        || target_freeze_seq != freeze_info_change_seq_;
+
     if (OB_ISNULL(major_merge_info_mgr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to try reload freeze info, freeze info manager is null", KR(ret),
                K_(is_primary_service));
-    } else if (OB_FAIL(major_merge_info_mgr_->reload())) {
+    } else if (!changed) {
+      // Unchanged standby merge metadata needs no inner SQL.
+    } else if (OB_FAIL(major_merge_info_mgr_->reload(
+                   true /* force_reload_global_info */))) {
       LOG_WARN("fail to reload freeze_info", KR(ret), K_(is_primary_service));
+    } else if (OB_SUCCESS == seq_ret) {
+      core_table_change_seq_ = target_core_seq;
+      freeze_info_change_seq_ = target_freeze_seq;
     }
   }
   return ret;

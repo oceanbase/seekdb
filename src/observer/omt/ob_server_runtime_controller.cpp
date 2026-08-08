@@ -49,6 +49,7 @@
 #include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/ob_ddl_sim_point.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "observer/omt/ob_srs_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // ObDDLScheduler
@@ -1348,6 +1349,10 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret)
+      && OB_FAIL(ObInternalTableChangeNotifier::get_instance().seal())) {
+    SERVER_LOG(WARN, "seal internal table change notifier fail", KR(ret));
+  }
   return ret;
 }
 

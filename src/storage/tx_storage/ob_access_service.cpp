@@ -597,6 +597,10 @@ int ObAccessService::check_write_allowed_(
   ObLS *ls = nullptr;
   ObLockID lock_id;
   ObLockParam lock_param;
+  // Keep an IN_TRANS_DML_LOCK record for every tablet touched by normal DML,
+  // even when the transaction already owns a stronger table or tablet lock.
+  // Commit-time internal-table notification relies on this record as its
+  // transaction-level touched-tablet marker.
   const ObTableLockMode lock_mode = ROW_EXCLUSIVE;
   const ObTableLockOpType lock_op_type = IN_TRANS_DML_LOCK;
   ObTableLockOwnerID lock_owner;

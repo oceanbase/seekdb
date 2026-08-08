@@ -18,6 +18,7 @@
 #include "ob_timezone_mgr.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 using namespace oceanbase::common;
 
@@ -31,7 +32,7 @@ void ObTimezoneMgr::UpdateTimezoneTask::runTimerTask()
   if (OB_ISNULL(timezone_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("time zone manager is null", K(ret));
-  } else if (OB_FAIL(timezone_mgr_->refresh_timezone_info())) {
+  } else if (OB_FAIL(timezone_mgr_->refresh_timezone_info_if_changed_())) {
     LOG_WARN("update time zone failed", K(ret));
   }
 }
@@ -40,7 +41,11 @@ ObTimezoneMgr::ObTimezoneMgr()
     : is_inited_(false),
       update_task_(this),
       timer_(),
-      usable_(false)
+      usable_(false),
+      sys_stat_change_seq_(0),
+      timezone_name_change_seq_(0),
+      timezone_transition_change_seq_(0),
+      timezone_transition_type_change_seq_(0)
 {
 }
 
@@ -62,17 +67,21 @@ int ObTimezoneMgr::init(ObMySQLProxy &sql_proxy)
     LOG_WARN("init timezone info failed", K(ret));
   } else if (OB_FAIL(timer_.init("TimezoneMgr", ObMemAttr("TimezoneMgr")))) {
     LOG_WARN("init timezone timer failed", K(ret));
+  } else if (OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().register_table(
+                 share::OB_ALL_SYS_STAT_TID))) {
+    LOG_WARN("register sys stat change tracking failed", K(ret));
+  } else if (OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().register_table(
+                 share::OB_ALL_TIME_ZONE_NAME_TID))) {
+    LOG_WARN("register timezone name change tracking failed", K(ret));
+  } else if (OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().register_table(
+                 share::OB_ALL_TIME_ZONE_TRANSITION_TID))) {
+    LOG_WARN("register timezone transition change tracking failed", K(ret));
+  } else if (OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().register_table(
+                 share::OB_ALL_TIME_ZONE_TRANSITION_TYPE_TID))) {
+    LOG_WARN("register timezone transition type change tracking failed", K(ret));
   } else {
-    // Register with notifier. Role-change-driven switch_to_leader will
-    // trigger the initial refresh after LS promotion; import path triggers
-    // via notify().
-    share::ObInternalTableChangeNotifier::get_instance().register_module(
-        share::ObInternalTableChangeNotifier::Module::TIMEZONE,
-        []() -> int {
-          LOG_INFO("[TIMEZONE_NOTIFIER] scheduling async refresh");
-          OTTZ_MGR.schedule_retry();
-          return OB_SUCCESS;
-        });
+    // The local sequences start at zero, so the first periodic task performs
+    // the startup baseline refresh without a TIMEZONE callback retry.
   }
   return ret;
 }
@@ -143,13 +152,54 @@ int ObTimezoneMgr::refresh_timezone_info()
   return ret;
 }
 
-int ObTimezoneMgr::schedule_retry()
+int ObTimezoneMgr::refresh_timezone_info_if_changed_()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(timer_.schedule(update_task_, 1000000, false))) {
-    LOG_WARN("schedule timezone retry timer failed", K(ret));
-  } else {
-    LOG_INFO("[TIMEZONE] retry timer scheduled");
+  share::ObInternalTableChangeNotifier &notifier =
+      share::ObInternalTableChangeNotifier::get_instance();
+  uint64_t target_sys_stat_seq = 0;
+  uint64_t target_name_seq = 0;
+  uint64_t target_transition_seq = 0;
+  uint64_t target_transition_type_seq = 0;
+  int seq_ret = OB_SUCCESS;
+  bool changed = false;
+
+  seq_ret = notifier.get_change_seq(
+      share::OB_ALL_SYS_STAT_TID, target_sys_stat_seq);
+  if (OB_SUCCESS == seq_ret) {
+    seq_ret = notifier.get_change_seq(
+        share::OB_ALL_TIME_ZONE_NAME_TID, target_name_seq);
+  }
+  if (OB_SUCCESS == seq_ret) {
+    seq_ret = notifier.get_change_seq(
+        share::OB_ALL_TIME_ZONE_TRANSITION_TID, target_transition_seq);
+  }
+  if (OB_SUCCESS == seq_ret) {
+    seq_ret = notifier.get_change_seq(
+        share::OB_ALL_TIME_ZONE_TRANSITION_TYPE_TID,
+        target_transition_type_seq);
+  }
+  if (OB_SUCCESS != seq_ret) {
+    LOG_WARN("fail to get timezone table change sequence, fallback to refresh",
+        K(seq_ret));
+  }
+  changed = OB_SUCCESS != seq_ret
+      || target_sys_stat_seq != sys_stat_change_seq_
+      || target_name_seq != timezone_name_change_seq_
+      || target_transition_seq != timezone_transition_change_seq_
+      || target_transition_type_seq != timezone_transition_type_change_seq_;
+
+  if (!changed) {
+    // The periodic timer remains active, but unchanged tables need no SQL.
+  } else if (OB_FAIL(refresh_timezone_info())) {
+    LOG_WARN("refresh changed timezone tables failed", K(ret));
+  } else if (OB_SUCCESS == seq_ret) {
+    // Advance only to the values captured before the read. A racing commit is
+    // detected by the next timer round.
+    sys_stat_change_seq_ = target_sys_stat_seq;
+    timezone_name_change_seq_ = target_name_seq;
+    timezone_transition_change_seq_ = target_transition_seq;
+    timezone_transition_type_change_seq_ = target_transition_type_seq;
   }
   return ret;
 }
