@@ -6,13 +6,11 @@ BUILD_SH=$TOPDIR/build.sh
 DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
 TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
 
-# Get CPU cores and CMAKE command, compatible with macOS and Linux
+# Get CPU cores; cmake path is resolved in do_build() (Linux may use host cmake before deps devtools exist)
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  CMAKE_COMMAND="cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
   CPU_CORES=$(sysctl -n hw.ncpu)
   KERNEL_RELEASE=""
 else
-  CMAKE_COMMAND="${TOOLS_DIR}/bin/cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
   CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
   KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
 fi
@@ -166,22 +164,25 @@ function do_init
 # make build directory && cmake && make (if need)
 function do_build
 {
-    # Check if cmake exists, compatible with macOS and Linux
+    # Resolve cmake: prefer OceanBase devtools on Linux; else Homebrew/common paths; else PATH (e.g. apt cmake on CI)
     CMAKE_PATH=""
     if [[ "$(uname -s)" == "Darwin" ]]; then
-      # macOS: cmake may be at /opt/homebrew/bin/cmake or /usr/local/bin/cmake
       if [ -f /opt/homebrew/bin/cmake ]; then
         CMAKE_PATH="/opt/homebrew/bin/cmake"
       elif [ -f /usr/local/bin/cmake ]; then
         CMAKE_PATH="/usr/local/bin/cmake"
       fi
     else
-      # Linux
-      CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
+      if [[ -x "${TOOLS_DIR}/bin/cmake" ]]; then
+        CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
+      fi
+    fi
+    if [[ -z "$CMAKE_PATH" ]] && command -v cmake >/dev/null 2>&1; then
+      CMAKE_PATH="$(command -v cmake)"
     fi
 
     if [ -z "$CMAKE_PATH" ]; then
-      echo_log "[NOTICE] Your workspace has not initialized dependencies, please append '--init' args to initialize dependencies"
+      echo_log "[NOTICE] cmake not found. On Linux install cmake (e.g. apt install cmake) or run --init so ${TOOLS_DIR}/bin/cmake exists"
       exit 1
     fi
 
@@ -196,11 +197,11 @@ function do_build
         echo_err "Set ANDROID_NDK_HOME or install the NDK"
         exit 1
       fi
-      ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28"
+      ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=ON"
       echo_log "Android NDK: $ANDROID_NDK_HOME"
     fi
 
-    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
+    "${CMAKE_PATH}" -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
     if [ $? -ne 0 ]; then
       echo_err "Failed to generate Makefile"
       exit 1

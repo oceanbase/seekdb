@@ -2036,6 +2036,17 @@ template int ObPartitionMultiRangeSpliter::get_split_multi_ranges(const ObIArray
                                                                   const int64_t,
                                                                   const int64_t);
 
+template int ObPartitionMultiRangeSpliter::build_range_array<ObStoreRange>(
+    const ObIArray<ObStoreRange> &,
+    const int64_t,
+    const ObITableReadInfo &,
+    const ObIArray<ObITable *> &,
+    ObIAllocator &,
+    ObArrayArray<ObStoreRange> &,
+    const bool,
+    const int64_t,
+    const int64_t);
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ObPartitionMajorSSTableRangeSpliter::ObPartitionMajorSSTableRangeSpliter()

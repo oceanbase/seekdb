@@ -381,6 +381,9 @@ tools/ob-configserver/bin/*
 tools/ob-configserver/tests/*.log
 tools/ob-configserver/tests/*.out
 
+############# package/libseekdb #############
+package/libseekdb/libseekdb-*.zip
+
 ## .NET Configurator build output (rebuilt by dotnet publish)
 tools/windows/seekdbConfigurator/bin/
 tools/windows/seekdbConfigurator/obj/
@@ -404,3 +407,4 @@ test/var
 .worktrees/
 .claude/
 CLAUDE.md
+.codegraph/

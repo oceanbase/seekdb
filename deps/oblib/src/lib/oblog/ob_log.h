@@ -1016,6 +1016,10 @@ void ObLogger::log_it(const char *mod_name,
     // (before main() enters or after main() returns). Fall back to stderr.
     if (OB_UNLIKELY(!g_ob_log_main_entered)) {
       if (OB_NOT_NULL(file) && OB_NOT_NULL(function)) {
+        // Static init is noisy at INFO; stderr fallback cannot honor module filters — drop chatter only.
+        if (level == OB_LOG_LEVEL_INFO || level == OB_LOG_LEVEL_TRACE || level == OB_LOG_LEVEL_DEBUG) {
+          return;
+        }
         static constexpr const char *const lvlstr[] = {"ERROR", "WARN", "INFO", "EDIAG", "WDIAG", "TRACE", "DEBUG"};
         const char *lvl = (level >= 0 && level < (int)(sizeof(lvlstr)/sizeof(lvlstr[0]))) ? lvlstr[level] : "?";
         fprintf(stderr, "[PRE-MAIN] %-5s %s:%d %s\n", lvl, file, line, function);

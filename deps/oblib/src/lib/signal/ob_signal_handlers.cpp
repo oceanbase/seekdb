@@ -99,6 +99,13 @@ static inline void handler(int sig, siginfo_t *s, void *p)
 int install_ob_signal_handler()
 {
   int ret = OB_SUCCESS;
+#ifdef __ANDROID__
+  // ART/libsigchain owns fatal signal dispatch for app processes. Installing
+  // OceanBase's process-wide crash handlers here interferes with JNI/runtime
+  // fault handling and can turn startup failures into opaque instrumentation
+  // crashes.
+  return ret;
+#else
   struct sigaction sa;
   sa.sa_flags = SA_SIGINFO | SA_RESTART | SA_NODEFER | SA_ONSTACK;
   sa.sa_sigaction = handler;
@@ -114,6 +121,7 @@ int install_ob_signal_handler()
     }
   }
   return ret;
+#endif
 }
 
 bool g_redirect_handler = false;

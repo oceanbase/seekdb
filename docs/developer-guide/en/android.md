@@ -5,7 +5,7 @@ Cross-compile seekdb for Android arm64-v8a on macOS using the NDK toolchain, the
 ## Prerequisites
 
 - macOS host (this guide is written for macOS)
-- Android NDK 27.x installed (default: `~/Library/Android/sdk/ndk/27.3.13750724`)
+- Android NDK installed (**27.x is recommended** to match pre-built dependencies; other major versions are untested). Default path example: `~/Library/Android/sdk/ndk/27.3.13750724`
 - Android emulator running arm64-v8a (API 28+), or a physical device
 - Dependencies built via [ob-deps](https://github.com/oceanbase/ob-deps/tree/android_arm64-v8a) `ndk/build_all.sh`
 - `adb` available on PATH
@@ -31,12 +31,33 @@ This runs `deps/init/dep_create.sh` in Android mode, which downloads and extract
 pre-built NDK dependency tarballs into `deps/3rd/`.
 
 ### 2. Configure and build
+
 To build only the observer binary:
 
 ```bash
 cd build_android_release
 make seekdb -j$(nproc)
 ```
+
+### Build libseekdb (FFI shared library)
+
+In the same Android build directory, build the C API shared library (CMake target `libseekdb`, output `libseekdb.so`):
+
+```bash
+cd build_android_release
+make libseekdb -j$(nproc)
+```
+
+The artifact is usually `build_android_release/src/include/libseekdb.so` (relative to the repo root). The public header is `src/include/seekdb.h` in the source tree.
+
+To reduce size, strip ELF with the NDK `llvm-strip` (not the host `strip`). On macOS or Linux hosts the toolchain lives under `toolchains/llvm/prebuilt/<host>/bin/`, for example:
+
+```bash
+NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
+$NDK_STRIP -o /tmp/libseekdb.stripped build_android_release/src/include/libseekdb.so
+```
+
+You can also pack `seekdb.h` and `libseekdb.so` into **`libseekdb-android-arm64-v8a.zip`** with [`package/libseekdb/libseekdb-build.sh`](../../../package/libseekdb/libseekdb-build.sh) (**arm64-v8a only**). From `package/libseekdb/` run `./libseekdb-build.sh --android` (builds if needed), or `./libseekdb-build.sh <path/to/build_android_*/src/include>` to pack an existing tree. On macOS, a tree that only contains the NDK-built `libseekdb.so` still gets that naming (not `darwin-*`).
 
 ### 3. Build unit tests (optional)
 
@@ -50,8 +71,9 @@ make all_tests
 ## Deploy to Emulator
 
 ### Strip debug symbols
+
 ```bash
-NDK_STRIP=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
+NDK_STRIP=$(echo "$ANDROID_NDK_HOME"/toolchains/llvm/prebuilt/*/bin/llvm-strip)
 
 $NDK_STRIP -o /tmp/seekdb build_android_release/src/observer/seekdb
 ```

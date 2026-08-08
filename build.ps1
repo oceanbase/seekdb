@@ -18,7 +18,9 @@ $Action = "debug"
 $Ninja  = $false
 $Init   = $false
 $Jobs   = 0
-$h      = $false
+$h             = $false
+$NinjaTarget  = "observer"
+$ExtraCmake   = @()
 
 $i = 0
 while ($i -lt $args.Count) {
@@ -27,12 +29,17 @@ while ($i -lt $args.Count) {
         { $_ -in "-h", "--help", "-help" } { $h = $true }
         { $_ -in "--ninja", "-ninja" }     { $Ninja = $true }
         { $_ -in "--init", "-init" }       { $Init = $true }
+        { $_ -in "--target" } {
+            $i++
+            if ($i -lt $args.Count) { $NinjaTarget = "$($args[$i])" }
+        }
         { $_ -in "-j", "--jobs" } {
             $i++
             if ($i -lt $args.Count) { $Jobs = [int]$args[$i] }
         }
         default {
             if (-not $a.StartsWith("-")) { $Action = $a }
+            elseif ($a.StartsWith("-D")) { $ExtraCmake += $a }
             else { Write-Host "[build.ps1][WARN] Unknown flag: $a" -ForegroundColor Yellow }
         }
     }
@@ -181,6 +188,7 @@ Usage:
     .\build.ps1 [BuildType] --ninja               Configure + compile (ninja)
     .\build.ps1 [BuildType] --ninja -j 16         Compile with 16 jobs
     .\build.ps1 [BuildType] --ninja --init          Init deps, then build
+    .\build.ps1 release --ninja --target libseekdb   Build embed DLL (example)
     .\build.ps1 package                           Build release + MSI/ZIP installer
 
 BuildType:
@@ -191,6 +199,8 @@ BuildType:
 Flags:
     --ninja         Configure + compile with Ninja
     --init          Run dependency init before building (like build.sh --init)
+    --target NAME   Ninja target (default: observer); e.g. libseekdb
+    -DVAR=VALUE     Extra CMake cache entries (repeatable); e.g. -DBUILD_EMBED_MODE=ON
 
 Environment variables (override dependency paths):
     OB_VCPKG_DIR      vcpkg install root   (default: deps/3rd or C:/VcpkgInstalled)
@@ -286,7 +296,13 @@ function Do-Build {
         [string[]]$ExtraCMakeArgs = @()
     )
 
-    $buildDir = "$TOPDIR\build_$($BuildType.ToLower())"
+    # Align directory names with build.sh: release -> build_release, debug -> build_debug
+    $folderName = switch ($BuildType) {
+        "RelWithDebInfo" { "release" }
+        "Debug"          { "debug" }
+        default          { $BuildType.ToLower() }
+    }
+    $buildDir = "$TOPDIR\build_$folderName"
     if (-not (Test-Path $buildDir)) {
         New-Item -ItemType Directory -Path $buildDir | Out-Null
     }
@@ -300,9 +316,9 @@ function Do-Build {
         "-DOB_VCPKG_DIR=$DefaultVcpkgDir",
         "-DOB_OPENSSL_DIR=$DefaultOpenSSLDir",
         "-DOB_LLVM_DIR=$DefaultLLVMDir"
-    ) + $ExtraCMakeArgs
+    ) + $ExtraCMakeArgs + $ExtraCmake
 
-    Write-Log "CMake configure: build_$($BuildType.ToLower())"
+    Write-Log "CMake configure: build_$folderName"
     Write-Log "  Build type : $BuildType"
     Write-Log "  VcpkgDir   : $DefaultVcpkgDir"
     Write-Log "  OpenSSLDir : $DefaultOpenSSLDir"
@@ -311,12 +327,53 @@ function Do-Build {
 
     Push-Location $buildDir
     try {
-        & cmake @cmakeArgs | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "CMake configure failed (exit code $LASTEXITCODE)"
-            exit $LASTEXITCODE
+        function Invoke-CMakeConfigure {
+            & cmake @cmakeArgs | Out-Host
+            return $LASTEXITCODE
+        }
+
+        $exit = Invoke-CMakeConfigure
+        if ($exit -ne 0) {
+            Write-Err "CMake configure failed (exit code $exit)"
+            exit $exit
         }
         Write-Log "CMake configure succeeded."
+
+        # Facts from CI: CMakeCache can say CMAKE_GENERATOR=Ninja while no *.ninja exists (incomplete/stale tree).
+        # Recover once by wiping cache + CMakeFiles and re-running cmake.
+        function Test-HasNinjaBuildFiles {
+            param([string]$Dir)
+            if (Test-Path (Join-Path $Dir "build.ninja")) { return $true }
+            try {
+                $nf = [System.IO.Directory]::GetFiles($Dir, "*.ninja", [System.IO.SearchOption]::TopDirectoryOnly)
+                return ($nf.Length -gt 0)
+            } catch {
+                return $false
+            }
+        }
+
+        if (-not (Test-HasNinjaBuildFiles -Dir $buildDir)) {
+            Write-Log "[build.ps1] No Ninja build files after configure; clearing CMakeCache + CMakeFiles and re-configuring once."
+            Remove-Item (Join-Path $buildDir "CMakeCache.txt") -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $buildDir "CMakeFiles") -Recurse -Force -ErrorAction SilentlyContinue
+            $exit2 = Invoke-CMakeConfigure
+            if ($exit2 -ne 0) {
+                Write-Err "CMake re-configure failed (exit code $exit2)"
+                exit $exit2
+            }
+            Write-Log "CMake re-configure finished."
+        }
+
+        # Fail fast if Ninja was requested but the build tree still has no Ninja backend files.
+        if (-not (Test-HasNinjaBuildFiles -Dir $buildDir)) {
+            Write-Err "CMake did not create build.ninja (or any *.ninja) under $buildDir after configure/retry (expected -G Ninja)."
+            $cache = Join-Path $buildDir "CMakeCache.txt"
+            if (Test-Path $cache) {
+                Select-String -Path $cache -Pattern "^CMAKE_GENERATOR:" | ForEach-Object { Write-Err $_.Line }
+            }
+            Write-Err "Fix: delete $buildDir completely and re-run, or ensure Ninja is on PATH when cmake runs (e.g. deps\3rd\tools\ninja)."
+            exit 1
+        }
 
         # Copy compile_commands.json to project root for IDE support
         $ccJson = "$buildDir\compile_commands.json"
@@ -334,17 +391,41 @@ function Do-Build {
 
 # -- ninja build -----------------------------------------------------
 function Do-Ninja {
-    param([string]$BuildDir)
+    param(
+        [string]$BuildDir,
+        [string]$Target = "observer"
+    )
 
-    Write-Log "Building with Ninja (-j $Jobs) in $BuildDir ..."
+    Write-Log "Building with Ninja (-j $Jobs) target=$Target in $BuildDir ..."
     Push-Location $BuildDir
     try {
-        & ninja -j $Jobs observer | Out-Host
+        & ninja -j $Jobs $Target | Out-Host
         if ($LASTEXITCODE -ne 0) {
             Write-Err "Build failed (exit code $LASTEXITCODE)"
             exit $LASTEXITCODE
         }
         Write-Log "Build succeeded!"
+
+        # Deterministic post-condition for libseekdb: link must emit a DLL somewhere under the build dir.
+        if ($Target -eq "libseekdb") {
+            $foundDll = $false
+            foreach ($leaf in @("seekdb.dll", "libseekdb.dll")) {
+                try {
+                    $arr = [System.IO.Directory]::GetFiles($BuildDir, $leaf, [System.IO.SearchOption]::AllDirectories)
+                    if ($arr -and $arr.Length -gt 0) {
+                        $foundDll = $true
+                        Write-Log "Found ${leaf} at $($arr[0])"
+                        break
+                    }
+                } catch {
+                    # ignore enumeration errors; treat as not found
+                }
+            }
+            if (-not $foundDll) {
+                Write-Err "ninja libseekdb succeeded but no seekdb.dll / libseekdb.dll under $BuildDir — link step did not produce a DLL (check ninja/link output above)."
+                exit 1
+            }
+        }
     }
     finally {
         Pop-Location
@@ -404,7 +485,7 @@ function Do-Package {
     }
 
     $buildDir = Do-Build -BuildType "RelWithDebInfo" -ExtraCMakeArgs @("-DOB_BUILD_PACKAGE=ON")
-    Do-Ninja -BuildDir $buildDir
+    Do-Ninja -BuildDir $buildDir -Target observer
 
     # Sign binaries before they are packaged into the MSI
     $exesToSign = @(
@@ -476,12 +557,12 @@ switch ($Action.ToLower()) {
     { $_ -in "release", "relwithdebinfo" } {
         if ($Init) { Do-Init }
         $buildDir = Do-Build -BuildType "RelWithDebInfo"
-        if ($Ninja) { Do-Ninja -BuildDir $buildDir }
+        if ($Ninja) { Do-Ninja -BuildDir $buildDir -Target $NinjaTarget }
     }
     { $_ -in "debug", "" } {
         if ($Init) { Do-Init }
         $buildDir = Do-Build -BuildType "Debug"
-        if ($Ninja) { Do-Ninja -BuildDir $buildDir }
+        if ($Ninja) { Do-Ninja -BuildDir $buildDir -Target $NinjaTarget }
     }
     "-h" {
         Show-Usage

@@ -58,8 +58,11 @@
                   Return="asyncNoWait" />
 
     <!-- Type 50 custom action: launch Configurator in remove mode (uninstall).
-         Uses the SEEKDB_CONFIGURATOR_EXE property set by the SetProperty
-         element below immediately before this action fires.
+         Uses SEEKDB_CONFIGURATOR_EXE: AppSearch from the registry, and
+         <SetProperty> (below) recomputes it on the server immediately before
+         this action.  Type 34 with Directory="INSTALL_ROOT" failed for
+         non-default install dirs because that directory property could revert
+         during uninstall.
          Return="ignore" ensures uninstall proceeds even if user cancels. -->
     <CustomAction Id="RunConfiguratorRemove"
                   Property="SEEKDB_CONFIGURATOR_EXE"

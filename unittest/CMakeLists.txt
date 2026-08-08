@@ -71,6 +71,7 @@ add_subdirectory(tools)
 # add_subdirectory(data_dictionary)
 # add_subdirectory(logminer)
 add_subdirectory(plugin)
+add_subdirectory(include)
 
 # Android: single combined test binary (all TEST() macros in one executable)
 # Uses sources registered by ob_unittest() and friends via ANDROID_TEST_SOURCES property.

@@ -147,6 +147,17 @@ else()
   set(CMAKE_CXX_FLAGS "-std=gnu++20")
 endif()
 
+
+# Before the first project(), WIN32 may be unset, so the elseif(WIN32) block below can skip
+# CMAKE_MAP_IMPORTED_CONFIG_*. That breaks Windows RelWithDebInfo with FindPython3 (Python3::Module
+# has no IMPORTED_IMPLIB for that config). CMAKE_HOST_WIN32 is set when cmake runs on Windows; skip
+# for Android NDK cross-builds (OB_ANDROID) so we do not force host mapping onto the NDK tree.
+if(CMAKE_HOST_WIN32 AND NOT OB_ANDROID)
+  set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release CACHE STRING "imported: map Debug -> Release" FORCE)
+  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release CACHE STRING "imported: map RelWithDebInfo -> Release" FORCE)
+  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release CACHE STRING "imported: map MinSizeRel -> Release" FORCE)
+endif()
+
 if(OB_DISABLE_PIE)
   message(STATUS "build without pie")
   set(PIE_OPT "-no-pie")
@@ -213,9 +224,15 @@ if(OB_ANDROID)
   # and Env.cmake runs before project() which would set ANDROID.
   set(OB_CLANG_BIN "clang")
   set(OB_CLANGXX_BIN "clang++")
-  # NDK toolchain bin dir (derive from ANDROID_NDK_HOME or CMAKE_TOOLCHAIN_FILE)
+  # NDK toolchain bin dir (derive from ANDROID_NDK_HOME or CMAKE_TOOLCHAIN_FILE).
+  # GLOB prebuilt/*/bin so Linux hosts (e.g. CI) resolve linux-x86_64, macOS resolves darwin-x86_64.
   if(DEFINED ENV{ANDROID_NDK_HOME})
-    set(_NDK_TOOLCHAIN_BIN "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64/bin")
+    file(GLOB _NDK_TOOLCHAIN_BIN "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/*/bin")
+    list(LENGTH _NDK_TOOLCHAIN_BIN _ndk_bin_n)
+    if(_ndk_bin_n LESS 1)
+      message(FATAL_ERROR "ANDROID_NDK_HOME: no toolchains/llvm/prebuilt/*/bin under $ENV{ANDROID_NDK_HOME}")
+    endif()
+    list(GET _NDK_TOOLCHAIN_BIN 0 _NDK_TOOLCHAIN_BIN)
   else()
     # Derive from toolchain file path: .../build/cmake/android.toolchain.cmake -> .../toolchains/llvm/prebuilt/*/bin
     get_filename_component(_NDK_ROOT "${CMAKE_TOOLCHAIN_FILE}" DIRECTORY)
@@ -316,9 +333,14 @@ endif()
 
 ob_define(OB_USE_CCACHE OFF)
 if (OB_USE_CCACHE)
+  # Prefer devtools (from deps); dep_create may wipe deps/3rd before a symlink is recreated,
+  # and Android deps do not ship obdevtools-ccache — fall back to ccache on PATH.
   find_program(OB_CCACHE ccache PATHS "${DEVTOOLS_DIR}/bin" NO_DEFAULT_PATH)
   if (NOT OB_CCACHE)
-    message(FATAL_ERROR "cannot find ccache.")
+    find_program(OB_CCACHE ccache)
+  endif()
+  if (NOT OB_CCACHE)
+    message(FATAL_ERROR "cannot find ccache. Install ccache (e.g. apt install ccache) or place it under ${DEVTOOLS_DIR}/bin.")
   else()
     set(CMAKE_C_COMPILER_LAUNCHER ${OB_CCACHE})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${OB_CCACHE})

@@ -50,28 +50,53 @@ foreach(PROTO_NAME ${PROTO_NAMES})
   set(GRPC_CC "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.cc")
   set(GRPC_H  "${PROTO_GEN_DIR}/${PROTO_NAME}.grpc.pb.h")
 
-  add_custom_command(
-    OUTPUT ${PB_CC} ${PB_H}
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
-      ${_PROTOC}
-      --cpp_out=${PROTO_GEN_DIR}
-      -I${PROTO_SRC_DIR}
-      ${PROTO_FILE}
-    DEPENDS ${PROTO_FILE}
-    COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
-  )
+  # Linux/macOS: protoc may need LD_LIBRARY_PATH for bundled libprotobuf.so.
+  # Windows (vcpkg): invoke protoc/grpc_cpp_plugin directly; LD_LIBRARY_PATH is meaningless.
+  if(WIN32)
+    add_custom_command(
+      OUTPUT ${PB_CC} ${PB_H}
+      COMMAND ${_PROTOC}
+        --cpp_out=${PROTO_GEN_DIR}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+      DEPENDS ${PROTO_FILE}
+      COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
+    )
 
-  add_custom_command(
-    OUTPUT ${GRPC_CC} ${GRPC_H}
-    COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
-      ${_PROTOC}
-      --grpc_out=${PROTO_GEN_DIR}
-      --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
-      -I${PROTO_SRC_DIR}
-      ${PROTO_FILE}
-    DEPENDS ${PROTO_FILE}
-    COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
-  )
+    add_custom_command(
+      OUTPUT ${GRPC_CC} ${GRPC_H}
+      COMMAND ${_PROTOC}
+        --grpc_out=${PROTO_GEN_DIR}
+        --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+      DEPENDS ${PROTO_FILE}
+      COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
+    )
+  else()
+    add_custom_command(
+      OUTPUT ${PB_CC} ${PB_H}
+      COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
+        ${_PROTOC}
+        --cpp_out=${PROTO_GEN_DIR}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+      DEPENDS ${PROTO_FILE}
+      COMMENT "Generating protobuf C++ from ${PROTO_NAME}.proto"
+    )
+
+    add_custom_command(
+      OUTPUT ${GRPC_CC} ${GRPC_H}
+      COMMAND ${CMAKE_COMMAND} -E env "LD_LIBRARY_PATH=${_PROTOC_LD_PATH}:$ENV{LD_LIBRARY_PATH}"
+        ${_PROTOC}
+        --grpc_out=${PROTO_GEN_DIR}
+        --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN}
+        -I${PROTO_SRC_DIR}
+        ${PROTO_FILE}
+      DEPENDS ${PROTO_FILE}
+      COMMENT "Generating gRPC C++ from ${PROTO_NAME}.proto"
+    )
+  endif()
 
   list(APPEND GENERATED_SRCS ${PB_CC} ${GRPC_CC})
 endforeach()

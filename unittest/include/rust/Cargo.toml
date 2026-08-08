@@ -1,0 +1,19 @@
+[package]
+name = "seekdb"
+version = "1.0.0"
+edition = "2021"
+authors = ["OceanBase"]
+license = "Apache-2.0"
+description = "Rust bindings for SeekDB"
+
+[dependencies]
+libc = "0.2"
+
+[lib]
+name = "seekdb"
+path = "src/lib.rs"
+
+[[bin]]
+name = "test"
+path = "src/test.rs"
+

@@ -1,0 +1,20 @@
+{
+  "name": "seekdb",
+  "version": "1.0.0",
+  "description": "N-API bindings for SeekDB",
+  "main": "index.js",
+  "gypfile": true,
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "test": "bash test.sh"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

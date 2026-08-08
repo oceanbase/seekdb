@@ -151,8 +151,14 @@ int ObDDLSqlService::gen_ddl_operation_dml(
     LOG_WARN("failed to add column table_name", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("operation_type", schema_operation.op_type_))) {
     LOG_WARN("failed to add column operation_type", KR(ret), K(schema_operation));
+#ifdef __ANDROID__
+  } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
+          ObHexEscapeSqlStr(ObString::make_empty_string())))) {
+    // Avoid large DDL text in __all_ddl_operation on embedded Android (LOB path).
+#else
   } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
           ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_?:"")))) {
+#endif
     LOG_WARN("failed to add column ddl_stmt_str", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_gmt_modified())) {
     LOG_WARN("failed to add column gmt_modified", KR(ret), K(schema_operation));
@@ -174,7 +180,11 @@ int ObDDLSqlService::gen_ddl_id_dml(
     LOG_WARN("schema_operation is invalid", K(ret), K(schema_operation), KP(ddl_id_str));
   } else if (OB_FAIL(ddl_id_dml.add_column("ddl_id_str", ObHexEscapeSqlStr(*ddl_id_str)))) {
     LOG_WARN("failed to add column ddl_id_str", KR(ret), K(*ddl_id_str));
+#ifdef __ANDROID__
+  } else if (OB_FAIL(ddl_id_dml.add_column("ddl_stmt_str", ObHexEscapeSqlStr(ObString::make_empty_string())))) {
+#else
   } else if (OB_FAIL(ddl_id_dml.add_column("ddl_stmt_str", ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_)))) {
+#endif
     LOG_WARN("failed to add column ddl_stmt_str", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_id_dml.add_gmt_modified())) {
     LOG_WARN("failed to add column gmt_modified", KR(ret), K(schema_operation));

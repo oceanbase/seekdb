@@ -9,6 +9,13 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+# Android NDK toolchain / defaults may pin C++17 after project(); enforce C++20 for language features (e.g. consteval).
+if(ANDROID)
+  set(CMAKE_CXX_STANDARD 20)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS ON)
+endif()
+
 if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
@@ -130,6 +137,7 @@ endif()
 
 add_subdirectory(deps/oblib)
 add_subdirectory(src/objit)
+include(${CMAKE_SOURCE_DIR}/cmake/EnsureWindowsDiaGuids.cmake)
 add_subdirectory(src)
 add_subdirectory(sqlite-benchmark)
 

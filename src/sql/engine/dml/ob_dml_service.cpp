@@ -1610,6 +1610,7 @@ int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
   dml_param.tenant_schema_version_ = base_rtdef.tenant_schema_version_;
   dml_param.prelock_ = base_rtdef.prelock_;
   dml_param.is_batch_stmt_ = base_ctdef.is_batch_stmt_;
+  dml_param.is_ignore_ = base_ctdef.is_ignore_;
   dml_param.dml_allocator_ = &das_alloc;
   dml_param.is_main_table_in_fts_ddl_ = base_ctdef.is_main_table_in_fts_ddl_;
   dml_param.check_schema_version_ = !base_ctdef.skip_check_schema_version_;
