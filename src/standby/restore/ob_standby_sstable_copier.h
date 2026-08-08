@@ -101,7 +101,8 @@ private:
       const ObCopySSTableMacroRangeInfo &macro_range_info,
       restore::ObStandbyRestoreHelper &helper,
       CopyTabletCtx &copy_tablet_ctx,
-      ObTabletCopyFinishTask &tablet_finish_task);
+      ObTabletCopyFinishTask &tablet_finish_task,
+      const share::ObTaskId &copy_id);
 
 private:
   bool is_inited_;

@@ -49,10 +49,8 @@ bool ObTabletCopyFinishTaskParam::is_valid() const
 
 /******************ObTabletCopyFinishTask*********************/
 ObTabletCopyFinishTask::ObTabletCopyFinishTask()
-  : ObITask(TASK_TYPE_STANDBY_RESTORE),
-    is_inited_(false),
+  : is_inited_(false),
     lock_(common::ObLatchIds::BACKUP_LOCK),
-    standby_restore_dag_(nullptr),
     arena_allocator_("TabCopyFinish"),
     minor_tables_handle_(),
     ddl_tables_handle_(),
@@ -81,7 +79,6 @@ int ObTabletCopyFinishTask::init(
     LOG_WARN("failed to set copy tablet status", K(ret));
   } else {
     param_ = param;
-    standby_restore_dag_ = static_cast<ObStandbyRestoreDag *>(this->get_dag());
     is_inited_ = true;
   }
   return ret;
@@ -118,8 +115,6 @@ int ObTabletCopyFinishTask::process()
   } else if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("tablet copy finish task do not init", K(ret));
-  } else if (standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed()) {
-    FLOG_INFO("standby restore dag net is already failed, skip physical copy finish task", "tablet_id", param_.tablet_id_, KPC(standby_restore_dag_));
   } else if (OB_FAIL(get_tablet_status(status))) {
     LOG_WARN("failed to get tablet status", K(ret), K(param_));
   } else if (ObCopyTabletStatus::TABLET_NOT_EXIST == status) {
@@ -165,16 +160,8 @@ int ObTabletCopyFinishTask::process()
       ObLSID::SYS_LS_ID,
       param_.tablet_id_.id(),
       ret,
-      standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed(),
       sstable_count,
       extra_info_str);
-
-  if (OB_FAIL(ret)) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = ObStandbyRestoreDagUtils::deal_with_fo(ret, standby_restore_dag_))) {
-      LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), K(param_));
-    }
-  }
   return ret;
 }
 
@@ -304,16 +291,6 @@ int ObTabletCopyFinishTask::create_new_table_store_with_minor_()
     } else if (OB_FAIL(ObStandbyRestoreTabletBuilderUtil::build_table_with_minor_tables(param))) {
       LOG_WARN("failed to build table with minor tables", K(ret), K(mds_tables_handle_),
         K(minor_tables_handle_), K(ddl_tables_handle_), K(param_.restore_action_));
-      if (OB_RELEASE_MDS_NODE_ERROR == ret) {
-        //Release mds node failed must do dag net retry.
-        //Because ls still replay and mds may has residue node which makes data incorrect.
-        //So should make ls offline and online
-        int tmp_ret = OB_SUCCESS;
-        const bool need_retry = false;
-        if (OB_SUCCESS != (tmp_ret = standby_restore_dag_->get_standby_restore_dag_net_ctx()->set_result(ret, need_retry))) {
-          LOG_ERROR("failed to set standby restore dag net ctx result", K(tmp_ret), K(ret));
-        }
-      }
     }
   }
   return ret;

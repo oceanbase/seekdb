@@ -540,7 +540,7 @@ int ObStandbyRestoreCopySSTableInfoMgr::build_sstable_macro_range_info_map_()
     void *buf = nullptr;
     ObCopySSTableMacroRangeInfo *sstable_macro_range_info_ptr = nullptr;
     ObArenaAllocator allocator("CopySStable");
-    restore::ObIRestoreHelper *helper = nullptr;
+    restore::ObStandbyRestoreHelper *helper = nullptr;
     if (OB_FAIL(param_.helper_->copy_for_task(allocator, helper))) {
       LOG_WARN("failed to copy helper", K(ret), K(param_));
     } else if (OB_ISNULL(helper)) {

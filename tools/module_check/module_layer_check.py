@@ -20,9 +20,8 @@ The checker enforces eight complementary policies:
   additionally requires the baseline to be empty.
 * Compatibility-artifact policy: deleted forwarding headers are permanently
   forbidden so an unused escape hatch cannot bypass include-edge ratchets.
-* External-interface policy: a module owning a header named in
-  ``[allowed_includes]`` may only be included by itself or through an exact
-  configured consumer-to-header edge.
+* Consumer policy: a module named as an ``[allowed_consumers]`` target may
+  only be included by itself or by the exact files/directories listed there.
 * Public-quarantine-consumer policy: direct data-plane consumers of the
   transitional query aggregate runtime header are kept in an independent
   exact baseline.  The normal check rejects both additions and stale entries,
@@ -329,7 +328,7 @@ domain_paths = []
 allowed_domain_edges = set()
 bridge_domain_edges = set()
 bridge_consumer_domain_edges = set()
-allowed_includes = {}
+allowed_consumers = {}
 section = None
 
 with open(CONF) as config_file:
@@ -371,37 +370,32 @@ with open(CONF) as config_file:
             bridge_domain_edges.add(_parse_edge(parts, section, line_number))
         elif section == "bridge_consumer_domain_edges":
             bridge_consumer_domain_edges.add(_parse_edge(parts, section, line_number))
-        elif section == "allowed_includes":
-            consumer, interface = _parse_edge(parts, section, line_number)
-            allowed_includes.setdefault(interface, set()).add(consumer)
+        elif section == "allowed_consumers":
+            consumer, target = _parse_edge(parts, section, line_number)
+            allowed_consumers.setdefault(target, set()).add(consumer)
 
 missing_targets = sorted(root for root in layer_scan_roots if root not in targets)
 if missing_targets:
     raise ValueError("scanned path not in [targets]: %s" % missing_targets)
 
-invalid_include_consumers = sorted(
+unknown_consumer_targets = sorted(set(allowed_consumers) - set(targets))
+if unknown_consumer_targets:
+    raise ValueError(
+        "[allowed_consumers] target is not in [targets]: %s"
+        % unknown_consumer_targets
+    )
+
+invalid_consumer_paths = sorted(
     consumer
-    for consumers in allowed_includes.values()
+    for consumers in allowed_consumers.values()
     for consumer in consumers
     if not os.path.isfile(os.path.join(REPO, consumer))
     and not os.path.isdir(os.path.join(REPO, consumer))
 )
-if invalid_include_consumers:
+if invalid_consumer_paths:
     raise ValueError(
-        "[allowed_includes] consumer is not a file or directory: %s"
-        % invalid_include_consumers
-    )
-
-invalid_interface_paths = sorted(
-    interface
-    for interface in allowed_includes
-    if not os.path.isfile(os.path.join(REPO, interface))
-    or not interface.endswith((".h", ".hpp", ".hh"))
-)
-if invalid_interface_paths:
-    raise ValueError(
-        "[allowed_includes] target is not an exact header file: %s"
-        % invalid_interface_paths
+        "[allowed_consumers] source is not a file or directory: %s"
+        % invalid_consumer_paths
     )
 
 # A newly added first-level module must not become invisible merely because its
@@ -469,6 +463,10 @@ modules = [
 ]
 layers = {module[1]: module[2] for module in modules}
 layers["__extsrc__"] = 99
+include_map = sorted(
+    ((module[3], module[1]) for module in modules), key=lambda item: -len(item[0])
+)
+domain_paths_by_specificity = sorted(domain_paths, key=lambda item: -len(item[1]))
 
 
 def file_module(path):
@@ -481,23 +479,6 @@ def file_module(path):
             best = name
             best_length = len(filesystem_path)
     return best
-
-
-protected_module_interfaces = {}
-for interface, consumers in allowed_includes.items():
-    interface_module = file_module(os.path.join(REPO, interface))
-    if interface_module is None:
-        raise ValueError(
-            "[allowed_includes] target is outside [targets]: %s" % interface
-        )
-    protected_module_interfaces.setdefault(interface_module, []).append(
-        (interface, consumers)
-    )
-
-include_map = sorted(
-    ((module[3], module[1]) for module in modules), key=lambda item: -len(item[0])
-)
-domain_paths_by_specificity = sorted(domain_paths, key=lambda item: -len(item[1]))
 
 
 def include_module(include):
@@ -597,22 +578,15 @@ def is_layer_scanned(relative_path):
     return any(_is_under(relative_path, root) for root in layer_scan_roots)
 
 
-def is_allowed_external_include(
-    source_path, source_module, target_module, resolved_path
-):
+def is_allowed_consumer(source_path, source_module, target_module):
     if source_module == target_module:
         return True
-    for interface, consumers in protected_module_interfaces[target_module]:
-        if resolved_path != interface:
-            continue
-        if any(
-            source_path == consumer
-            if os.path.isfile(os.path.join(REPO, consumer))
-            else _is_under(source_path, consumer)
-            for consumer in consumers
-        ):
-            return True
-    return False
+    return any(
+        source_path == consumer
+        if os.path.isfile(os.path.join(REPO, consumer))
+        else _is_under(source_path, consumer)
+        for consumer in allowed_consumers[target_module]
+    )
 
 
 def read_baseline(path):
@@ -686,7 +660,7 @@ boundary_violations = {}
 bridge_dependencies = {}
 bridge_consumers = {}
 public_quarantine_consumers = {}
-external_interface_violations = {}
+consumer_violations = {}
 cross_module_includes = 0
 cross_domain_includes = 0
 seen_files = set()
@@ -739,18 +713,14 @@ for scan_root in sorted(scan_roots):
                 if target_module is not None and target_module != source_module:
                     cross_module_includes += 1
                     if (
-                        target_module in protected_module_interfaces
-                        and not is_allowed_external_include(
-                            source_relative_path,
-                            source_module,
-                            target_module,
-                            resolved_path,
+                        target_module in allowed_consumers
+                        and not is_allowed_consumer(
+                            source_relative_path, source_module, target_module
                         )
                     ):
                         key = (source_relative_path, include)
-                        external_interface_violations[key] = (
-                            "only exact [allowed_includes] edges may include %s"
-                            % target_module
+                        consumer_violations[key] = (
+                            "only declared consumers may include %s" % target_module
                         )
                     if (
                         is_layer_scanned(source_relative_path)
@@ -927,8 +897,8 @@ print(
     % len(compatibility_source_artifacts)
 )
 print(
-    "protected-module external-interface check: violations %d"
-    % len(external_interface_violations)
+    "protected-module consumer check: violations %d"
+    % len(consumer_violations)
 )
 print(
     "public-quarantine consumer check: direct includes %d "
@@ -1001,13 +971,13 @@ if compatibility_source_artifacts:
     for path in sorted(compatibility_source_artifacts):
         print("   %s" % path)
 
-if external_interface_violations:
+if consumer_violations:
     failed = True
     print_records(
-        "[FAIL] undeclared protected-module external includes:",
+        "[FAIL] undeclared protected-module consumers:",
         [
-            (source, include, external_interface_violations[(source, include)])
-            for source, include in sorted(external_interface_violations)
+            (source, include, consumer_violations[(source, include)])
+            for source, include in sorted(consumer_violations)
         ],
     )
 

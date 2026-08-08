@@ -229,7 +229,7 @@ struct FetchStandbyPalfBaseInfoResDefaultTypeInternal {
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT FetchStandbyPalfBaseInfoResDefaultTypeInternal _FetchStandbyPalfBaseInfoRes_default_instance_;
 constexpr FetchLogReq::FetchLogReq(
   ::PROTOBUF_NAMESPACE_ID::internal::ConstantInitialized)
-  : start_scn_(uint64_t{0u})
+  : start_lsn_(uint64_t{0u})
   , max_bytes_(uint64_t{0u}){}
 struct FetchLogReqDefaultTypeInternal {
   constexpr FetchLogReqDefaultTypeInternal()
@@ -396,7 +396,7 @@ const uint32_t TableStruct_standbyservice_2eproto::offsets[] PROTOBUF_SECTION_VA
   ~0u,  // no _oneof_case_
   ~0u,  // no _weak_field_map_
   ~0u,  // no _inlined_string_donated_
-  PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, start_scn_),
+  PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, start_lsn_),
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogReq, max_bytes_),
   ~0u,  // no _has_bits_
   PROTOBUF_FIELD_OFFSET(::standbyservice::FetchLogRes, _internal_metadata_),
@@ -476,7 +476,7 @@ const char descriptor_table_protodef_standbyservice_2eproto[] PROTOBUF_SECTION_V
   "ndbyPalfBaseInfoReq\022\013\n\003buf\030\001 \001(\014\022\014\n\004size"
   "\030\002 \001(\004\"8\n\033FetchStandbyPalfBaseInfoRes\022\013\n"
   "\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004\"3\n\013FetchLogReq\022"
-  "\021\n\tstart_scn\030\001 \001(\004\022\021\n\tmax_bytes\030\002 \001(\004\"M\n"
+  "\021\n\tstart_lsn\030\001 \001(\004\022\021\n\tmax_bytes\030\002 \001(\004\"M\n"
   "\013FetchLogRes\022\013\n\003buf\030\001 \001(\014\022\014\n\004size\030\002 \001(\004\022"
   "\022\n\nsource_lsn\030\003 \001(\004\022\017\n\007end_scn\030\004 \001(\004*<\n\024"
   "FetchLSViewEntryType\022\023\n\017LS_META_PACKAGE\020"
@@ -4174,17 +4174,17 @@ FetchLogReq::FetchLogReq(::PROTOBUF_NAMESPACE_ID::Arena* arena,
 FetchLogReq::FetchLogReq(const FetchLogReq& from)
   : ::PROTOBUF_NAMESPACE_ID::Message() {
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
-  ::memcpy(&start_scn_, &from.start_scn_,
+  ::memcpy(&start_lsn_, &from.start_lsn_,
     static_cast<size_t>(reinterpret_cast<char*>(&max_bytes_) -
-    reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
+    reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
   // @@protoc_insertion_point(copy_constructor:standbyservice.FetchLogReq)
 }
 
 inline void FetchLogReq::SharedCtor() {
 ::memset(reinterpret_cast<char*>(this) + static_cast<size_t>(
-    reinterpret_cast<char*>(&start_scn_) - reinterpret_cast<char*>(this)),
+    reinterpret_cast<char*>(&start_lsn_) - reinterpret_cast<char*>(this)),
     0, static_cast<size_t>(reinterpret_cast<char*>(&max_bytes_) -
-    reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
+    reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
 }
 
 FetchLogReq::~FetchLogReq() {
@@ -4214,9 +4214,9 @@ void FetchLogReq::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  ::memset(&start_scn_, 0, static_cast<size_t>(
+  ::memset(&start_lsn_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&max_bytes_) -
-      reinterpret_cast<char*>(&start_scn_)) + sizeof(max_bytes_));
+      reinterpret_cast<char*>(&start_lsn_)) + sizeof(max_bytes_));
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -4226,10 +4226,10 @@ const char* FetchLogReq::_InternalParse(const char* ptr, ::PROTOBUF_NAMESPACE_ID
     uint32_t tag;
     ptr = ::PROTOBUF_NAMESPACE_ID::internal::ReadTag(ptr, &tag);
     switch (tag >> 3) {
-      // uint64 start_scn = 1;
+      // uint64 start_lsn = 1;
       case 1:
         if (PROTOBUF_PREDICT_TRUE(static_cast<uint8_t>(tag) == 8)) {
-          start_scn_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
+          start_lsn_ = ::PROTOBUF_NAMESPACE_ID::internal::ReadVarint64(&ptr);
           CHK_(ptr);
         } else
           goto handle_unusual;
@@ -4271,10 +4271,10 @@ uint8_t* FetchLogReq::_InternalSerialize(
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  // uint64 start_scn = 1;
-  if (this->_internal_start_scn() != 0) {
+  // uint64 start_lsn = 1;
+  if (this->_internal_start_lsn() != 0) {
     target = stream->EnsureSpace(target);
-    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_start_scn(), target);
+    target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::WriteUInt64ToArray(1, this->_internal_start_lsn(), target);
   }
 
   // uint64 max_bytes = 2;
@@ -4299,9 +4299,9 @@ size_t FetchLogReq::ByteSizeLong() const {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  // uint64 start_scn = 1;
-  if (this->_internal_start_scn() != 0) {
-    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_start_scn());
+  // uint64 start_lsn = 1;
+  if (this->_internal_start_lsn() != 0) {
+    total_size += ::PROTOBUF_NAMESPACE_ID::internal::WireFormatLite::UInt64SizePlusOne(this->_internal_start_lsn());
   }
 
   // uint64 max_bytes = 2;
@@ -4331,8 +4331,8 @@ void FetchLogReq::MergeFrom(const FetchLogReq& from) {
   uint32_t cached_has_bits = 0;
   (void) cached_has_bits;
 
-  if (from._internal_start_scn() != 0) {
-    _internal_set_start_scn(from._internal_start_scn());
+  if (from._internal_start_lsn() != 0) {
+    _internal_set_start_lsn(from._internal_start_lsn());
   }
   if (from._internal_max_bytes() != 0) {
     _internal_set_max_bytes(from._internal_max_bytes());
@@ -4357,9 +4357,9 @@ void FetchLogReq::InternalSwap(FetchLogReq* other) {
   ::PROTOBUF_NAMESPACE_ID::internal::memswap<
       PROTOBUF_FIELD_OFFSET(FetchLogReq, max_bytes_)
       + sizeof(FetchLogReq::max_bytes_)
-      - PROTOBUF_FIELD_OFFSET(FetchLogReq, start_scn_)>(
-          reinterpret_cast<char*>(&start_scn_),
-          reinterpret_cast<char*>(&other->start_scn_));
+      - PROTOBUF_FIELD_OFFSET(FetchLogReq, start_lsn_)>(
+          reinterpret_cast<char*>(&start_lsn_),
+          reinterpret_cast<char*>(&other->start_lsn_));
 }
 
 ::PROTOBUF_NAMESPACE_ID::Metadata FetchLogReq::GetMetadata() const {

@@ -23,6 +23,7 @@
 #include "standby/control/ob_standby_timestamp_provider.h"
 #include "standby/ob_standby_grpc_service.h"
 #include "standby/ob_standby_log_sync_service.h"
+#include "share/ob_server_info.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -36,6 +37,7 @@ using StandbyGrpcServer = obgrpc::ObGrpcServer;
 
 ObStandbyService::ObStandbyService()
   : is_inited_(false),
+    rpc_tls_enabled_(false),
     grpc_server_(nullptr),
     schema_refresh_trigger_()
 {
@@ -45,9 +47,11 @@ ObStandbyService::~ObStandbyService()
 {
 }
 
-int ObStandbyService::init(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task)
+int ObStandbyService::init(
+    ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task,
+    const bool rpc_tls_enabled)
 {
-  return instance_().init_(submit_schema_refresh_task);
+  return instance_().init_(submit_schema_refresh_task, rpc_tls_enabled);
 }
 
 int ObStandbyService::stop()
@@ -70,13 +74,20 @@ int ObStandbyService::start_rpc_service(const int rpc_port)
   return instance_().start_rpc_service_(rpc_port);
 }
 
+bool ObStandbyService::is_rpc_tls_enabled()
+{
+  return instance_().rpc_tls_enabled_;
+}
+
 ObStandbyService &ObStandbyService::instance_()
 {
   static ObStandbyService service;
   return service;
 }
 
-int ObStandbyService::init_(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task)
+int ObStandbyService::init_(
+    ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task,
+    const bool rpc_tls_enabled)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
@@ -84,7 +95,8 @@ int ObStandbyService::init_(ObStandbySubmitSchemaRefreshTask submit_schema_refre
   } else if (OB_ISNULL(grpc_server_ = OB_NEW(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC server", KR(ret));
-  } else if (FALSE_IT(register_standby_grpc_service(*grpc_server_))) {
+  } else if (OB_FAIL(register_standby_grpc_service(*grpc_server_))) {
+    LOG_WARN("failed to register standby gRPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(submit_schema_refresh_task))) {
     LOG_WARN("failed to init standby schema refresh trigger", KR(ret));
   } else if (OB_FAIL(ObStandbyLogSyncService::init())) {
@@ -92,6 +104,7 @@ int ObStandbyService::init_(ObStandbySubmitSchemaRefreshTask submit_schema_refre
     schema_refresh_trigger_.destroy();
   } else {
     share::bind_server_service<share::ObITenantRoleTransitionService>(&role_transition_service_);
+    rpc_tls_enabled_ = rpc_tls_enabled;
     is_inited_ = true;
   }
   if (OB_FAIL(ret) && nullptr != grpc_server_) {
@@ -152,6 +165,7 @@ void ObStandbyService::destroy_()
     OB_DELETE(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK, grpc_server_);
     grpc_server_ = nullptr;
   }
+  rpc_tls_enabled_ = false;
   is_inited_ = false;
 }
 
@@ -165,6 +179,33 @@ ObStandbyStartupProfile ObStandbyService::startup_profile(const bool embed_mode)
     profile.wait_timezone_usable_ = false;
   }
   return profile;
+}
+
+int ObStandbyService::restore_persisted_role()
+{
+  int ret = OB_SUCCESS;
+  share::ObServerInfo server_info;
+  if (OB_FAIL(share::ObServerInfoProxy::load_server_info(
+      GCTX.config_mgr_, GCTX.server_role_, server_info))) {
+    LOG_WARN("failed to restore persisted server role", KR(ret));
+  } else if (!server_info.is_valid()) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("persisted server role is invalid", KR(ret), K(server_info));
+  } else {
+    GCTX.server_role_ = server_info.server_role_.value();
+    share::set_server_role(GCTX.server_role_);
+    const bool promotion_in_progress = server_info.is_prepare_switching_to_primary_status()
+        || server_info.is_prepare_flashback_for_failover_to_primary_status()
+        || server_info.is_flashback_status()
+        || server_info.is_switching_to_primary_status();
+    if (promotion_in_progress && OB_FAIL(ObStandbyLogSyncService::pause())) {
+      LOG_WARN("failed to keep log import paused during promotion recovery",
+          KR(ret), K(server_info));
+    } else {
+      LOG_INFO("restored persisted server role before storage replay", K(server_info));
+    }
+  }
+  return ret;
 }
 
 int ObStandbyService::bootstrap()
@@ -190,16 +231,9 @@ int ObStandbyService::bootstrap()
 int ObStandbyService::activate_current_role()
 {
   int ret = OB_SUCCESS;
-  storage::ObLSService *ls_service = share::server_service<storage::ObLSService>();
-  if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is null while activating server role", KR(ret), K(GCTX.server_role_));
-  } else if (GCTX.is_standby_server()
-             && OB_FAIL(ObStandbyTimestampProvider::enable())) {
+  if (GCTX.is_standby_server()
+      && OB_FAIL(ObStandbyTimestampProvider::enable())) {
     LOG_WARN("failed to activate standby timestamp provider", KR(ret));
-  } else if (GCTX.is_standby_server()
-             && OB_FAIL(ls_service->switch_to_local_replay_mode())) {
-    LOG_WARN("failed to activate standby log replay mode", KR(ret), K(GCTX.server_role_));
   } else if (GCTX.is_standby_server()
              && OB_FAIL(ObStandbyTimestampProvider::prepare_for_startup())) {
     LOG_WARN("failed to prepare standby timestamp for startup", KR(ret), K(GCTX.server_role_));
@@ -223,13 +257,15 @@ int ObStandbyService::start_role_services(const bool embed_mode)
   return ret;
 }
 
-int ObStandbyService::wait_startup_ready(const bool embed_mode)
+int ObStandbyService::wait_startup_ready(
+    const bool embed_mode,
+    const std::function<bool()> &is_stopping)
 {
   int ret = OB_SUCCESS;
   const ObStandbyStartupProfile profile = startup_profile(embed_mode);
   if (profile.enable_log_sync_
       && GCTX.is_standby_server()
-      && OB_FAIL(ObStandbyLogSyncService::wait_startup_replay())) {
+      && OB_FAIL(ObStandbyLogSyncService::wait_startup_replay(is_stopping))) {
     LOG_WARN("failed to wait standby startup replay", KR(ret));
   }
   return ret;
@@ -244,12 +280,12 @@ int ObStandbyService::start_rpc_service_(const int rpc_port)
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    // Config reload can run before the Observer composition root finishes.
+    ret = OB_NOT_INIT;
   } else if (nullptr == grpc_server_) {
     ret = OB_ERR_UNEXPECTED;
   } else if (rpc_port <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(grpc_server_->start(rpc_port))) {
+  } else if (OB_FAIL(grpc_server_->start(rpc_port, rpc_tls_enabled_))) {
     LOG_WARN("failed to start standby gRPC service", KR(ret), K(rpc_port));
   }
   return ret;

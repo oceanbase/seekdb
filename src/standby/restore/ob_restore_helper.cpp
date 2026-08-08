@@ -46,57 +46,6 @@ static int64_t calc_ls_view_stream_timeout_us(const int64_t tablet_count)
   return timeout_us;
 }
 
-static const char *restore_task_type_strs[] = {
-  "STANDBY_RESTORE_TASK",
-};
-
-const char *ObRestoreTaskType::get_str(const TYPE &type)
-{
-  STATIC_ASSERT(static_cast<int64_t>(MAX_RESTORE_TASK_TYPE) == ARRAYSIZEOF(restore_task_type_strs),
-                    "restore task type str len is mismatch");
-  const char *str = nullptr;
-  if (type < 0 || type >= MAX_RESTORE_TASK_TYPE) {
-    str = "UNKNOWN_TYPE";
-  } else {
-    str = restore_task_type_strs[type];
-  }
-  return str;
-}
-
-ObRestoreTask::ObRestoreTask()
-  : task_id_(),
-    type_(ObRestoreTaskType::MAX_RESTORE_TASK_TYPE),
-    src_info_()
-{
-}
-
-ObRestoreTask::~ObRestoreTask()
-{
-}
-
-void ObRestoreTask::reset()
-{
-  task_id_.reset();
-  type_ = ObRestoreTaskType::MAX_RESTORE_TASK_TYPE;
-  src_info_.reset();
-}
-
-bool ObRestoreTask::is_valid() const
-{
-  return task_id_.is_valid()
-      && ObRestoreTaskType::is_valid(type_)
-      && src_info_.is_valid();
-}
-
-DEF_TO_STRING(ObIRestoreHelper)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV("type", "ObIRestoreHelper");
-  J_OBJ_END();
-  return pos;
-}
-
 ObStandbyRestoreHelper::ObStandbyRestoreHelper()
   : is_inited_(false),
     task_id_(),
@@ -150,7 +99,9 @@ int ObStandbyRestoreHelper::init(
   return ret;
 }
 
-int ObStandbyRestoreHelper::copy_for_task(common::ObIAllocator &allocator, ObIRestoreHelper *&helper) const
+int ObStandbyRestoreHelper::copy_for_task(
+    common::ObIAllocator &allocator,
+    ObStandbyRestoreHelper *&helper) const
 {
   int ret = OB_SUCCESS;
   helper = nullptr;

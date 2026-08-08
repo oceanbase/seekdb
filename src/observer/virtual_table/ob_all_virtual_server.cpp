@@ -221,11 +221,11 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(resource_info.log_disk_in_use_);
           break;
         case RPC_CERT_EXPIRE_TIME:
-          cur_row_.cells_[i].set_int(obgrpc::ob_grpc_is_rpc_tls_enabled()
+          cur_row_.cells_[i].set_int(GCONF.enable_rpc_tls
               ? obgrpc::get_rpc_cert_expire_time() : 0);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(obgrpc::ob_grpc_is_rpc_tls_enabled());
+          cur_row_.cells_[i].set_int(GCONF.enable_rpc_tls);
           break;
         case MEMORY_LIMIT:
           // Keep the legacy column name for virtual-table compatibility.

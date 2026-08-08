@@ -32,7 +32,7 @@ ObStandbyRestoreMacroBlockWriter::ObStandbyRestoreMacroBlockWriter()
    tenant_id_(OB_INVALID_ID),
    ls_id_(),
    tablet_id_(),
-   dag_id_(),
+   copy_id_(),
    sstable_param_(nullptr),
    reader_(NULL),
    index_block_rebuilder_(nullptr),
@@ -45,7 +45,7 @@ int ObStandbyRestoreMacroBlockWriter::init(
     const uint64_t tenant_id,
     const share::ObLSID &ls_id,
     const common::ObTabletID &tablet_id,
-    const ObDagId &dag_id,
+    const share::ObTaskId &copy_id,
     const ObMigrationSSTableParam *sstable_param,
     ObICopyMacroBlockReader *reader,
     ObIndexBlockRebuilder *index_block_rebuilder,
@@ -58,7 +58,7 @@ int ObStandbyRestoreMacroBlockWriter::init(
   } else if (OB_INVALID_ID == tenant_id
 	          || !ls_id.is_valid()
             || !tablet_id.is_valid()
-	          || dag_id.is_invalid()
+	          || copy_id.is_invalid()
             || OB_ISNULL(sstable_param)
             || OB_ISNULL(reader)
             || OB_ISNULL(index_block_rebuilder)
@@ -73,7 +73,7 @@ int ObStandbyRestoreMacroBlockWriter::init(
     tenant_id_ = tenant_id;
     ls_id_ = ls_id;
     tablet_id_ = tablet_id;
-    dag_id_.set(dag_id);
+    copy_id_.set(copy_id);
     sstable_param_ = sstable_param;
     reader_ = reader;
     index_block_rebuilder_ = index_block_rebuilder;
@@ -113,8 +113,7 @@ int ObStandbyRestoreMacroBlockWriter::check_macro_block_(
 }
 
 int ObStandbyRestoreMacroBlockWriter::process(
-    blocksstable::ObMacroBlocksWriteCtx &copied_ctx,
-    ObIStandbyRestoreDagNetCtx &standby_restore_dag_net_ctx)
+    blocksstable::ObMacroBlocksWriteCtx &copied_ctx)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
@@ -140,19 +139,16 @@ int ObStandbyRestoreMacroBlockWriter::process(
     STORAGE_LOG(WARN, "failed to init macro meta row", K(ret));
   } else {
     STORAGE_LOG(INFO, "macro block writer begin", K_(tenant_id), K_(ls_id), K_(tablet_id),
-        K_(dag_id), KPC_(sstable_param));
+        K_(copy_id), KPC_(sstable_param));
     while (OB_SUCC(ret)) {
       if (OB_FAIL(LOCAL_DEVICE_INSTANCE.check_space_full(0 /*required_size*/))) {
         STORAGE_LOG(ERROR, "failed to check disk space", K(ret), K_(tenant_id), K_(ls_id),
-            K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+            K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         break;
-      } else if (OB_FAIL(dag_yield())) {
-        STORAGE_LOG(ERROR, "fail to yield dag", K(ret), K_(tenant_id), K_(ls_id),
-            K_(tablet_id), K_(dag_id), KPC_(sstable_param));
       } else if (OB_FAIL(reader_->get_next_macro_block(read_data))) {
         if (OB_ITER_END != ret) {
           LOG_ERROR("failed to get next macro block", K(ret), K_(tenant_id), K_(ls_id),
-              K_(tablet_id), K_(dag_id), KPC_(sstable_param), KP_(reader));
+              K_(tablet_id), K_(copy_id), KPC_(sstable_param), KP_(reader));
         } else {
           LOG_INFO("get next macro block end");
           ret = OB_SUCCESS;
@@ -161,19 +157,19 @@ int ObStandbyRestoreMacroBlockWriter::process(
       } else if (!read_data.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(ERROR, "invalid read data", K(ret), K(read_data), K_(tenant_id),
-            K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+            K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
       } else if (read_data.is_macro_meta()) {
         const MacroBlockId &macro_id = read_data.macro_meta_->get_macro_id();
         if (ObIndexBlockRowHeader::DEFAULT_IDX_ROW_MACRO_ID == macro_id) {
           ret = OB_INVALID_ARGUMENT;
           STORAGE_LOG(ERROR, "invalid macro id (id is default)", K(ret), K(macro_id),
-              K(read_data), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+              K(read_data), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else if (OB_FAIL(copied_ctx.add_macro_block_id(macro_id))) {
           STORAGE_LOG(ERROR, "fail to add macro id", K(ret), K(macro_id), K_(tenant_id),
-              K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+              K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else if (OB_FAIL(index_block_rebuilder_->append_macro_row(*read_data.macro_meta_))) {
           STORAGE_LOG(ERROR, "failed to append macro row", K(ret), KPC(read_data.macro_meta_),
-              K_(tenant_id), K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+              K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else {
           copied_ctx.increment_old_block_count();
           ++reuse_count;
@@ -185,18 +181,18 @@ int ObStandbyRestoreMacroBlockWriter::process(
         if (OB_FAIL(check_macro_block_(data))) {
           STORAGE_LOG(ERROR, "failed to check macro block, fatal error", K(ret), K(write_count),
               K(data), K(macro_block_id), K_(tenant_id), K_(ls_id), K_(tablet_id),
-              K_(dag_id), KPC_(sstable_param));
+              K_(copy_id), KPC_(sstable_param));
           ret = OB_INVALID_DATA;// overwrite ret
         } else if (!write_handle.is_empty() && OB_FAIL(write_handle.wait())) {
           STORAGE_LOG(ERROR, "failed to wait write handle", K(ret), K(write_info),
-              K(macro_block_id), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(dag_id),
+              K(macro_block_id), K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_id),
               KPC_(sstable_param));
         } else if (OB_FAIL(set_macro_write_info_(macro_block_id, write_info, opt)))  {
           LOG_ERROR("failed to set macro write info", K(ret), K(macro_block_id), K_(tenant_id),
-              K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+              K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else if (OB_FAIL(write_macro_block_(opt, write_info, write_handle, copied_ctx, data))) {
           LOG_ERROR("failed to write macro block", K(ret), K(opt), K(macro_block_id),
-              K_(tenant_id), K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+              K_(tenant_id), K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
         } else {
           ObTaskController::get().allow_next_syslog();
           ++write_count;
@@ -206,7 +202,7 @@ int ObStandbyRestoreMacroBlockWriter::process(
       } else {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(ERROR, "invalid read data", K(ret), K(read_data), K_(tenant_id),
-            K_(ls_id), K_(tablet_id), K_(dag_id), KPC_(sstable_param));
+            K_(ls_id), K_(tablet_id), K_(copy_id), KPC_(sstable_param));
       }
     }
 

@@ -98,34 +98,18 @@ int ObStandbyBootstrapService::check_bootstrap_source(
     const ObStandbyBootstrapParam &param,
     common::ObAddr &primary_addr)
 {
-  const bool allow_missing_source = true;
-  return get_bootstrap_source_(param, allow_missing_source, primary_addr);
-}
-
-int ObStandbyBootstrapService::get_bootstrap_source_(
-    const ObStandbyBootstrapParam &param,
-    const bool allow_missing_source,
-    common::ObAddr &primary_addr)
-{
   int ret = OB_SUCCESS;
   primary_addr.reset();
 
-  if (!param.is_standby_cluster_) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("standby bootstrap called but not standby cluster", KR(ret), K(param.self_));
-  } else if (!param.self_.is_valid()) {
+  if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid standby bootstrap self address", KR(ret), K(param.self_));
+    LOG_WARN("invalid standby bootstrap parameter", KR(ret), K(param.self_),
+        K(param.is_standby_cluster_), KP(param.bandwidth_throttle_));
   } else if (OB_FAIL(share::ObStandbySourceUtil::get_first_service_addr(
                  GCONF.log_restore_source.str(), primary_addr))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      if (allow_missing_source) {
-        ret = OB_SUCCESS;
-        LOG_INFO("standby bootstrap continues without log_restore_source", K(param.self_));
-      } else {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("standby log source is not configured for bootstrap", KR(ret), K(param.self_));
-      }
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("standby log source is not configured for bootstrap", KR(ret), K(param.self_));
     } else {
       LOG_WARN("failed to get standby bootstrap source", KR(ret), K(param.self_));
     }

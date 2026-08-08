@@ -45,6 +45,7 @@ ObLSService::ObLSService()
   : is_inited_(false),
     is_running_(false),
     is_stopped_(false),
+    startup_append_mode_(true),
     ls_(nullptr),
     ls_allocator_(),
     change_lock_(common::ObLatchIds::LS_CHANGE_LOCK)
@@ -270,13 +271,20 @@ int ObLSService::post_create_ls_(const bool is_restore, ObLS *ls)
   int ret = OB_SUCCESS;
   bool need_online = false;
   if (OB_FAIL(ls->check_ls_need_online(need_online))) {
-  } else if (need_online &&
-             OB_FAIL(ls->online_without_lock())) {
-    LOG_ERROR("ls start failed", K(ret));
-  } else if (is_restore) {
+  } else if (need_online) {
+    if ((is_restore || !startup_append_mode_)
+        && OB_FAIL(ls->online_in_replay_mode_without_lock())) {
+      LOG_ERROR("failed to start ls in replay mode", K(ret), K(is_restore), K_(startup_append_mode));
+    } else if (!is_restore && startup_append_mode_
+               && OB_FAIL(ls->online_without_lock())) {
+      LOG_ERROR("failed to start ls in append mode", K(ret));
+    }
+  }
+  if (OB_SUCC(ret) && is_restore) {
     if (OB_FAIL(ls->set_start_restore_state())) {
     }
-  } else if (OB_FAIL(ls->set_start_work_state())) {
+  } else if (OB_SUCC(ret) && OB_FAIL(ls->set_start_work_state())) {
+    LOG_ERROR("ls set start work state failed", KR(ret), KPC(ls));
   }
 
   return ret;
@@ -496,7 +504,7 @@ int ObLSService::get_ls(ObLS *&ls)
   return ret;
 }
 
-int ObLSService::switch_to_local_append_mode()
+int ObLSService::switch_to_local_append_mode(const int64_t deadline_us)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -506,15 +514,18 @@ int ObLSService::switch_to_local_append_mode()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local log stream is null", K(ret));
   } else {
-    ObLSLockGuard lock_ls(ls);
-    if (OB_FAIL(ls->switch_to_local_append_mode_())) {
+    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
+    if (!lock_ls.locked()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("lock local log stream for append mode timed out", K(ret), K(deadline_us));
+    } else if (OB_FAIL(ls->switch_to_local_append_mode_(deadline_us))) {
       LOG_WARN("failed to switch local log stream to append mode", K(ret));
     }
   }
   return ret;
 }
 
-int ObLSService::switch_to_local_replay_mode()
+int ObLSService::switch_to_local_replay_mode(const int64_t deadline_us)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -524,8 +535,11 @@ int ObLSService::switch_to_local_replay_mode()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local log stream is null", K(ret));
   } else {
-    ObLSLockGuard lock_ls(ls);
-    if (OB_FAIL(ls->switch_to_local_replay_mode_())) {
+    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
+    if (!lock_ls.locked()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("lock local log stream for replay mode timed out", K(ret), K(deadline_us));
+    } else if (OB_FAIL(ls->switch_to_local_replay_mode_(deadline_us))) {
       LOG_WARN("failed to switch local log stream to replay mode", K(ret));
     }
   }

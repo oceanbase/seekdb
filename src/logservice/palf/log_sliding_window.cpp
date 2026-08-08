@@ -352,7 +352,9 @@ int LogSlidingWindow::submit_log(const char *buf,
   return ret;
 }
 
-int LogSlidingWindow::submit_imported_group(const char *buf,
+int LogSlidingWindow::submit_imported_group(const LSN &source_lsn,
+                                            const SCN &source_scn,
+                                            const char *buf,
                                             const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
@@ -366,10 +368,12 @@ int LogSlidingWindow::submit_imported_group(const char *buf,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(buf) || buf_len <= LogGroupEntryHeader::HEADER_SER_SIZE
+  } else if (!source_lsn.is_valid() || !source_scn.is_valid()
+             || OB_ISNULL(buf) || buf_len <= LogGroupEntryHeader::HEADER_SER_SIZE
              || buf_len > MAX_LOG_BUFFER_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid imported group", K(ret), K_(self), KP(buf), K(buf_len));
+    PALF_LOG(WARN, "invalid imported group", K(ret), K_(self), K(source_lsn),
+        K(source_scn), KP(buf), K(buf_len));
   } else if (OB_FAIL(header.deserialize(buf, buf_len, pos))) {
     PALF_LOG(WARN, "failed to deserialize imported group header", K(ret), K_(self));
   } else if (pos != LogGroupEntryHeader::HEADER_SER_SIZE
@@ -379,13 +383,18 @@ int LogSlidingWindow::submit_imported_group(const char *buf,
     PALF_LOG(ERROR, "invalid imported group data", K(ret), K_(self), K(buf_len), K(header));
   } else if (OB_FAIL(lsn_allocator_.get_curr_end_lsn(curr_end_lsn))) {
     PALF_LOG(WARN, "failed to get local palf end", K(ret), K_(self));
+  } else if (curr_end_lsn != source_lsn) {
+    ret = OB_STATE_NOT_MATCH;
+    PALF_LOG(ERROR, "imported group lsn is not continuous with local palf", K(ret),
+        K_(self), K(curr_end_lsn), K(source_lsn), K(source_scn), K(header));
+  } else if (header.get_max_scn() != source_scn) {
+    ret = OB_INVALID_DATA;
+    PALF_LOG(ERROR, "imported group scn does not match transport metadata", K(ret),
+        K_(self), K(source_lsn), K(source_scn), K(header));
   } else if (header.get_log_id() != get_max_log_id() + 1) {
     ret = OB_STATE_NOT_MATCH;
     PALF_LOG(ERROR, "imported group is not continuous with local palf", K(ret), K_(self),
         K(curr_end_lsn), K(header), "max_log_id", get_max_log_id());
-  } else if (OB_FAIL(header.update_committed_end_lsn(curr_end_lsn))) {
-    PALF_LOG(WARN, "failed to rebase imported group on local palf", K(ret), K_(self),
-        K(curr_end_lsn), K(header));
   } else if (!can_submit_larger_log_(header.get_log_id())) {
     ret = OB_EAGAIN;
   } else if (OB_FAIL(wait_sw_slot_ready_(header.get_log_id()))) {

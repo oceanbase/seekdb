@@ -72,7 +72,6 @@ public:
   //
   // Used to update header checksum
   void update_header_checksum();
-  int update_committed_end_lsn(const LSN &lsn);
   void update_accumulated_checksum(int64_t accumulated_checksum);
 
   NEED_SERIALIZE_AND_DESERIALIZE;

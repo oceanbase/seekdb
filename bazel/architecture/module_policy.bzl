@@ -90,7 +90,6 @@ ALLOWED_MODULE_DEPS = {
         "share",
     ],
     "standby": [
-        "data_plane",
         "logservice",
         "oblib",
         "share",

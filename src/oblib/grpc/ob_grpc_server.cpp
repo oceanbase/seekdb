@@ -91,14 +91,22 @@ ObGrpcServer::ObGrpcServer()
 {
 }
 
-void ObGrpcServer::register_service(grpc::Service *service)
+int ObGrpcServer::register_service(grpc::Service *service)
 {
-  if (NULL != service) {
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(service)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("cannot register a null gRPC service", K(ret));
+  } else if (NULL != server_.get()) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("cannot register gRPC service after server start", K(ret));
+  } else {
     services_.push_back(service);
   }
+  return ret;
 }
 
-int ObGrpcServer::start(int port)
+int ObGrpcServer::start(int port, const bool tls_enabled)
 {
   int ret = OB_SUCCESS;
   if (NULL != server_.get()) {
@@ -122,7 +130,7 @@ int ObGrpcServer::start(int port)
     builder.SetMaxSendMessageSize(MAX_MESSAGE_SIZE);
 
     std::shared_ptr<grpc::ServerCredentials> creds;
-    if (ob_grpc_is_rpc_tls_enabled()) {
+    if (tls_enabled) {
       creds = create_server_credentials(cert_provider_);
       if (!creds) {
         ret = OB_INIT_FAIL;

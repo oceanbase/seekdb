@@ -7,7 +7,6 @@ cc_library(
     srcs = glob(["**/*.cpp"]),
     hdrs = glob(["**/*.h"]),
     deps = [
-        "//src/data_plane:data_plane_api_interface",
         "//src/logservice:append_callback_interface",
         "//src/logservice:logservice",
         "//src/oblib/grpc:grpc_runtime",

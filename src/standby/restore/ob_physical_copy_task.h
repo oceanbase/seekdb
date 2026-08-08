@@ -20,7 +20,6 @@
 #include "lib/thread/ob_dynamic_thread_pool.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/allocator/page_arena.h"
-#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
@@ -29,7 +28,6 @@
 #include "ob_standby_restore_reader.h"
 #include "storage/blocksstable/ob_sstable.h"
 #include "ob_storage_restore_struct.h"
-#include "ob_standby_restore_dag.h"
 #include "ob_physical_copy_ctx.h"
 #include "ob_sstable_copy_finish_task.h"
 #include "ob_tablet_copy_finish_task.h"
@@ -38,14 +36,14 @@ namespace oceanbase
 {
 namespace restore
 {
-class ObIRestoreHelper;
+class ObStandbyRestoreHelper;
 }
 namespace storage
 {
 
 class ObSSTableCopyFinishTask;
 class ObStandbyRestoreMacroBlockWriter;
-class ObPhysicalCopyTask : public share::ObITask
+class ObPhysicalCopyTask
 {
 public:
   ObPhysicalCopyTask();
@@ -53,8 +51,7 @@ public:
   int init(
       ObPhysicalCopyCtx *copy_ctx,
       ObSSTableCopyFinishTask *finish_task);
-  virtual int process() override;
-  virtual int generate_next_task(ObITask *&next_task) override;
+  int process();
   VIRTUAL_TO_STRING_KV(K("ObPhysicalCopyFinishTask"), KP(this), KPC(copy_ctx_));
 private:
   class ObCopyMacroBlockHelperReader final : public ObICopyMacroBlockReader
@@ -63,7 +60,7 @@ private:
     ObCopyMacroBlockHelperReader();
     virtual ~ObCopyMacroBlockHelperReader() override;
     int init(
-        restore::ObIRestoreHelper *proto_helper,
+        restore::ObStandbyRestoreHelper *proto_helper,
         const ObITable::TableKey &table_key,
         const ObCopyMacroRangeInfo &range_info,
         const share::SCN &backfill_tx_scn,
@@ -74,7 +71,7 @@ private:
 
   private:
     common::ObArenaAllocator allocator_;
-    restore::ObIRestoreHelper *helper_;
+    restore::ObStandbyRestoreHelper *helper_;
     bool is_inited_;
     DISALLOW_COPY_AND_ASSIGN(ObCopyMacroBlockHelperReader);
   };
