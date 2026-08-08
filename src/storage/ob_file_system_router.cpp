@@ -23,7 +23,6 @@
 namespace oceanbase {
 using namespace common;
 using namespace share;
-using namespace rootserver;
 using namespace blocksstable;
 namespace storage {
 /**

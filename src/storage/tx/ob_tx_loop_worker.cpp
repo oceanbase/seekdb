@@ -16,7 +16,7 @@
 
 #include "storage/tx/ob_tx_loop_worker.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -146,11 +146,11 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc,
   ObLS *tenant_ls = nullptr;
   ObLS *cur_ls_ptr = nullptr;
 
-  if (OB_ISNULL(share::g_mp->ls_service())) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "[Tx Loop Worker] ls service is null", K(ret), KP(share::g_mp->ls_service()));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] get transaction storage failed", K(ret), KP(share::g_mp->ls_service()));
+    TRANS_LOG(WARN, "[Tx Loop Worker] ls service is null", K(ret), KP(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
+    TRANS_LOG(WARN, "[Tx Loop Worker] get transaction storage failed", K(ret), KP(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()));
   } else {
     cur_ls_ptr = tenant_ls;
     SCN min_start_scn = SCN::invalid_scn();
@@ -244,7 +244,7 @@ void ObTxLoopWorker::refresh_runtime_config_()
 {
   int ret = OB_SUCCESS;
   ObTransService *txs = NULL;
-  if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+  if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
   } else {
@@ -274,7 +274,7 @@ void ObTxLoopWorker::update_max_commit_ts_()
     } else if (OB_UNLIKELY(!snapshot.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "invalid snapshot from gts", K(snapshot));
-    } else if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+    } else if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "unexpected transaction service", K(ret), KP(txs));
     } else {

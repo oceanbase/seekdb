@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_table_access_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -383,7 +383,7 @@ int ObTempTableAccessOp::locate_interm_result(int64_t result_id)
   // The current operation of obtaining intermediate results and
   // the operation of the background thread of dumping intermediate results
   // are mutually exclusive
-  if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->atomic_get_interm_result_info(
        dtl_int_key, result_info_guard_))) {
     LOG_WARN("failed to create row store.", K(ret));
   } else if (FALSE_IT(result_info = result_info_guard_.result_info_)) {

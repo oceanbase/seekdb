@@ -23,9 +23,9 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"     // TO_STRING_KV
 #include "share/ob_errno.h"                 // OB_PARTIAL_LOG
-#include "log_define.h"                     // LogItemType
+#include "share/log/palf/log_define.h"                     // LogItemType
 #include "log_block_header.h"               // LogBlockHeader
-#include "lsn.h"                            // LSN
+#include "share/log/palf/lsn.h"                            // LSN
 #include "log_reader_utils.h"               // ReadBuf
 #include "log_entry.h"                      // LogEntry
 #include "log_group_entry.h"                // LogGroupEntry

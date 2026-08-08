@@ -15,13 +15,15 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 #include "nio.h"
 #include "observer/mysql/ob_mysql_result_set.h"
-#include "observer/mysql/ob_mysql_rust_row.h"
+#include "query/protocol/ob_mysql_rust_row.h"
 #include "observer/mysql/obmp_utils.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "rpc/obmysql/packet/ompk_auth_switch.h"
+#include "share/rc/ob_server_runtime.h"
+#include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_field.h"
@@ -159,7 +161,7 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
                   row.build_cell_value(i, scratch_allocator, values.at(i)))) {
             LOG_WARN("failed to build MySQL Row semantic cell", K(ret), K(i));
           } else if (OB_FAIL(
-                         build_nio_mysql_cell_view(values.at(i), views.at(i)))) {
+                         query::build_nio_mysql_cell_view(values.at(i), views.at(i)))) {
             LOG_WARN("failed to build Rust MySQL Row cell view", K(ret), K(i));
           }
         }
@@ -169,8 +171,8 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
           nio_mysql_row_view view = {};
           view.cells = &views.at(0);
           view.cell_count = views.count();
-          if (OB_FAIL(get_nio_mysql_row_protocol(row.get_protocol_type(),
-                                                 view.protocol))) {
+          if (OB_FAIL(query::get_nio_mysql_row_protocol(row.get_protocol_type(),
+                                                        view.protocol))) {
             encode_ret = ret;
             LOG_WARN("invalid MySQL Row protocol", K(ret), "protocol",
                      row.get_protocol_type());
@@ -752,11 +754,15 @@ int ObMPPacketSender::send_error_packet(int err,
 int ObMPPacketSender::revert_session(ObSQLSessionInfo *sess_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.session_mgr_) || OB_ISNULL(sess_info)) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()) || OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("session mgr or session info is null", K_(GCTX.session_mgr), K(sess_info), K(ret));
+    LOG_ERROR(
+        "session mgr or session info is null",
+        KP(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()),
+        K(sess_info),
+        K(ret));
   } else {
-    GCTX.session_mgr_->revert_session(sess_info);
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(sess_info);
   }
   return ret;
 }
@@ -764,10 +770,10 @@ int ObMPPacketSender::revert_session(ObSQLSessionInfo *sess_info)
 int ObMPPacketSender::get_session(ObSQLSessionInfo *&sess_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(conn_) || OB_ISNULL(GCTX.session_mgr_)) {
+  if (OB_ISNULL(conn_) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn or sessoin mgr is NULL", K(ret), KP(conn_), K(GCTX.session_mgr_));
-  } else if (OB_FAIL(GCTX.session_mgr_->get_session(conn_->sessid_, sess_info))) {
+    LOG_WARN("conn or session mgr is NULL", K(ret), KP(conn_), K(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->get_session(conn_->sessid_, sess_info))) {
     LOG_WARN("get session fail", K(ret), "sessid", conn_->sessid_);
   } else {
     NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid());

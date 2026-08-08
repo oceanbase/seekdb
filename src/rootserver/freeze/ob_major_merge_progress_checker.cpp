@@ -288,6 +288,7 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
           LOG_WARN("failed to push back tablet ids", KR(tmp_ret), K(cur_tablet_ids));
         } else if (finish_tablet_ids_.count() < MAX_BATCH_INSERT_COUNT) {
         } else if (OB_TMP_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
+              GCTX.meta_db_pool_,
               get_compaction_scn_val(), finish_tablet_ids_,
               ObTabletRuntimeInfo::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {
           LOG_WARN("fail to batch update report_scn", KR(tmp_ret), K_(finish_tablet_ids));
@@ -1082,7 +1083,12 @@ int ObMajorMergeProgressChecker::generate_tablet_status_map()
   int ret = OB_SUCCESS;
   ObTabletRuntimeInfo tablet_info;
   ObCompactionTabletMetaIterator iter(!is_extra_check_round(), get_compaction_scn_val());
-  if (OB_FAIL(iter.init(batch_size_mgr_.get_inner_table_scan_batch_size()))) {
+  if (OB_ISNULL(GCTX.meta_db_pool_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("meta database pool is null", KR(ret));
+  } else if (OB_FAIL(iter.init(
+      *GCTX.meta_db_pool_,
+      batch_size_mgr_.get_inner_table_scan_batch_size()))) {
     LOG_WARN("failed to init iter", KR(ret));
   }
   while (OB_SUCC(ret) && !stop_) {

@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_stat_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
-#include "observer/ob_server.h"
+#include "storage/access/ob_global_iterator_pool.h"
+#include "storage/compaction/ob_partition_merge_policy.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -294,9 +296,9 @@ int ObRuntimeSysStat::refresh(const bool force_refresh /*=false*/)
   int ret = OB_SUCCESS;
 
   if (!REACH_THREAD_TIME_INTERVAL(300_s) && !force_refresh) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_cpu(min_cpu_cnt_, max_cpu_cnt_))) {
-    LOG_WARN("failed to get runtime CPU count", K(ret));
   } else {
+    min_cpu_cnt_ = share::server_runtime()->min_cpu();
+    max_cpu_cnt_ = share::server_runtime()->max_cpu();
     memory_hold_ = lib::get_allocator_memory_hold();
     memory_budget_ = lib::get_memory_budget();
   }
@@ -884,7 +886,7 @@ void ObTabletStatMgr::refresh_queuing_mode()
   int64_t update_schema_cnt = 0;
   int64_t schema_version = OB_INVALID_VERSION;
 
-  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -1007,7 +1009,7 @@ void ObTabletStatMgr::TabletStatUpdater::runTimerTask()
 {
   mgr_.process_stats();
   mgr_.refresh_sys_stat();
-  ObGlobalIteratorPool *global_iter_pool = share::g_mp->global_iterator_pool();
+  ObGlobalIteratorPool *global_iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
   if (nullptr != global_iter_pool && global_iter_pool->is_valid()) {
     global_iter_pool->wash();
   }

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Compile: 步骤与 .github/workflows/buildbase 一致（init → build.sh $TARGET → cd build_* && make）。
+# Compile: initialize and build the Bazel release Unity target.
 # Required env: GITHUB_WORKSPACE, SEEKDB_TASK_DIR
-# Optional: RELEASE_MODE, FORWARDING_HOST, MAKE, MAKE_ARGS
-set -e
+# Optional: FORWARDING_HOST, MAKE_ARGS
+
+if [[ -f ~/.bashrc ]]; then
+  source ~/.bashrc
+fi
+
+set -euo pipefail
 
 WORKSPACE="${GITHUB_WORKSPACE:?}"
 TASK_DIR="${SEEKDB_TASK_DIR:?}"
 
-# 调试：便于排查 k8s/container 下 No build.sh
+# Diagnostics for container/workspace path issues.
 echo "[compile.sh] WORKSPACE=$WORKSPACE"
 echo "[compile.sh] pwd=$(pwd)"
 ls -la "$WORKSPACE/" 2>/dev/null | head -20 || true

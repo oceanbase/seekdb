@@ -1,2 +1,0 @@
-storage_unittest(test_key_wrapper)
-storage_unittest(test_deadlock_utility)

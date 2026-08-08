@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "observer/mysql/obsm_conn_callback.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "lib/random/ob_mysql_random.h"
 #include "observer/omt/ob_server_runtime.h"
@@ -56,7 +57,7 @@ static int sm_conn_init(ObSMConnection& conn)
   int ret = OB_SUCCESS;
   int crt_id_ret = OB_SUCCESS;
   uint32_t sessid = 0;
-  crt_id_ret =  GCTX.session_mgr_->create_sessid(sessid);
+  crt_id_ret = ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_sessid(sessid);
   if (OB_UNLIKELY(OB_SUCCESS != crt_id_ret && OB_ERR_CON_COUNT_ERROR != crt_id_ret)) {
     ret = crt_id_ret;
     LOG_WARN("fail to create sessid", K(crt_id_ret), K(sessid));
@@ -78,7 +79,7 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   if (OB_FAIL(sm_conn_init(conn))) {
     LOG_WARN("init conn fail", K(ret));
   } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
-                 share::SYS_VAR_AUTOCOMMIT, autocommit))) {
+                 *GCTX.schema_service_, share::SYS_VAR_AUTOCOMMIT, autocommit))) {
     LOG_WARN("get global autocommit failed", K(ret));
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
     ret = OB_ERR_UNEXPECTED;
@@ -114,7 +115,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
       {
         int tmp_ret = OB_SUCCESS;
         sql::ObSQLSessionInfo *sess_info = NULL;
-        sql::ObSessionGetterGuard guard(*GCTX.session_mgr_, conn.sessid_);
+        sql::ObSessionGetterGuard guard(*::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>(), conn.sessid_);
         if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = guard.get_session(sess_info)))) {
           LOG_WARN_RET(tmp_ret, "fail to get session", K(tmp_ret), K(conn.sessid_));
         } else if (OB_ISNULL(sess_info)) {
@@ -174,7 +175,7 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
       && !conn.is_sess_free_.load(std::memory_order_acquire)
       && ObSMConnection::INITIAL_SESSID != conn.sessid_) {
     sql::ObSQLSessionInfo *sess_info = NULL;
-    sql::ObSessionGetterGuard guard(*(GCTX.session_mgr_), conn.sessid_);
+    sql::ObSessionGetterGuard guard(*::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>(), conn.sessid_);
     if (OB_FAIL(guard.get_session(sess_info))) {
       LOG_WARN("fail to get session", K(conn.sessid_));
     } else if (OB_ISNULL(sess_info)) {

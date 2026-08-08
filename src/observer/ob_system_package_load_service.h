@@ -18,7 +18,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/task/ob_timer.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "observer/ob_system_package_load_task.h"
 #include "share/scn.h"
 

@@ -30,6 +30,7 @@ class ObTabletID;
 namespace storage
 {
 class ObLS;
+class ObLSService;
 class ObTabletHandle;
 class ObLSTabletService;
 }
@@ -108,7 +109,9 @@ class ObCompactionScheduleIterator : public ObBasicMergeScheduleIterator
 public:
   ObCompactionScheduleIterator(const bool is_major);
   ~ObCompactionScheduleIterator() { reset(); }
-  int build_iter(const int64_t schedule_batch_size);
+  int build_iter(
+      const int64_t schedule_batch_size,
+      storage::ObLSService &ls_service);
   void set_report_scn_flag() { report_scn_flag_ = true; }
   bool need_report_scn() const { return report_scn_flag_; }
   void set_tablet_get_mode(const storage::ObMDSGetTabletMode mode) { tablet_get_mode_ = mode; }

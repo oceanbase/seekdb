@@ -18,7 +18,6 @@
 
 #include "share/ob_max_id_fetcher.h"
 
-#include "share/ob_server_struct.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_max_id_cache.h"
 
@@ -65,12 +64,21 @@ lib::ObMutex ObMaxIdFetcher::mutex_;
 
 ObMaxIdFetcher::ObMaxIdFetcher(ObMySQLProxy &proxy)
   : proxy_(proxy),
+    max_id_cache_(nullptr),
+    group_id_(0)
+{
+}
+
+ObMaxIdFetcher::ObMaxIdFetcher(ObMySQLProxy &proxy, ObIMaxIdCache *max_id_cache)
+  : proxy_(proxy),
+    max_id_cache_(max_id_cache),
     group_id_(0)
 {
 }
 
 ObMaxIdFetcher::ObMaxIdFetcher(ObMySQLProxy &proxy, const int32_t group_id)
   : proxy_(proxy),
+    max_id_cache_(nullptr),
     group_id_(group_id)
 {
 }
@@ -115,6 +123,31 @@ int ObMaxIdFetcher::convert_id_type(
       LOG_WARN("not supported id type", KR(ret), K(src));
       break;
     }
+  }
+  return ret;
+}
+
+int ObMaxIdFetcher::fetch_max_id_from_cache_(ObMaxIdType id_type,
+    uint64_t &max_id, const uint64_t size)
+{
+  int ret = OB_SUCCESS;
+  uint64_t min_id = OB_INVALID_ID;
+  bool use_cache = false;
+  if (OB_ISNULL(max_id_cache_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(check_use_max_id_cache_(id_type, use_cache))) {
+    LOG_WARN("failed to check use max id cache", KR(ret), K(id_type));
+  } else if (OB_UNLIKELY(!use_cache)) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(max_id_cache_->fetch_max_id(id_type, min_id, size))) {
+    LOG_WARN("failed to fetch max id", KR(ret), K(id_type), K(size));
+  } else if (FALSE_IT(max_id = min_id + size - 1)) {
+  } else if (max_id < min_id) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("id out of range", KR(ret), K(min_id), K(size), K(max_id));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(check_id_valid(id_type, max_id))) {
+    LOG_WARN("invalid max id", KR(ret), K(id_type), K(max_id));
   }
   return ret;
 }
@@ -287,8 +320,6 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
   }
   return ret;
 }
-
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state) -> src/rootserver/ob_root_utils.cpp
 
 int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
                                   ObMaxIdType max_id_type, const uint64_t max_id)

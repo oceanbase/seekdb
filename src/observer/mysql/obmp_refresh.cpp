@@ -26,7 +26,7 @@ using namespace obmysql;
 
 namespace observer
 {
-ObMPRefresh::ObMPRefresh(const ObGlobalContext &gctx)
+ObMPRefresh::ObMPRefresh(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx)
 {
 }

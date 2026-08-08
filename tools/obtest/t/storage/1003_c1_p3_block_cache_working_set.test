@@ -1,0 +1,98 @@
+# owner: haijing.zhj
+# description: case about block cache working set
+
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+sleep 2;
+
+CREATE RESOURCE UNIT test_unit MAX_CPU 4, MAX_MEMORY '10G', MAX_IOPS 100000, MAX_DISK_SIZE '1G', MAX_SESSION_NUM 64;
+eval CREATE RESOURCE POOL test_pool UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+eval CREATE TENANT test_tenant RESOURCE_POOL_LIST = ('test_pool') set ob_tcp_invited_nodes='%';
+
+connect (conn1,$ip,root@test_tenant,,oceanbase,$port);
+connection conn1;
+use test;
+create table test_table (pk int, value int, str_val varchar(8192)) compression = 'none';
+
+let $cnt = 80000;
+let $i = 0;
+let $str = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+--disable_query_log
+--disable_result_log
+while ($i < $cnt)
+{
+  eval insert into test_table (pk, value, str_val) values ($i, $i, $str);
+  inc $i;
+}
+--disable_query_log
+--enable_result_log
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+connection conn2;
+update __all_unit_config set max_memory = max_memory / 20, min_memory = min_memory / 20 where name = 'test_unit';
+alter system reload unit;
+sleep 20;
+
+connection conn1;
+select count(*) from test_table;
+
+connection conn2;
+let $cache_size1 = query_get_value(select cache_store_size from __all_virtual_kvcache_info where tenant_id = 1001 and cache_name ='user_block_cache', cache_store_size, 1);
+
+connection conn1;
+select count(*) from test_table;
+
+connection conn2;
+let $cache_size2 = query_get_value(select cache_store_size from __all_virtual_kvcache_info where tenant_id = 1001 and cache_name ='user_block_cache', cache_store_size, 1);
+
+connection conn1;
+let $i = 0;
+let $cnt = 5;
+while ($i < $cnt)
+{
+  select count(*) from test_table;
+  inc $i;
+}
+
+connection conn2;
+let $cache_size3 = query_get_value(select cache_store_size from __all_virtual_kvcache_info where tenant_id = 1001 and cache_name ='user_block_cache', cache_store_size, 1);
+
+connection conn1;
+select count(*) from test_table;
+
+connection conn2;
+let $cache_size4 = query_get_value(select cache_store_size from __all_virtual_kvcache_info where tenant_id = 1001 and cache_name ='user_block_cache', cache_store_size, 1);
+
+let $working_set_limit = query_get_value(select 512 * 1024 * 1024 * 0.05 + 16 * 1024 * 1024 + 2 * 1024 * 1024 as working_set_limit, working_set_limit, 1);
+echo $cache_size1;
+echo $cache_size2;
+echo $cache_size3;
+echo $cache_size4;
+if ($cache_size1 < $working_set_limit)
+{
+  echo pass;
+}
+
+if ($cache_size1 < $cache_size2)
+{
+  echo pass;
+}
+
+if ($cache_size2 < $cache_size3)
+{
+  echo pass;
+}
+
+if ($cache_size3 == $cache_size4)
+{
+  echo pass;
+}

@@ -18,10 +18,12 @@
 
 #include "ob_all_virtual_sql_stat.h"
 #include "lib/utility/ob_mod_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_context.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
+#include "observer/ob_server_runtime_access.h"
+#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 
 using namespace oceanbase::common;
@@ -99,7 +101,7 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
       ret = OB_ITER_END;
     } else {
       ObReqTimeGuard req_timeinfo_guard;
-      ObPlanCache* plan_cache = share::g_mp->plan_cache();
+      ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_NOT_NULL(plan_cache)) {
         ObGetAllSqlStatCacheIdOp op(&sql_stat_cache_id_array_);
         if (OB_FAIL(plan_cache->foreach_cache_obj(op))) {
@@ -110,8 +112,8 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
       }
 
       if (OB_SUCC(ret)) {
-        if (OB_NOT_NULL(GCTX.session_mgr_)) {
-          GCTX.session_mgr_->for_each_session(*this);
+        if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
+          ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->for_each_session(*this);
         }
       }
       done_ = true;
@@ -143,7 +145,11 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
     {
       if (!key.is_valid()) {
         // do nothing
-      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value())) {
+      } else if (OB_ISNULL(get_observer_sql_engine())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("query runtime environment is not bound", K(ret));
+      } else if (OB_FAIL(executing_sql_stat_record.record_sqlstat_end_value(
+                     get_observer_sql_engine()->get_query_runtime_environment()))) {
         LOG_WARN("failed to record sqlstat end value in query virtual table", K(ret));
       } else if (OB_SUCC(tmp_sql_stat_map_.get_refactored(key, value))) {
         if (OB_FAIL(value->sum_stat_value(executing_sql_stat_record))) {
@@ -200,7 +206,7 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
     } else {
       if (sql_stat_cache_id_array_idx_ < sql_stat_cache_id_array_.count()) {
         ObReqTimeGuard req_timeinfo_guard;
-        ObPlanCache* plan_cache = share::g_mp->plan_cache();
+        ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
         if (OB_NOT_NULL(plan_cache)) {
           uint64_t cur_sql_stat_cache_id = sql_stat_cache_id_array_.at(sql_stat_cache_id_array_idx_);
           sql_stat_cache_id_array_idx_++;

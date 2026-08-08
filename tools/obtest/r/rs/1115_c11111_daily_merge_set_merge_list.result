@@ -1,0 +1,45 @@
+ob1=OBI(cluster=2:2:2:2:2,proxy_num=0,init_unit_cpu=0, locality=HZ:HZ:SH:SH:SZ);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time = '10s';
+ERROR HY000: Invalid config
+ERROR HY000: Invalid config
+ERROR HY000: Invalid config
+ob1.mysql create table oceanbase.test1(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+select value2 from __all_virtual_server_event_history where module like '%merge%' and event = "start_merge" and value1 = 2;
+value2
+z1
+z2
+z3
+z4
+z5
+ob1.mysql_p select info from __all_zone where zone="" and name = "merge_list";
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+select value2 from __all_virtual_server_event_history where module like '%merge%' and event = "start_merge" and value1 = 3;
+value2
+z1
+z2
+z3
+z4
+z5
+ob1.mysql create table oceanbase.test(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+select value2 from __all_virtual_server_event_history where module like '%merge%' and event = "start_merge" and value1 = 4;
+value2
+z3
+z4
+z1
+z2
+z5
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+ob1.mysql alter system stop zone 'z2';
+ob1.mysql alter system delete zone 'z2';
+alter system add zone 'z2';
+show warnings;
+Level	Code	Message
+ob1.mysql alter system major freeze;
+ob1.check_version 6;

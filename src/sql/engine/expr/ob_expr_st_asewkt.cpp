@@ -115,7 +115,7 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
     ObString wkb = gis_datum->get_string();
     if (is_null_result) {
       res.set_null();
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *gis_datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *gis_datum,
                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,
@@ -157,7 +157,11 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
     ObString wkb = objs[0].get_string();
     if (is_null_result) {
       result.set_null();
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, objs[0], wkb))) {
+    } else if (OB_ISNULL(expr_ctx.exec_ctx_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("execution context is null", K(ret));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   *expr_ctx.exec_ctx_, &tmp_allocator, objs[0], wkb))) {
       LOG_WARN("fail to get real data", K(ret), K(objs[0]), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,
                                                   res_wkt,
@@ -165,7 +169,7 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
                                                   maxdecimaldigits))) {
       LOG_WARN("eval geo to ewkt failed", K(ret), K(wkb), K(maxdecimaldigits));
     } else {
-      ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
+      common::ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
       if (OB_FAIL(text_result.init(res_wkt.length(), expr_ctx.calc_buf_))) {
         LOG_WARN("init lob result failed");
       } else if (OB_FAIL(text_result.append(res_wkt.ptr(), res_wkt.length()))) {

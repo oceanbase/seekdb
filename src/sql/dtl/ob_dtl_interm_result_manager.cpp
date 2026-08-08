@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_interm_result_manager.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include(free within sql)
-#include "share/rc/ob_module_provider.h"
-#include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
+#include "data_plane/tmp_file/ob_tmp_file.h"
+#include "share/ob_shared_timer.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase;
 using namespace common;
@@ -268,7 +268,7 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
     // The code here is mainly for the use of the temp_table.
     // For the px module,
     // the dir_id has already been set in the previous access_mem_profile.
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
+    if (OB_FAIL(data_plane::tmp_file_alloc_dir(dir_id_))) {
       LOG_WARN("allocate file directory failed", K(ret));
     } else {
       DTL_IR_STORE_DO(*result_info, set_dir_id, dir_id_);
@@ -413,10 +413,10 @@ ObDTLIntermResultManager::~ObDTLIntermResultManager()
 }
 
 int ObDTLIntermResultManager::generate_monitor_info_rows(
-    observer::ObDTLIntermResultMonitorInfoGetter &monitor_info_getter)
+    ObIDTLIntermResultConsumer &consumer)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(interm_res_map_.foreach_refactored(monitor_info_getter))) {
+  if (OB_FAIL(interm_res_map_.foreach_refactored(consumer))) {
     LOG_WARN("fail to generate monitor info array from map",
               K(ret), K(interm_res_map_.size()));
     if (OB_SIZE_OVERFLOW == ret) {
@@ -650,7 +650,7 @@ int ObDTLIntermResultManager::server_module_start(ObDTLIntermResultManager *&dtl
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != dtl_interm_result_manager)) {
-    if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->schedule(
         dtl_interm_result_manager->get_gc_task(),
         ObDTLIntermResultGCTask::REFRESH_INTERVAL, true))) {
       LOG_WARN("failed to scheduler flush all task", K(ret));
@@ -667,7 +667,7 @@ void ObDTLIntermResultManager::server_module_stop(ObDTLIntermResultManager *&dtl
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager) &&
       dtl_interm_result_manager->get_gc_task().is_start_) {
-    share::g_mp->shared_timer()->cancel_task(dtl_interm_result_manager->get_gc_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->cancel_task(dtl_interm_result_manager->get_gc_task());
   }
 }
 
@@ -675,7 +675,7 @@ void ObDTLIntermResultManager::server_module_wait(ObDTLIntermResultManager *&dtl
 {
   if (OB_LIKELY(nullptr != dtl_interm_result_manager &&
       dtl_interm_result_manager->get_gc_task().is_start_)) {
-    share::g_mp->shared_timer()->wait_task(dtl_interm_result_manager->get_gc_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->wait_task(dtl_interm_result_manager->get_gc_task());
   }
 }
 

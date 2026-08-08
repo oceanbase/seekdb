@@ -1,0 +1,11 @@
+ob1=OBI(cluster=2:2,proxy_num=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+drop database if exists db_create;
+create database db_create;
+use db_create;
+create table t1(c1 int);
+use information_schema;
+select table_schema, table_name, table_type from tables where table_schema = 'db_create' and table_name = 't1';
+table_schema	table_name	table_type
+db_create	t1	BASE TABLE

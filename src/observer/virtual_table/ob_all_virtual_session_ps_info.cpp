@@ -18,6 +18,7 @@
 
 #include "sql/resolver/ob_resolver_utils.h"
 
+#include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
 
 using namespace oceanbase;
@@ -52,16 +53,19 @@ int ObAllVirtualSessionPsInfo::inner_get_next_row()
 int ObAllVirtualSessionPsInfo::inner_open()
 {
   int ret = OB_SUCCESS;
+
+
+
   session_ids_.reset();
-  if (OB_ISNULL(GCTX.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->for_each_session(all_sql_session_iterator_))) {
-    SERVER_LOG(WARN, "failed to read each session", K(ret));
-  } else {
-    int64_t cnt = 0;
-    GCTX.session_mgr_->get_session_count(cnt);
-    SERVER_LOG(WARN, "all virtual ssinfo get_session_count", K(cnt));
+  if (OB_SUCC(ret)) {
+    ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
+    if (OB_FAIL(session_mgr.for_each_session(all_sql_session_iterator_))) {
+      SERVER_LOG(WARN, "failed to read each session", K(ret));
+    } else {
+      int64_t cnt = 0;
+      session_mgr.get_session_count(cnt);
+      SERVER_LOG(WARN, "all virtual ssinfo get_session_count", K(cnt));
+    }
   }
 
   return ret;
@@ -279,13 +283,9 @@ int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
   sess_info = nullptr;
   SessionID session_id = 0;
   if (OB_NOT_NULL(last_attach_session_info_)) {
-    if (OB_ISNULL(GCTX.session_mgr_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
-    } else {
-      GCTX.session_mgr_->revert_session(last_attach_session_info_);
-      last_attach_session_info_ = nullptr;
-    }
+    OBSERVER.get_sql_session_mgr().revert_session(
+        last_attach_session_info_);
+    last_attach_session_info_ = nullptr;
   }
   if (OB_SUCC(ret) && OB_ISNULL(cur_session_id_list_)) {
     cur_session_id_list_ = &session_ids_;
@@ -304,10 +304,8 @@ int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
         if (OB_FAIL(cur_session_id_list_->pop_back(session_id))) {
           SERVER_LOG(WARN, "failed to get session id", K(ret));
         } else {
-          if (OB_ISNULL(GCTX.session_mgr_)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
-          } else if (OB_FAIL(GCTX.session_mgr_->get_session(session_id, sess_info))) {
+          if (OB_FAIL(OBSERVER.get_sql_session_mgr().get_session(
+                  session_id, sess_info))) {
             if (OB_ENTRY_NOT_EXIST == ret) {
               ret = OB_SUCCESS;
             }
@@ -324,15 +322,10 @@ int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
 
 void ObAllVirtualSessionPsInfo::ObSessionInfoIterator::reset()
 {
-  int ret = OB_SUCCESS;
   if (OB_NOT_NULL(last_attach_session_info_)) {
-    if (OB_ISNULL(GCTX.session_mgr_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "GCTX.session_mgr_ is NULL", K(ret));
-    } else {
-      GCTX.session_mgr_->revert_session(last_attach_session_info_);
-      last_attach_session_info_ = nullptr;
-    }
+    OBSERVER.get_sql_session_mgr().revert_session(
+        last_attach_session_info_);
+    last_attach_session_info_ = nullptr;
   }
   cur_session_id_list_ = nullptr;
   

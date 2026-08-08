@@ -1,0 +1,19 @@
+load("//bazel:defs.bzl", "seekdb_module_cc_test")
+
+package(default_visibility = ["//visibility:private"])
+
+seekdb_module_cc_test(
+    name = "query_tests",
+    srcs = glob(["**/*.cpp"]),
+    test_hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.ipp",
+        ],
+        allow_empty = True,
+    ),
+    module_interface = "//src/query:query_unit_test_interface",
+    shard_count = 1,
+)

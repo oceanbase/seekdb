@@ -1,0 +1,78 @@
+## owner:nijia.nj
+## owner group:sql2
+## description:
+# 测试自增列cache长度是否可以通过租户级全局变量控制
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+
+ob1.mysql_root alter system set enable_auto_leader_switch = True;
+sleep 5;
+
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn,$l_ip,root@obtest,,oceanbase,$l_port);
+connection conn;
+
+create database db primary_zone = 'z1';
+create table db.t1(c1 int primary key auto_increment, c2 int);
+let $insert = insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+let $query = select * from db.t1;
+
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;
+
+
+alter database db primary_zone = 'z2';
+set global auto_increment_cache_size = 100;
+sleep 10;
+
+# need reconnect to make variable valid
+connect (conn2,$l_ip,root@obtest,,oceanbase,$l_port);
+connection conn2;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+connect (conn_sys,$l_ip,root@sys,,oceanbase,$l_port);
+let $table_id=query_get_value(select table_id from oceanbase.__all_virtual_column where column_name = 'c1', table_id, 1);
+let $column_id=query_get_value(select column_id from oceanbase.__all_virtual_column where column_name = 'c1', column_id, 1);
+eval select sequence_value from  oceanbase.__all_sequence_v2 where (sequence_key, column_id) in (('$table_id','$column_id'));
+
+connection conn2;
+eval $query;
+
+alter database db primary_zone = 'z3';
+sleep 10;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+connect (conn3,$l_ip,root@obtest,,oceanbase,$l_port);
+connection conn3;
+echo $leader;
+eval $insert;
+eval $query;
+
+alter database db primary_zone = 'z1';
+set global auto_increment_cache_size = 1;
+sleep 10;
+
+# need reconnect to make variable valid
+connect (conn4,$l_ip,root@obtest,,oceanbase,$l_port);
+connection conn4;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;
+# specify autoinc-col value
+insert into db.t1(c1, c2) values(2000000, 0);
+eval $query;
+
+alter database db primary_zone = 'z1';
+sleep 10;
+
+connect (conn5,$l_ip,root@obtest,,oceanbase,$l_port);
+connection conn5;
+let $leader = deploy_get_value(ob1.get_leader obtest:db:t1:0);
+echo $leader;
+eval $insert;
+eval $query;

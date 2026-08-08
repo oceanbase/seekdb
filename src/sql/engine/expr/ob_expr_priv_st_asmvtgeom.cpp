@@ -121,7 +121,7 @@ int ObExprPrivSTAsMVTGeom::get_bounds(lib::MemoryContext &mem_ctx, ObGeometry &g
 }
 
 int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx &ctx,
-    MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1, ObGeometry *&geo2, 
+    MultimodeAlloctor &allocator, bool &is_null_res, ObGeometry *&geo1, ObGeometry *&geo2,
     int32_t &extent, int32_t &buffer, bool &clip_geom)
 {
   int ret = OB_SUCCESS;
@@ -131,7 +131,7 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
   ObExpr *arg2 = expr.args_[1];
   ObObjType type1 = arg1->datum_meta_.type_;
   ObObjType type2 = arg2->datum_meta_.type_;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
 
@@ -152,11 +152,11 @@ int ObExprPrivSTAsMVTGeom::process_input_geometry(const ObExpr &expr, ObEvalCtx 
     ObString wkb1 = datum1->get_string();
     ObString wkb2 = datum2->get_string();
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_,
             allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb1))) {
       LOG_WARN(
           "fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()), K(wkb1));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
                    *datum2,
                    arg2->datum_meta_,
                    arg2->obj_meta_.has_lob_header(),
@@ -323,7 +323,7 @@ int ObExprPrivSTAsMVTGeom::split_geo_to_basic_type(
       LOG_WARN("failed to transform gc to tree", K(ret));
     } else {
       geo = tree_visitor.get_geometry();
-    } 
+    }
   } else {
     geo = &in_geo;
   }
@@ -520,7 +520,7 @@ int ObExprPrivSTAsMVTGeom::eval_priv_st_asmvtgeom(const ObExpr &expr, ObEvalCtx 
     LOG_WARN("check geo empty failed", K(ret));
   } else if (is_geo_empty) {
     is_null_res = true;
-  } 
+  }
 
   if (OB_SUCC(ret)) {
     if (is_null_res) {

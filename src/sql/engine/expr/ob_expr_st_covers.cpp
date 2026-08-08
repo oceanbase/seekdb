@@ -79,7 +79,7 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   uint32_t srid2;
   bool is_geo1_empty = false;
   bool is_geo2_empty = false;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   bool is_geo1_cached = false;
   bool is_geo2_cached = false;
@@ -116,7 +116,7 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get session", K(ret));
-  } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(srs_guard, srid1, srs))) {
+  } else if (!is_geo1_cached && !is_geo2_cached && OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, srid1, srs))) {
     LOG_WARN("fail to get srs item", K(ret), K(srid1));
   } else if (ObGeoTypeUtil::is_geo1_dimension_higher_than_geo2(type2, type1)) {
     res.set_bool(false);
@@ -184,9 +184,9 @@ int ObExprPrivSTCovers::eval_st_covers_common(const ObExpr &expr, ObEvalCtx &ctx
           } else {
             res.set_bool(result);
           }
-        } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(*geo1, *geo2, T_FUN_SYS_ST_COVERS)) {
+        } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(*geo1, *geo2, ObGeoPredicate::COVERS)) {
           bool result = false;
-          if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(geo1, geo2, T_FUN_SYS_ST_COVERS, result))) {
+          if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(geo1, geo2, ObGeoPredicate::COVERS, result))) {
             LOG_WARN("fail to get res.", K(ret));
           } else {
             res.set_bool(result);
@@ -223,10 +223,10 @@ int ObExprPrivSTCovers::eval_st_covers(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     res.set_null();
   } else if (FALSE_IT(wkb1 = gis_datum1->get_string())) {
   } else if (FALSE_IT(wkb2 = gis_datum2->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum1,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum1,
             gis_arg1->datum_meta_, gis_arg1->obj_meta_.has_lob_header(), wkb1))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum2,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum2,
             gis_arg2->datum_meta_, gis_arg2->obj_meta_.has_lob_header(), wkb2))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb2));
   } else if (OB_FAIL(ObExprPrivSTCovers::eval_st_covers_common(expr, ctx,

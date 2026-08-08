@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/basic/ob_expr_values_op.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
 namespace oceanbase
@@ -364,7 +365,8 @@ int ObExprValuesOp::eval_values_op_dynamic_cast_to_lob(ObExpr &real_src_expr,
       ObExprStrResAlloc res_alloc(*dst_expr, eval_ctx_);
       // need adjust lob header, since lob to lob may not handle headers
       if (is_lob_storage(src_obj_meta.get_type()) &&
-          OB_FAIL(ob_adjust_lob_datum(*datum,
+          OB_FAIL(ob_adjust_lob_datum(eval_ctx_.exec_ctx_,
+                                      *datum,
                                       src_obj_meta,
                                       dst_expr->obj_meta_,
                                       eval_ctx_.exec_ctx_.get_eval_tmp_allocator()))) {

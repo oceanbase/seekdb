@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_SERVER_THREAD_HELPER_H
 #define OCEANBASE_ROOTSERVER_OB_SERVER_THREAD_HELPER_H
 #include "lib/thread/ob_reentrant_thread.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "lib/lock/ob_thread_cond.h"
 
 

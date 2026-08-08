@@ -19,7 +19,7 @@
 
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "log_define.h"                                // block_id_t ...
+#include "share/log/palf/log_define.h"                                // block_id_t ...
 #include "share/io/ob_io_struct.h"                     // ObIOInfo
 
 // This block contains the key class for writing a log into stable storage

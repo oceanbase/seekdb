@@ -19,13 +19,15 @@
 
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
-#include "sql/engine/ob_physical_plan.h"
+#include "sql/das/ob_das_define.h"
+#include "sql/ob_sql_utils.h"
 
 namespace oceanbase
 {
 namespace common
 {
 class ObIAllocator;
+struct ObSimpleBatch;
 }
 
 namespace sql
@@ -33,6 +35,9 @@ namespace sql
 class ObBatchEstTasks;
 class ObCostTableScanSimpleInfo;
 class ObDASTabletLoc;
+class ObOpSpec;
+class ObPhysicalPlan;
+class ObTableScanSpec;
 typedef common::hash::ObHashMap<int64_t, int64_t,
         common::hash::NoPthreadDefendMode> AutoDopHashMap;
 

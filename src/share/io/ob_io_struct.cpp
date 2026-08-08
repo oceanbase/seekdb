@@ -17,9 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
-#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
-#include "share/rc/ob_server_runtime.h"  // SERVER_ID, previously hidden behind a transitive include(free within share)
 #include "share/ob_io_device_helper.h"
+#include "share/ob_force_print_log.h"
+#include "lib/objectpool/ob_concurrency_objpool.h"
+#include "lib/utility/ob_sort.h"
+#include "lib/utility/ob_tracepoint.h"
 
 
 #ifdef _WIN32
@@ -80,7 +82,6 @@ inline int getrusage(int who, struct rusage *usage)
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
-using namespace oceanbase::storage;
 
 static int clear_io_hang_errsim;
 
@@ -514,45 +515,6 @@ int ObIOGroupUsage::calc(double &avg_size, double &avg_iops, int64_t &avg_bw,
   return ret;
 }
 
-/******************             CpuUsage              **********************/
-ObCpuUsage::ObCpuUsage()
-  : last_usage_(),
-    last_ts_(0)
-{
-  MEMSET(&last_usage_, 0, sizeof(last_usage_));
-}
-
-ObCpuUsage::~ObCpuUsage()
-{
-
-}
-
-void ObCpuUsage::get_cpu_usage(double &avg_usage_percentage)
-{
-  const int64_t new_ts = ObTimeUtility::fast_current_time();
-  struct rusage new_usage;
-  int sys_errno = 0;
-  if (0 != (sys_errno = getrusage(RUSAGE_SELF, &new_usage))) {
-    if (REACH_TIME_INTERVAL(1000L * 1000L * 10)) {
-      LOG_WARN_RET(OB_ERR_SYS, "get cpu usage failed", K(sys_errno));
-    }
-  } else {
-    if (last_ts_ > 0 && new_ts > last_ts_) {
-      const int64_t sched_period_us = new_ts - last_ts_;
-      const int64_t cpu_time_us = (new_usage.ru_utime.tv_sec - last_usage_.ru_utime.tv_sec) * 1000000L
-                             + (new_usage.ru_utime.tv_usec - last_usage_.ru_utime.tv_usec)
-                             + (new_usage.ru_stime.tv_sec - last_usage_.ru_stime.tv_sec) * 1000000L
-                             + (new_usage.ru_stime.tv_usec - last_usage_.ru_stime.tv_usec);
-      avg_usage_percentage = 1.0 * cpu_time_us / sched_period_us * 100;
-    } else {
-      avg_usage_percentage = 0;
-    }
-    last_usage_ = new_usage;
-    last_ts_ = new_ts;
-  }
-}
-
-
 /******************         IOMemStat and IOMemStats           **********************/
 
 
@@ -655,83 +617,6 @@ int ObIOMemStats::dec(const ObIORequest &req)
   }
   return ret;
 }
-
-/******************             IOTuner              **********************/
-ObIOTuner::ObIOTuner()
-  : lib::Threads(1), is_inited_(false), cpu_usage_()
-{
-
-}
-
-ObIOTuner::~ObIOTuner()
-{
-  destroy();
-}
-
-int ObIOTuner::init()
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(is_inited_)) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
-  } else if (OB_FAIL(lib::Threads::init())) {
-    LOG_WARN("init io tuner thread failed", K(ret));
-  } else if (OB_FAIL(lib::Threads::start())) {
-    LOG_WARN("start io scheduler failed", K(ret));
-  } else {
-    is_inited_ = true;
-  }
-  if (OB_UNLIKELY(!is_inited_)) {
-    destroy();
-  }
-  return ret;
-}
-
-
-
-void ObIOTuner::stop()
-{
-  if (is_inited_) {
-    lib::Threads::stop();
-  }
-}
-
-void ObIOTuner::wait()
-{
-  if (is_inited_) {
-    lib::Threads::wait();
-  }
-}
-
-void ObIOTuner::destroy()
-{
-  if (is_inited_) {
-    stop();
-    wait();
-    lib::Threads::destroy();
-    is_inited_ = false;
-  }
-}
-
-void ObIOTuner::run1()
-{
-  int ret = OB_SUCCESS;
-  const int64_t thread_id = get_thread_idx();
-  set_thread_name("IO_TUNING", thread_id);
-  LOG_INFO("io tuner thread started");
-  while (!has_set_stop()) {
-    // print interval must <= 1s, for ensuring real_iops >= 1 in gv$ob_io_quota.
-    if (REACH_TIME_INTERVAL(1000L * 1000L * 1L)) {
-      OB_IO_MANAGER.print_status();
-      if (OB_FAIL(send_detect_task())) {
-        LOG_WARN("fail to send detect task", K(ret));
-      }
-    }
-    ob_usleep(100 * 1000, true/*is_idle_sleep*/); // 100ms
-  }
-  LOG_INFO("io tuner thread stopped");
-}
-
 
 /******************             ObIOGroupQueues              **********************/
 ObIOGroupQueues::ObIOGroupQueues(ObIAllocator &allocator)
@@ -1317,7 +1202,9 @@ int ObSyncIOChannel::submit(ObIORequest &req)
 {
   int ret = OB_SUCCESS;
   const int64_t current_ts = ObTimeUtility::current_time();
-  const int64_t io_depth = get_io_depth(min(max(GMEMCONF.get_server_memory_budget() / 5, static_cast<int64_t>(500LL * 1024LL * 1024LL)), static_cast<int64_t>(4LL * 1024LL * 1024LL * 1024LL)));
+  const int64_t io_depth = get_io_depth(min(max(OB_IO_MANAGER.get_server_memory_limit() / 5,
+      static_cast<int64_t>(500LL * 1024LL * 1024LL)),
+      static_cast<int64_t>(4LL * 1024LL * 1024LL * 1024LL)));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));

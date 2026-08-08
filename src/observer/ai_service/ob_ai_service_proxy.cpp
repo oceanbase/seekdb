@@ -15,6 +15,7 @@
  */
 
 #include "observer/ai_service/ob_ai_service_proxy.h"
+#include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_max_id_fetcher.h"

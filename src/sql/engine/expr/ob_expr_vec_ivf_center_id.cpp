@@ -19,9 +19,8 @@
 #include "sql/engine/expr/ob_expr_vec_ivf_center_id.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "observer/vector_index/ob_vector_index_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -87,7 +86,7 @@ int ObExprVecIVFCenterID::calc_center_id(
     char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
     ObString str(buf_len, 0, buf);
     ObCenterId center_id(1, 0);
-    if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
+    if (OB_FAIL(share::ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
       LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
     } else {
       expr_datum.set_string(str);
@@ -99,27 +98,27 @@ int ObExprVecIVFCenterID::calc_center_id(
     common::ObArenaAllocator tmp_allocator("IVFExprCID", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
-    ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;
+    share::ObVectorIndexDistAlgorithm dis_algo = share::VIDA_MAX;
     ObSEArray<float*, 64> centers;
     bool contain_null = false;
     ObIArrayType *arr = NULL;
     int64_t center_idx = 0; // use 0 as center idx if vector is null
     uint64_t center_prefix = 0;
-    if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
+    if (OB_FAIL(share::ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
       LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
     } else {
-      ObVectorKmeansClusterHelper helper;
-      ObVectorNormalizeInfo norm_info;
+      share::ObVectorKmeansClusterHelper helper;
+      share::ObVectorNormalizeInfo norm_info;
       if (OB_FAIL(helper.get_nearest_probe_centers(
           reinterpret_cast<float*>(arr->get_data()),
           arr->size(),
           centers,
           1/*nprobe*/,
           tmp_allocator,
-          VIDA_COS != dis_algo ? nullptr: &norm_info))) {
+          share::VIDA_COS != dis_algo ? nullptr: &norm_info))) {
         LOG_WARN("failed to get nearest center", K(ret));
       } else if (OB_FAIL(helper.get_center_idx(0, center_idx))) {
         LOG_WARN("failed to get center idx", K(ret));
@@ -130,7 +129,7 @@ int ObExprVecIVFCenterID::calc_center_id(
       char *buf = expr.get_str_res_mem(eval_ctx, buf_len);
       ObString str(buf_len, 0, buf);
       ObCenterId center_id(center_prefix, center_idx);
-      if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
+      if (OB_FAIL(share::ObVectorKmeansClusterHelper::set_center_id_to_string(center_id, str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {
         expr_datum.set_string(str);
@@ -142,4 +141,3 @@ int ObExprVecIVFCenterID::calc_center_id(
 
 }  // namespace sql
 }  // namespace oceanbase
-

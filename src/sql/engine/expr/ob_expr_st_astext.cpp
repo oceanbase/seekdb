@@ -97,7 +97,7 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   int num_args = expr.arg_cnt_;
   bool is_null_result = false;
   ObString res_wkt;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;
   ObGeometry *geo = NULL;
@@ -112,10 +112,10 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   } else if (gis_datum->is_null()) {
     is_null_result = true;
   } else if (FALSE_IT(wkb = gis_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *gis_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *gis_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
-  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(tmp_allocator,
+  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(ctx, tmp_allocator,
       wkb, srs_guard, srs, geo, func_name, true, false))) {
     LOG_WARN("fail to create geo", K(ret), K(wkb));
   } else if (OB_NOT_NULL(srs)){
@@ -137,7 +137,7 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     } else if (FALSE_IT(dstr = datum->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
               expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), dstr))) {
       LOG_WARN("fail to get real string data", K(ret), K(dstr));
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(dstr, func_name, axis_order))) {

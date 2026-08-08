@@ -954,7 +954,7 @@ int ObStaticEngineCG::generate_spec(
 }
 
 void ObStaticEngineCG::set_murmur_hash_func(
-     ObHashFunc &hash_func, const ObExprBasicFuncs *basic_funcs_)
+     ObHashFunc &hash_func, const common::ObDatumBasicFuncs *basic_funcs_)
 {
   hash_func.hash_func_ = basic_funcs_->murmur_hash_v2_;
   hash_func.batch_hash_func_ = basic_funcs_->murmur_hash_v2_batch_;
@@ -3335,6 +3335,15 @@ int ObStaticEngineCG::generate_popular_values_hash(
     common::ObFixedArray<uint64_t, common::ObIAllocator> &popular_values_hash)
 {
   int ret = OB_SUCCESS;
+  ObExecContext *exec_ctx = OB_ISNULL(opt_ctx_)
+      ? nullptr
+      : opt_ctx_->get_exec_ctx();
+  ObSQLSessionInfo *session = OB_ISNULL(opt_ctx_)
+      ? nullptr
+      : opt_ctx_->get_session_info();
+  common::ObILobReadService *lob_read_service = OB_ISNULL(exec_ctx)
+      ? nullptr
+      : exec_ctx->get_lob_read_service();
   popular_values_hash.set_capacity(popular_values_expr.count());
   popular_values_hash.set_allocator(&phy_plan_->get_allocator());
   // we allocate a temp buffer for datum, it's enough to hold any datatype
@@ -3342,13 +3351,22 @@ int ObStaticEngineCG::generate_popular_values_hash(
   char buf[OBJ_DATUM_MAX_RES_SIZE];
   datum.ptr_ = buf;
   uint64_t hash_val = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_expr.count(); ++i) {
-    if (OB_FAIL(datum.from_obj(popular_values_expr.at(i)))) {
-      LOG_WARN("fail convert obj to datum", K(ret));
-    } else if (OB_FAIL(hash_func.hash_func_(datum, 0, hash_val))) {
-      LOG_WARN("fail to do hash", K(ret));
-    } else if (OB_FAIL(popular_values_hash.push_back(hash_val))) {
-      LOG_WARN("fail push back values", K(ret));
+  if (OB_ISNULL(lob_read_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed for code generation", K(ret));
+  } else {
+    common::ObLobReadOptions lob_read_options(
+        *lob_read_service, session->get_query_timeout_ts());
+    const common::ObDatumAccessContext datum_access_ctx(lob_read_options);
+    for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_expr.count(); ++i) {
+      if (OB_FAIL(datum.from_obj(popular_values_expr.at(i)))) {
+        LOG_WARN("fail convert obj to datum", K(ret));
+      } else if (OB_FAIL(hash_func.hash_func_(
+                     datum, 0, hash_val, &datum_access_ctx))) {
+        LOG_WARN("fail to do hash", K(ret));
+      } else if (OB_FAIL(popular_values_hash.push_back(hash_val))) {
+        LOG_WARN("fail push back values", K(ret));
+      }
     }
   }
   LOG_DEBUG("generated popular values", K(popular_values_hash));

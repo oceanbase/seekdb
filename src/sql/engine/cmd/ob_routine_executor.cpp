@@ -16,16 +16,16 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_routine_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 #include "sql/resolver/cmd/ob_anonymous_block_stmt.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
-#include "src/pl/pl_cache/ob_pl_cache_mgr.h"
+#include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
 
 namespace oceanbase
 {
@@ -48,7 +48,8 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_routine(crt_routine_arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call(
+                 [&]{ return ctx.root_command_service().create_routine(crt_routine_arg); }))) {
     LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -286,7 +287,8 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_routine(drop_routine_arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call(
+                 [&]{ return ctx.root_command_service().drop_routine(drop_routine_arg); }))) {
     LOG_WARN("rpc proxy drop procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;
@@ -310,7 +312,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
     } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_routine(alter_routine_arg); }))) {
+    } else if (OB_FAIL(query::serialize_root_service_call(
+                   [&]{ return ctx.root_command_service().alter_routine(alter_routine_arg); }))) {
       LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
     }
   } else {

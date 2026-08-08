@@ -18,7 +18,7 @@
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/cmd/ob_kill_session_arg.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 using namespace common;
@@ -29,10 +29,13 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObKillSessionArg arg;
-  ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
-  if (OB_FAIL(arg.init(ctx, stmt))) {
+  ObSQLSessionMgr *session_mgr = ctx.get_session_mgr();
+  if (OB_ISNULL(session_mgr)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("session manager is not installed", K(ret));
+  } else if (OB_FAIL(arg.init(ctx, stmt))) {
     LOG_WARN("fail to init kill_session arg", K(ret), K(arg), K(ctx), K(stmt));
-  } else if (OB_FAIL(kill_session(arg, session_mgr))) {
+  } else if (OB_FAIL(kill_session(arg, *session_mgr))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_UNKNOWN_CONNECTION;
     } else {

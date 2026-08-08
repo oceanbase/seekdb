@@ -17,11 +17,12 @@
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "sql/das/ob_das_dml_vec_iter.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "storage/blocksstable/ob_datum_row_utils.h"
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
 #include "share/schema/ob_schema_struct.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 
@@ -86,7 +87,9 @@ int ObVecIndexDMLIterator::get_vec_data(
     vector = store_row->cells()[row_projector_->at(vector_idx)].get_string();
     if (das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE) {
       // do nothing, delete do not need to read vector
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                *lob_read_options_,
+                                                                &allocator_,
                                                                 ObLongTextType,
                                                                 CS_TYPE_BINARY,
                                                                 true,
@@ -127,7 +130,9 @@ int ObVecIndexDMLIterator::get_vec_data_for_update(
                          : store_row->cells()[vector_new_proj_idx].get_string();
     // get vec data without lob
     // here expect always has lob header
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -162,7 +167,7 @@ int ObVecIndexDMLIterator::generate_vec_delta_buff_row(common::ObIAllocator &all
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || vector_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid vector index column idx", K(ret), K(vec_id_idx), K(vector_idx), KPC(row_projector));
-  } else if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
+  } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
     LOG_WARN("create current row failed", K(ret), K(is_update), K(is_old_row_), KPC(row_projector));
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
@@ -341,7 +346,9 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data(
     docid = store_row->cells()[row_projector_->at(docid_idx)];
     sparse_vec = store_row->cells()[row_projector_->at(sparse_vec_idx)].get_string();
     
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -374,7 +381,9 @@ int ObSparseVecIndexDMLIterator::get_sparse_vec_data_for_update(
     docid = store_row->cells()[docid_proj_idx];
     sparse_vec = store_row->cells()[sparse_vec_proj_idx].get_string();
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -557,7 +566,7 @@ int ObHybridVecLogDMLIterator::generate_hybrid_vec_log_row(common::ObIAllocator 
   if (OB_UNLIKELY(vec_id_idx >= row_projector->count() || chunk_idx >= row_projector->count() || type_idx >= row_projector->count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid hybrid vec log column idx", K(ret), K(vec_id_idx), K(chunk_idx), KPC(row_projector));
-  } else if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
+  } else if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
     LOG_WARN("create current row failed", K(ret), K(das_ctdef_->op_type_), KPC(row_projector));
   } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                      *store_row,
@@ -646,7 +655,7 @@ int ObHybridVecLogDMLIterator::check_sync_interval(bool &is_sync_interval) const
   ObVectorIndexSyncIntervalType sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MAX;
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
-  const ObTableSchemaParam &table_param = das_ctdef_->table_param_.get_data_table();
+  const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
   
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?
@@ -703,7 +712,7 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
   } else {
     const IntFixedArray* row_projector = row_projector_;
     blocksstable::ObDatumRow *row = nullptr;
-    if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector->count(), row))) {
+    if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector->count(), row))) {
       LOG_WARN("create current row failed", K(ret), K(das_ctdef_->op_type_), KPC(row_projector));
     } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                        *store_row,
@@ -787,7 +796,9 @@ int ObEmbeddedVecDMLIterator::get_chunk_data(const ObChunkDatumStore::StoredRow 
   } else {
     const int64_t main_table_embedded_idx = row_projector_->at(embedded_vec_idx);
     chunk = store_row->cells()[main_table_embedded_idx].get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -836,7 +847,7 @@ int ObEmbeddedVecDMLIterator::check_sync_interval(bool &is_sync_interval) const
   ObVectorIndexSyncIntervalType sync_interval_type = ObVectorIndexSyncIntervalType::VSIT_MAX;
   int64_t sync_interval_value = 0;
   share::ObVectorIndexParam vec_param;
-  const ObTableSchemaParam &table_param = das_ctdef_->table_param_.get_data_table();
+  const data_plane::ObDmlTableView table_param = das_ctdef_->table_param_.get_data_table();
   
   if (table_param.get_vec_index_param().empty()) {
     // Use default sync mode when vector index param is empty?

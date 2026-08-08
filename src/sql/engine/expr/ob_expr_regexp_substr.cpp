@@ -271,7 +271,7 @@ int ObExprRegexpSubstr::regexp_substr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         expr_datum.set_null();
         is_final = true;
       } else if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-        if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, text_str))) {
+        if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, text_str))) {
           LOG_WARN("get text string failed", K(ret));
         }
       } else {

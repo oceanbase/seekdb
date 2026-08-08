@@ -18,8 +18,9 @@
 
 #include "ob_table_modify_op.h"
 #include "share/ob_autoincrement_service.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
-#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
@@ -590,10 +591,14 @@ int ForeignKeyHandle::is_self_ref_row(ObEvalCtx &eval_ctx,
                                       bool &is_self_ref)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *access_ctx = nullptr;
   is_self_ref = fk_arg.is_self_ref_;
   ObDatum *name_col = NULL;
   ObDatum *val_col = NULL;
-  for (int64_t i = 0; is_self_ref && i < fk_arg.columns_.count(); i++) {
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && is_self_ref && i < fk_arg.columns_.count(); i++) {
     const int32_t name_idx = fk_arg.columns_.at(i).name_idx_;
     const int32_t val_idx = fk_arg.columns_.at(i).idx_;
     ObExprCmpFuncType cmp_func = row.at(name_idx)->basic_funcs_->null_first_cmp_;
@@ -603,7 +608,7 @@ int ForeignKeyHandle::is_self_ref_row(ObEvalCtx &eval_ctx,
     OZ(row.at(name_idx)->eval(eval_ctx, name_col));
     OZ(row.at(val_idx)->eval(eval_ctx, val_col));
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(*name_col, *val_col, cmp_ret))) {
+    if (OB_FAIL(cmp_func(*name_col, *val_col, cmp_ret, access_ctx))) {
       LOG_WARN("cmp failed", K(ret), K(i));
     } else {
       is_self_ref = (0 == cmp_ret);
@@ -1004,20 +1009,27 @@ int ObTableModifyOp::open_inner_conn()
   } else if (NULL != session->get_inner_conn()) {
     // do nothing.
   } else if (OB_FAIL(
-                 ObInnerSQLConnection::create_connection_with_external_session(
-                     session, inner_conn_guard_))) {
+                 query::ObInnerSQLConnectionAccess::
+                     create_connection_with_external_session(
+                         session, inner_conn_guard_))) {
     LOG_WARN("failed to acquire inner connection", K(ret));
+  } else if (OB_ISNULL(inner_conn_guard_.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner SQL connection is null", K(ret));
   } else {
     /**
      * session is the only data struct which can pass through multi layer nested sql,
      * so we put inner conn in session to share it within multi layer nested sql.
      */
-    session->set_inner_conn(
-        static_cast<ObInnerSQLConnection *>(inner_conn_guard_.get_ptr()));
+    session->set_inner_conn(inner_conn_guard_.get_ptr());
     need_close_conn_ = true;
   }
   if (OB_SUCC(ret)) {
-    inner_conn_ = static_cast<ObInnerSQLConnection *>(session->get_inner_conn());
+    inner_conn_ = as_inner_sql_connection(session->get_inner_conn());
+    if (OB_ISNULL(inner_conn_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("connection does not implement the SQL inner connection interface", K(ret));
+    }
   }
   return ret;
 }
@@ -1031,19 +1043,17 @@ int ObTableModifyOp::close_inner_conn()
   int ret = OB_SUCCESS;
   if (need_close_conn_) {
     ObSQLSessionInfo *session = ctx_.get_my_session();
-    if (OB_ISNULL(session)) {
+    if (OB_ISNULL(sql_proxy_) || OB_ISNULL(session)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("session is NULL", K(ret), KP(session));
-    } else if (OB_ISNULL(session->get_inner_conn())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner connection is NULL", K(ret));
+      LOG_WARN("sql_proxy of session is NULL", K(ret), KP(sql_proxy_), KP(session));
     } else {
-      session->set_inner_conn(NULL);
+      OX(session->set_inner_conn(NULL));
+      OX(inner_conn_guard_.reset());
     }
-    inner_conn_guard_.reset();
     need_close_conn_ = false;
   }
   sql_proxy_ = NULL;
+  inner_conn_guard_.reset();
   inner_conn_ = NULL;
   return ret;
 }

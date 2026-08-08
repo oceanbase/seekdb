@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_table_lock_iterator.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tablelock/ob_table_lock_deadlock.h"
@@ -311,7 +311,7 @@ int ObLockMemtable::check_tablet_write_allow_(const ObTableLockOp &lock_op,
   } else if (!lock_op.lock_id_.is_tablet_lock()) {
   } else if (OB_FAIL(lock_op.lock_id_.convert_to(tablet_id))) {
     LOG_WARN("convert lock id to tablet_id failed", K(ret), K(lock_op));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get ls", K(ret));
   } else if (OB_FAIL(tenant_ls->get_tablet(tablet_id,
                                                     tablet_handle,
@@ -489,7 +489,7 @@ int ObLockMemtable::post_obj_lock_conflict_(ObMvccAccessCtx &acc_ctx,
     ? mem_ctx->get_lock_wait_start_ts()
     : current_ts;
   int64_t lock_wait_expire_ts = acc_ctx.eval_lock_expire_ts(lock_wait_start_ts);
-  if (OB_ISNULL(lock_wait_mgr = share::server_module<ObLockWaitMgr *>())) {
+  if (OB_ISNULL(lock_wait_mgr = share::server_service<ObLockWaitMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("can not get server lock_wait_mgr");
   } else {

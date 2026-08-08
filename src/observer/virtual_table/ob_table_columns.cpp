@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
+#include "observer/ob_server_runtime_access.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -1241,7 +1242,12 @@ int ObTableColumns::resolve_view_definition(
         resolver_ctx.expr_factory_ = &expr_factory;
         resolver_ctx.stmt_factory_ = &stmt_factory;
         resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
-        if (OB_ISNULL(resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx())) {
+        ObSql *sql_engine = get_observer_sql_engine();
+        if (OB_ISNULL(sql_engine)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("SQL engine is null", K(ret));
+        } else if (FALSE_IT(sql_engine->bind_resolver_runtime_services(resolver_ctx))) {
+        } else if (OB_ISNULL(resolver_ctx.query_ctx_ = stmt_factory.get_query_ctx())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("create query context failed", K(ret));
         } else {
@@ -1304,7 +1310,12 @@ int ObTableColumns::resolve_view_definition(
           LOG_WARN("failed to resolve view", K(ret));
         } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret)) {
           // do nothing
-        } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(table_schema, select_stmt, reset_column_infos, *allocator, *session))) {
+        } else if (OB_ISNULL(sql_engine)) {
+          tmp_ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("SQL engine is null", K(tmp_ret));
+        } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(
+            table_schema, select_stmt, reset_column_infos, *allocator, *session,
+            sql_engine->get_dep_info_queue()))) {
           LOG_WARN("failed to add recompile view task", K(tmp_ret));
           if (OB_ERR_TOO_LONG_COLUMN_LENGTH == tmp_ret) {
             tmp_ret = OB_SUCCESS; //ignore

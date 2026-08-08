@@ -507,13 +507,13 @@ int ObExprBaseLRpad::calc_mysql(const LRpadType pad_type, const ObExpr &expr, Ob
       common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
       ObString str_text;
       ObString str_pad;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator,
                                                             text,
                                                             expr.args_[0]->datum_meta_,
                                                             expr.args_[0]->obj_meta_.has_lob_header(),
                                                             str_text))) {
         LOG_WARN("failed to read lob data text", K(ret), K(text));
-      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator,
                                                                    pad_text,
                                                                    expr.args_[2]->datum_meta_,
                                                                    expr.args_[2]->obj_meta_.has_lob_header(),
@@ -532,8 +532,8 @@ int ObExprBaseLRpad::calc_mysql(const LRpadType pad_type, const ObExpr &expr, Ob
 DEF_SET_LOCAL_SESSION_VARS(ObExprBaseLRpad, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(2);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_MAX_ALLOWED_PACKET);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_MAX_ALLOWED_PACKET);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
   return ret;
 }
 

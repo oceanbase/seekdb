@@ -1,1 +1,0 @@
-storage_unittest(test_ob_replace_lock_request)

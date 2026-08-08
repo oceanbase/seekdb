@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/basic/chunk_store/ob_default_block_writer.h"
+#include "data_plane/blocksstable/ob_storage_datum.h"
 
 namespace oceanbase
 {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_table_redefinition_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
@@ -215,7 +216,7 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
 {
   int ret = OB_SUCCESS;
   bool modify_autoinc = false;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   int64_t new_execution_id = 0;
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -246,7 +247,7 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
         trace_id_,
         parallelism_,
         use_heap_table_ddl_plan_,
-        GCTX.local_management_service_,
+        ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>(),
         data_format_version_,
         is_ddl_retryable_);
     if (OB_FAIL(local_management_service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -400,7 +401,7 @@ int ObTableRedefinitionTask::replica_end_check(const int ret_code)
 int ObTableRedefinitionTask::copy_table_indexes()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
@@ -458,7 +459,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout failed", K(ret));
             ret = OB_INVALID_ARGUMENT;
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
+          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
             LOG_WARN("rebuild hidden table index failed", K(ret), K(ddl_rpc_timeout));
           }
         }
@@ -484,7 +485,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
           SMART_VAR(ObCreateIndexArg, create_index_arg) {
             ObTraceIdGuard trace_id_guard(get_trace_id());
             ATOMIC_INC(&sub_task_trace_id_);
-            ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
+            ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
             if (OB_FAIL(new_schema_guard.get_table_schema( index_ids.at(i), index_schema))) {
               LOG_WARN("get table schema failed", K(ret), K(index_ids.at(i)));
             } else if (OB_ISNULL(index_schema)) {
@@ -504,7 +505,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
               create_index_arg.index_type_ = index_schema->get_index_type();
               if (index_schema->is_vec_index() || index_schema->is_fts_index() || index_schema->is_multivalue_index()) {
                 has_rebuild_domain_indexes_ = true;
-                if (OB_FAIL(ObDDLUtil::construct_domain_index_arg(new_schema_guard, table_schema, index_schema, *this, create_index_arg, ddl_type))) {
+                if (OB_FAIL(ObDDLTaskUtil::construct_domain_index_arg(new_schema_guard, table_schema, index_schema, *this, create_index_arg, ddl_type))) {
                   LOG_WARN("failed to construct domain index arg", K(ret));
                 }
               }
@@ -566,7 +567,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
 int ObTableRedefinitionTask::copy_table_constraints()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -600,10 +601,11 @@ int ObTableRedefinitionTask::copy_table_constraints()
         alter_table_arg_.table_id_ = object_id_;
         alter_table_arg_.hidden_table_id_ = target_object_id_;
         int64_t ddl_rpc_timeout = 0;
-        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
+        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
           LOG_WARN("get ddl rpc timeout fail", K(ret));
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
           LOG_WARN("rebuild hidden table constraint failed", K(ret), K(ddl_rpc_timeout));
         }
       } else {
@@ -635,7 +637,7 @@ int ObTableRedefinitionTask::copy_table_constraints()
 int ObTableRedefinitionTask::copy_table_foreign_keys()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -673,10 +675,11 @@ int ObTableRedefinitionTask::copy_table_foreign_keys()
           alter_table_arg_.table_id_ = object_id_;
           alter_table_arg_.hidden_table_id_ = target_object_id_;
           int64_t ddl_rpc_timeout = 0;
-          if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
+          if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                  *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
             ret = OB_INVALID_ARGUMENT;
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->                execute_ddl_task(alter_table_arg_, fk_ids); }))) {
+          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, fk_ids); }))) {
             LOG_WARN("rebuild hidden table constraint failed", K(ret), K(ddl_rpc_timeout));
           }
         }
@@ -835,9 +838,14 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     } else {
       LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
     }
-  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, ddl_rpc_timeout))) {
+  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                 *GCTX.schema_service_, target_object_id_, ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->      execute_ddl_task(alter_table_arg_, objs); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+               return ::oceanbase::share::server_service<
+                   ::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(
+                       alter_table_arg_, objs);
+             }))) {
     int tmp_ret = OB_SUCCESS;
     bool has_took_effect_succ = false;
     if (OB_TMP_FAIL(check_take_effect_succ(has_took_effect_succ))) {
@@ -863,7 +871,7 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     "object_id", object_id_buffer,
     K_(schema_version),
     "info", next_task_status);
-  LOG_INFO("table redefinition task take effect", K(ret), "ddl_event_info", ObDDLEventInfo(), K(*this));
+  LOG_INFO("table redefinition task take effect", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(*this));
   return ret;
 }
 

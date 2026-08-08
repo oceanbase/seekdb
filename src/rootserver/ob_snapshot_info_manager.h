@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_SNAPSHOT_INFO_MANAGER_H_
 #define OCEANBASE_ROOTSERVER_OB_SNAPSHOT_INFO_MANAGER_H_
 
-#include "rootserver/ob_snapshot_table_proxy.h"
+#include "share/ob_snapshot_table_proxy.h"
 #include "lib/net/ob_addr.h"
 #include "share/scn.h"
 namespace oceanbase

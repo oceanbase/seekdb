@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_chunk_datum_store.h"
 #include "sql/engine/ob_exec_context.h"
 // for ObChunkStoreUtil
@@ -380,45 +381,6 @@ int ObChunkDatumStore::Block::copy_datums(const ObDatum *datums, const int64_t c
   return ret;
 }
 
-int ObChunkDatumStore::Block::copy_storage_datums(const blocksstable::ObStorageDatum *storage_datums, const int64_t cnt,
-                                                  const int64_t extra_size, StoredRow **dst_sr)
-{
-  int ret = OB_SUCCESS;
-  BlockBuffer *buf = get_buffer();
-  int64_t head_size = sizeof(StoredRow);
-  int64_t datum_size = sizeof(ObDatum) * cnt;
-  int64_t row_size = head_size + sizeof(ObDatum) * cnt + extra_size;
-  if (!buf->is_inited()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(row_size));
-  } else {
-    StoredRow *sr = new (buf->head())StoredRow;
-    sr->cnt_ = cnt;
-    for (int64_t i = 0; i < cnt; ++i) {
-      const ObDatum *tmp_datum = static_cast<const ObDatum *>(&storage_datums[i]);
-      MEMCPY(sr->payload_ + i * sizeof(ObDatum), tmp_datum, sizeof(ObDatum));
-    }
-    char* data_start = sr->payload_ + datum_size + extra_size;
-    int64_t pos = 0;
-    for (int64_t i = 0; i < cnt; ++i) {
-      MEMCPY(data_start + pos, storage_datums[i].ptr_, storage_datums[i].len_);
-      sr->cells()[i].ptr_ = data_start + pos;
-      pos += storage_datums[i].len_;
-      row_size += storage_datums[i].len_;
-    }
-    sr->row_size_ = row_size;
-    if (OB_FAIL(buf->advance(row_size))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size));
-    } else {
-      rows_++;
-      if (nullptr != dst_sr) {
-        *dst_sr = sr;
-      }
-    }
-  }
-  return ret;
-}
-
 //the memory of shadow stored row is not continuous,
 //so you cannot directly copy the memory of the entire stored row,
 //and you should make a deep copy of each datum in turn
@@ -519,7 +481,7 @@ int ObChunkDatumStore::Block::swizzling(int64_t *col_cnt)
   return ret;
 }
 
-ObChunkDatumStore::ObChunkDatumStore(const ObLabel &label, common::ObIAllocator *alloc /* = NULL */)
+ObChunkDatumStore::ObChunkDatumStore(const lib::ObLabel &label, common::ObIAllocator *alloc /* = NULL */)
   : inited_(false), label_(label),
     ctx_id_(0), mem_limit_(0), cur_blk_(NULL), cur_blk_buffer_(nullptr),
     max_blk_size_(0), min_blk_size_(INT64_MAX),
@@ -568,7 +530,7 @@ void ObChunkDatumStore::reset()
   int ret = OB_SUCCESS;
   if (is_file_open()) {
     aio_write_handle_.reset();
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(io_.fd_))) {
+    if (OB_FAIL(data_plane::tmp_file_remove(io_.fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(io_.fd));
@@ -1960,7 +1922,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(io_.fd_, io_.dir_id_))) {
+      } else if (OB_FAIL(data_plane::tmp_file_open(io_.fd_, io_.dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -1975,7 +1937,7 @@ int ObChunkDatumStore::write_file(void *buf, int64_t size)
     set_io(size, static_cast<char *>(buf));
     if (aio_write_handle_.is_valid() && OB_FAIL(aio_write_handle_.wait())) {
       LOG_WARN("failed to wait write", K(ret));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_write(io_, aio_write_handle_))) {
+    } else if (OB_FAIL(data_plane::tmp_file_aio_write(io_, aio_write_handle_))) {
       LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
@@ -1993,7 +1955,7 @@ int ObChunkDatumStore::aio_read_file(
   void *buf,
   const int64_t size,
   const int64_t offset,
-  tmp_file::ObTmpFileIOHandle &handle)
+  data_plane::ObTmpFileIOHandle &handle)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
@@ -2003,12 +1965,12 @@ int ObChunkDatumStore::aio_read_file(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), K(offset), KP(buf));
   } else if (size > 0) {
-    tmp_file::ObTmpFileIOInfo tmp_io = io_;
+    data_plane::ObTmpFileIOInfo tmp_io = io_;
     set_io(size, static_cast<char *>(buf), tmp_io);
     tmp_io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     if (OB_FAIL(get_timeout(tmp_io.io_timeout_ms_))) {
       LOG_WARN("get timeout failed", K(ret));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_pread(tmp_io, offset, handle))) {
+    } else if (OB_FAIL(data_plane::tmp_file_aio_pread(tmp_io, offset, handle))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("read form file failed", K(ret), K(tmp_io), K(offset));
       }
@@ -2573,4 +2535,131 @@ void ObChunkDatumStore::IteratedBlockHolder::release()
 }
 
 } // end namespace sql
+
+namespace query
+{
+namespace
+{
+sql::ObChunkDatumStore *to_store(ObSpillRowStore *store)
+{
+  return reinterpret_cast<sql::ObChunkDatumStore *>(store);
+}
+
+const sql::ObChunkDatumStore *to_store(const ObSpillRowStore *store)
+{
+  return reinterpret_cast<const sql::ObChunkDatumStore *>(store);
+}
+
+sql::ObChunkDatumStore::Iterator *to_iterator(
+    ObSpillRowStoreIterator *iterator)
+{
+  return reinterpret_cast<sql::ObChunkDatumStore::Iterator *>(iterator);
+}
+} // namespace
+
+int create_spill_row_store(
+    common::ObIAllocator &allocator, ObSpillRowStore *&store)
+{
+  int ret = common::OB_SUCCESS;
+  void *buffer = allocator.alloc(sizeof(sql::ObChunkDatumStore));
+  sql::ObChunkDatumStore *impl = nullptr;
+  if (OB_ISNULL(buffer)) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+  } else if (FALSE_IT(impl = new (buffer) sql::ObChunkDatumStore(
+      common::ObModIds::OB_SQL_CHUNK_ROW_STORE))) {
+  } else if (OB_FAIL(impl->init(
+      1024 * 8,
+      common::ObCtxIds::DEFAULT_CTX_ID,
+      common::ObModIds::OB_SQL_CHUNK_ROW_STORE,
+      true,
+      0,
+      sql::ObChunkDatumStore::BLOCK_SIZE))) {
+    impl->~ObChunkDatumStore();
+    impl = nullptr;
+  } else if (OB_FAIL(impl->alloc_dir_id())) {
+    impl->~ObChunkDatumStore();
+    impl = nullptr;
+  } else {
+    impl->set_allocator(allocator);
+    store = reinterpret_cast<ObSpillRowStore *>(impl);
+  }
+  return ret;
+}
+
+void reset_spill_row_store(ObSpillRowStore *store)
+{
+  if (OB_NOT_NULL(store)) {
+    to_store(store)->reset();
+  }
+}
+
+int spill_row_store_add_batch(
+    ObSpillRowStore *store,
+    const common::ObIArray<sql::ObExpr *> &expressions,
+    sql::ObEvalCtx &eval_ctx,
+    const sql::ObBitVector &skip,
+    const int64_t batch_size,
+    int64_t &stored_count)
+{
+  return OB_ISNULL(store)
+      ? common::OB_INVALID_ARGUMENT
+      : to_store(store)->add_batch(
+          expressions, eval_ctx, skip, batch_size, stored_count);
+}
+
+int spill_row_store_add_row(
+    ObSpillRowStore *store,
+    const common::ObIArray<sql::ObExpr *> &expressions,
+    sql::ObEvalCtx &eval_ctx)
+{
+  return OB_ISNULL(store)
+      ? common::OB_INVALID_ARGUMENT
+      : to_store(store)->add_row(expressions, &eval_ctx, nullptr);
+}
+
+int64_t spill_row_store_row_count(const ObSpillRowStore *store)
+{
+  return OB_ISNULL(store) ? 0 : to_store(store)->get_row_cnt();
+}
+
+int create_spill_row_store_iterator(
+    common::ObIAllocator &allocator, ObSpillRowStoreIterator *&iterator)
+{
+  int ret = common::OB_SUCCESS;
+  void *buffer = allocator.alloc(sizeof(sql::ObChunkDatumStore::Iterator));
+  if (OB_ISNULL(buffer)) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    iterator = reinterpret_cast<ObSpillRowStoreIterator *>(
+        new (buffer) sql::ObChunkDatumStore::Iterator());
+  }
+  return ret;
+}
+
+void reset_spill_row_store_iterator(ObSpillRowStoreIterator *iterator)
+{
+  if (OB_NOT_NULL(iterator)) {
+    to_iterator(iterator)->reset();
+  }
+}
+
+int init_spill_row_store_iterator(
+    ObSpillRowStoreIterator *iterator, ObSpillRowStore *store)
+{
+  return OB_ISNULL(iterator) || OB_ISNULL(store)
+      ? common::OB_INVALID_ARGUMENT
+      : to_iterator(iterator)->init(to_store(store));
+}
+
+int spill_row_store_next_row(
+    ObSpillRowStoreIterator *iterator,
+    sql::ObEvalCtx &eval_ctx,
+    const common::ObIArray<sql::ObExpr *> &expressions)
+{
+  return OB_ISNULL(iterator)
+      ? common::OB_INVALID_ARGUMENT
+      : to_iterator(iterator)->get_next_row(eval_ctx, expressions);
+}
+
+} // namespace query
 } // end namespace oceanbase

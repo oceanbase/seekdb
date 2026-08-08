@@ -17,10 +17,13 @@
 #define protected public
 #define private public
 #include "ob_truncate_info_helper.h"
-#include "storage/mockcontainer/mock_ob_iterator.h"
+#include "unittest/storage/mockcontainer/mock_ob_iterator.h"
 #include "storage/truncate_info/ob_mds_info_distinct_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
+#undef protected
+#undef private
+
 namespace oceanbase
 {
 namespace storage
@@ -125,8 +128,12 @@ int TruncateInfoHelper::get_tablet(
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
+  ObLSService *ls_service = share::server_service<ObLSService>();
 
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_ISNULL(ls_service)) {
+    ret = OB_NOT_INIT;
+    COMMON_LOG(WARN, "ls service is null", K(ret));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
     COMMON_LOG(WARN, "failed to get ls", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;

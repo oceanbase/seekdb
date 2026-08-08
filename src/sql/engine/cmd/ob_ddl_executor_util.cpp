@@ -15,20 +15,23 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "rootserver/ob_local_management_service.h"
-#include "observer/ob_service.h"
+#include "query/command/ob_local_command_service.h"
+#include "share/ob_server_struct.h"
+#include "query/command/ob_root_command_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_executor_util.h"
+#include "query/engine/cmd/ob_ddl_execution.h"
+#include "share/ob_ddl_task_executor.h"
 #include "share/ob_ex_rpc.h"
 #include "share/ob_structured_event_logger.h"
-#include "share/schema/ob_schema_utils.h"  // relocated-definition owner
+#include "share/ob_share_util.h"
+#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
 using namespace common;
 using namespace share;
 using namespace share::schema;
-using namespace observer;
 namespace sql
 {
 int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
@@ -54,6 +57,8 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
 int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
     const bool ddl_need_retry_at_executor,
     ObSQLSessionInfo *session,
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    query::ObILocalCommandService &local_command_service,
     const bool is_support_cancel)
 {
   int ret = OB_SUCCESS;
@@ -72,7 +77,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
       "rpc_dest", GCTX.self_addr());
-    LOG_INFO("start wait ddl finsih", K(task_id), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("start wait ddl finsih", K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
 
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
@@ -80,7 +85,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
           if (ddl_need_retry_at_executor) {
-            ret = ObIDDLTask::in_ddl_retry_white_list(ret) ? OB_EAGAIN : ret;
+            ret = share::ObIDDLTask::in_ddl_retry_white_list(ret) ? OB_EAGAIN : ret;
             LOG_WARN("is ddl need retry at user", K(ret));
           } else {
             FORWARD_USER_ERROR(ret, error_message.user_message_);
@@ -107,7 +112,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         if (OB_FAIL(ret)) {
         } else if (nullptr != session && OB_FAIL(handle_session_exception(*session))) {
           LOG_WARN("session exeception happened", K(ret), K(is_support_cancel));
-          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task())) {
+          if (is_support_cancel && OB_TMP_FAIL(cancel_ddl_task(local_command_service))) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -116,7 +121,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
         } 
         
         if (OB_FAIL(ret)) {
-        } else if (is_server_stopped()) {
+        } else if (is_server_stopped(runtime_environment)) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
           LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
@@ -131,7 +136,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
       "rpc_dest", GCTX.self_addr());
-    LOG_INFO("finish wait ddl", K(ret), K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
+    LOG_INFO("finish wait ddl", K(ret), K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(error_message));
   }
   return ret;
 }
@@ -149,7 +154,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", task_id);
-  LOG_INFO("start wait build index finish", K(task_id), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("start wait build index finish", K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
 
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -160,28 +165,20 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
       FORWARD_USER_ERROR(ret, error_message.user_message_);
     }
     is_finish = true;
-  } else {
-    if (OB_FAIL(ret)) {
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (is_server_stopped()) {
-      ret = OB_TIMEOUT;
-      FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-      LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
-    }
   }
 
   SERVER_EVENT_ADD("ddl", "end wait build index finish",
     "ret", error_message.ret_code_,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "task_id", task_id);
-  LOG_INFO("finish wait build index", K(ret), "ddl_event_info", ObDDLEventInfo(), K(error_message));
+  LOG_INFO("finish wait build index", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(error_message));
   return ret;
 }
 
 int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
     ObSQLSessionInfo &session,
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    query::ObILocalCommandService &local_command_service,
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
@@ -201,7 +198,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
       "rpc_dest", GCTX.self_addr());
-    LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
+    LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(error_message));
 
     bool is_primary_server = true;
     int tmp_ret = OB_SUCCESS;
@@ -251,7 +248,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(handle_session_exception(session))) {
           LOG_WARN("session exception happened", K(ret));
-          if (OB_TMP_FAIL(cancel_ddl_task())) {
+          if (OB_TMP_FAIL(cancel_ddl_task(local_command_service))) {
             LOG_WARN("cancel ddl task failed", K(tmp_ret));
             ret = OB_SUCCESS;
           } else {
@@ -260,7 +257,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
         } 
         
         if (OB_FAIL(ret)) {
-        } else if (is_server_stopped()) {
+        } else if (is_server_stopped(runtime_environment)) {
           ret = OB_TIMEOUT;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
           LOG_WARN("server is stopping, check whether the ddl task finish successfully or not", K(ret), K(task_id));
@@ -276,21 +273,20 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       "trace_id", *ObCurTraceId::get_trace_id(),
       "task_id", task_id,
       "rpc_dest", GCTX.self_addr());
-    LOG_INFO("fnish wait ddl retry task", K(ret), K(task_id), "ddl_event_info", ObDDLEventInfo(), K(error_message));
+    LOG_INFO("fnish wait ddl retry task", K(ret), K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(error_message));
   }
   return ret;
 }
 
-int ObDDLExecutorUtil::cancel_ddl_task()
+int ObDDLExecutorUtil::cancel_ddl_task(
+    query::ObILocalCommandService &local_command_service)
 {
   int ret = OB_SUCCESS;
   obcall::ObCancelTaskArg rpc_arg;
   rpc_arg.task_id_ = *ObCurTraceId::get_trace_id();
 
-  if (OB_ISNULL(GCTX.ob_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ob_service is null", KR(ret));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{ return GCTX.ob_service_->cancel_sys_task(rpc_arg.task_id_); }))) {
+  if (OB_FAIL(ex_rpc::sync_call(
+      [&]{ return local_command_service.cancel_sys_task(rpc_arg.task_id_); }))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
@@ -301,19 +297,21 @@ int ObDDLExecutorUtil::cancel_ddl_task()
     "ret", ret,
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dest", GCTX.self_addr());
-  LOG_INFO("finish cancel ddl task", K(ret), K(rpc_arg), "rpc_dest", GCTX.self_addr(), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish cancel ddl task", K(ret), K(rpc_arg), "rpc_dest", GCTX.self_addr(), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
-int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const char* parallel_ddl_type,
+int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session,
+                                            query::ObIRootCommandService &root_commands,
+                                            const char* parallel_ddl_type,
                                             const obcall::ObCreateTableArg &arg, obcall::ObCreateTableRes &res)
 {
   int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
+  const int64_t start_time = ObTimeUtility::current_time();
   ObTimeoutCtx ctx;
   if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
     LOG_WARN("fail to set timeout ctx", KR(ret));
-  } else if (OB_FAIL(GCTX.local_management_service_->parallel_create_table(arg, res))) {
+  } else if (OB_FAIL(root_commands.parallel_create_table(arg, res))) {
     LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
@@ -330,25 +328,15 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
   return ret;
 }
 
+bool ObDDLExecutorUtil::is_server_stopped(
+    query::ObIQueryRuntimeEnvironment &runtime_environment)
+{
+  return query::query_server_stopped(runtime_environment);
+}
+
 } //end namespace sql
 } //end namespace oceanbase
 
-// ===== definition moved from share/schema/ob_schema_utils.cpp =====
-// real user of this module's symbol(previously share->upper-layer inverted include); declaration remains in share header, resolved at link time(transitional state)
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-// wait_local_schema_visible moved to the sql namespace at the end of the file(ObDDLExecutorUtil)
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// from share::schema::ObSchemaUtils demoted(real user sql::ObSQLSessionInfo, A-set)
 namespace oceanbase
 {
 namespace sql
@@ -390,4 +378,27 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
   return ret;
 }
 }  // namespace sql
+
+namespace query
+{
+
+int ObDDLExecution::wait_ddl_finish(
+    const int64_t task_id,
+    const bool ddl_need_retry_at_executor,
+    sql::ObSQLSessionInfo *session,
+    ObIQueryRuntimeEnvironment &runtime_environment,
+    ObILocalCommandService &local_command_service,
+    const bool is_support_cancel)
+{
+  return sql::ObDDLExecutorUtil::wait_ddl_finish(
+      task_id, ddl_need_retry_at_executor, session,
+      runtime_environment, local_command_service, is_support_cancel);
+}
+
+int ObDDLExecution::handle_session_exception(sql::ObSQLSessionInfo &session)
+{
+  return sql::ObDDLExecutorUtil::handle_session_exception(session);
+}
+
+} // namespace query
 }  // namespace oceanbase

@@ -15,12 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "ob_plugin_vector_index_serialize.h"
+#include "query/vector/ob_vector_index_serialize.h"
 #include "share/ob_lob_access_utils.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 
 namespace oceanbase
 {
@@ -311,7 +311,7 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
           if (OB_ISNULL(str_iter = OB_NEWx(ObTextStringIter, allocator, ObLongTextType, CS_TYPE_BINARY, data_datum.get_string(), true))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to new ObTextStringIter", KR(ret));
-          } else if (OB_FAIL(str_iter->init(0, NULL, allocator))) {
+          } else if (OB_FAIL(str_iter->init(0, param.lob_read_options_, allocator))) {
             LOG_WARN("init lob str iter failed ", K(ret));
           } else if (index_type_ == VIAT_MAX) {
             ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);
@@ -385,7 +385,7 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   ObLobLocatorV2 src_lob(const_cast<char*>(data), data_size, false); // data from vsag must has no header
   ObHNSWSerializeCallback::CbParam &param = static_cast<ObHNSWSerializeCallback::CbParam&>(cb_param);
   ObVecIdxSnapshotDataWriteCtx *vctx = reinterpret_cast<ObVecIdxSnapshotDataWriteCtx*>(param.vctx_);
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   ObLobAccessParam lob_param;
   lob_param.set_tmp_allocator(param.tmp_allocator_);
   lob_param.allocator_ = param.allocator_;

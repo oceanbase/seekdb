@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "ob_ivf_async_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
 
@@ -112,7 +112,7 @@ int ObIvfAsyncTask::do_work()
 {
   int ret = OB_SUCCESS;
   bool is_deprecated = false;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   DEBUG_SYNC(HANDLE_VECTOR_INDEX_ASYNC_TASK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

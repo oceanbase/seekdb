@@ -1,0 +1,54 @@
+# owner: jianyun.sjy
+# owner group: storage/ddl
+
+ob1=OBI(cluster=1, proxy_num=0);
+
+
+--echo ===============================================================
+--echo ====================     bootstrap   ==========================
+--echo ===============================================================
+--echo test case for bootstrap begin
+ob1.reboot;
+sleep 3;
+let $sys_tenant_id = 1;
+ob1.mysql alter system set enable_rebalance='false';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--echo test case for bootstrap finish
+
+--echo ===============================================================
+--echo ==================     create tenant   ========================
+--echo ===============================================================
+# 注意: 创建初始mysql租户'F@z1, F@z3'
+--echo test case for create tenant begin
+set @@session.ob_query_timeout = 1000000000;
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE='8G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+source include/check_schema_sync.inc;
+connection conn_sys;
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo test case for create tenant finish
+
+
+--echo ===============================================================
+--echo ===============       first offline ddl     ===================
+--echo ===============================================================
+--echo test case for first offline ddl begin
+connection conn_mysql;
+# create table
+create table t1 (c1 int primary key, c2 varchar(255));
+insert into t1 values (1, "hello"), (2, "world");
+# restart
+ob1.force_stop;
+sleep 10;
+ob1.nstart;
+sleep 60;
+# alter column as first offline ddl
+ob_connect(conn_mysql_2, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql_2;
+alter table t1 MODIFY column c2 varchar(30) NOT NULL;
+--echo test case for first offline ddl finish
+

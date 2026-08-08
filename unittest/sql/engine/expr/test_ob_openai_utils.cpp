@@ -285,10 +285,3 @@ TEST_F(ObOpenAIUtilsTest, test_embedding_parse_output_empty)
     ObIJsonBase *result = nullptr;
     ASSERT_EQ(OB_INVALID_DATA, embedding.parse_output(allocator, http_response, result));
 }
-
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc,argv);
-    return RUN_ALL_TESTS();
-}

@@ -1,0 +1,35 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+alter system set debug_sync_timeout = '1000s';
+# create mysql tenant
+CREATE RESOURCE UNIT if not exists unit_x MAX_CPU 2, MEMORY_SIZE='4G';
+CREATE RESOURCE POOL if not exists pool_x UNIT = 'unit_x', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+drop table if exists t;
+create table t (c1 int, c2 varchar(255));
+create fulltext index idx on t(c2);
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+drop table if exists t1;
+create table t1 (c1 int, c2 varchar(255));
+alter table t1 add fulltext index idx(c2);
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+ALTER SYSTEM MINOR FREEZE;
+ALTER SYSTEM MAJOR FREEZE;
+select * from __all_zone where name = "is_merge_error" or info = "ERROR";
+gmt_create	gmt_modified	zone	name	value	info
+set ob_enable_index_direct_select = true;
+select /*+ opt_param('hidden_column_visible', 'true') */  count(*) from __idx_500002_fts_rowkey_doc;
+count(*)
+100
+select /*+ opt_param('hidden_column_visible', 'true') */  count(*) from __idx_500007_fts_rowkey_doc;
+count(*)
+100

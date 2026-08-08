@@ -20,7 +20,7 @@
 #include "storage/tx/ob_tx_log_operator.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tablelock/ob_lock_memtable.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_tx_service.h"
 #include "storage/ob_relative_table.h"
@@ -596,7 +596,8 @@ int ObTxReplayExecutor::replay_one_row_in_memtable_(ObMutatorRowHeader &row_head
       TX_REPLAY_LOG(INFO, "get tablet failed, retry this log entry", K(row_head.tablet_id_));
       ret = OB_EAGAIN;
     }
-  } else if (OB_FAIL(logservice::ObTabletReplayExecutor::replay_check_restore_status(tablet_handle, false/*update_tx_data*/))) {
+  } else if (OB_FAIL(ObTabletReplayExecutor::replay_check_restore_status(
+      tablet_handle, false/*update_tx_data*/))) {
     if (OB_NO_NEED_UPDATE == ret) {
       ctx_->check_no_need_replay_checksum(log_ts_ns_, replay_queue_);
       ret = OB_SUCCESS;

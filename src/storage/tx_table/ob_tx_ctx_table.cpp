@@ -15,7 +15,7 @@
  */
 
 #include "ob_tx_ctx_table.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_ctx.h"
 
@@ -110,7 +110,7 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
                                  ctx_info.tx_id_,
                                  0, /*session_id*/
                                  INT64_MAX,
-                                 share::g_mp->trans_service());
+                                 ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>());
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
                                            tx_ctx_existed, /*tx_ctx_existed*/
                                            tx_ctx))) {
@@ -252,7 +252,7 @@ OB_WEAK_SYMBOL int ObTxCtxTable::acquire_ref_()
   transaction::ObTransService *txs = NULL;
 
   if (NULL == ls_tx_ctx_mgr_) {
-    if (OB_ISNULL(txs = share::g_mp->trans_service())) {
+    if (OB_ISNULL(txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "trans_service get fail", K(ret));
     } else {

@@ -15,7 +15,7 @@
  */
  
 #include "ob_all_virtual_mds_node_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -70,7 +70,7 @@ int ObAllVirtualMdsNodeStat::get_mds_table_handle_(ObTablet &tablet,
                                                    mds::MdsTableHandle &handle,
                                                    const bool create_if_not_exist)
 {
-  return tablet.get_mds_table_handle_(handle, create_if_not_exist);
+  return tablet.get_mds_table_handle_for_diagnostics(handle, create_if_not_exist);
 }
 
 int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
@@ -90,7 +90,7 @@ int ObAllVirtualMdsNodeStat::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ApplyOnTabletOp apply_on_table_op(this, temp_buffer);
         ObLS *ls = nullptr;
-        ObLSService *ls_service = share::g_mp->ls_service();
+        ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
         if (OB_ISNULL(ls_service)) {
           ret = OB_ERR_UNEXPECTED;
           MDS_LOG(WARN, "ls service is null", K(ret));

@@ -168,7 +168,7 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
       OB_ASSERT(precision != PRECISION_UNKNOWN_YET);
       OB_ASSERT(precision >= 0 && precision <= OB_MAX_DECIMAL_PRECISION);
     }
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type(),
         col_desc.col_type_.get_scale(), has_lob_header, precision);
     ObHashFunc hash_func;
@@ -224,7 +224,8 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
             *skip_bit_,
             datum_array_size,
             &seed,
-            false);
+            false,
+            nullptr);
         for (int64_t idx = 0; OB_SUCC(ret) && idx < datum_array_size && list_cnt_ < list_num_; ++idx) {
           if (!skip_bit_->at(idx)) {
             int64_t row_id = i * dimension_size + idx;
@@ -286,7 +287,7 @@ int ObEncodingHashTableBuilder::hash(
   if (need_binary) {
     res = xxhash64(datum.ptr_, datum.len_, seed);
   } else {
-    ret = hash_func.hash_func_(datum, seed, res);
+    ret = hash_func.hash_func_(datum, seed, res, nullptr);
   }
   return ret;
 }

@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_ST_BUFFER
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 namespace oceanbase
@@ -89,7 +89,7 @@ protected:
                                   common::ObGeoBufferStrategy &buf_strat,
                                   double distance);
   static int fill_proj4_params(lib::MemoryContext &mem_ctx,
-                               omt::ObSrsCacheGuard &srs_guard,
+                               common::ObSrsCacheGuard &srs_guard,
                                uint32 srid,
                                common::ObGeometry *geo,
                                const common::ObSrsItem *srs,

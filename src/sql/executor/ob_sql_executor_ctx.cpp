@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_sql_executor_ctx.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

@@ -15,7 +15,7 @@
  */
 
 #include "ob_mvcc_trans_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_tx_ctx.h"
 
@@ -1360,11 +1360,11 @@ void ObTransCallbackMgr::revert_callback_list()
 
 void ObTransCallbackMgr::wakeup_waiting_txns_()
 {
-  if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
-    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "share::g_mp->lock_wait_mgr() is null");
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+    TRANS_LOG_RET(WARN, OB_ERR_UNEXPECTED, "::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>() is null");
   } else {
     ObMemtableCtx &mem_ctx = static_cast<ObMemtableCtx&>(host_);
-    share::g_mp->lock_wait_mgr()->wakeup(mem_ctx.get_trans_ctx()->get_trans_id());
+    ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->wakeup(mem_ctx.get_trans_ctx()->get_trans_id());
   }
 }
 
@@ -1870,7 +1870,7 @@ int ObMvccRowCallback::wakeup_row_waiter_if_need_()
     //   case 1: elr transaction
     ret = value_.wakeup_waiter(get_tablet_id(), key_);
     /*****[for deadlock]*****/
-    ObLockWaitMgr *p_lwm = share::g_mp->lock_wait_mgr();
+    ObLockWaitMgr *p_lwm = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>();
     if (OB_ISNULL(p_lwm)) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "lock wait mgr is nullptr", K(*this));

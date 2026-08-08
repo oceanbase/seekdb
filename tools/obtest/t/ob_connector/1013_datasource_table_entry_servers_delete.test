@@ -1,0 +1,73 @@
+##############################
+#owner: luyun
+#owner group: java_client1.0
+#description: 验证table entry全部实效，sql仍然可以转发执行
+###############################
+
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+
+ob1.source include/merge.inc;
+
+ob1.mysql alter system set balancer_idle_time='10s';
+ob1.mysql alter system set balancer_task_timeout='30s';
+ob1.mysql alter system set server_data_copy_in_concurrency=4;
+ob1.mysql alter system set server_data_copy_out_concurrency=4;
+
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+
+ob1.create_client tenant=sys,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+
+#等待2s，确保刷新一次server list
+sleep 2;
+let $leader = deploy_get_value(ob1.get_leader sys:test:t1);
+select * from t1;
+source include/get_ob_connector_last_query_addr.inc;
+
+if ($leader != $obs)
+{
+  --echo leader is $leader, query_obs is $obs
+  --exit
+}
+
+### 找出table location所在所有server
+let $tenant_id = query_get_value(select tenant_id from oceanbase.__all_tenant where tenant_name = 'sys', tenant_id, 1);
+let $database_id = query_get_value(select database_id from oceanbase.__all_virtual_database where database_name='test' and tenant_id = $tenant_id, database_id, 1);
+let $t1_table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name='t1' and database_id=$database_id and tenant_id=$tenant_id,table_id,1);
+
+let $sql1 = select svr_ip, svr_port from oceanbase.__all_virtual_meta_table where table_id=$t1_table_id order by svr_ip, svr_port limit 1 offset 0;
+let $sql2 = select svr_ip, svr_port from oceanbase.__all_virtual_meta_table where table_id=$t1_table_id order by svr_ip, svr_port limit 1 offset 1;
+let $sql3 = select svr_ip, svr_port from oceanbase.__all_virtual_meta_table where table_id=$t1_table_id order by svr_ip, svr_port limit 1 offset 2;
+
+let $ip1 = query_get_value($sql1, svr_ip, 1);
+let $port1 = query_get_value($sql1, svr_port, 1);
+
+let $ip2 = query_get_value($sql2, svr_ip, 1);
+let $port2 = query_get_value($sql2, svr_port, 1);
+
+let $ip3 = query_get_value($sql3, svr_ip, 1);
+let $port3 = query_get_value($sql3, svr_port, 1);
+
+## delete 所有server
+ob1.mysql alter system delete server '$ip1:$port1';
+ob1.mysql alter system delete server '$ip2:$port2';
+ob1.mysql alter system delete server '$ip3:$port3';
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_server,3,2000;
+
+## 验证t1仍然可以访问
+sleep 2;
+select * from t1;
+
+source include/get_ob_connector_last_query_addr.inc;
+
+if ($leader == $obs)
+{
+  --echo old deleted leader is $leader, but still query $obs
+  --exit
+}

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_service_sql_impl.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 // TODO, move basic structs to ob_schema_struct.h
 #include "observer/schema/ob_schema_retrieve_utils.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -180,11 +181,14 @@ int ObSchemaServiceSQLImpl::retrieve_schema_version(T &result, int64_t &schema_v
   return ret;
 }
 
-ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl()
+ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl(
+    ObIMaxIdCache *max_id_cache,
+    ObMySQLProxy &ddl_sql_proxy,
+    ObMultiVersionSchemaService &schema_service)
     : mysql_proxy_(NULL),
       last_operation_schema_version_(OB_INVALID_VERSION),
       database_service_(*this),
-      table_service_(*this),
+      table_service_(*this, schema_service),
       user_service_(*this),
       priv_service_(*this),
       outline_service_(*this),
@@ -200,6 +204,8 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl()
       ai_model_service_(*this),
       cluster_schema_status_(ObClusterSchemaStatus::NORMAL_STATUS),
       schema_service_(NULL),
+      max_id_cache_(max_id_cache),
+      ddl_sql_proxy_(&ddl_sql_proxy),
       object_ids_mutex_(),
       tablet_ids_mutex_(),
       sequence_id_()
@@ -229,7 +235,8 @@ int ObSchemaServiceSQLImpl::init(
   if (OB_ISNULL(sql_proxy)
       || OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ptr is null", K(ret), KP(sql_proxy), KP(schema_service));
+    LOG_WARN("invalid schema service runtime", K(ret), KP(sql_proxy),
+             KP(schema_service));
   } else {
     mysql_proxy_ = sql_proxy;
     schema_service_ = schema_service;
@@ -1801,7 +1808,8 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
-        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(check_deleted, *result, range_part_tables))) {
+        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(
+            check_deleted, *result, range_part_tables))) {
           LOG_WARN("failed to retrieve all column schema", KR(ret));
         } else { }//do nothing
       }
@@ -2207,7 +2215,11 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
 {
   int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
     LOG_WARN("fail to generate server runtime schema", KR(ret));
   } else if (OB_FAIL(runtime_schema_array.push_back(runtime_schema))) {
     LOG_WARN("fail to push back", KR(ret), K(runtime_schema));
@@ -2221,7 +2233,11 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
   int ret = OB_SUCCESS;
   ObSimpleServerRuntimeSchema simple_runtime_schema;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
     LOG_WARN("fail to generate server runtime schema", KR(ret));
   } else {
     
@@ -2245,7 +2261,11 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
 {
   int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
     LOG_WARN("fail to generate default runtime schema", KR(ret));
   } else {
     version_his_val.is_deleted_ = false;
@@ -2615,7 +2635,7 @@ int ObSchemaServiceSQLImpl::fetch_new_object_ids(const int64_t object_cnt,
     LOG_WARN("proxy is NULL", KR(ret));
   } else {
     lib::ObMutexGuard mutex_guard(object_ids_mutex_);
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_id( OB_MAX_USED_OBJECT_ID_TYPE,
         max_object_id, UINT64_MAX/*initial value should exist*/, object_cnt))) {
       LOG_WARN("fail to fetch object id", KR(ret), K(object_cnt));
@@ -2640,7 +2660,7 @@ int ObSchemaServiceSQLImpl::fetch_new_tablet_ids(const uint64_t size,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is NULL", KR(ret));
   } else {
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_ids(
         OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE, min_tablet_id, size))) {
       LOG_WARN("get new tablet id failed", KR(ret));
@@ -2685,7 +2705,7 @@ int ObSchemaServiceSQLImpl::fetch_new_schema_id_(const enum ObMaxIdType max_id_t
     LOG_WARN("proxy is NULL");
   } else {
     lib::ObMutexGuard mutex_guard(object_ids_mutex_);
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_id( max_id_type, new_schema_id))) {
       LOG_WARN("get new schema id failed", K(ret), K(max_id_type));
     }
@@ -4904,7 +4924,8 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(sql), K(ret));
-        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(check_deleted, *result, schema))) {
+        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(
+            check_deleted, *result, schema))) {
           LOG_WARN("failed to retrieve all part info", K(check_deleted), K(ret));
         }
       }
@@ -7344,4 +7365,13 @@ int ObSchemaRetrieveUtils::add_column_to_table_schema(ObColumnSchemaV2 &column, 
 
 }//namespace schema
 }//namespace share
+
+namespace query
+{
+int sort_table_partition_info(share::schema::ObTableSchema &table_schema)
+{
+  return share::schema::ObSchemaServiceSQLImpl::sort_table_partition_info_v2(table_schema);
+}
+}//namespace query
+
 }//namespace oceanbase

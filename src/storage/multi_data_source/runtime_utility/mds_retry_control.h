@@ -17,6 +17,7 @@
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_RETRY_CONTROL_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_UTILITY_MDS_RETRY_CONTROL_H
 
+#include "lib/literals/ob_literals.h"
 #include "common_define.h"
 #include "mds_lock.h"
 #include "share/ob_errno.h"

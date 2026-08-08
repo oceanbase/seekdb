@@ -128,7 +128,7 @@ int ObExprArray::eval_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
               }
             } else if (FALSE_IT(raw_bin = datum->get_string())) {
             } else if (FALSE_IT(elem_subid = expr.args_[i]->obj_meta_.get_subschema_id())) {
-            } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+            } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator,
                            *datum,
                            expr.args_[i]->datum_meta_,
                            expr.args_[i]->obj_meta_.has_lob_header(),

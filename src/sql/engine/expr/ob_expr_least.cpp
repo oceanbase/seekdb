@@ -312,7 +312,10 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
       ObDatum minmax_datum;
       ObTempExprCtx::TempAllocGuard tmp_alloc_guard(ctx);
       ObDatumCmpFuncType cmp_func = reinterpret_cast<ObDatumCmpFuncType>(expr.inner_functions_[0]);
-      if (OB_SUCC(ret) &&
+      const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+        LOG_WARN("get datum access context failed", K(ret));
+      } else if (OB_SUCC(ret) &&
           OB_FAIL(cast_param(*expr.args_[0], ctx, cast_info->cmp_meta_, cast_info->cm_,
                              tmp_alloc_guard.get_allocator(), minmax_datum))) {
         LOG_WARN("cast param failed", K(ret));
@@ -324,7 +327,8 @@ int ObExprLeastGreatest::calc_mysql(const ObExpr &expr, ObEvalCtx &ctx,
           LOG_WARN("cast param failed", K(ret));
         } else {
           int cmp_res = 0;
-          if (OB_FAIL(cmp_func(minmax_datum, cur_datum, cmp_res))) {
+          if (OB_FAIL(cmp_func(
+                  minmax_datum, cur_datum, cmp_res, datum_access_ctx))) {
             LOG_WARN("compare failed", K(ret));
           } else if((!least && cmp_res < 0) || (least && cmp_res > 0)) {
             res_idx = i;

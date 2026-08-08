@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_compaction_history.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -52,7 +52,7 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   int64_t compression_ratio = 0;
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
-    if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
       STORAGE_LOG(WARN, "fail to open ObSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }

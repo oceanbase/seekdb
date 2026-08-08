@@ -6,6 +6,7 @@
 #
 set +x
 CURDIR="$(dirname $(readlink -f "$0"))"
+ITEM_TYPE_HEADER="$CURDIR/../../query/api/query/parser/ob_item_type.h"
 #export PATH=/usr/local/bin:$PATH
 export PATH=$CURDIR/../../../deps/3rd/usr/local/oceanbase/devtools/bin/:$PATH
 export BISON_PKGDATADIR=$CURDIR/../../../deps/3rd/usr/local/oceanbase/devtools/share/bison
@@ -35,7 +36,7 @@ fi
 
 cat ../../../src/sql/parser/sql_parser_mysql_mode.y >> $TEMP_FILE
 cat ../../../src/sql/parser/sql_parser_mysql_mode.l >> $TEMP_FILE
-cat ../../../src/sql/parser/ob_item_type.h >> $TEMP_FILE
+cat "$ITEM_TYPE_HEADER" >> $TEMP_FILE
 
 md5sum_value=$(md5sum "$TEMP_FILE" | awk '{ print $1 }')
 
@@ -96,7 +97,7 @@ sed_inplace "/obsql_mysql_yylex_init is special because it creates the scanner i
 
 
 # generate type name
-./gen_type_name.sh ../../../src/sql/parser/ob_item_type.h > type_name.c
+./gen_type_name.sh "$ITEM_TYPE_HEADER" > type_name.c
 
 echo "$md5sum_value" > $CACHE_MD5_FILE
 }

@@ -19,6 +19,7 @@
 #include "ob_server_schema_service.h"
 #include "share/ob_schema_status_proxy.h"
 #include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
@@ -36,7 +37,10 @@ ObServerSchemaService::ObServerSchemaService()
     : schema_manager_rwlock_(common::ObLatchIds::SCHEMA_MGR_CACHE_LOCK),
       schema_service_(NULL),
       sql_proxy_(NULL),
-      config_(NULL)
+      config_(NULL),
+      schema_status_proxy_(NULL),
+      service_status_(NULL),
+      in_bootstrap_(NULL)
 {
 }
 
@@ -48,10 +52,8 @@ ObServerSchemaService::~ObServerSchemaService()
 int ObServerSchemaService::destroy()
 {
   int ret = OB_SUCCESS;
-  if (NULL != schema_service_) {
-    ObSchemaServiceFactory::destroy(schema_service_);
-    schema_service_ = NULL;
-  }
+  // The concrete backend is owned by the Observer composition root.
+  schema_service_ = NULL;
   // Each map held exactly one entry (sys). Mirror the per-entry
   // dtor on the single member, preserving the original FOREACH destroy (no leak).
   if (OB_SUCC(ret) && OB_NOT_NULL(schema_mgr_for_cache_)) {
@@ -118,7 +120,11 @@ int ObServerSchemaService::init_runtime_basic_schema()
 }
 
 int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
-                                const ObCommonConfig *config)
+                                const ObCommonConfig *config,
+                                ObSchemaStatusProxy &schema_status_proxy,
+                                const ObServiceStatus &service_status,
+                                bool &in_bootstrap,
+                                ObSchemaService &schema_backend)
 {
   int ret = OB_SUCCESS;
   auto attr = lib::ObMemAttr(ObModIds::OB_SCHEMA_ID_VERSIONS, ObCtxIds::SCHEMA_SERVICE);
@@ -131,9 +137,7 @@ int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
         KP(config));
   } else if (OB_FAIL(ObSysTableChecker::instance().init())) {
     LOG_WARN("fail to init runtime space table checker", KR(ret));
-  } else if (NULL == (schema_service_ = ObSchemaServiceFactory::create())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create schema service failed (creator registered by observer?), no memory", KR(ret));
+  } else if (FALSE_IT(schema_service_ = &schema_backend)) {
   } else if (OB_FAIL(schema_service_->init(sql_proxy, this))) {
     LOG_ERROR("fail to init schema service,", KR(ret));
   } else if (FALSE_IT(schema_service_->set_common_config(config))) {
@@ -145,6 +149,9 @@ int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
   } else {
     sql_proxy_ = sql_proxy;
     config_ = config;
+    schema_status_proxy_ = &schema_status_proxy;
+    service_status_ = &service_status;
+    in_bootstrap_ = &in_bootstrap;
   }
   // initialize server runtime schema management
   if (OB_SUCC(ret)) {
@@ -187,8 +194,9 @@ bool ObServerSchemaService::check_inner_stat() const
 int ObServerSchemaService::check_stop() const
 {
   int ret = OB_SUCCESS;
-  if (ObServiceStatus::SS_STOPPING == GCTX.status_
-      || ObServiceStatus::SS_STOPPED == GCTX.status_) {
+  if (nullptr != service_status_
+      && (ObServiceStatus::SS_STOPPING == *service_status_
+          || ObServiceStatus::SS_STOPPED == *service_status_)) {
     ret = OB_SERVER_IS_STOPPING;
     LOG_WARN("observer is stopping", K(ret));
   }
@@ -2748,7 +2756,9 @@ int ObServerSchemaService::refresh_full_schema(
       if (OB_SUCC(ret)) {
         // full runtime schema refresh completes bootstrap optimizations.
         {
-          GCTX.in_bootstrap_ = false;
+          if (nullptr != in_bootstrap_) {
+            *in_bootstrap_ = false;
+          }
         }
         break;
       } else {
@@ -3187,7 +3197,7 @@ int ObServerSchemaService::try_fetch_publish_sys_schemas(
     int64_t new_schema_version = 0;
     if (OB_FAIL(get_sys_table_ids(sys_table_ids))) {
       LOG_WARN("get sys table ids failed", KR(ret), K(schema_status));
-    } else if (GCTX.in_bootstrap_ && OB_FAIL(construct_related_table_schemas(sys_table_ids, table_schemas, sys_schemas))) {
+    } else if (is_in_bootstrap() && OB_FAIL(construct_related_table_schemas(sys_table_ids, table_schemas, sys_schemas))) {
       LOG_WARN("construct sys table schemas from bootstrap schemas failed", KR(ret), K(schema_status));
     } else if (OB_FAIL(schema_service_->get_sys_table_schemas(
                sql_client, schema_status, sys_table_ids, allocator, sys_schemas))) {
@@ -3325,7 +3335,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       } else {
         const ObSimpleServerRuntimeSchema &simple_runtime = simple_runtimes.at(0);
         if (simple_runtime.is_restore()) {
-          ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+          ObSchemaStatusProxy *schema_status_proxy = schema_status_proxy_;
           if (OB_ISNULL(schema_status_proxy)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("schema_status_proxy is null", KR(ret));
@@ -3377,7 +3387,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       } else if (OB_FAIL(schema_service_->get_all_databases(
           sql_client, schema_status, schema_version, simple_databases))) {
         LOG_WARN("get all databases failed", K(ret), K(schema_version));
-      } else if (!GCTX.in_bootstrap_ && OB_FAIL(schema_service_->get_all_tables(
+      } else if (!is_in_bootstrap() && OB_FAIL(schema_service_->get_all_tables(
           sql_client, allocator, schema_status, schema_version, simple_tables))) {
         LOG_WARN("get all table schema failed", KR(ret), K(schema_version));
       } else if (OB_FAIL(schema_service_->get_all_outlines(
@@ -3447,7 +3457,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
         LOG_WARN("add users failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->add_databases(simple_databases))) {
         LOG_WARN("add databases failed", K(ret));
-      } else if (!GCTX.in_bootstrap_ && OB_FAIL(schema_mgr_for_cache->add_tables(simple_tables))) {
+      } else if (!is_in_bootstrap() && OB_FAIL(schema_mgr_for_cache->add_tables(simple_tables))) {
         LOG_WARN("add tables failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->outline_mgr_.add_outlines(simple_outlines))) {
         LOG_WARN("add outlines failed", K(ret));
@@ -3498,7 +3508,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       ObArray<ObSimpleTableSchemaV2*> simple_non_sys_schemas(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator));
       if (OB_FAIL(schema_mgr_for_cache->get_non_sys_table_ids(non_sys_table_ids))) {
         LOG_WARN("fail to get non sys table_ids", KR(ret), K(schema_status));
-      } else if (GCTX.in_bootstrap_ && OB_FAIL(construct_related_table_schemas(non_sys_table_ids, table_schemas, non_sys_tables))) {
+      } else if (is_in_bootstrap() && OB_FAIL(construct_related_table_schemas(non_sys_table_ids, table_schemas, non_sys_tables))) {
         LOG_WARN("construct non sys tables from bootstrap schemas failed", KR(ret), K(schema_status));
       } else if (OB_FAIL(schema_service_->get_batch_table_schema(
                  schema_status, schema_version, non_sys_table_ids, sql_client,

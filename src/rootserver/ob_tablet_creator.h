@@ -23,17 +23,13 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_tablet_id.h"//ObTabletID
-#include "share/ob_rpc_struct.h"//ObBatchCreateTabletArg
 #include "share/ob_ddl_common.h" // ObForkTabletInfo
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_define.h"
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 
 namespace oceanbase
 {
-namespace rpc
-{
-class ObBatchCreateTabletArg;
-}
 namespace rootserver
 {
 struct ObTabletCreatorArg

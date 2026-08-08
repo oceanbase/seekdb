@@ -18,7 +18,7 @@
 
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_util.h"
 
 namespace oceanbase
@@ -99,6 +99,11 @@ int ObGroupRowHashTable::init(ObIAllocator *allocator,
   if (OB_FAIL(ObExtendHashTable<ObGroupRowItem>::init(
               allocator, mem_attr, initial_size))) {
     LOG_WARN("failed to init extended hash table", K(ret));
+  } else if (OB_ISNULL(eval_ctx)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("evaluation context is null", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else {
     gby_exprs_ = &gby_exprs;
     eval_ctx_ = eval_ctx;
@@ -149,7 +154,8 @@ int ObGroupRowHashTable::likely_equal(
         result = true;
       } else {
         int cmp_res = 0;
-        if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l, *r, cmp_res))) {
+        if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                *l, *r, cmp_res, datum_access_ctx_))) {
           LOG_WARN("failed to do cmp", K(ret), KPC(l), KPC(r));
         } else {
           result = (0 == cmp_res);
@@ -201,6 +207,8 @@ int ObHashGroupByOp::inner_open()
   ObMemAttr node_attr("GbyPMapBktNod");
   if (OB_FAIL(ObGroupByOp::inner_open())) {
     LOG_WARN("failed to inner_open", K(ret));
+  } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
     LOG_WARN("init memory entity failed", K(ret));
   } else if (!local_group_rows_.is_inited()) {
@@ -1315,7 +1323,8 @@ int ObHashGroupByOp::calc_groupby_exprs_hash(ObIArray<ObExpr*> &groupby_exprs,
         LOG_WARN("eval failed", K(ret));
       } else {
         ObExprHashFuncType hash_func = expr->basic_funcs_->murmur_hash_v2_;
-        if (OB_FAIL(hash_func(*result, hash_value, hash_value))) {
+        if (OB_FAIL(
+                hash_func(*result, hash_value, hash_value, datum_access_ctx_))) {
           LOG_WARN("hash failed", K(ret));
         }
       }
@@ -1959,7 +1968,8 @@ void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
                   expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                   *child_brs.skip_, child_brs.size_,
                   is_batch_seed ? base_hash_vals_ : &seed,
-                  is_batch_seed);
+                  is_batch_seed,
+                  datum_access_ctx_);
       }
     }
     has_calc_base_hash_ = true;
@@ -1982,7 +1992,8 @@ void ObHashGroupByOp::calc_groupby_exprs_hash_batch(
                 expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                 *child_brs.skip_, child_brs.size_,
                 is_batch_seed ? hash_vals_ : &seed,
-                is_batch_seed);
+                is_batch_seed,
+                datum_access_ctx_);
     }
   }
 }
@@ -3183,7 +3194,7 @@ int ObHashGroupByOp::check_llc_ndv()
   int64_t global_bound_size = 0;
   bool ndv_ratio_is_small_enough = false;
   bool has_enough_mem_for_deduplication = false;
-  ObSqlMemoryManager *runtime_sql_mem_manager = share::g_mp->sql_memory_manager();
+  ObSqlMemoryManager *runtime_sql_mem_manager = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
   ObExprEstimateNdv::llc_estimate_ndv(ndv, llc_est_.llc_map_);
   if (0 == llc_est_.est_cnt_) {
     ret = OB_ERR_UNEXPECTED;

@@ -1,0 +1,49 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，分布式事务执行过程中发生partition切换
+# 测试场景：开启事务，执行SQL。发起切换, commit
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0, init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@sys,,oceanbase,$l_port);
+
+connection conn1;
+set ob_query_timeout=90000000;
+set ob_trx_timeout=1200000000;
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+
+connection conn2;
+ob1.z2.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+
+connection conn1;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+sleep 10;
+
+connection conn2;
+ob1.z1.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+
+connection conn1;
+update t1 set c2='aa' where pk=1;
+commit;
+
+set autocommit=1;
+select * from t1;

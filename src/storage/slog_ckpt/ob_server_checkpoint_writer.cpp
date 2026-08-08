@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include
-#include "observer/omt/ob_server_runtime_meta.h"
-#include "observer/ob_server_struct.h" 
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
+#include "storage/meta_store/ob_server_runtime_meta.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -29,7 +29,8 @@ namespace storage
 using namespace oceanbase::common;
 using namespace oceanbase::blocksstable;
 
-int ObServerCheckpointWriter::init(ObStorageLogger *server_slogger)
+int ObServerCheckpointWriter::init(
+    ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime)
 {
   int ret = OB_SUCCESS;
   const int64_t MEM_LIMIT = 128 << 20;  // 128M
@@ -46,6 +47,7 @@ int ObServerCheckpointWriter::init(ObStorageLogger *server_slogger)
     LOG_WARN("fail to init runtime meta item writer", K(ret));
   } else {
     server_slogger_ = server_slogger;
+    server_runtime_ = &server_runtime;
     is_inited_ = true;
   }
   return ret;
@@ -86,7 +88,7 @@ int ObServerCheckpointWriter::write_runtime_meta_checkpoint(MacroBlockId &block_
 
   omt::ObServerRuntimeMeta meta;
   bool exist = false;
-  if (OB_FAIL(GCTX.server_runtime_controller_->get_runtime_meta_for_ckpt(meta, exist))) {
+  if (OB_FAIL(server_runtime_->get_runtime_meta_for_ckpt(meta, exist))) {
     LOG_WARN("fail to get_runtime_meta_for_ckpt", K(ret));
   } else if (exist) {
     // The project keeps one local OMT runtime. Persist the current mainline

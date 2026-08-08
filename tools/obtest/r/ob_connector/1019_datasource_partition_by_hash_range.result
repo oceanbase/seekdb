@@ -1,0 +1,20 @@
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+create table t1 (c1 int, c2 datetime, c3 varchar(200)) partition by hash (c1) subpartition by range columns(c2) subpartition template (subpartition p1 values less than ('2008-01-01 00:00:00'), subpartition p2 values less than ('2017-01-01 00:00:00'), subpartition p3 values less than (MAXVALUE)) partitions 8;
+insert into t1 values (1, '2001-10-07 21:00:00', 'aaaa');
+insert into t1 values (1, '2008-10-07 21:00:00', 'bbbb');
+insert into t1 values (2, '2017-10-07 21:00:00', 'cccc');
+insert into t1 values (2, '2020-10-07 21:00:00', 'dddd');
+insert into t1 values (3, '1999-10-07 21:00:00', 'eeee');
+insert into t1 values (3, '2030-10-07 21:00:00', 'ffff');
+select c3 from t1 where c1 = 1 and c2 = '2017-10-07 21:00:00';
+c3
+$follower.switch_partition obtest:test:t1:$partId;
+select c3 from t1 where c1 = 1 and c2 = '2017-10-07 21:00:00';
+c3
+select c3 from t1 where c1 = 1 and c2 = '2017-10-07 21:00:00';
+c3

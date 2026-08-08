@@ -1,0 +1,91 @@
+# owner: msy164651
+# description: 测试从switching的状态转成主库可以正常
+# case1：同步成功后，主库切换成备库，在switching的状态failover成主
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+let $cpu = 2;
+let $memory = 2073741824;
+let $min_memory = 2073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+ob1.mysql set @@global.ob_query_timeout = 50000000;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(conn1, ob1.z1.obs0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+connection conn1;
+create table t(c1 int primary key, c2 int, c3 int);
+insert into t values (1,2,3);
+insert into t values (3,4,5);
+insert into t values (5,6,7);
+select * from t;
+ob_connect(sys_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set max_stale_time_for_weak_consistency = '120s';
+alter system set debug_sync_timeout = '100000s';
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001 and zone = 'z1', $partition_cnt, 120;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.check_version 2;
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql set @@global.ob_query_timeout = 100000000;
+ob1.mysql alter system commit to switchover to physical standby;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+ob2.force_stop;
+ob1.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER; 
+ob1.mysql_p select cluster_status from oceanbase.__all_cluster where cluster_id = $cluster_id;
+sleep 5;
+#备库应该是disable的状态
+#不可以直接enable，虽然没有failover的过程
+let $cluster_name = deploy_get_value(ob1.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+ob_connect(conn3, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn3;
+--disable_query_log
+#--error 4179
+#eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+let $failover_scn = deploy_get_value(ob1.select select standby_became_primary_scn from oceanbase.__all_virtual_cluster, standby_became_primary_scn, 1);
+ob2.z1.obs0.nstart -m disabled_cluster;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table,1, 100;
+sleep 10;
+--disable_query_log
+ob1.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+connection conn1;
+select * from t;
+
+#case 2
+connection conn1;
+alter table t add c4 int;
+insert into t values (111,111,111,111);
+ob_connect(conn2, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+alter system change tenant tt;
+let $schema_version = query_get_value(select max(schema_version) as version from oceanbase.__all_ddl_operation, version, 1);
+let $tenant_id = deploy_get_value(ob2.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $row_id = deploy_get_value(ob2.select select row_id from oceanbase.__all_core_table where table_name = '__all_schema_status' and column_name = 'tenant_id' and column_value = $tenant_id, row_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_schema_status' and column_name = 'readable_schema_version' and row_id = $row_id and column_value = $schema_version, 1,10;
+ob1.z1.obs0.force_stop;
+ob_connect(sys_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+set ob_query_timeout = 100000000;
+alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+select * from t;
+

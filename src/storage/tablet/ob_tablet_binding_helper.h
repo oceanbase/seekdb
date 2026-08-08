@@ -42,11 +42,6 @@ namespace share
 class SCN;
 }
 
-namespace rootserver
-{
-class ObDDLSQLTransaction;
-}
-
 namespace transaction
 {
 struct ObMulSourceDataNotifyArg;
@@ -126,7 +121,7 @@ public:
   static int get_ls(ObLS *&tenant_ls);
   static int build_single_table_write_defensive(const share::schema::ObTableSchema &table_schema,
                                                 const int64_t schema_version,
-                                                rootserver::ObDDLSQLTransaction &trans);
+                                                common::ObMySQLTransaction &trans);
 private:
   const ObLS &ls_;
   const transaction::ObMulSourceDataNotifyArg &trans_flags_;

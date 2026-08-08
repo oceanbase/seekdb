@@ -16,12 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "pl/sys_package/ob_dbms_stats.h"
+#include "share/ob_share_util.h"
 #include "share/ob_ex_rpc.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "src/observer/virtual_table/ob_all_virtual_dml_stats.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
@@ -5323,7 +5324,7 @@ int ObDbmsStats::check_statistic_table_writeable(sql::ObExecContext &ctx)
   if (OB_ISNULL(ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", KR(ret), KP(ctx.get_my_session()));
-  } else if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+  } else if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_primary(is_primary))) {
     LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     ret = OB_NOT_SUPPORTED;

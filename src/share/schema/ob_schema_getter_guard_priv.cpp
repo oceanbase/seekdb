@@ -22,7 +22,6 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace observer;
 
 namespace share
 {
@@ -937,6 +936,102 @@ int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
 }
 
 
+
+int ObSchemaGetterGuard::check_priv(
+    const ObSessionPrivInfo &session_priv,
+    const common::ObIArray<uint64_t> &enable_role_id_array,
+    const ObStmtNeedPrivs &stmt_need_privs)
+{
+  int ret = OB_SUCCESS;
+  const ObStmtNeedPrivs::NeedPrivs &need_privs = stmt_need_privs.need_privs_;
+
+  if (session_priv.is_valid()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < need_privs.count(); ++i) {
+      const ObNeedPriv &need_priv = need_privs.at(i);
+      switch (need_priv.priv_level_) {
+        case OB_PRIV_USER_LEVEL: {
+          if (OB_FAIL(check_user_priv(session_priv,
+                                      enable_role_id_array,
+                                      need_priv.priv_set_,
+                                      OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
+          }
+          break;
+        }
+        case OB_PRIV_DB_LEVEL: {
+          if (OB_FAIL(check_db_priv(session_priv,
+                                    enable_role_id_array,
+                                    need_priv.db_,
+                                    need_priv.priv_set_))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
+          }
+          break;
+        }
+        case OB_PRIV_TABLE_LEVEL: {
+          if (OB_PRIV_CHECK_ALL == need_priv.priv_check_type_) {
+            if (OB_FAIL(check_single_table_priv(
+                    session_priv, enable_role_id_array, need_priv))) {
+              LOG_WARN("No privilege",
+                       "user_id", session_priv.user_id_,
+                       "need_priv", need_priv.priv_set_,
+                       "table", need_priv.table_,
+                       "db", need_priv.db_,
+                       "user_priv", session_priv.user_priv_set_,
+                       KR(ret));
+            }
+          } else if (OB_PRIV_CHECK_ANY == need_priv.priv_check_type_) {
+            if (OB_FAIL(check_single_table_priv_or(
+                    session_priv, enable_role_id_array, need_priv))) {
+              LOG_WARN("No privilege",
+                       "user_id", session_priv.user_id_,
+                       "need_priv", need_priv.priv_set_,
+                       "table", need_priv.table_,
+                       "db", need_priv.db_,
+                       "user_priv", session_priv.user_priv_set_,
+                       KR(ret));
+            }
+          } else {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("Privilege checking of other not use this function yet", KR(ret));
+          }
+          break;
+        }
+        case OB_PRIV_ROUTINE_LEVEL: {
+          if (OB_FAIL(check_routine_priv(
+                  session_priv, enable_role_id_array, need_priv))) {
+            LOG_WARN("No privilege",
+                     "user_id", session_priv.user_id_,
+                     "need_priv", need_priv.priv_set_,
+                     "table", need_priv.table_,
+                     "db", need_priv.db_,
+                     "user_priv", session_priv.user_priv_set_,
+                     KR(ret));
+          }
+          break;
+        }
+        case OB_PRIV_DB_ACCESS_LEVEL: {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Privilege checking of database access should not use this function", KR(ret));
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+    }
+  } else {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
 
 int ObSchemaGetterGuard::check_priv_db_or_(const ObSessionPrivInfo &session_priv,
                                            const common::ObIArray<uint64_t> &enable_role_id_array,

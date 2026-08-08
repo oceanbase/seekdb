@@ -18,7 +18,7 @@
 
 #include "ob_expr_get_subprogram_var.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "pl/ob_pl.h"
+#include "sql/pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -97,7 +97,8 @@ int ObExprGetSubprogramVar::calc_get_subprogram_var(
     *session_info, package_id, subprogram_id, var_idx, res_var));
     OZ (expr_datum.from_obj(res_var));
     if (is_lob_storage(res_var.get_type())) {
-      OZ (ob_adjust_lob_datum(res_var, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), expr_datum));
+      OZ (ob_adjust_lob_datum(ctx.exec_ctx_, res_var, expr.obj_meta_,
+                              ctx.exec_ctx_.get_allocator(), expr_datum));
     }
   }
   return ret;

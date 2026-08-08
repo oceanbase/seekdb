@@ -24,7 +24,7 @@
 #include "common/row/ob_row_desc.h"
 #include "share/ob_autoincrement_param.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "share/schema/ob_dependency_info.h"      // ObReferenceObjTable
 #include "lib/objectpool/ob_pooled_allocator.h"
 namespace oceanbase

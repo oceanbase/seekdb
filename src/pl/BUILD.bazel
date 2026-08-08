@@ -1,0 +1,344 @@
+load(
+    "//bazel:defs.bzl",
+    "SEEKDB_C_MIGRATION_COPTS",
+    "seekdb_semantic_unity_cc_library",
+    "seekdb_test_interface",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    ":pl_build_defs.bzl",
+    "PL_IGNORED_GENERATED_HEADERS",
+    "PL_IGNORED_GENERATED_SOURCES",
+    "PL_PRIVATE_HEADERS",
+    "PL_PUBLIC_HEADER_ROOTS",
+    "PL_STANDALONE_SOURCES",
+    "PL_UNITY_GROUPS",
+    "pl_singleton_unity_groups",
+    "pl_validate_header_inventory",
+    "pl_validate_source_inventory",
+)
+load(
+    ":pl_parser_c_group_oblib_deps.bzl",
+    "pl_parser_c_group_oblib_deps",
+)
+load(":pl_runtime_group_oblib_deps.bzl", "pl_runtime_group_oblib_deps")
+
+package(default_visibility = ["//visibility:private"])
+
+pl_validate_source_inventory(
+    PL_UNITY_GROUPS,
+    PL_STANDALONE_SOURCES,
+    glob([
+        "**/*.c",
+        "**/*.cc",
+        "**/*.cpp",
+        "**/*.cxx",
+    ], exclude = PL_IGNORED_GENERATED_SOURCES, allow_empty = True),
+)
+
+pl_validate_header_inventory(glob(
+    ["**/*.h"],
+    exclude = PL_IGNORED_GENERATED_HEADERS,
+))
+
+# Public only for the negative central-policy probe in //src/sql/bazel_pilot.
+# It carries no production files or providers; its purpose is to prove that a
+# broad target visibility cannot authorize a forbidden module direction.
+filegroup(
+    name = "module_policy_public_probe",
+    tags = ["manual"],
+    testonly = True,
+    visibility = ["//visibility:public"],
+)
+
+# These producers deliberately expose public probes, so ordinary visibility
+# permits the edges. The central module policy must independently reject both
+# forbidden PL -> server directions.
+filegroup(
+    name = "bazel_pilot_illegal_observer_dependency",
+    srcs = ["//src/observer:module_policy_public_probe"],
+    tags = ["manual"],
+    testonly = True,
+)
+
+filegroup(
+    name = "bazel_pilot_illegal_rootserver_dependency",
+    srcs = ["//src/rootserver:module_policy_public_probe"],
+    tags = ["manual"],
+    testonly = True,
+)
+
+genrule(
+    name = "generate_pl_parser",
+    srcs = [
+        "parser/pl_parser_mysql_mode.l",
+        "parser/pl_parser_mysql_mode.y",
+    ],
+    outs = [
+        "parser/bazel_generated/pl_parser_mysql_mode_lex.c",
+        "parser/bazel_generated/pl_parser_mysql_mode_lex.h",
+        "parser/bazel_generated/pl_parser_mysql_mode_tab.c",
+        "parser/bazel_generated/pl_parser_mysql_mode_tab.h",
+    ],
+    cmd = """
+      bash $(location //tools/bazel_migration:generate_pl_parser.sh) \
+        $(location @seekdb_3rd_headers//:devtools/bin/bison) \
+        $(location @seekdb_3rd_headers//:devtools/bin/flex) \
+        $$(dirname $(location @seekdb_3rd_headers//:devtools/share/bison/README)) \
+        $(RULEDIR)/parser/bazel_generated \
+        $$(dirname $(location parser/pl_parser_mysql_mode.y))
+    """,
+    tools = [
+        "//tools/bazel_migration:generate_pl_parser.sh",
+        "@seekdb_3rd_headers//:bison_runtime",
+        "@seekdb_3rd_headers//:devtools/bin/bison",
+        "@seekdb_3rd_headers//:devtools/bin/flex",
+        "@seekdb_3rd_headers//:devtools/share/bison/README",
+    ],
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "_generated_pl_parser_headers",
+    hdrs = [
+        "parser/bazel_generated/pl_parser_mysql_mode_lex.h",
+        "parser/bazel_generated/pl_parser_mysql_mode_tab.h",
+    ],
+    include_prefix = "pl/parser",
+    includes = ["parser/bazel_generated"],
+    strip_include_prefix = "parser/bazel_generated",
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/pl:__subpackages__",
+    ],
+)
+
+# PL has one external interface. The files here are facade headers; the
+# canonical stored-program vocabulary remains SQL-owned so SQL never acquires
+# a reverse dependency on PL.
+cc_library(
+    name = "pl_interface",
+    hdrs = PL_PUBLIC_HEADER_ROOTS,
+    deps = ["//src/sql:sql_runtime_interface"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = [
+        "//src:__subpackages__",
+        "//unittest:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "pl_internal_headers",
+    hdrs = PL_PRIVATE_HEADERS,
+    deps = [
+        ":pl_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/sql:sql_runtime_interface",
+    ],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+seekdb_test_interface(
+    name = "pl_unit_test_interface",
+    deps = [
+        ":_generated_pl_parser_headers",
+        ":pl_internal_headers",
+    ],
+    visibility = ["//unittest/pl:__pkg__"],
+)
+
+_PL_RUNTIME_SHARE_HEADER_DEPS = [
+    "//src/share:ai_endpoint_interface",
+    "//src/share:autoincrement_runtime",
+    "//src/share:cache",
+    "//src/share:catalog_access",
+    "//src/share:cluster_metadata_persistence",
+    "//src/share:cluster_topology",
+    "//src/share:cluster_version_interface",
+    "//src/share:collection_types",
+    "//src/share:config",
+    "//src/share:config_parser_interface",
+    "//src/share:config_value_support",
+    "//src/share:core_types",
+    "//src/share:datum",
+    "//src/share:ddl_protocol",
+    "//src/share:debug_sync_interface",
+    "//src/share:diagnostics",
+    "//src/share:error_codes",
+    "//src/share:execution_contracts",
+    "//src/share:external_storage",
+    "//src/share:geo_cast_interface",
+    "//src/share:geo_types",
+    "//src/share:id_generator",
+    "//src/share:inner_table_schema_io",
+    "//src/share:interrupt_runtime",
+    "//src/share:io",
+    "//src/share:io_bench_controller_interface",
+    "//src/share:lib_cache_namespace",
+    "//src/share:lob_runtime",
+    "//src/share:location",
+    "//src/share:log_protocol",
+    "//src/share:ls_restore_status",
+    "//src/share:memory_support",
+    "//src/share:object_cast",
+    "//src/share:pl_integer_type",
+    "//src/share:resource_limit_calculator",
+    "//src/share:rpc_dispatch",
+    "//src/share:rpc_message_types",
+    "//src/share:runtime_context",
+    "//src/share:schema_access",
+    "//src/share:schema_entities",
+    "//src/share:schema_foundation_types",
+    "//src/share:schema_model_interface",
+    "//src/share:schema_partition_iteration",
+    "//src/share:schema_registry",
+    "//src/share:schema_transaction_control",
+    "//src/share:scn_interface",
+    "//src/share:semistruct",
+    "//src/share:sequence_option",
+    "//src/share:sequence_runtime",
+    "//src/share:session_state",
+    "//src/share:sql_persistence_support",
+    "//src/share:sqlite_storage_interface",
+    "//src/share:statement_type",
+    "//src/share:storage_cache_policy",
+    "//src/share:system_variable_metadata",
+    "//src/share:table_lock_priority",
+    "//src/share:tablet_autoincrement_types",
+    "//src/share:tablet_metadata",
+    "//src/share:task_control",
+    "//src/share:tenant_runtime",
+    "//src/share:timezone_runtime",
+    "//src/share:transaction_id",
+    "//src/share:unit_config_interface",
+    "//src/share:unit_topology",
+    "//src/share:utility_types",
+    "//src/share:vector",
+]
+
+_PL_RUNTIME_DEPS = [
+    ":_generated_pl_parser_headers",
+    ":pl_interface",
+    ":pl_internal_headers",
+    "//src/oblib/easy:easy",
+    "//src/oblib:common_sql_mode",
+    "//src/oblib:oblib_foundation",
+    "//src/data_plane:data_plane_api_interface",
+    "//src/data_plane:tx_desc_access_interface",
+    "//src/query:ai_endpoint_admin",
+    "//src/query:change_stream_service",
+    "//src/query:mysql_protocol_util",
+    "//src/query:query_api_interface",
+    "//src/query:root_command_service",
+    "//src/query:root_service_serialization",
+    "//src/query:scheduler_interface",
+    "//src/sql:sql_runtime_interface",
+] + _PL_RUNTIME_SHARE_HEADER_DEPS
+
+_PL_RUNTIME_NON_OBLIB_DEPS = [
+    dep
+    for dep in _PL_RUNTIME_DEPS
+    if not dep.startswith("//src/oblib:")
+]
+
+_PL_RUNTIME_UNITY_GROUPS = PL_UNITY_GROUPS + pl_singleton_unity_groups(
+    PL_STANDALONE_SOURCES,
+    "pl_parser_cxx",
+    "c++",
+)
+
+# Five C++ Unity actions, one archive: the four release groups plus the parser.
+seekdb_semantic_unity_cc_library(
+    name = "pl_runtime",
+    owner_package = "src/pl",
+    unity_groups = _PL_RUNTIME_UNITY_GROUPS,
+    expected_group_names = [
+        "pl_cache",
+        "pl_common",
+        "pl_parser_cxx_0",
+        "pl_recompile",
+        "pl_sys_package",
+    ],
+    implementation_deps = _PL_RUNTIME_NON_OBLIB_DEPS,
+    group_implementation_deps = pl_runtime_group_oblib_deps(
+        _PL_RUNTIME_UNITY_GROUPS,
+    ),
+    features = ["layering_check"],
+    tags = ["manual"],
+)
+
+# Flex/Bison C sources remain separate Unity actions to avoid generated-symbol
+# collisions, but belong to one semantic parser archive.
+seekdb_semantic_unity_cc_library(
+    name = "pl_parser_c",
+    owner_package = "src/pl",
+    unity_groups = pl_singleton_unity_groups(
+        PL_STANDALONE_SOURCES,
+        "pl_parser_c",
+        "c",
+    ),
+    language = "c",
+    expected_group_names = [
+        "pl_parser_c_0",
+        "pl_parser_c_1",
+        "pl_parser_c_2",
+        "pl_parser_c_3",
+    ],
+    source_replacements = {
+        "src/pl/parser/pl_parser_mysql_mode_lex.c": "parser/bazel_generated/pl_parser_mysql_mode_lex.c",
+        "src/pl/parser/pl_parser_mysql_mode_tab.c": "parser/bazel_generated/pl_parser_mysql_mode_tab.c",
+    },
+    implementation_deps = [
+        ":_generated_pl_parser_headers",
+        ":pl_internal_headers",
+        "//src/query:query_api_interface",
+        "//src/sql:sql_runtime_interface",
+    ],
+    group_implementation_deps = pl_parser_c_group_oblib_deps(
+        pl_singleton_unity_groups(
+            PL_STANDALONE_SOURCES,
+            "pl_parser_c",
+            "c",
+        ),
+    ),
+    copts = SEEKDB_C_MIGRATION_COPTS,
+    tags = ["manual"],
+)
+
+cc_library(
+    name = "syspack_source",
+    srcs = ["//src/share/inner_table/sys_package:bazel_generated/syspack/syspack_source.cpp"],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "pl_static",
+    implementation_deps = [
+        ":pl_parser_c",
+        ":pl_runtime",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+filegroup(
+    name = "pl_static_build",
+    srcs = [
+        ":pl_parser_c",
+        ":pl_runtime",
+        ":syspack_source",
+    ],
+    tags = ["manual"],
+    visibility = ["//src/observer:__pkg__"],
+)
+
+alias(
+    name = "syspack_release",
+    actual = "//src/share/inner_table/sys_package:syspack_release",
+    tags = ["manual"],
+    visibility = ["//visibility:public"],
+)

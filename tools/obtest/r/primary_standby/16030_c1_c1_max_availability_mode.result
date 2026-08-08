@@ -1,0 +1,80 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+protection_level
+MAXIMUM PERFORMANCE
+MAXIMUM PERFORMANCE
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 100;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+protection_level
+MAXIMUM AVAILABILITY
+MAXIMUM AVAILABILITY
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob2.force_stop;
+create table t1(c1 int);
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 40;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+protection_level
+MAXIMUM PERFORMANCE
+MAXIMUM PERFORMANCE
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 60;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='net_timeout = 180000000';
+ob2.force_stop;
+create table t2(c1 int);
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+protection_level
+MAXIMUM AVAILABILITY
+MAXIMUM AVAILABILITY
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 40;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+protection_level
+MAXIMUM PERFORMANCE
+MAXIMUM PERFORMANCE
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob2.mysql alter system commit to switchover to primary;
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM AVAILABILITY, 100;
+ob2.force_stop;
+ob1.mysql alter system failover to '$cluster_name' cluster_id $cluster_id;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 180000000	MAXIMUM PERFORMANCE
+ob2.z1.obs0.nstart -m disabled_cluster;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 200;
+ob2.mysql alter system convert to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 100;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob2.mysql alter system commit to switchover to primary;
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM AVAILABILITY, 100;

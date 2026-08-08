@@ -184,7 +184,7 @@ int ObLooseMinMaxStatCollector<AGG_TYPE>::init(
     STORAGE_LOG(WARN, "Init twice", K(ret));
   } else {
     allocator_ = &result_alloc;
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
     if (blocksstable::ObSkipIndexColType::SK_IDX_MAX == AGG_TYPE) {
       cmp_func_ = basic_funcs->null_first_cmp_;
@@ -211,7 +211,7 @@ int ObLooseMinMaxStatCollector<AGG_TYPE>::collect(const ObDatum &datum)
   if (OB_ISNULL(agg_result_)) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
-  } else if (OB_FAIL(cmp_func_(datum, *agg_result_, cmp_res))) {
+  } else if (OB_FAIL(cmp_func_(datum, *agg_result_, cmp_res, nullptr))) {
     STORAGE_LOG(WARN, "failed to compare datum", K(ret), K(datum), KPC_(agg_result));
   } else if (!need_update_result(cmp_res)) {
     // skip

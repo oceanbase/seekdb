@@ -1,0 +1,731 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.z1.obs0.set extra_config=$extra_conf;
+===============================================================
+====================     bootstrap   ==========================
+===============================================================
+test case for bootstrap begin
+ob1.reboot;
+test case for bootstrap finish
+===============================================================
+==================     create tenant   ========================
+===============================================================
+test case for create tenant begin
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE='3G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1', locality='F@z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+ob_connect(conn_mysql_meta, ob1.z1.obs0, root@META$1002, , test, , USE_MYSQL_CONNECTOR)
+ERROR 0A000: login meta tenant not supported
+alter system run job "root_inspection";
+alter system upgrade virtual schema;
+test case for create tenant finish
+===============================================================
+===========     dml/select under sys tenant   =================
+===============================================================
+test case for dml and select under sys tenant begin
+create table t1_no_pk (c1 int);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_no_pk values (1), (2), (3);
+select * from t1_no_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_pk (c1 int primary key);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_pk values (1), (2), (3);
+select * from t1_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_part (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part values (1), (2), (3), (4);
+select * from t1_part order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part set c1=c1+10;
+select * from t1_part order by c1 asc;
+c1
+11
+12
+13
+14
+test case for dml and select under sys tenant finish
+===============================================================
+==========     dml/select under mysql tenant   ================
+===============================================================
+test case for dml and select under mysql tenant begin
+create table t1_no_pk (c1 int);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_no_pk values (1), (2), (3);
+select * from t1_no_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_pk (c1 int primary key);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_pk values (1), (2), (3);
+select * from t1_pk order by c1 asc;
+c1
+1
+2
+3
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+11
+12
+13
+create table t1_part (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part values (1), (2), (3), (4);
+select * from t1_part order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part set c1=c1+10;
+select * from t1_part order by c1 asc;
+c1
+11
+12
+13
+14
+create table like_t1_part like t1_part;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into like_t1_part values (1), (2), (3), (4);
+select * from like_t1_part order by c1 asc;
+c1
+1
+2
+3
+4
+update like_t1_part set c1=c1+10;
+select * from like_t1_part order by c1 asc;
+c1
+11
+12
+13
+14
+test case for dml and select under mysql tenant finish
+===============================================================
+==========     dml/select under mysql tenant   ================
+===============================================================
+test dml and select under mysql tenant after minor freeze begin
+set @@session.ob_query_timeout = 100000000000;
+alter system minor freeze tenant mysql;
+insert into t1_no_pk values (1001), (1002), (1003);
+select * from t1_no_pk order by c1 asc;
+c1
+11
+12
+13
+1001
+1002
+1003
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+21
+22
+23
+1011
+1012
+1013
+insert into t1_pk values (1011), (1012), (1013);
+select * from t1_pk order by c1 asc;
+c1
+11
+12
+13
+1011
+1012
+1013
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+21
+22
+23
+1021
+1022
+1023
+create table t1_part_1 (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part_1 values (1), (2), (3), (4);
+select * from t1_part_1 order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part_1 set c1=c1+10;
+select * from t1_part_1 order by c1 asc;
+c1
+11
+12
+13
+14
+test dml and select under mysql tenant after minor freeze finish
+===============================================================
+=================     checkpoint slog   =======================
+===============================================================
+test checkpoint slog begin
+test checkpoint slog finish
+===============================================================
+============     create index before restart   ================
+===============================================================
+test create index before restart begin
+create table test_create_index(c1 int, c2 int);
+insert into test_create_index values(1,1);
+create index i1 on test_create_index(c2);
+test create index before restart finish
+===============================================================
+============     alter schema before restart   ================
+===============================================================
+test alter schema before restart begin
+create table t_no_pk(a int, b int);
+insert into t_no_pk values(1, 1), (2, 2);
+alter table t_no_pk add x varchar(10) after a;
+insert into t_no_pk values(3, 'hehe', 3);
+alter table t_no_pk add y int;
+insert into t_no_pk values(4, '666', 4, 4), (5, '888', 5, 5);
+select * from t_no_pk;
+a	x	b	y
+1	NULL	1	NULL
+2	NULL	2	NULL
+3	hehe	3	NULL
+4	666	4	4
+5	888	5	5
+drop table t_no_pk;
+test alter schema before restart finish
+===============================================================
+=================     restart cluster    ======================
+===============================================================
+test restart cluster begin
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server a left join oceanbase.__all_virtual_server_schema_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port where b.svr_ip is null, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
+ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
+test restart cluster finish
+===============================================================
+=================     tablet report    ========================
+===============================================================
+test tablet report begin
+ob1.check_until_timeout select count(*) = $server_count * ($sys_table_count + $core_table_count) from oceanbase.__all_virtual_tablet_meta_table where tenant_id = $sys_tenant_id and tablet_id < $max_index_tablet_id, 1, 200;
+create table sys_t1(c1 int);
+ob1.check_until_timeout select count(*) = $server_count from oceanbase.__all_virtual_tablet_meta_table where tenant_id = $sys_tenant_id and tablet_id = $tablet_id, 1, 200;
+create table sys_t2(c1 int) partition by hash(c1) partitions 3;
+ob1.check_until_timeout select count(*) = $partition_num * $server_count from oceanbase.__all_virtual_tablet_meta_table where tenant_id = $sys_tenant_id and tablet_id in ($tablet_ids), 1, 200;
+create table mysql_t1(c1 int);
+create table mysql_t2(c1 int) partition by hash(c1) partitions 3;
+ob1.check_until_timeout select count(*) = $server_count from oceanbase.__all_virtual_tablet_meta_table where tenant_id = $mysql_tenant_id and tablet_id = $t1_tablet_id, 1, 200;
+ob1.check_until_timeout select count(*) = $partition_num * $server_count from oceanbase.__all_virtual_tablet_meta_table where tenant_id = $mysql_tenant_id and tablet_id in ($t2_tablet_ids), 1, 200;
+test tablet report finish
+===============================================================
+=================     change tenant    ========================
+===============================================================
+test change tenant begin
+select effective_tenant_id();
+effective_tenant_id()
+1
+alter system change tenant tenant_id = 1001;
+select effective_tenant_id();
+effective_tenant_id()
+1001
+select count(*) > 0 from oceanbase.__all_ls_meta_table where tenant_id = 1002;
+count(*) > 0
+1
+alter system change tenant tenant_id = 1002;
+select effective_tenant_id();
+effective_tenant_id()
+1002
+alter system change tenant tenant_id = 1003;
+ERROR HY000: Unknown tenant
+select effective_tenant_id();
+effective_tenant_id()
+1002
+alter system change tenant tenant_id = 1;
+select effective_tenant_id();
+effective_tenant_id()
+1
+alter system change tenant META$1002;
+select effective_tenant_id();
+effective_tenant_id()
+1001
+select count(*) > 0 from oceanbase.__all_ls_meta_table where tenant_id = 1002;
+count(*) > 0
+1
+alter system change tenant mysql;
+select effective_tenant_id();
+effective_tenant_id()
+1002
+alter system change tenant META_TENANT;
+ERROR HY000: invalid tenant name specified in connection string
+select effective_tenant_id();
+effective_tenant_id()
+1002
+alter system change tenant sys;
+select effective_tenant_id();
+effective_tenant_id()
+1
+test change tenant finish
+===============================================================
+=================     minor freeze    =========================
+===============================================================
+test minor freeze begin
+create table test_uncommitted_ctx (a int);
+begin;
+insert into test_uncommitted_ctx value(1);
+set @@session.ob_query_timeout = 10000000000;
+alter system minor freeze tenant mysql;
+ob1.z1.obs0.check_log_until_success -c "succeed to release head data memtable";
+insert into t1_no_pk values (2001), (2002), (2003);
+select * from t1_no_pk order by c1 asc;
+c1
+21
+22
+23
+1011
+1012
+1013
+2001
+2002
+2003
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk order by c1 asc;
+c1
+31
+32
+33
+1021
+1022
+1023
+2011
+2012
+2013
+insert into t1_pk values (2011), (2012), (2013);
+select * from t1_pk order by c1 asc;
+c1
+21
+22
+23
+1021
+1022
+1023
+2011
+2012
+2013
+update t1_pk set c1=c1+10;
+select * from t1_pk order by c1 asc;
+c1
+31
+32
+33
+1031
+1032
+1033
+2021
+2022
+2023
+create table t1_part_2 (c1 int primary key) partition by hash(c1) partitions 4;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1_part_2 values (1), (2), (3), (4);
+select * from t1_part_2 order by c1 asc;
+c1
+1
+2
+3
+4
+update t1_part_2 set c1=c1+10;
+select * from t1_part_2 order by c1 asc;
+c1
+11
+12
+13
+14
+test minor freeze finish
+===============================================================
+============     distributed transaction    ===================
+===============================================================
+test distributed_transaction begin
+create table test_dist_tx (test_dist_tx int primary key);
+alter system change tenant mysql;
+create table test_dist_tx_inner (id int primary key);
+begin;
+insert into test.test_dist_tx values(1);
+ERROR 42000: Access denied for user 'root'@'%' to database 'test'
+insert into test_dist_tx_inner values(1);
+commit;
+select * from test.test_dist_tx;
+ERROR 42000: Access denied for user 'root'@'%' to database 'test'
+select * from test_dist_tx_inner;
+id
+1
+drop table test_dist_tx_inner;
+alter system change tenant sys;
+test distributed_transaction finish
+===============================================================
+====    test __all_tablet_to_table_history & drop table    ====
+===============================================================
+test __all_tablet_to_table_history & drop table begin
+drop table t1_no_pk;
+drop table t1_pk;
+drop table t1_part;
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_tablet_to_table_history where tenant_id = 1 and tablet_id in ($sys_tablet_id_list_str) order by schema_version, tablet_id;
+count(*)
+12
+drop table t1_no_pk;
+drop table t1_pk;
+drop table t1_part;
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_tablet_to_table_history where tenant_id = $mysql_tenant_id and tablet_id in ($mysql_tablet_id_list_str) order by schema_version, tablet_id;
+count(*)
+12
+test __all_tablet_to_table_history & drop table finish
+===============================================================
+===========    test views    ===========
+===============================================================
+test views begin
+================== 1. SYS tenant views ==================
+1.1 check views schema
+desc oceanbase.DBA_OB_TENANTS;
+Field	Type	Null	Key	Default	Extra
+TENANT_ID	bigint(20)	NO		NULL	
+TENANT_NAME	varchar(128)	NO		NULL	
+TENANT_TYPE	varchar(4)	NO			
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+PRIMARY_ZONE	varchar(8192)	YES		NULL	
+LOCALITY	varchar(4096)	NO			
+PREVIOUS_LOCALITY	varchar(4096)	NO			
+COMPATIBILITY_MODE	varchar(6)	NO			
+STATUS	varchar(64)	NO			
+IN_RECYCLEBIN	varchar(3)	NO			
+LOCKED	varchar(3)	NO		NULL	
+TENANT_ROLE	varchar(100)	NO		NULL	
+SWITCHOVER_STATUS	varchar(100)	NO		NULL	
+SWITCHOVER_EPOCH	bigint(20)	NO		NULL	
+SYNC_SCN	bigint(20) unsigned	NO		NULL	
+REPLAYABLE_SCN	bigint(20) unsigned	NO		NULL	
+READABLE_SCN	bigint(20) unsigned	NO		NULL	
+RECOVERY_UNTIL_SCN	bigint(20) unsigned	NO			
+LOG_MODE	varchar(100)	NO			
+UNIT_NUM	bigint(20)	NO			
+COMPATIBLE	varchar(65536)	NO			
+MAX_LS_ID	bigint(20)	NO			
+RESTORE_DATA_MODE	varchar(128)	NO			
+desc oceanbase.DBA_OB_UNITS;
+Field	Type	Null	Key	Default	Extra
+UNIT_ID	bigint(20)	NO		NULL	
+TENANT_ID	bigint(20)	NO		NULL	
+STATUS	varchar(128)	NO			
+RESOURCE_POOL_ID	bigint(20)	NO		NULL	
+UNIT_GROUP_ID	bigint(20)	NO		NULL	
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+ZONE	varchar(128)	NO		NULL	
+SVR_IP	varchar(46)	NO		NULL	
+SVR_PORT	bigint(20)	NO		NULL	
+MIGRATE_FROM_SVR_IP	varchar(46)	NO		NULL	
+MIGRATE_FROM_SVR_PORT	bigint(20)	NO		NULL	
+MANUAL_MIGRATE	varchar(3)	NO		NULL	
+UNIT_CONFIG_ID	bigint(20)	NO		NULL	
+MAX_CPU	double	NO		NULL	
+MIN_CPU	double	NO		NULL	
+MEMORY_SIZE	bigint(20)	NO		NULL	
+LOG_DISK_SIZE	bigint(20)	NO		NULL	
+DATA_DISK_SIZE	bigint(20)	NO			
+MAX_IOPS	bigint(20)	NO		NULL	
+MIN_IOPS	bigint(20)	NO		NULL	
+IOPS_WEIGHT	bigint(20)	NO		NULL	
+MAX_NET_BANDWIDTH	bigint(20)	NO			
+NET_BANDWIDTH_WEIGHT	bigint(20)	NO			
+desc oceanbase.DBA_OB_UNIT_CONFIGS;
+Field	Type	Null	Key	Default	Extra
+UNIT_CONFIG_ID	bigint(20)	NO		NULL	
+NAME	varchar(128)	NO		NULL	
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+MAX_CPU	double	NO		NULL	
+MIN_CPU	double	NO		NULL	
+MEMORY_SIZE	bigint(20)	NO		NULL	
+LOG_DISK_SIZE	bigint(20)	NO		NULL	
+DATA_DISK_SIZE	bigint(20)	NO			
+MAX_IOPS	bigint(20)	NO		NULL	
+MIN_IOPS	bigint(20)	NO		NULL	
+IOPS_WEIGHT	bigint(20)	NO		NULL	
+MAX_NET_BANDWIDTH	bigint(20)	NO			
+NET_BANDWIDTH_WEIGHT	bigint(20)	NO			
+desc oceanbase.DBA_OB_RESOURCE_POOLS;
+Field	Type	Null	Key	Default	Extra
+RESOURCE_POOL_ID	bigint(20)	NO		NULL	
+NAME	varchar(128)	NO		NULL	
+TENANT_ID	bigint(20)	NO		NULL	
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+UNIT_COUNT	bigint(20)	NO		NULL	
+UNIT_CONFIG_ID	bigint(20)	NO		NULL	
+ZONE_LIST	varchar(8192)	NO		NULL	
+REPLICA_TYPE	varchar(4)	NO			
+desc oceanbase.DBA_OB_SERVERS;
+Field	Type	Null	Key	Default	Extra
+SVR_IP	varchar(46)	NO		NULL	
+SVR_PORT	bigint(20)	NO		NULL	
+ID	bigint(20)	NO		NULL	
+ZONE	varchar(128)	NO		NULL	
+SQL_PORT	bigint(20)	NO		NULL	
+WITH_ROOTSERVER	varchar(3)	NO		NULL	
+STATUS	varchar(64)	NO		NULL	
+START_SERVICE_TIME	timestamp(6)	NO		NULL	
+STOP_TIME	timestamp(6)	NO			
+BLOCK_MIGRATE_IN_TIME	timestamp(6)	NO		NULL	
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+BUILD_VERSION	varchar(256)	NO		NULL	
+LAST_OFFLINE_TIME	timestamp(6)	NO			
+desc oceanbase.DBA_OB_ZONES;
+Field	Type	Null	Key	Default	Extra
+ZONE	varchar(128)	NO			
+CREATE_TIME	timestamp(6)	NO			
+MODIFY_TIME	timestamp(6)	NO			
+STATUS	varchar(4096)	NO			
+IDC	varchar(4096)	NO			
+REGION	varchar(4096)	NO			
+TYPE	varchar(4096)	NO			
+desc oceanbase.DBA_OB_TENANT_JOBS;
+Field	Type	Null	Key	Default	Extra
+JOB_ID	bigint(20)	NO		NULL	
+JOB_TYPE	varchar(128)	NO		NULL	
+JOB_STATUS	varchar(128)	NO		NULL	
+RESULT_CODE	bigint(20)	YES		NULL	
+PROGRESS	bigint(20)	NO			
+START_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+TENANT_ID	bigint(20)	YES		NULL	
+SQL_TEXT	longtext	YES		NULL	
+EXTRA_INFO	varchar(4096)	YES		NULL	
+RS_SVR_IP	varchar(46)	NO		NULL	
+RS_SVR_PORT	bigint(20)	NO		NULL	
+desc oceanbase.DBA_OB_UNIT_JOBS;
+Field	Type	Null	Key	Default	Extra
+JOB_ID	bigint(20)	NO		NULL	
+JOB_TYPE	varchar(128)	NO		NULL	
+JOB_STATUS	varchar(128)	NO		NULL	
+RESULT_CODE	bigint(20)	YES		NULL	
+PROGRESS	bigint(20)	NO			
+START_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+TENANT_ID	bigint(20)	YES		NULL	
+UNIT_ID	bigint(20)	YES		NULL	
+SQL_TEXT	longtext	YES		NULL	
+EXTRA_INFO	varchar(4096)	YES		NULL	
+RS_SVR_IP	varchar(46)	NO		NULL	
+RS_SVR_PORT	bigint(20)	NO		NULL	
+desc oceanbase.DBA_OB_SERVER_JOBS;
+Field	Type	Null	Key	Default	Extra
+JOB_ID	bigint(20)	NO		NULL	
+JOB_TYPE	varchar(128)	NO		NULL	
+JOB_STATUS	varchar(128)	NO		NULL	
+RESULT_CODE	bigint(20)	YES		NULL	
+PROGRESS	bigint(20)	NO			
+START_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+SVR_IP	varchar(46)	YES		NULL	
+SVR_PORT	bigint(20)	YES		NULL	
+SQL_TEXT	longtext	YES		NULL	
+EXTRA_INFO	varchar(4096)	YES		NULL	
+RS_SVR_IP	varchar(46)	NO		NULL	
+RS_SVR_PORT	bigint(20)	NO		NULL	
+1.2 only accessed by SYS tenant, user tenant can not access
+desc oceanbase.DBA_OB_TENANTS;
+Field	Type	Null	Key	Default	Extra
+TENANT_ID	bigint(20)	NO		NULL	
+TENANT_NAME	varchar(128)	NO		NULL	
+TENANT_TYPE	varchar(4)	NO			
+CREATE_TIME	timestamp(6)	YES			
+MODIFY_TIME	timestamp(6)	YES			
+PRIMARY_ZONE	varchar(8192)	YES		NULL	
+LOCALITY	varchar(4096)	NO			
+PREVIOUS_LOCALITY	varchar(4096)	NO			
+COMPATIBILITY_MODE	varchar(6)	NO			
+STATUS	varchar(64)	NO			
+IN_RECYCLEBIN	varchar(3)	NO			
+LOCKED	varchar(3)	NO		NULL	
+TENANT_ROLE	varchar(100)	NO		NULL	
+SWITCHOVER_STATUS	varchar(100)	NO		NULL	
+SWITCHOVER_EPOCH	bigint(20)	NO		NULL	
+SYNC_SCN	bigint(20) unsigned	NO		NULL	
+REPLAYABLE_SCN	bigint(20) unsigned	NO		NULL	
+READABLE_SCN	bigint(20) unsigned	NO		NULL	
+RECOVERY_UNTIL_SCN	bigint(20) unsigned	NO			
+LOG_MODE	varchar(100)	NO			
+UNIT_NUM	bigint(20)	NO			
+COMPATIBLE	varchar(65536)	NO			
+MAX_LS_ID	bigint(20)	NO			
+RESTORE_DATA_MODE	varchar(128)	NO			
+desc oceanbase.DBA_OB_UNITS;
+ERROR 42S02: Table 'oceanbase.dba_ob_units' doesn't exist
+desc oceanbase.DBA_OB_UNIT_CONFIGS;
+ERROR 42S02: Table 'oceanbase.dba_ob_unit_configs' doesn't exist
+desc oceanbase.DBA_OB_RESOURCE_POOLS;
+ERROR 42S02: Table 'oceanbase.dba_ob_resource_pools' doesn't exist
+desc oceanbase.DBA_OB_SERVERS;
+ERROR 42S02: Table 'oceanbase.dba_ob_servers' doesn't exist
+desc oceanbase.DBA_OB_ZONES;
+ERROR 42S02: Table 'oceanbase.dba_ob_zones' doesn't exist
+desc oceanbase.DBA_OB_TENANT_JOBS;
+ERROR 42S02: Table 'oceanbase.dba_ob_tenant_jobs' doesn't exist
+desc oceanbase.DBA_OB_UNIT_JOBS;
+ERROR 42S02: Table 'oceanbase.dba_ob_unit_jobs' doesn't exist
+desc oceanbase.DBA_OB_SERVER_JOBS;
+ERROR 42S02: Table 'oceanbase.dba_ob_server_jobs' doesn't exist
+1.3 verify all views
+SELECT TENANT_ID, TENANT_NAME, TENANT_TYPE, PRIMARY_ZONE, LOCALITY, PREVIOUS_LOCALITY, COMPATIBILITY_MODE, STATUS, IN_RECYCLEBIN, LOCKED FROM DBA_OB_TENANTS;
+TENANT_ID	TENANT_NAME	TENANT_TYPE	PRIMARY_ZONE	LOCALITY	PREVIOUS_LOCALITY	COMPATIBILITY_MODE	STATUS	IN_RECYCLEBIN	LOCKED
+1	sys	SYS	RANDOM	FULL{1}@z1	NULL	MYSQL	NORMAL	NO	NO
+1001	META$1002	META	z1	FULL{1}@z1	NULL	MYSQL	NORMAL	NO	NO
+1002	mysql	USER	z1	FULL{1}@z1	NULL	MYSQL	NORMAL	NO	NO
+SELECT UNIT_ID, TENANT_ID, STATUS, RESOURCE_POOL_ID, UNIT_GROUP_ID, ZONE, MIGRATE_FROM_SVR_IP, MIGRATE_FROM_SVR_PORT, MANUAL_MIGRATE, UNIT_CONFIG_ID FROM DBA_OB_UNITS;
+UNIT_ID	TENANT_ID	STATUS	RESOURCE_POOL_ID	UNIT_GROUP_ID	ZONE	MIGRATE_FROM_SVR_IP	MIGRATE_FROM_SVR_PORT	MANUAL_MIGRATE	UNIT_CONFIG_ID
+1	1	ACTIVE	1	1	z1	NULL	NULL	NULL	1
+1001	1002	ACTIVE	1001	1001	z1	NULL	NULL	NULL	1001
+select distinct(U.MAX_CPU = C.MAX_CPU) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.MAX_CPU = C.MAX_CPU)
+1
+select distinct(U.MIN_CPU = C.MIN_CPU) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.MIN_CPU = C.MIN_CPU)
+1
+select distinct(U.MEMORY_SIZE = C.MEMORY_SIZE) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.MEMORY_SIZE = C.MEMORY_SIZE)
+1
+select distinct(U.LOG_DISK_SIZE = C.LOG_DISK_SIZE) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.LOG_DISK_SIZE = C.LOG_DISK_SIZE)
+1
+select distinct(U.MAX_IOPS = C.MAX_IOPS) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.MAX_IOPS = C.MAX_IOPS)
+1
+select distinct(U.MIN_IOPS = C.MIN_IOPS) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.MIN_IOPS = C.MIN_IOPS)
+1
+select distinct(U.IOPS_WEIGHT = C.IOPS_WEIGHT) from DBA_OB_UNIT_CONFIGS C, DBA_OB_UNITS U where C.UNIT_CONFIG_ID = U.UNIT_CONFIG_ID;
+(U.IOPS_WEIGHT = C.IOPS_WEIGHT)
+1
+SELECT UNIT_CONFIG_ID, NAME, MAX_CPU, MIN_CPU, MEMORY_SIZE, LOG_DISK_SIZE, MAX_IOPS, MIN_IOPS, IOPS_WEIGHT FROM DBA_OB_UNIT_CONFIGS WHERE UNIT_CONFIG_ID > 1;
+UNIT_CONFIG_ID	NAME	MAX_CPU	MIN_CPU	MEMORY_SIZE	LOG_DISK_SIZE	MAX_IOPS	MIN_IOPS	IOPS_WEIGHT
+1001	unit_1	2	2	3221225472	9663676416	9223372036854775807	9223372036854775807	2
+SELECT RESOURCE_POOL_ID, NAME, TENANT_ID, UNIT_COUNT, UNIT_CONFIG_ID, ZONE_LIST, REPLICA_TYPE FROM DBA_OB_RESOURCE_POOLS;
+RESOURCE_POOL_ID	NAME	TENANT_ID	UNIT_COUNT	UNIT_CONFIG_ID	ZONE_LIST	REPLICA_TYPE
+1	sys_pool	1	1	1	z1	FULL
+1001	pool_1	1002	1	1001	z1	FULL
+SELECT count(*) FROM DBA_OB_SERVERS WHERE (SVR_IP, SVR_PORT, ID, ZONE, SQL_PORT, STATUS, START_SERVICE_TIME, BUILD_VERSION, CREATE_TIME, MODIFY_TIME) in (SELECT SVR_IP, SVR_PORT, ID, ZONE, SQL_PORT, STATUS, usec_to_time(START_SERVICE_TIME), BUILD_VERSION, GMT_CREATE AS CREATE_TIME, GMT_MODIFIED AS MODIFY_TIME  FROM __all_server);
+count(*)
+1
+SELECT STOP_TIME FROM DBA_OB_SERVERS;
+STOP_TIME
+NULL
+insert into __all_rootservice_job (job_id, job_type, job_status, result_code, progress, tenant_id, unit_id, svr_ip, svr_port, sql_text, extra_info, rs_svr_ip, rs_svr_port) values
+(10000, 'ALTER_TENANT_LOCALITY', 'INPROGRESS', 0, 0, 1, 0, '', 0, 'sql_text', 'extra_info', '127.0.0.1', 1000),
+(20000, 'MIGRATE_UNIT', 'INPROGRESS', 0, 0, -1, 1001,  '', 0, 'sql_text', 'extra_info', '127.0.0.1', 1000),
+(30000, 'MIGRATE_UNIT', 'FAILED', 4002, 0, 1002, 1003,  '', 0, 'sql_text', 'extra_info', '127.0.0.1', 1000),
+(40000, 'DELETE_SERVER', 'SUCCESS', 0, 100, -1, 0, '192.168.1.1', 2000,  'sql_text', 'extra_info', '127.0.0.1', 1000);
+SELECT JOB_ID, JOB_TYPE, JOB_STATUS, RESULT_CODE, PROGRESS, TENANT_ID, SQL_TEXT, EXTRA_INFO, RS_SVR_IP, RS_SVR_PORT FROM DBA_OB_TENANT_JOBS WHERE JOB_ID >= 10000;
+JOB_ID	JOB_TYPE	JOB_STATUS	RESULT_CODE	PROGRESS	TENANT_ID	SQL_TEXT	EXTRA_INFO	RS_SVR_IP	RS_SVR_PORT
+10000	ALTER_TENANT_LOCALITY	INPROGRESS	0	0	1	sql_text	extra_info	127.0.0.1	1000
+SELECT JOB_ID, JOB_TYPE, JOB_STATUS, RESULT_CODE, PROGRESS, TENANT_ID, UNIT_ID, SQL_TEXT, EXTRA_INFO, RS_SVR_IP, RS_SVR_PORT FROM DBA_OB_UNIT_JOBS WHERE JOB_ID >= 10000;
+JOB_ID	JOB_TYPE	JOB_STATUS	RESULT_CODE	PROGRESS	TENANT_ID	UNIT_ID	SQL_TEXT	EXTRA_INFO	RS_SVR_IP	RS_SVR_PORT
+20000	MIGRATE_UNIT	INPROGRESS	0	0	NULL	1001	sql_text	extra_info	127.0.0.1	1000
+30000	MIGRATE_UNIT	FAILED	4002	0	1002	1003	sql_text	extra_info	127.0.0.1	1000
+SELECT JOB_ID, JOB_TYPE, JOB_STATUS, RESULT_CODE, PROGRESS, SVR_IP, SVR_PORT, SQL_TEXT, EXTRA_INFO, RS_SVR_IP, RS_SVR_PORT FROM DBA_OB_SERVER_JOBS WHERE JOB_ID >= 10000;
+JOB_ID	JOB_TYPE	JOB_STATUS	RESULT_CODE	PROGRESS	SVR_IP	SVR_PORT	SQL_TEXT	EXTRA_INFO	RS_SVR_IP	RS_SVR_PORT
+40000	DELETE_SERVER	SUCCESS	0	100	192.168.1.1	2000	sql_text	extra_info	127.0.0.1	1000
+ALTER TENANT mysql lock;
+SELECT TENANT_ID, TENANT_NAME, LOCKED FROM DBA_OB_TENANTS WHERE TENANT_NAME = 'mysql';
+TENANT_ID	TENANT_NAME	LOCKED
+1002	mysql	YES
+ALTER TENANT mysql unlock;
+SELECT TENANT_ID, TENANT_NAME, LOCKED FROM DBA_OB_TENANTS WHERE TENANT_NAME = 'mysql';
+TENANT_ID	TENANT_NAME	LOCKED
+1002	mysql	NO
+================== 2. Tenant space views ==================
+------- DBA_OB_LS / CDB_OB_LS
+------- mysql tenant
+desc oceanbase.DBA_OB_LS;
+Field	Type	Null	Key	Default	Extra
+LS_ID	bigint(20)	NO		NULL	
+STATUS	varchar(100)	NO		NULL	
+PRIMARY_ZONE	longtext	YES		NULL	
+UNIT_GROUP_ID	bigint(20)	NO		NULL	
+LS_GROUP_ID	bigint(20)	NO		NULL	
+CREATE_SCN	bigint(20) unsigned	NO		NULL	
+DROP_SCN	bigint(20) unsigned	NO			
+SYNC_SCN	bigint(20) unsigned	NO			
+READABLE_SCN	bigint(20) unsigned	NO			
+FLAG	varchar(2048)	NO			
+desc oceanbase.CDB_OB_LS;
+ERROR 42S02: Table 'oceanbase.cdb_ob_ls' doesn't exist
+------- sys tenant
+desc oceanbase.DBA_OB_LS;
+Field	Type	Null	Key	Default	Extra
+LS_ID	bigint(20)	NO		NULL	
+STATUS	varchar(100)	NO		NULL	
+PRIMARY_ZONE	longtext	YES		NULL	
+UNIT_GROUP_ID	bigint(20)	NO		NULL	
+LS_GROUP_ID	bigint(20)	NO		NULL	
+CREATE_SCN	bigint(20) unsigned	NO		NULL	
+DROP_SCN	bigint(20) unsigned	NO			
+SYNC_SCN	bigint(20) unsigned	NO			
+READABLE_SCN	bigint(20) unsigned	NO			
+FLAG	varchar(2048)	NO			
+desc oceanbase.CDB_OB_LS;
+Field	Type	Null	Key	Default	Extra
+TENANT_ID	bigint(20)	NO		NULL	
+LS_ID	bigint(20)	NO		NULL	
+STATUS	varchar(100)	NO		NULL	
+PRIMARY_ZONE	longtext	YES		NULL	
+UNIT_GROUP_ID	bigint(20)	NO		NULL	
+LS_GROUP_ID	bigint(20)	NO		NULL	
+CREATE_SCN	bigint(20) unsigned	NO		NULL	
+DROP_SCN	bigint(20) unsigned	NO			
+SYNC_SCN	bigint(20) unsigned	NO			
+READABLE_SCN	bigint(20) unsigned	NO			
+FLAG	varchar(2048)	NO			
+select ls_id, status, primary_zone, unit_group_id, ls_group_id, create_scn, drop_scn from oceanbase.DBA_OB_LS where ls_id = 1;
+ls_id	status	primary_zone	unit_group_id	ls_group_id	create_scn	drop_scn
+1	NORMAL	z1	0	0	NULL	NULL
+select ls_id, status, primary_zone, unit_group_id, ls_group_id, drop_scn from oceanbase.DBA_OB_LS where ls_id != 1;
+ls_id	status	primary_zone	unit_group_id	ls_group_id	drop_scn
+test views end
+===============================================================
+========================= clear ===============================
+===============================================================
+clear begin
+set recyclebin = 'OFF';
+clear end

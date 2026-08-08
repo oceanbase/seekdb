@@ -1,0 +1,159 @@
+#rs
+#msy
+#测试readonly的主库
+#case1 ：AB集群，建租户建表，然后B集群failover成主库，A集群以readonly的状态启动，B集群不能enableA集群，A集群可强读，但是不可写
+#case2 ：宕机B集群，A集群的切一次rs，这个readonly状态不会丢失。
+#case3 ：启动B集群，然后接入C集群，然后宕机B集群，C集群不会把A集群作为上游。
+#case4 ：宕机B集群，然后A集群failover成主库，切一次rs，不会被重新覆盖为disabled状态。
+#case6 ：宕机A集群，B集群以disabled状态启动
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+ob1.mysql alter system set enable_auto_leader_switch =false;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1, F@z2';
+let $zone_list = 'z1','z2';
+source include/create_tenant_1.inc;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int, c3 int);
+create index il on t1(c2);
+create index il1 on t1(c3) local;
+create table t2(c1 int primary key, c2 int, c3 int);
+create table t3(c1 int primary key, c2 int, c3 int) partition by hash(c1) partitions 10;
+insert into t1 values(1,1,1);
+insert into t2 values(1,1,1);
+insert into t3 values(1,1,1);
+insert into t3 values(2,1,1);
+insert into t3 values(3,1,1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+
+#case1 ：AB集群，建租户建表，然后B集群failover成主库，A集群以readonly的状态启动，B集群不能enableA集群，A集群可强读，但是不可写
+ob2.mysql set global ob_query_timeout = 300000000;
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+
+ob1.z1.obs0.nstart -m disabled_with_readonly_cluster;
+ob1.z2.obs0.nstart -m disabled_with_readonly_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 2, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 4, 100;
+sleep 60;
+#验证主库强读，不能写
+ob_connect(conntt1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conntt1;
+#验证强读
+select * from t1;
+select * from t2;
+select * from t1 where c1 = 1;
+select * from t1 where c2 = 1;
+select * from t1 where c3 = 1;
+#验证读系统表
+use oceanbase;
+select count(*) from __all_table_v2;
+show variables like "ob_read_consistency";
+use test;
+##验证弱读
+set ob_read_consistency = 2;
+select * from t1;
+select * from t2;
+select * from t3;
+select * from t1 where c1 = 1;
+select * from t1 where c2 = 1;
+select * from t1 where c3 = 1;
+
+--error 5234
+insert into t1 values(2,2,2);
+--error 5234
+create table t444(c1 int primary key, c2 int);
+#验证主库做不了ddl操作
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+--error 4179
+create database msy;
+alter system major freeze;
+connection conn2;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+ob2.check_version 2;
+ob2.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 200;
+--disable_query_log
+--error 4179
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+#case2 ：宕机B集群，A集群的切一次rs，这个readonly状态不会丢失。
+ob2.force_stop;
+sleep 20;
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = 'z2' and role =1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = 'z2' and role =1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+
+#case3 ：启动B集群，然后接入C集群，然后宕机B集群，C集群不会把A集群作为上游。
+ob2.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob2);
+
+ob3.reboot;
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+source include/standby_ddl.inc;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob3.mysql set global ob_query_timeout = 100000000;
+ob2.force_stop;
+ob3.force_stop;
+
+#case4 ：宕机B集群，然后A集群failover成主库，切一次rs，不会被重新覆盖为disabled状态。
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = 'z2' and role =1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+ob1.mysql alter system switch rootservice follower zone = 'z1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = 'z2' and role =1, 1, 100;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+ob1.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob1.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+#case6 ：宕机A集群，B集群以disabled状态启动，C集群可以拉起
+ob1.force_stop;
+ob2.z1.obs0.nstart -m disabled_cluster;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 1, 100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob2.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+
+ob3.start;
+ob3.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 1, 100;
+ob3.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob3.mysql_p select cluster_role, cluster_status from oceanbase.__all_virtual_cluster;
+
+ob3.mysql alter system set _mini_merge_concurrency = 16;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob3.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER force;
+ob3.mysql alter system set _mini_merge_concurrency = 3;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob3.check_version 3;
+ob3.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 200;
+ob2.mysql alter system convert to physical standby;
+
+ob_connect(conn31, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn31;
+--disable_query_log
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+

@@ -16,13 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_tablet_memtable_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace rootserver;
 using namespace blocksstable;
 using namespace memtable;
 using namespace transaction;
@@ -99,7 +98,7 @@ int ObTabletMemtableMgr::init(const common::ObTabletID &tablet_id,
              || OB_ISNULL(freezer)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_id), KP(freezer), KP(t3m));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get ls", K(ret));
   } else {
     ls_ = tenant_ls;
@@ -287,7 +286,7 @@ int ObTabletMemtableMgr::create_memtable_(const CreateMemtableArg &arg,
   } else if (OB_ISNULL(new_tablet_memtable = static_cast<ObITabletMemtable *>(memtable_handle.get_table()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get memtable", K(ret), K(tablet_id_), K(memtable_handle));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(tablet_id_));
   } else if (OB_FAIL(new_tablet_memtable->init(
                  table_key, tenant_ls, freezer_, this, arg.schema_version_, logstream_freeze_clock))) {

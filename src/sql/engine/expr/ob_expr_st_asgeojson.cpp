@@ -51,8 +51,8 @@ int ObExprSTAsGeoJson::calc_result_typeN(ObExprResType &type, ObExprResType *typ
           LOG_WARN("invalid type for geometry", K(ret), K(type));
         }
       } else {
-        if (!ob_is_integer_type(type) && !ob_is_null(type) 
-            && !ob_is_varchar_char_type(type, types_stack[i].get_collation_type()) 
+        if (!ob_is_integer_type(type) && !ob_is_null(type)
+            && !ob_is_varchar_char_type(type, types_stack[i].get_collation_type())
             && !ob_is_enum_or_set_type(type)) {
           ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
           LOG_WARN("invalid type", K(ret), K(type));
@@ -80,7 +80,7 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
   ObExpr *arg1 = expr.args_[0];
   ObObjType type1 = arg1->datum_meta_.type_;
   is_null_res = false;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   if (ob_is_null(type1)) {
     is_null_res = true;
@@ -91,11 +91,11 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     // construct geometry
     ObString wkb = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_,
             allocator, *datum, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(
-                   allocator, wkb, srs_guard, srs, geo, N_ST_ASGEOJSON, true, false))) {
+                   ctx, allocator, wkb, srs_guard, srs, geo, N_ST_ASGEOJSON, true, false))) {
       LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
     } else {
       srid = ObGeoWkbByteOrderUtil::read<uint32_t>(wkb.ptr(), ObGeoWkbByteOrder::LittleEndian);

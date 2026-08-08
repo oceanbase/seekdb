@@ -249,7 +249,7 @@ int ObRLEDecoder::eq_ne_operator(
       int64_t dict_ref = 0;
       int cmp_res = 0;
       while (OB_SUCC(ret) && traverse_it != end_it) {
-        if (OB_FAIL(cmp_func(*traverse_it, ref_datum, cmp_res))) {
+        if (OB_FAIL(cmp_func(*traverse_it, ref_datum, cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datum", K(ret), K(*traverse_it), K(ref_datum));
         } else if (cmp_res == 0) {
           if (OB_FAIL(cmp_ref_and_set_res(parent, col_ctx, dict_ref,
@@ -307,7 +307,7 @@ int ObRLEDecoder::comparison_operator(
       int64_t dict_ref = 0;
       int cmp_res = 0;
       while (OB_SUCC(ret) && traverse_it != end_it) {
-        if (OB_FAIL(cmp_func(*traverse_it, ref_datum, cmp_res))) {
+        if (OB_FAIL(cmp_func(*traverse_it, ref_datum, cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datum", K(ret), K(*traverse_it), K(ref_datum));
         } else if (get_cmp_ret(cmp_res)) {
           found = true;
@@ -357,9 +357,9 @@ int ObRLEDecoder::bt_operator(
       int left_cmp_res = 0;
       int right_cmp_res = 0;
       while (OB_SUCC(ret) && traverse_it != end_it) {
-        if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res))) {
+        if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datum", K(ret), K(*traverse_it), K(datums.at(0)));
-        } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res))) {
+        } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datum", K(ret), K(*traverse_it), K(datums.at(1)));
         } else if ((left_cmp_res >= 0)
                   && (right_cmp_res <= 0)) {

@@ -15,7 +15,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
-#include "storage/fts/dict/ob_dic_loader.h"
+#include "common/ob_timeout_ctx.h"
+#include "data_plane/fts/dict/ob_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
 namespace oceanbase
 {

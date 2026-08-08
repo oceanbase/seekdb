@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_optimizer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/ob_explain_note.h"
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
@@ -949,7 +949,8 @@ int ObOptimizer::set_auto_dop_params(const ObSQLSessionInfo &session)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (session.is_user_session() &&
-               OB_FAIL(ObSchemaUtils::get_runtime_int_variable(SYS_VAR_PARALLEL_SERVERS_TARGET,
+               OB_FAIL(ObSchemaUtils::get_runtime_int_variable(*GCTX.schema_service_,
+                                                              SYS_VAR_PARALLEL_SERVERS_TARGET,
                                                               parallel_servers_target))) {
       LOG_WARN("fail to read runtime variable", K(ret));
     } else {
@@ -1204,7 +1205,7 @@ int ObOptimizer::update_column_usage_infos()
   } else {
     SERVER_MODULE_SCOPE {
       ObOptStatMonitorManager *optstat_monitor_mgr = NULL;
-      if (OB_ISNULL(optstat_monitor_mgr = share::g_mp->opt_stat_monitor_manager())) {
+      if (OB_ISNULL(optstat_monitor_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret), K(optstat_monitor_mgr));
       } else if (OB_FAIL(optstat_monitor_mgr->update_local_cache(ctx_.get_column_usage_infos()))) {

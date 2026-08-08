@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "query/das/ob_das_iter_access.h"
 #include "ob_spiv_dim_iter.h"
 
 namespace oceanbase
@@ -58,7 +59,7 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inv_idx_scan_param or inv_idx_agg_expr is NULL", KPC_(inv_idx_agg_param), KPC_(inv_idx_agg_expr));
   } else {
-    sql::ObExprBasicFuncs *basic_funcs =
+    common::ObDatumBasicFuncs *basic_funcs =
         ObDatumFuncs::get_basic_func(inv_scan_domain_id_expr_->datum_meta_.type_, CS_TYPE_BINARY);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
@@ -75,7 +76,7 @@ int ObSPIVDaaTDimIter::init(const ObSPIVDimIterParam &iter_param)
     } else if (OB_FAIL(doc_ids_.prepare_allocate(max_batch_size_))) {
       LOG_WARN("failed to prepare allocate docid array", K(ret));
     } else {
-      inv_idx_scan_iter_->set_scan_param(*inv_idx_scan_param_);
+      query::das_scan_set_param(inv_idx_scan_iter_, *inv_idx_scan_param_);
       max_score_cached_ = false;
       is_inited_ = true;
     }
@@ -90,10 +91,10 @@ void ObSPIVDaaTDimIter::reset()
   scores_.reset();
   doc_ids_.reset();
   if (OB_NOT_NULL(inv_idx_scan_iter_)) {
-    inv_idx_scan_iter_->reset();
+    query::das_scan_reset(inv_idx_scan_iter_);
   }
   if (OB_NOT_NULL(inv_idx_agg_iter_)) {
-    inv_idx_agg_iter_->reset();
+    query::das_scan_reset(inv_idx_agg_iter_);
   }
 }
 
@@ -134,7 +135,8 @@ int ObSPIVDaaTDimIter::get_next_row()
     LOG_WARN("inv_idx_scan_iter is null", K(ret));
   } else {
     if (max_batch_size_ > 1) {
-      if (OB_FAIL(inv_idx_scan_iter_->get_next_rows(count_, max_batch_size_))) {
+      if (OB_FAIL(query::das_scan_next_rows(
+          inv_idx_scan_iter_, count_, max_batch_size_))) {
         if (ret != OB_ITER_END) {
           LOG_WARN("failed to get next rows", K(ret));
         } else if (count_ != 0) {
@@ -145,7 +147,7 @@ int ObSPIVDaaTDimIter::get_next_row()
         need_save = true;
       }
     } else {
-      if (OB_FAIL(inv_idx_scan_iter_->get_next_row())) {
+      if (OB_FAIL(query::das_scan_next_row(inv_idx_scan_iter_))) {
         if (ret != OB_ITER_END) {
           LOG_WARN("failed to get next row", K(ret));
         }
@@ -192,14 +194,14 @@ int ObSPIVDaaTDimIter::update_scan_param(const ObDatum &id_datum)
       scan_range.border_flag_.set_inclusive_end();
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(inv_idx_scan_iter_->reuse())) {
+    } else if (OB_FAIL(query::das_scan_reuse(inv_idx_scan_iter_))) {
       LOG_WARN("failed to reuse inverted index scan iterator", K(ret));
     } else if (OB_UNLIKELY(!inv_idx_scan_param_->key_ranges_.empty())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected non-empty scan range", K(ret));
     } else if (OB_FAIL(inv_idx_scan_param_->key_ranges_.push_back(scan_range))) {
       LOG_WARN("failed to push back scan range", K(ret));
-    } else if (OB_FAIL(inv_idx_scan_iter_->rescan())) {
+    } else if (OB_FAIL(query::das_scan_rescan(inv_idx_scan_iter_))) {
       LOG_WARN("failed to rescan inverted index", K(ret));
     }
   }
@@ -218,7 +220,8 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
   }
   while (OB_SUCC(ret) && !find) {
     if (cur_idx_ < count_) {
-      if (OB_FAIL(cmp_func_(id_datum, doc_ids_[cur_idx_].get_datum(), result))) {
+      if (OB_FAIL(cmp_func_(
+              id_datum, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
         LOG_WARN("failed to compare datum", K(ret));
       } else if (result <= 0) {
         find = true;
@@ -236,7 +239,8 @@ int ObSPIVDaaTDimIter::advance_to(const ObDatum &id_datum)
     } else if (cur_idx_ != 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected result", K(ret), K(result));
-    } else if (OB_FAIL(cmp_func_(id_datum, doc_ids_[cur_idx_].get_datum(), result))) {
+    } else if (OB_FAIL(cmp_func_(
+                   id_datum, doc_ids_[cur_idx_].get_datum(), result, nullptr))) {
       LOG_WARN("failed to compare datum", K(ret));
     } else if (result <= 0) {
       find = true;
@@ -279,7 +283,7 @@ int ObSPIVDaaTDimIter::get_dim_max_score(double &max_score)
   if (max_score_cached_) {
     max_score = max_score_;
   } else {
-    if (OB_FAIL(inv_idx_agg_iter_->get_next_row())) {
+    if (OB_FAIL(query::das_scan_next_row(inv_idx_agg_iter_))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to get next row", K(ret));
       } else {

@@ -8,6 +8,17 @@ os=8
 arch=x86_64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/8/x86_64/
 
+#RANGE_IF_BUSINESS
+[target-obshell]
+os=8
+arch=x86_64
+repo=https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+
+[target-obdeploy]
+os=8
+arch=x86_64
+repo=https://ob-yum.oceanbase-dev.com/8/x86_64/test/ob-deploy/
+#RANGE_END
 
 [deps]
 devdeps-gtest-1.8.0-312026021311.el8.x86_64.rpm
@@ -41,10 +52,19 @@ obdevtools-gcc-12.3.0-32024122017.el8.x86_64.rpm
 obdevtools-llvm-17.0.6-202026032415.el8.x86_64.rpm
 
 [tools-deps]
-obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
-#obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=community
+#RANGE_IF_BUSINESS
+obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=obshell
+#RANGE_ELSE
+#obshell-4.4.1.1-32026031914.el8.x86_64.rpm target=community
+##obshell-4.5.0.0-12026050816.el8.x86_64.rpm target=community
+#RANGE_END
 
 [test-utils]
-ob-deploy-4.1.0-2.el8.x86_64.rpm target=community
-obclient-2.2.2-1.el8.x86_64.rpm target=community
-libobclient-2.2.2-3.el8.x86_64.rpm target=community
+#RANGE_IF_BUSINESS
+ob-deploy-4.1.x-190.el8.x86_64.rpm target=obshell
+obclient-2.0.2-3.el8.x86_64.rpm target=community
+#RANGE_ELSE
+#ob-deploy-4.1.0-2.el8.x86_64.rpm target=community
+#obclient-2.2.2-1.el8.x86_64.rpm target=community
+#libobclient-2.2.2-3.el8.x86_64.rpm target=community
+#RANGE_END

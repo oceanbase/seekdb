@@ -1,0 +1,99 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set _transfer_start_trans_timeout = '60s';
+ob1.mysql alter system set enable_rebalance =false;
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE '2G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1, z2' set ob_tcp_invited_nodes='%';
+create table non_partition_0(pk int primary key);
+create table non_partition_1(pk int primary key);
+create table non_partition_2(pk int primary key);
+create table non_partition_3(pk int primary key);
+create table non_partition_4(pk int primary key);
+create table non_partition_5(pk int primary key);
+create table non_partition_6(pk int primary key);
+create table non_partition_7(pk int primary key);
+create table non_partition_8(pk int primary key);
+create table non_partition_9(pk int primary key);
+create table one_partition_0(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_1(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_2(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_3(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_4(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_5(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_6(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_7(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_8(pk int primary key) partition by hash(pk) partitions 10;
+create table one_partition_9(pk int primary key) partition by hash(pk) partitions 10;
+create table two_partition_0 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_1 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_2 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_3 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_4 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_5 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_6 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_7 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_8 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_9 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_10 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_11 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_12 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_13 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_14 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_15 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_16 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_17 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_18 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+create table two_partition_19 (c1 int, c2 int, c3 int, c4 int) partition by range(c1) subpartition by range(c2) ( partition t1rp0 values less than (100) ( subpartition t1rp0sp0 values less than (100),  subpartition t1rp0sp1 values less than (200), subpartition t1rp0sp2 values less than (300), subpartition t1rp0sp3 values less than (400)), partition t1rp1 values less than (200) (subpartition t1rp1sp0 values less than (100),subpartition t1rp1sp1 values less than (200),subpartition t1rp1sp2 values less than (300),subpartition t1rp1sp3 values less than (400)));
+ob1.mysql set ob_global_debug_sync = 'LS_GC_BEFORE_SUBMIT_OFFLINE_LOG wait_for signal';
+ob1.mysql alter tenant mysql set primary_zone = 'z1';
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id and status != 'NORMAL';
+ls_id	status
+1002	WAIT_OFFLINE
+alter system change tenant tenant_id = 1001;
+update __all_tenant_info set max_ls_id = 1000000000;
+alter system change tenant tenant_id = 1;
+ob1.mysql alter tenant mysql set primary_zone = 'z1, z2';
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id, status,comment from oceanbase.__all_virtual_balance_task order by task_id;
+task_type	src_ls	dest_ls	ls_group_id	status	comment
+LS_SPLIT	1001	1003	1001	INIT	Wait for LS 1002 to write offline log
+ob1.mysql_p select * from oceanbase.__all_virtual_ls where ls_id = $ls_id;
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+ob1.mysql set ob_global_debug_sync = 'STOP_PRIMARY_LS_THREAD wait_for signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_BALANCE_EXECUTE_WORK wait_for signal1';
+ob1.mysql alter tenant mysql set primary_zone = 'z1, z2, z3';
+ob1.check_until_timeout select status from oceanbase.__all_virtual_balance_job, DOING, 100;
+alter system change tenant tenant_id = 1001;
+update __all_ls_status set status = 'DROPPING' where status = 'WAIT_OFFLINE';
+update __all_ls_recovery_stat set drop_scn = 1 where drop_scn != 1;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id order by ls_id;
+ls_id	status
+1	NORMAL
+1001	NORMAL
+1002	DROPPING
+1003	NORMAL
+ob1.mysql set ob_global_debug_sync = 'now signal signal1';
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id, status,comment from oceanbase.__all_virtual_balance_task order by task_id;
+task_type	src_ls	dest_ls	ls_group_id	status	comment
+LS_SPLIT	1001	1004	1001	INIT	Wait for LS 1002 in DROPPING status to become OFFLINE
+LS_SPLIT	1003	1005	1001	INIT	Wait for LS 1002 in DROPPING status to become OFFLINE
+LS_MERGE	1005	1004	1001	INIT	NULL
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job, 0, 100;
+ob1.mysql_p select ls_id, status from oceanbase.__all_virtual_ls_status where tenant_id = $tenant_id order by ls_id;
+ls_id	status
+1	NORMAL
+1001	NORMAL
+1002	WAIT_OFFLINE
+1003	NORMAL
+1004	NORMAL
+1005	WAIT_OFFLINE
+ob1.mysql_p select max_ls_id from oceanbase.__all_virtual_tenant_info where tenant_id = $tenant_id;
+max_ls_id
+1000000000

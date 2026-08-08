@@ -19,38 +19,12 @@
 
 #include <stdint.h>
 #include "lib/literals/ob_literals.h"
+#include "share/tablet/ob_tablet_read_mode.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-/*
-  Tablet is created/deleted through MDS which has transactional meaning.
-  Consider creating tablet as inserting a row to database, and deleting tablet as
-  remove a row from database. So below ObMDSGetTabletMode can be understood as read
-  isolation level in a database.
-
-  READ_ALL_COMMITED:
-    Read committed row after transaction committed, except empty shell.
-    Return tablet which has finished at least one MDS transaction(not including tablet in NORMAL not committed status).
-    Not return CREATING and DELETING who was abandoned from 4.2.
-    In addition, you should NOT pass read timeout under this mode.
-
-  READ_WITHOUT_CHECK:
-    Read uncommitted row. Return tablet whatever it is in a MDS transaction or not.
-
-  READ_READABLE_COMMITED:
-    Read committed row, not include deleted one. The most frequently used mode. Return
-    tablet in NORMAL status. Not return one in unreadable status.
-    If read operation reaches read timeout, you'll get OB_ERR_SHARED_LOCK_CONFLICT error.
-*/
-enum class ObMDSGetTabletMode
-{
-  READ_ALL_COMMITED = 0,
-  READ_WITHOUT_CHECK = 1,
-  READ_READABLE_COMMITED = 2,
-};
-
 class ObTabletCommon final
 {
 public:

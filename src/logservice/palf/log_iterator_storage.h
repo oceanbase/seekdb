@@ -24,7 +24,7 @@
 #include "lib/function/ob_function.h"   // ObFunction
 #include "log_io_context.h"
 #include "log_storage_interface.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "log_reader_utils.h"
 namespace oceanbase
 {

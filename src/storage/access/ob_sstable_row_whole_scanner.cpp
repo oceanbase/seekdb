@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_row_whole_scanner.h"
-#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {

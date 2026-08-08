@@ -37,7 +37,7 @@ class PalfEnv;
 }
 namespace logservice
 {
-class ObLSAdapter;
+class ObILogStorage;
 class AppendCb;
 class AppendCbTask;
 class ObApplyStatus;
@@ -242,7 +242,7 @@ public:
   virtual ~ObLogApplyService();
 public:
   int init(palf::PalfEnv *palf_env,
-           ObLSAdapter *ls_adapter);
+           ObILogStorage *log_storage);
   void destroy();
   int start();
   void stop();
@@ -272,7 +272,7 @@ private:
   bool is_inited_;
   bool is_running_;
   palf::PalfEnv *palf_env_;
-  ObLSAdapter *ls_adapter_;
+  ObILogStorage *log_storage_;
   ObApplyStatus *apply_status_;
   mutable common::ObQSyncLock lock_;
   DISALLOW_COPY_AND_ASSIGN(ObLogApplyService);

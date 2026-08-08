@@ -19,20 +19,14 @@
 
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
+#include "sql/dtl/ob_dtl_interm_result_manager.h"
 namespace oceanbase
 {
-namespace sql
-{
-namespace dtl
-{
-class ObDTLIntermResultKey;
-class ObDTLIntermResultInfo;
-}
-}
 namespace observer
 {
 
 class ObDTLIntermResultMonitorInfoGetter
+    : public sql::dtl::ObIDTLIntermResultConsumer
 {
 public:
   ObDTLIntermResultMonitorInfoGetter(common::ObScanner &scanner,
@@ -45,7 +39,8 @@ public:
       cur_row_(cur_row)
   {}
   virtual ~ObDTLIntermResultMonitorInfoGetter() = default;
-  int operator() (common::hash::HashMapPair<sql::dtl::ObDTLIntermResultKey, sql::dtl::ObDTLIntermResultInfo *> &entry);
+  int consume(const sql::dtl::ObDTLIntermResultKey &key,
+              const sql::dtl::ObDTLIntermResultInfo &info) override;
 public:
   
   DISALLOW_COPY_AND_ASSIGN(ObDTLIntermResultMonitorInfoGetter);
@@ -94,4 +89,3 @@ private:
 } // namespace observer
 } // namespace oceanbase
 #endif // OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_DTL_INTERM_RESULT_MONITOR_
-

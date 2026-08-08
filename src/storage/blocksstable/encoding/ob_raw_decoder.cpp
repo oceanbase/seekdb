@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/encoding/ob_cpu_features.h"
 #include "ob_raw_decoder.h"
 #include "lib/utility/ob_target_specific.h"
 
@@ -232,7 +233,7 @@ bool init_raw_fix_fast_filter_funcs() {
   res = ObNDArrayIniter<RawFixFilterArrayInit, 2, 4, 6>::apply();
   // Dispatch simd version cmp funcs
 #if defined ( __x86_64__ )
-  if (is_avx512_valid()) {
+  if (data_plane::is_avx512_supported()) {
     res = init_raw_fix_simd_filter_funcs();
   }
 #elif defined ( __aarch64__ ) && defined ( __ARM_NEON )
@@ -892,7 +893,7 @@ int ObRawDecoder::fast_datum_comparison_operator(
       } else {
         int cmp_res = 0;
         for (int64_t i = 0; OB_SUCC(ret) && i < curr_batch_size; ++i) {
-          if (OB_FAIL(cmp_func(datums[i], filter.get_datums().at(0), cmp_res))) {
+          if (OB_FAIL(cmp_func(datums[i], filter.get_datums().at(0), cmp_res, nullptr))) {
             LOG_WARN("Failed to compare datum", K(ret),
                 K(i), K(datums[i]), K(filter.get_datums().at(0)));
           } else if (get_cmp_ret(cmp_res)) {
@@ -1089,7 +1090,7 @@ int ObRawDecoder::ObRawDecoderFilterCmpFunc::operator()(
 {
   int ret = OB_SUCCESS;
   int cmp_res = 0;
-  if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(0), cmp_res))) {
+  if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(0), cmp_res, nullptr))) {
     LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
   } else {
     result = get_cmp_ret_(cmp_res);
@@ -1105,11 +1106,13 @@ int ObRawDecoder::ObRawDecoderFilterBetweenFunc::operator()(
   int ret = OB_SUCCESS;
   int left_cmp_res = 0;
   int right_cmp_res = 0;
-  if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(0), left_cmp_res))) {
+  if (OB_FAIL(type_cmp_func_(
+          cur_datum, filter.get_datums().at(0), left_cmp_res, nullptr))) {
     LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
   } else if (left_cmp_res < 0) {
     result = false;
-  } else if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(1), right_cmp_res))) {
+  } else if (OB_FAIL(type_cmp_func_(
+                 cur_datum, filter.get_datums().at(1), right_cmp_res, nullptr))) {
     LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(1)));
   } else {
     result = (right_cmp_res <= 0);

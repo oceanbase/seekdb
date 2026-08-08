@@ -1,0 +1,77 @@
+#rs
+#msy
+#验证enable的时候会删除多余的freeze info信息
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql set global ob_query_timeout = 30000000;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.mysql set global ob_query_timeout = 300000000;
+#控制备库不同步，主库不推版本
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for continue_signal';
+sleep 10;
+ob2.check_version 2;
+--disable_query_log
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob2.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, DISABLED, 10;
+#等待上一轮同步线程结束
+sleep 3;
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+let $frozen_version = deploy_get_value(ob1.select select value from oceanbase.__all_zone where name = 'last_merged_version', value, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_freeze_schema_version where frozen_version > $frozen_version, 10, 100;
+ob1.mysql_p select count(*) from oceanbase.__all_zone where name = 'frozen_version' and value > $frozen_version;
+ob1.mysql_p select count(*) from oceanbase.__all_core_table where table_name = '__all_freeze_info' and column_name = 'frozen_version' and column_value > $frozen_version;
+ob1.mysql_p select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version' and column_value > $frozen_version;
+ob1.force_stop;
+sleep 3;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+#failover成功后，无条件变成valid
+ob2.mysql_p select cluster_status from oceanbase.__all_virtual_cluster;
+let $failover_scn = deploy_get_value(ob2.select select standby_became_primary_scn from oceanbase.__all_virtual_cluster, standby_became_primary_scn, 1);
+ob1.z1.obs0.nstart -m disabled_cluster;
+##rs不能完全启动
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE', 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1, 1, 100;
+ob1.mysql alter system convert to physical standby;
+ob2.check_until_timeout select count(*) from oceanbase.__all_acquired_snapshot where snapshot_type = 2, 0, 200;
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+--disable_query_log
+--error 4179
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+

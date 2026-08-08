@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
+#include "query/vector/ob_vector_index_cache.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 
 namespace oceanbase

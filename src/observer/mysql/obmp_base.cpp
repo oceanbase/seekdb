@@ -18,7 +18,7 @@
 
 #include "obmp_base.h"
 
-#include "observer/mysql/ob_mysql_end_trans_cb.h"
+#include "sql/ob_mysql_end_trans_cb.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "observer/mysql/obsm_row.h"
 #include "observer/mysql/obmp_utils.h"
@@ -42,7 +42,7 @@ namespace sql
 namespace observer
 {
 
-ObMPBase::ObMPBase(const ObGlobalContext &gctx)
+ObMPBase::ObMPBase(const share::ObGlobalContext &gctx)
     : gctx_(gctx), process_timestamp_(0), end_trans_cb_to_enable_(NULL)
 {
 }
@@ -273,11 +273,8 @@ int ObMPBase::create_session(ObSMConnection *conn, ObSQLSessionInfo *&sess_info)
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get connection fail", K(ret));
-  } else if (OB_ISNULL(gctx_.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("session manager is null", K(ret));
   } else {
-    if (OB_FAIL(gctx_.session_mgr_->create_session(conn, sess_info))) {
+    if (OB_FAIL(OBSERVER.get_sql_session_mgr().create_session(conn, sess_info))) {
       LOG_WARN("create session fail", "sessid", conn->sessid_, K(ret));
     } else {
       LOG_DEBUG("create session successfully", "sessid", conn->sessid_);
@@ -297,15 +294,12 @@ int ObMPBase::free_session()
   if (NULL == (conn = packet_sender_.get_conn())) {
     ret = OB_CONNECT_ERROR;
     LOG_WARN("connection already disconnected", K(ret));
-  } else if (OB_ISNULL(gctx_.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("session manager is null", K(ret));
   } else {
     ObFreeSessionCtx ctx;
     
     ctx.sessid_ = conn->sessid_;
     ctx.has_inc_active_num_ = conn->has_inc_active_num_;
-    if (OB_FAIL(gctx_.session_mgr_->free_session(ctx))) {
+    if (OB_FAIL(OBSERVER.get_sql_session_mgr().free_session(ctx))) {
       LOG_WARN("fail to free session", K(ctx), K(ret));
     } else {
       LOG_INFO("free session successfully", K(ctx));

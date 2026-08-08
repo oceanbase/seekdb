@@ -85,7 +85,7 @@ public:
   void inc_ref_count() { ATOMIC_AAF(&reference_count_, 1); }
   void dec_ref_count() { ATOMIC_AAF(&reference_count_, -1); }
 
-  int init();
+  int init(const ObExecContext::RuntimeServices &runtime_services);
   bool valid() { return  ((nullptr != notifier_)      &&
                          (nullptr != exec_ctx_)       &&
                          (nullptr != des_phy_plan_)   &&
@@ -105,7 +105,10 @@ public:
   ObPxSubCoord &get_sub_coord() { return *sub_coord_; }
   ObPxSQCProxy &get_sqc_proxy() { return sub_coord_->get_sqc_proxy(); }
   ObSqcCtx &get_sqc_ctx() { return sub_coord_->get_sqc_ctx(); }
-  const ObDDLCtrl &get_ddl_control() { return sub_coord_->get_ddl_control(); }
+  const data_plane::ObDirectLoadControl &get_ddl_control()
+  {
+    return sub_coord_->get_ddl_control();
+  }
   ObPxWorkNotifier &get_notifier() { return *notifier_; }
   int worker_end_hook();
   int copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_t data_len);
@@ -162,6 +165,7 @@ private:
   Ob2DArray<ObPxTabletRange> part_ranges_;
   SpinRWLock part_ranges_spin_lock_;
   bool is_session_query_locked_;
+  ObExecContext::RuntimeServices runtime_services_;
 };
 
 }

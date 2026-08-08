@@ -93,7 +93,7 @@
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
 #include "sql/resolver/cmd/ob_get_diagnostics_resolver.h"
 #include "sql/resolver/dcl/ob_alter_role_resolver.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 
 namespace oceanbase
 {

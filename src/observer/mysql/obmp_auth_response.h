@@ -30,7 +30,7 @@ public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_AUTH_SWITCH_RESPONSE;
 
 public:
-  explicit ObMPAuthResponse(const ObGlobalContext &gctx)
+  explicit ObMPAuthResponse(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx),
         auth_data_()
   {}

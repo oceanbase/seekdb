@@ -18,8 +18,9 @@
 
 #include "ob_async_cmd_driver.h"
 
-#include "obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 #include "observer/mysql/obmp_query.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -29,7 +30,7 @@ using namespace obmysql;
 namespace observer
 {
 
-ObAsyncCmdDriver::ObAsyncCmdDriver(const ObGlobalContext &gctx,
+ObAsyncCmdDriver::ObAsyncCmdDriver(const share::ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,

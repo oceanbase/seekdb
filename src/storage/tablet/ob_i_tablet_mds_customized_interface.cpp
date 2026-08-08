@@ -33,7 +33,7 @@ int ObITabletMdsCustomizedInterface::get_ddl_data(ObTabletBindingMdsUserData &dd
   return ret;
 }
 
-int ObITabletMdsCustomizedInterface::get_autoinc_seq(share::ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator)
+int ObITabletMdsCustomizedInterface::get_autoinc_seq(ObTabletAutoincSeq &inc_seq, ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_latest_committed_data(inc_seq, &allocator))) {

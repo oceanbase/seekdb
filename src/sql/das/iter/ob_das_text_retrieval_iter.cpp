@@ -506,7 +506,7 @@ int ObDASTextRetrievalIter::init_base_idx_scan_param(
     }
     scan_param.pd_storage_filters_ = rtdef->p_pd_expr_op_->pd_storage_filters_;
     if (OB_NOT_NULL(tx_desc)) {
-      scan_param.tx_id_ = tx_desc->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(tx_desc);
     } else {
       scan_param.tx_id_.reset();
     }

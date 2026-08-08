@@ -59,17 +59,23 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
                                           ObDatum &expr_datum)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(expr.eval_param_value(ctx))) {
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (OB_FAIL(expr.eval_param_value(ctx))) {
     LOG_WARN("eval param value failed", K(ret));
   } else {
     uint64_t hash_value = 0;
     for (int i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
       ObDatum &param_datum = expr.locate_param_datum(ctx, i);
-      ObExprHashFuncType hash_func =
-        (ob_is_decimal_int(expr.args_[i]->datum_meta_.type_) ?
-           wide::PartitionHash<ObMurmurHash, ObDatum>::calculate :
-           expr.args_[i]->basic_funcs_->murmur_hash_);
-      if (OB_FAIL(hash_func(param_datum, hash_value, hash_value))) {
+      if (ob_is_decimal_int(expr.args_[i]->datum_meta_.type_)) {
+        ret = wide::PartitionHash<ObMurmurHash, ObDatum>::calculate(
+            param_datum, hash_value, hash_value);
+      } else {
+        ret = expr.args_[i]->basic_funcs_->murmur_hash_(
+            param_datum, hash_value, hash_value, datum_access_ctx);
+      }
+      if (OB_FAIL(ret)) {
         LOG_WARN("hash value failed", K(ret));
       }
     }
@@ -89,21 +95,26 @@ int ObExprFuncPartKey::calc_partition_key_batch(BATCH_EVAL_FUNC_ARG_DECL)
   uint64_t *hash_values = reinterpret_cast<uint64_t *>(
       ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
   ObBitVector &flags = expr.get_evaluated_flags(ctx);
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret) ; i++) {
     ObExpr *e = expr.args_[i];
-    ObBatchDatumHashFunc batch_hash_func =
-      ob_is_decimal_int(e->datum_meta_.type_) ?
-        wide::PartitionHash<ObMurmurHash, ObDatum>::hash_batch :
-        e->basic_funcs_->murmur_hash_batch_;
     if (OB_FAIL(e->eval_batch(ctx, skip, size))) {
       LOG_WARN("evaluate batch failed", K(ret), K(*e));
     } else {
       const bool is_batch_seed = (i > 0);
-      batch_hash_func(hash_values,
-                      e->locate_batch_datums(ctx), e->is_batch_result(),
-                      skip, size,
-                      is_batch_seed ? hash_values : &seed,
-                      is_batch_seed);
+      if (ob_is_decimal_int(e->datum_meta_.type_)) {
+        wide::PartitionHash<ObMurmurHash, ObDatum>::hash_batch(
+            hash_values, e->locate_batch_datums(ctx), e->is_batch_result(),
+            skip, size, is_batch_seed ? hash_values : &seed, is_batch_seed);
+      } else {
+        e->basic_funcs_->murmur_hash_batch_(
+            hash_values, e->locate_batch_datums(ctx), e->is_batch_result(),
+            skip, size, is_batch_seed ? hash_values : &seed, is_batch_seed,
+            datum_access_ctx);
+      }
 
     }
   }

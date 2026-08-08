@@ -17,19 +17,16 @@
 #ifndef OCEANBASE_SHARE_VEC_INDEX_BUILDER_UTIL_H_
 #define OCEANBASE_SHARE_VEC_INDEX_BUILDER_UTIL_H_
 
+#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/resolver/ob_schema_checker.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/resolver/ddl/ob_table_stmt.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {
-namespace rootserver
-{
-class ObDDLOperator;
-} // namespace rootserver
 namespace share
 {
 
@@ -114,12 +111,12 @@ public:
       ObVectorIndexParam& index_param,
       share::schema::ObTableSchema &index_schema);
   static int set_hybrid_vec_log_table_columns(
-      const ObCreateIndexArg &arg,
+      const obcall::ObCreateIndexArg &arg,
       const ObTableSchema &data_schema,
       ObVectorIndexParam& index_param,
       ObTableSchema &index_schema);
   static int set_hybrid_vec_embedded_vec_table_columns(
-      const ObCreateIndexArg &arg,
+      const obcall::ObCreateIndexArg &arg,
       const ObTableSchema &data_schema,
       ObVectorIndexParam& index_param,
       ObTableSchema &index_schema);
@@ -145,18 +142,18 @@ public:
       ObTableSchema &new_table_schema,
       ObTableSchema &new_index_schema,
       common::ObIAllocator &allocator,
-      oceanbase::rootserver::ObDDLOperator &ddl_operator, 
+      query::ObIColumnSchemaWriter &column_writer,
       common::ObMySQLTransaction &trans, 
       ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
       ObSEArray<ObString, 1> &domain_store_columns);
   static int vec_set_index_arg_index_schema(
-      ObCreateIndexArg &create_index_arg,
+      obcall::ObCreateIndexArg &create_index_arg,
       ObSchemaGetterGuard &schema_guard,
       const ObTableSchema &data_table_schema,
       const ObTableSchema &index_table_schema);
       
   static int set_vec_aux_table_columns(
-      const ObCreateIndexArg &arg, 
+      const obcall::ObCreateIndexArg &arg,
       const ObTableSchema &data_schema,
       ObTableSchema &index_schema);
   static int construct_ivf_col_name(
@@ -222,7 +219,7 @@ private:
       const obcall::ObCreateIndexArg &index_arg,
       bool &vec_common_aux_table_exist,
       ObIArray<sql::ObPartitionResolveResult> &resolve_results,
-      ObIArray<ObCreateIndexArg> &index_arg_list,
+      ObIArray<obcall::ObCreateIndexArg> &index_arg_list,
       ObIAllocator *allocator,
       const sql::ObSQLSessionInfo *session_info);
   static int append_vec_ivfsq8_args(
@@ -520,13 +517,13 @@ private:
       const int64_t buf_len,
       int64_t &name_pos);
   static int construct_chunk_col_name(
-      const ObCreateIndexArg *index_arg,
+      const obcall::ObCreateIndexArg *index_arg,
       const ObTableSchema &data_schema,
       char *col_name_buf,
       const int64_t buf_len,
       int64_t &name_pos);
   static int construct_embedded_vector_col_name(
-      const ObCreateIndexArg *index_arg,
+      const obcall::ObCreateIndexArg *index_arg,
       const ObTableSchema &data_schema,
       char *col_name_buf,
       const int64_t buf_len,

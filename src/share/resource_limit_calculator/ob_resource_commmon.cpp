@@ -26,7 +26,7 @@ const char *get_logic_res_type_name(const int64_t intype)
 {
   const char *type_name = "invalid";
   switch (intype) {
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)   \
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name)   \
     case n:                                                        \
       type_name = #name;                                           \
       break;
@@ -42,7 +42,7 @@ const char *get_logic_res_type_name(const int64_t intype)
 int64_t get_logic_res_type_by_name(const char *type_name)
 {
   int64_t out_type = INVALID_LOGIC_RESOURCE;
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)   \
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name)   \
   if (strcasecmp(type_name, #name) == 0) {                             \
     out_type = n;                                                  \
   }
@@ -55,7 +55,7 @@ bool is_valid_logic_res_type(const int64_t intype)
 {
   bool is_valid = true;
   switch (intype) {
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)   \
+#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name)   \
   case n:                                                          \
     is_valid = true;                                               \
     break;

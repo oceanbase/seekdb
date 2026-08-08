@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+PID_FILE=appserver.pid
+
+base=`dirname $0`
+cd $base 
+base=`pwd`
+
+lib=$base/../lib
+
+start()
+{
+      cp $base/libobsql.tmp $base/libobsql.conf
+      echo "initurl=http://$DIAMOND/method=get&key=$DATAID">>$base/libobsql.conf
+      echo "logfile=$base/obsql.log">>$base/libobsql.conf
+      
+      export LD_LIBRARY_PATH=/home/hudson/mysql-5.5.27/libmysql:$LD_LIBRARY_PATH 
+      export OB_SQL_CONFIG=$base/libobsql.conf      
+      
+      LD_PRELOAD=$lib/libobsql.so.0.0.0 ./obsqltest -t ./$ClIENT_PARAM> $base/appserver.log 2>&1 &
+      echo $! > $PID_FILE
+      echo $!
+}
+
+stop()
+{
+     if [ -f $PID_FILE ];then
+	 PID=$(cat $PID_FILE)
+         kill -9 $PID
+     else
+         pkill -9 -f obsqltest
+     fi
+}
+
+status()
+{
+    count=`ps uxf | grep "obsqltest -t"| grep -v grep | wc -l`
+    if [ $count  -gt 0 ];then
+	echo "running"
+    else
+	echo "stop"
+    fi
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	status)
+		status
+		;;
+	*)
+		echo "Usage: $0 {start|stop|status}"
+		exit 2		
+esac
+

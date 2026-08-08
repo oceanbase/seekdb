@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_medium_checker.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -26,26 +26,6 @@ namespace oceanbase
 using namespace storage;
 namespace compaction
 {
-/*
- * ObTabletCheckInfo implement
- * */
-bool ObTabletCheckInfo::is_valid() const
-{
-  return tablet_id_.is_valid() && check_medium_scn_ != 0;
-}
-
-uint64_t ObTabletCheckInfo::hash() const
-{
-  uint64_t hash_val = 0;
-  hash_val = murmurhash(&tablet_id_, sizeof(tablet_id_), hash_val);
-  return hash_val;
-}
-
-bool ObTabletCheckInfo::operator==(const ObTabletCheckInfo &other) const
-{
-  return tablet_id_ == other.tablet_id_;
-}
-
 /*
  * ObBatchFinishCheckStat implement
  * */
@@ -158,7 +138,7 @@ int ObMediumChecker::check_medium_finish_schedule()
         tablet_check_set_.clear();
       }
     }
-    const int64_t batch_size = share::g_mp->tablet_scheduler()->get_checker_batch_size();
+    const int64_t batch_size = ::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->get_checker_batch_size();
     if (OB_FAIL(ret) || tablet_check_infos.empty()) {
     } else if (OB_FAIL(batch_tablet_check_infos.reserve(batch_size))) {
       LOG_WARN("fail to reserve array", K(ret), "size", batch_size);

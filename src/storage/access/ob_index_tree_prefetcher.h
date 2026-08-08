@@ -25,6 +25,7 @@
 #include "storage/blocksstable/index_block/ob_index_block_row_scanner.h"
 #include "storage/blocksstable/ob_row_cache.h"
 #include "storage/blocksstable/ob_sstable.h"
+#include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/access/ob_rows_info.h"
 

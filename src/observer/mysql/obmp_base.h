@@ -20,12 +20,9 @@
 #include "rpc/frame/ob_sql_processor.h"
 #include "sql/ob_sql_context.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "observer/ob_server_struct.h"
-#include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
-#include "observer/mysql/obmp_packet_sender.h"
-#include "lib/utility/ob_mod_define.h"
-#include "lib/alloc/ob_malloc_callback.h"
-#include "lib/utility/ob_tracepoint.h"
+#include "sql/monitor/ob_process_malloc_callback.h"
+#include "share/ob_server_struct.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 
 namespace oceanbase
 {
@@ -36,7 +33,7 @@ class ObSqlEndTransCb;
 
 class ObMPBase : public rpc::frame::ObSqlProcessor {
 public:
-  explicit ObMPBase(const ObGlobalContext &gctx);
+  explicit ObMPBase(const share::ObGlobalContext &gctx);
   virtual ~ObMPBase();
 
   int64_t get_process_timestamp() const { return process_timestamp_; };
@@ -114,7 +111,7 @@ protected:
   static const int64_t MAX_TRY_STEPS = 5;
   static int64_t TRY_EZ_BUF_SIZES[MAX_TRY_STEPS];
 
-  const ObGlobalContext &gctx_;
+  const share::ObGlobalContext &gctx_;
   ObMPPacketSender packet_sender_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPBase);

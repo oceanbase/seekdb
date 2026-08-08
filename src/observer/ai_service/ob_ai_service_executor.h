@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_AI_SERVICE_OB_AI_SERVICE_EXECUTOR_H_
 #define OCEANBASE_SHARE_AI_SERVICE_OB_AI_SERVICE_EXECUTOR_H_
 
-#include "observer/ai_service/ob_ai_service_struct.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 
 namespace oceanbase
 {

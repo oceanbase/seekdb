@@ -17,8 +17,8 @@
 #ifndef OB_SPARSE_TAAT_ITER_H_
 #define OB_SPARSE_TAAT_ITER_H_
 
+#include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_i_sparse_retrieval_iter.h"
-#include "sql/das/ob_das_ir_define.h"
 
 namespace oceanbase
 {
@@ -56,8 +56,8 @@ protected:
   ObSparseRetrievalMergeParam *iter_param_;
   ObISparseRetrievalDimIter *dim_iter_;
   int64_t partition_cnt_;
-  sql::ObChunkDatumStore **datum_stores_;
-  sql::ObChunkDatumStore::Iterator **datum_store_iters_;
+  query::ObSpillRowStore **datum_stores_;
+  query::ObSpillRowStoreIterator **datum_store_iters_;
   sql::ObBitVector **skips_;
   ObSRTaaTHashMap **hash_maps_;
   ObSRTaaTHashMap::iterator *cur_map_iter_;

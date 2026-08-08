@@ -20,7 +20,9 @@
 
 
 #include "ob_tablet_runtime_meta_updater.h"
+#include "data_plane/report/ob_tablet_report.h"
 #include "observer/omt/ob_server_runtime_controller.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/tablet/ob_tablet_table_operator.h"  // for ObTabletOperator
 #include "observer/ob_service.h"                    // for is_mini_mode
 #include "share/ob_tablet_local_checksum_operator.h" // for ObTabletLocalChecksumItem
@@ -244,7 +246,7 @@ int64_t ObTabletRuntimeMetaUpdater::cal_thread_count_()
   if (!lib::is_mini_mode()) {
     double max_cpu = 0;
     double min_cpu = 0;
-    omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
+    omt::ObServerRuntimeController *runtime_controller = ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
     if (NULL == runtime_controller) {
       tmp_ret = OB_INVALID_ARGUMENT;
       LOG_WARN_RET(tmp_ret, "invalid argument", K(tmp_ret), KP(runtime_controller));
@@ -493,9 +495,9 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletRuntimeMetaUpdater is not inited", KR(ret));
-  } else if (OB_ISNULL(GCTX.tablet_operator_) || OB_ISNULL(GCTX.ob_service_)) {
+  } else if (OB_ISNULL(GCTX.tablet_operator_) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.tablet_operator_), KP(GCTX.ob_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.tablet_operator_), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()));
   } else if (OB_UNLIKELY(batch_tasks.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch_tasks count <= 0", KR(ret), "tasks_count", batch_tasks.count());
@@ -511,7 +513,7 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
     } else if (FALSE_IT(task->check_task_status())) {
     } else if (FALSE_IT(tablet_info.reset())) {
     } else if (FALSE_IT(checksum_item.reset())) {
-    } else if (OB_FAIL(GCTX.ob_service_->fill_tablet_runtime_info(task->get_tablet_id(),
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()->fill_tablet_runtime_info(task->get_tablet_id(),
                                                                  tablet_info,
                                                                  checksum_item))) {
       bool is_remove_task = false;
@@ -824,4 +826,69 @@ int64_t ObTabletRuntimeMetaUpdateTaskQueue::task_count() const
 }
 
 } // end namespace observer
+
+namespace data_plane
+{
+
+int submit_tablet_update(
+    const common::ObTabletID &tablet_id,
+    const bool need_diagnose)
+{
+  return ::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()->submit_update_task(
+      tablet_id, need_diagnose);
+}
+
+int refresh_tablet_update_worker_count()
+{
+  return ::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()->set_thread_count();
+}
+
+int get_tablet_update_task_status(
+    const common::ObTabletID &tablet_id,
+    bool &is_waiting,
+    bool &is_processing)
+{
+  int ret = common::OB_SUCCESS;
+  is_waiting = false;
+  is_processing = false;
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()->check_exist(
+      tablet_id, is_waiting))) {
+  } else if (!is_waiting
+      && OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()
+          ->check_processing_exist(tablet_id, is_processing))) {
+  }
+  return ret;
+}
+
+int get_stalled_tablet_update_tasks(
+    common::ObIArray<ObTabletUpdateTaskInfo> &waiting_tasks,
+    common::ObIArray<ObTabletUpdateTaskInfo> &processing_tasks)
+{
+  int ret = common::OB_SUCCESS;
+  common::ObArray<observer::ObTabletRuntimeMetaUpdateTask> internal_waiting;
+  common::ObArray<observer::ObTabletRuntimeMetaUpdateTask> internal_processing;
+  waiting_tasks.reset();
+  processing_tasks.reset();
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObTabletRuntimeMetaUpdater>()
+      ->diagnose_existing_task(internal_waiting, internal_processing))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < internal_waiting.count(); ++i) {
+    const observer::ObTabletRuntimeMetaUpdateTask &task = internal_waiting.at(i);
+    if (OB_FAIL(waiting_tasks.push_back(ObTabletUpdateTaskInfo(
+        task.get_tablet_id(), task.get_add_timestamp(),
+        task.get_start_timestamp())))) {
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < internal_processing.count(); ++i) {
+    const observer::ObTabletRuntimeMetaUpdateTask &task =
+        internal_processing.at(i);
+    if (OB_FAIL(processing_tasks.push_back(ObTabletUpdateTaskInfo(
+        task.get_tablet_id(), task.get_add_timestamp(),
+        task.get_start_timestamp())))) {
+    }
+  }
+  return ret;
+}
+
+} // end namespace data_plane
 } // end namespace oceanbase

@@ -25,14 +25,16 @@ using namespace oceanbase::sql;
 
 /************************************* ObDatumRowCompare *********************************/
 ObDatumRowCompare::ObDatumRowCompare()
-  : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr), rows_(nullptr)
+  : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr),
+    rows_(nullptr), datum_access_ctx_(nullptr)
 {
 }
 
 int ObDatumRowCompare::init(
     const ObIArray<ObSortFieldCollation> *sort_collations,
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-    const common::ObIArray<const ObChunkDatumStore::StoredRow*> &rows)
+    const common::ObIArray<const ObChunkDatumStore::StoredRow*> &rows,
+    const common::ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs) {
@@ -46,6 +48,7 @@ int ObDatumRowCompare::init(
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
     rows_ = &rows;
+    datum_access_ctx_ = datum_access_ctx;
   }
   return ret;
 }
@@ -69,7 +72,8 @@ bool ObDatumRowCompare::operator()(
     int cmp = 0;
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+              lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
@@ -83,14 +87,16 @@ bool ObDatumRowCompare::operator()(
 
 /************************************* ObMaxDatumRowCompare *********************************/
 ObMaxDatumRowCompare::ObMaxDatumRowCompare()
-  : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr), rows_(nullptr)
+  : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr),
+    rows_(nullptr), datum_access_ctx_(nullptr)
 {
 }
 
 int ObMaxDatumRowCompare::init(
     const ObIArray<ObSortFieldCollation> *sort_collations,
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-    const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> &rows)
+    const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> &rows,
+    const common::ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs) {
@@ -104,6 +110,7 @@ int ObMaxDatumRowCompare::init(
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
     rows_ = &rows;
+    datum_access_ctx_ = datum_access_ctx;
   }
   return ret;
 }
@@ -127,7 +134,8 @@ bool ObMaxDatumRowCompare::operator()(
     int cmp = 0;
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+              lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;

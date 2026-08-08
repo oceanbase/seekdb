@@ -31,6 +31,8 @@
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -39,6 +41,26 @@ namespace storage
 {
 
 typedef common::hash::ObHashMap<ObFTWord, int64_t> ObFTWordMap;
+
+class FTParseDataEnvironment final : public ::testing::Environment
+{
+public:
+  void SetUp() override
+  {
+    ASSERT_EQ(OB_SUCCESS, ObFTParseData::init_global());
+  }
+
+  void TearDown() override
+  {
+    ObFTParseData::deinit_global();
+  }
+};
+
+namespace
+{
+::testing::Environment *const FT_PARSE_DATA_ENVIRONMENT =
+    ::testing::AddGlobalTestEnvironment(new FTParseDataEnvironment());
+}
 
 int segment_and_calc_word_count(
     common::ObIAllocator &allocator,
@@ -85,12 +107,12 @@ public:
   int64_t get_add_word_count() const { return ith_word_; }
   static int64_t get_word_cnt_without_stopword() { return TEST_WORD_COUNT_WITHOUT_STOPWORD; }
   VIRTUAL_TO_STRING_KV(K_(ith_word));
-private:
+public:
   int check_ith_word(
       const char *word,
       const int64_t word_len,
       const int64_t char_cnt);
-private:
+public:
   bool is_min_max_word(const int64_t c_len) const;
   int casedown_word(const ObFTWord &src, ObFTWord &dst);
   ObObjMeta meta_;
@@ -194,7 +216,7 @@ public:
   virtual void SetUp() override;
   virtual void TearDown() override;
 
-private:
+public:
   ObFTParser parser_;
   const ObIFTParserDesc *desc_;
   ObFTParserParam ft_parser_param_;
@@ -311,7 +333,7 @@ public:
   virtual void SetUp() override;
   virtual void TearDown() override;
 
-private:
+public:
   const common::ObString parser_name_;
   const common::ObString parser_properties_;
   common::ObObjMeta meta_;
@@ -520,7 +542,7 @@ public:
   virtual void SetUp() override;
   virtual void TearDown() override;
 
-private:
+public:
   const common::ObString parser_name_;
   const common::ObString parser_properties_;
   const char *ngram_words_[TEST_WORD_COUNT];
@@ -717,18 +739,3 @@ TEST(ObTestNgramImpl, test_ngram_impl)
 
 } // end namespace storage
 } // end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_fts_parser_helper.log");
-  OB_LOGGER.set_file_name("test_fts_parser_helper.log", true);
-  OB_LOGGER.set_log_level("DEBUG");
-  testing::InitGoogleTest(&argc, argv);
-  const int init_ret = oceanbase::storage::ObFTParseData::init_global();
-  if (oceanbase::OB_SUCCESS != init_ret) {
-    return init_ret;
-  }
-  const int test_ret = RUN_ALL_TESTS();
-  oceanbase::storage::ObFTParseData::deinit_global();
-  return test_ret;
-}

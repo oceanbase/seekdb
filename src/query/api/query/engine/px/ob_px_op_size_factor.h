@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OB_PX_OP_SIZE_FACTOR_H_
+#define _OB_PX_OP_SIZE_FACTOR_H_
+
+#include "lib/utility/ob_unify_serialize.h"
+#include "lib/utility/ob_print_utils.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+struct PxOpSizeFactor
+{
+  OB_UNIS_VERSION(1);
+public:
+  PxOpSizeFactor() :
+    block_granule_child_(false), block_granule_parent_(false),
+    partition_granule_child_(false), partition_granule_parent_(false),
+    single_partition_table_scan_(false), broadcast_exchange_(false),
+    pk_exchange_(false), reserved_(0)
+  {}
+  TO_STRING_KV(K_(block_granule_child),
+    K_(block_granule_parent),
+    K_(partition_granule_child),
+    K_(partition_granule_parent),
+    K_(single_partition_table_scan),
+    K_(broadcast_exchange),
+    K_(pk_exchange));
+  void revert_all() { factor_ = 0; }
+  void merge_factor(PxOpSizeFactor src_factor) { factor_ |= src_factor.factor_; }
+  bool has_exchange() const
+  { return pk_exchange_ || broadcast_exchange_; }
+  bool has_granule() const
+  {
+    return (block_granule_child_ ||
+            block_granule_parent_ ||
+            partition_granule_child_ ||
+            partition_granule_parent_);
+  }
+  void revert_exchange()
+  {
+    broadcast_exchange_ = false;
+    pk_exchange_ = false;
+  }
+  bool has_leaf_granule() const
+  { return has_granule() || single_partition_table_scan_; }
+  bool has_granule_child_factor() const
+  { return block_granule_child_ || partition_granule_child_; }
+  bool has_partition_granule() const
+  { return partition_granule_child_ || partition_granule_parent_; }
+  PxOpSizeFactor get_granule_child_factor()
+  {
+    PxOpSizeFactor tmp_factor;
+    tmp_factor.block_granule_child_ = block_granule_child_;
+    tmp_factor.partition_granule_child_ = partition_granule_child_;
+    return tmp_factor;
+  }
+  bool has_block_granule() const
+  { return block_granule_child_ || block_granule_parent_; }
+  void revert_leaf_factor()
+  {
+    block_granule_child_ = false;
+    block_granule_parent_ = false;
+    partition_granule_child_ = false;
+    partition_granule_parent_ = false;
+    single_partition_table_scan_ = false;
+  }
+
+  union
+  {
+    uint32_t factor_;
+    struct {
+      uint32_t block_granule_child_ :1;
+      uint32_t block_granule_parent_ :1;
+      uint32_t partition_granule_child_ :1;
+      uint32_t partition_granule_parent_ :1;
+      uint32_t single_partition_table_scan_ :1;
+      uint32_t broadcast_exchange_ :1;
+      uint32_t pk_exchange_ :1;
+      uint32_t reserved_ :25 ;
+    };
+  };
+};
+
+}
+}
+
+#endif // _OB_PX_OP_SIZE_FACTOR_H_

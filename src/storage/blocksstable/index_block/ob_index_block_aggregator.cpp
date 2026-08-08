@@ -20,8 +20,8 @@
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/encoding/ob_encoding_hash_util.h"
 #include "storage/blocksstable/encoding/ob_column_datum_iter.h"
-#include "src/sql/session/ob_sql_session_info.h"
-#include "sql/engine/expr/ob_expr_bm25.h"
+#include "query/engine/expr/ob_expr_bm25.h"
+#include "query/engine/expr/ob_expr_util.h"
 
 namespace oceanbase
 {
@@ -297,7 +297,7 @@ int ObColMaxAggregator::init(
   if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else {
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+    ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
     cmp_func_ = basic_funcs->null_first_cmp_;
     data_evaluated_ = false;
@@ -410,7 +410,7 @@ int ObColMaxAggregator::cmp_with_prefix(
 {
   int ret = OB_SUCCESS;
   int tmp_res = 0;
-  if (OB_FAIL(cmp_func_(left_datum, right_datum, tmp_res))) {
+  if (OB_FAIL(cmp_func_(left_datum, right_datum, tmp_res, nullptr))) {
     LOG_WARN("failed to compare datums", K(ret), K(left_datum), K(right_datum));
   } else {
     if (!left_is_prefix && !right_is_prefix) {
@@ -479,7 +479,7 @@ int ObColMinAggregator::init(
   if (OB_FAIL(ObIColAggregator::init(is_major, col_desc, result, result_attr))) {
     LOG_WARN("fail to init ObIColAggregator", K(ret));
   } else {
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+    ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
         col_desc.col_type_.get_type(), col_desc.col_type_.get_collation_type());
     cmp_func_ = basic_funcs->null_last_cmp_;
     data_evaluated_ = false;
@@ -589,7 +589,7 @@ int ObColMinAggregator::cmp_with_prefix(
 {
   int ret = OB_SUCCESS;
   int tmp_res = 0;
-  if (OB_FAIL(cmp_func_(left_datum, right_datum, tmp_res))) {
+  if (OB_FAIL(cmp_func_(left_datum, right_datum, tmp_res, nullptr))) {
     LOG_WARN("failed to compare datums", K(ret), K(left_datum), K(right_datum));
   } else {
     if (tmp_res != 0 || (left_is_prefix == right_is_prefix)) {

@@ -27,7 +27,7 @@ namespace observer
 class ObMPDefault: public ObMPBase
 {
 public:
-  explicit ObMPDefault(const ObGlobalContext &gctx)
+  explicit ObMPDefault(const share::ObGlobalContext &gctx)
       :ObMPBase(gctx)
   {}
   virtual ~ObMPDefault() {}

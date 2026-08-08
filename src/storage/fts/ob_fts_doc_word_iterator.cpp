@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_doc_word_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/fts/ob_fts_doc_word_scan.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
@@ -67,11 +68,13 @@ int ObFTDocWordScanIterator::init(
 void ObFTDocWordScanIterator::reset()
 {
   if (OB_NOT_NULL(doc_word_iter_)) {
-    share::g_mp->access_service()->revert_scan_iter(doc_word_iter_);
+    ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->revert_scan_iter(doc_word_iter_);
     doc_word_iter_ = nullptr;
   }
   table_param_.reset();
-  allocator_.reset();
+  // table_param_ owns main_read_info_ allocated from allocator_.  The pointer
+  // remains part of table_param_ after reset and is reused by the next scan,
+  // so allocator_ must live until table_param_ is destroyed.
   scan_allocator_.reset();
   is_inited_ = false;
 }
@@ -82,7 +85,7 @@ int ObFTDocWordScanIterator::reuse()
   if (OB_ISNULL(doc_word_iter_)) {
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
-  } else if (OB_FAIL(share::g_mp->access_service()->reuse_scan_iter(false/*switch param*/, doc_word_iter_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->reuse_scan_iter(false/*switch param*/, doc_word_iter_))) {
     LOG_WARN("fail to reuse storage scan iter", K(ret));
   } else {
     scan_param_.key_ranges_.reuse();
@@ -101,7 +104,7 @@ int ObFTDocWordScanIterator::do_table_rescan()
   } else if (OB_ISNULL(doc_word_iter_)) {
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
-  } else if (OB_FAIL(share::g_mp->access_service()->table_rescan(scan_param_, doc_word_iter_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->table_rescan(scan_param_, doc_word_iter_))) {
     LOG_WARN("fail to table rescan", K(ret));
   }
 #ifdef OB_BUILD_PACKAGE
@@ -295,7 +298,7 @@ int ObFTDocWordScanIterator::do_table_scan()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K(is_inited_));
-  } else if (OB_FAIL(share::g_mp->access_service()->table_scan(scan_param_, doc_word_iter_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->table_scan(scan_param_, doc_word_iter_))) {
     LOG_WARN("fail to do table scan", K(ret), K(scan_param_));
   }
 #ifdef OB_BUILD_PACKAGE
@@ -307,4 +310,76 @@ int ObFTDocWordScanIterator::do_table_scan()
 }
 
 } // end namespace storage
+
+namespace data_plane
+{
+namespace
+{
+storage::ObFTDocWordScanIterator *as_storage_iterator(
+    ObFTDocWordIterator *iterator)
+{
+  return reinterpret_cast<storage::ObFTDocWordScanIterator *>(iterator);
+}
+}
+
+int create_ft_doc_word_iterator(common::ObIAllocator &allocator,
+                                ObFTDocWordIterator *&iterator)
+{
+  int ret = OB_SUCCESS;
+  void *buffer = allocator.alloc(sizeof(storage::ObFTDocWordScanIterator));
+  if (OB_ISNULL(buffer)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate FTS doc-word iterator", K(ret));
+  } else {
+    iterator = reinterpret_cast<ObFTDocWordIterator *>(
+        new (buffer) storage::ObFTDocWordScanIterator());
+  }
+  return ret;
+}
+
+void destroy_ft_doc_word_iterator(ObFTDocWordIterator *&iterator)
+{
+  if (OB_NOT_NULL(iterator)) {
+    as_storage_iterator(iterator)->~ObFTDocWordScanIterator();
+    iterator = nullptr;
+  }
+}
+
+void reset_ft_doc_word_iterator(ObFTDocWordIterator *iterator)
+{
+  if (OB_NOT_NULL(iterator)) {
+    as_storage_iterator(iterator)->reset();
+  }
+}
+
+int init_ft_doc_word_iterator(ObFTDocWordIterator *iterator,
+                              uint64_t table_id,
+                              const common::ObTabletID &tablet_id,
+                              const transaction::ObTxReadSnapshot *snapshot,
+                              int64_t schema_version)
+{
+  return OB_ISNULL(iterator)
+      ? OB_INVALID_ARGUMENT
+      : as_storage_iterator(iterator)->init(
+            table_id, tablet_id, snapshot, schema_version);
+}
+
+int scan_ft_doc_words(ObFTDocWordIterator *iterator,
+                      uint64_t table_id,
+                      const common::ObDatum &row_mapping_id)
+{
+  return OB_ISNULL(iterator)
+      ? OB_INVALID_ARGUMENT
+      : as_storage_iterator(iterator)->do_scan(table_id, row_mapping_id);
+}
+
+int next_ft_doc_word(ObFTDocWordIterator *iterator,
+                     blocksstable::ObDatumRow *&row)
+{
+  return OB_ISNULL(iterator)
+      ? OB_INVALID_ARGUMENT
+      : as_storage_iterator(iterator)->get_next_row(row);
+}
+
+} // namespace data_plane
 } // end namespace oceanbase

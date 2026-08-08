@@ -22,14 +22,14 @@
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/container/ob_2d_array.h"
 #include "lib/random/ob_random.h"
-#include "sql/optimizer/ob_table_partition_info.h"
 #include "sql/monitor/ob_exec_stat.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "share/config/ob_runtime_config.h"
 #include "sql/monitor/ob_sql_stat_record.h"
-#include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
+#include "query/optimizer/ob_optimizer_location_defs.h"
+#include "query/optimizer/stat/ob_opt_ds_stat.h"
 
 namespace oceanbase
 {
@@ -53,6 +53,7 @@ class ObPL;
 }
 namespace sql
 {
+class ObTablePartitionInfo;
 typedef common::ObIArray<ObTablePartitionInfo *> ObTablePartitionInfoArray;
 //ObLocationConstraint if there is only one item, then only need to constrain whether the location type is consistent;
 //                    If there are multiple items, then it is necessary to verify whether the physical distribution corresponding to each location is the same
@@ -404,6 +405,8 @@ public:
   ObSqlCtx();
   ~ObSqlCtx() { reset(); }
   int set_partition_infos(const ObTablePartitionInfoArray &info, common::ObIAllocator &allocator);
+  const ObTablePartitionInfoArray &get_partition_infos() const;
+  int64_t get_partition_info_count() const;
   int set_related_user_var_names(const common::ObIArray<common::ObString> &user_var_names, common::ObIAllocator &allocator);
   int set_location_constraints(const ObLocationConstraintContext &location_constraint,
                                ObIAllocator &allocator);
@@ -482,7 +485,11 @@ public:
   uint64_t statement_id_;
   common::ObString cur_sql_;
   stmt::StmtType stmt_type_;
-  common::ObFixedArray<ObTablePartitionInfo*, common::ObIAllocator> partition_infos_;
+  // The concrete pointer array is allocated and destroyed in ob_sql_context.cpp,
+  // where ObTablePartitionInfo is complete. Keeping only its interface pointer
+  // here prevents every ObSqlCtx consumer from importing Optimizer headers.
+  ObTablePartitionInfoArray *partition_infos_;
+  common::ObIAllocator *partition_infos_allocator_;
   bool is_restore_;
   common::ObFixedArray<common::ObString, common::ObIAllocator> related_user_var_names_;
   //use for plan cache support dist plan

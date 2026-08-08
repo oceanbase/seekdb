@@ -21,7 +21,7 @@
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 
@@ -522,7 +522,7 @@ int ObDASDomainIdMergeIter::init_rowkey_domain_scan_param(
       LOG_WARN("unexpected null snapshot", K(ret), KPC(ctdef), KPC(rtdef));
     }
     if (OB_NOT_NULL(trans_desc)) {
-      scan_param.tx_id_ = trans_desc->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(trans_desc);
     } else {
       scan_param.tx_id_.reset();
     }

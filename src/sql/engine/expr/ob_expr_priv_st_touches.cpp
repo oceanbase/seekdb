@@ -71,14 +71,14 @@ int ObExprPrivSTTouches::calc_result_type2(ObExprResType &type, ObExprResType &t
   return ret;
 }
 
-int ObExprPrivSTTouches::get_input_geometry(omt::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
+int ObExprPrivSTTouches::get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &temp_allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
     ObDatum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty)
 {
   int ret = OB_SUCCESS;
   ObString wkb = gis_datum->get_string();
   ObGeoType type = ObGeoType::GEOTYPEMAX;
   uint32_t srid = -1;
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator,
           *gis_datum,
           gis_arg->datum_meta_,
           gis_arg->obj_meta_.has_lob_header(),
@@ -116,7 +116,7 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
   bool is_geo2_null = false;
   ObGeometry *geo1 = nullptr;
   ObGeometry *geo2 = nullptr;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = nullptr;
   const ObSrsItem *srs2 = nullptr;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);

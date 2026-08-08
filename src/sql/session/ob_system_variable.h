@@ -18,7 +18,6 @@
 #define OCEANBASE_SQL_SESSION_OB_SYSTEM_VARIABLE_
 #include "common/timezone/ob_time_convert.h"
 #include "share/system_variable/ob_system_variable_init.h"
-#include "storage/tx/ob_trans_define.h"
 
 namespace oceanbase
 {

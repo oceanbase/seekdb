@@ -468,7 +468,7 @@
 /tools/codestyle/**
 /src/objit/deps/googletest/**
 /.git/**
-/deps/oblib/src/lib/compress/**
+/src/oblib/lib/compress/**
 --------------------------------------------------------
 # Config the ignored fold to escape the Chinese scan by GLOB wildcard
 --------------------------------------------------------

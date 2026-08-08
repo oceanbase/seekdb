@@ -18,13 +18,15 @@
 #define OB_TEXT_RETRIEVAL_TOKEN_ITER_H_
 
 #include "lib/container/ob_se_array.h"
-#include "sql/engine/expr/ob_expr.h"
-#include "sql/das/iter/ob_das_scan_iter.h"
-#include "sql/das/ob_das_ir_define.h"
+#include "query/engine/expr/ob_expr.h"
 #include "ob_block_max_iter.h"
 #include "ob_i_sparse_retrieval_iter.h"
 namespace oceanbase
 {
+namespace sql
+{
+class ObDASScanIter;
+}
 namespace storage
 {
 class ObTableScanParam;

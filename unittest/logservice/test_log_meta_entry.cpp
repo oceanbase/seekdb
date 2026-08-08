@@ -74,10 +74,3 @@ TEST(TestLogMetaEntry, serialize_and_check_integrity)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_meta_entry.log", true);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -16,11 +16,6 @@
 
 #ifndef OCEANBASE_STORAGE_INIT_BASIC_STRUCT_H_
 #define OCEANBASE_STORAGE_INIT_BASIC_STRUCT_H_
-#include "share/ob_rpc_struct.h"
-#include "share/schema/ob_table_schema.h"
-#include "logservice/palf/palf_base_info.h"
-#include "share/scn.h"
-#include "share/schema/ob_column_schema.h"
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 namespace oceanbase
 {

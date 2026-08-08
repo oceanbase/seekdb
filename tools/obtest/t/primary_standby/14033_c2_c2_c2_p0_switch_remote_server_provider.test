@@ -1,0 +1,59 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试多集群的场景下，相互切换，remote_server_provider会刷到正确的server_list;
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+ob3.reboot;
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY' and switchover_info = 'SYNCED STANDBY CLUSTERS: 2,3', 1, 360;
+
+##做一次切换之后，卡住原主库的同步，验证第三方备库也同步不到；
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+alter system set debug_sync_timeout = '100000s';
+set ob_query_timeout = 60000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+set ob_query_timeout = 60000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system commit to switchover to primary;
+
+sleep 5;
+##在新主库上建租户
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob2.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 60;
+#验证第三方备库remote_server_list的值
+ob1.check_until_timeout select count(*) from __all_tenant, 2, 10;
+ob3.check_until_timeout select count(*) from __all_tenant, 2, 10;
+##在原主库做一次DDL;
+ob1.mysql alter tenant sys set primary_zone = 'z1';
+##获取schema_version;
+let $version1 = deploy_get_value(ob1.select select max(schema_version) schema_version from __all_ddl_operation, schema_version, 1);
+let $version3 = deploy_get_value(ob3.select select max(schema_version) schema_version from __all_ddl_operation, schema_version, 1);
+let $version2 = deploy_get_value(ob2.select select max(schema_version) schema_version from __all_ddl_operation, schema_version, 1);
+if ($version1 == $version3)
+{
+  echo "failed";
+}
+if ($version2 == $version3) 
+{
+  echo "success";
+}

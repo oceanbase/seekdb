@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_PC
 #include "ob_cache_object.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "share/ob_truncated_string.h"
-#include "pl/ob_pl.h"
+#include "sql/pl/ob_pl.h"
 
 
 namespace oceanbase

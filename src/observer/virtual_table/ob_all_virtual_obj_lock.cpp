@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_obj_lock.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -262,7 +262,7 @@ int ObAllVirtualObjLock::get_next_lock_op_iter_from_lock_memtable()
 int ObAllVirtualObjLock::prepare_start_to_read()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "allocator_ shouldn't be NULL", K(allocator_), K(ret));

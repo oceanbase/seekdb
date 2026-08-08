@@ -1,0 +1,76 @@
+# CASE_OWNER:
+#    @msy164651
+# CASE_DESC:
+#
+
+ob1=OBI(cluster=2:2:2, init_unit_cpu=0, proxy_num=0, ct_num=0);
+
+# disable 6 server, 系统租户在z1,z3,z5
+ob1.reboot;
+
+
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 2, memory_size '4G';
+ob1.mysql CREATE RESOURCE POOL pool_wenduo UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_wenduo'), primary_zone = 'z1', locality = 'F{1}@z1,F{1}@z2,F{1}@z3' set ob_tcp_invited_nodes='%';
+
+#ob1.mysql alter system set balancer_idle_time = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_TENANT_BALANCE_SERVICE wait_for signal';
+sleep 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_status where status = 'normal' and ls_id != 1, 2, 100;
+let $obs0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0 =deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(mysql_conn,$obs0,root@mysql,,test,$port0);
+connection mysql_conn;
+
+create table wenduo0(pk int primary key);
+create table wenduo1(pk int primary key);
+create table wenduo2(pk int primary key);
+create table wenduo3(pk int primary key);
+create table wenduo4(pk int primary key);
+
+create table wenduo5(pk int primary key);
+create table wenduo6(pk int primary key);
+
+create table t_hash(pk int primary key) partition by hash (pk) partitions 10;
+
+create table t_range_range1 (c1 int, c2 int, c3 int, c4 int)
+partition by range(c1)
+subpartition by range(c2)
+(
+  partition t1rp0 values less than (100)
+  (
+    subpartition t1rp0sp0 values less than (100),
+    subpartition t1rp0sp1 values less than (200),
+    subpartition t1rp0sp2 values less than (300),
+    subpartition t1rp0sp3 values less than (400)
+  ),
+  partition t1rp1 values less than (200)
+  (
+    subpartition t1rp1sp0 values less than (100),
+    subpartition t1rp1sp1 values less than (200),
+    subpartition t1rp1sp2 values less than (300),
+    subpartition t1rp1sp3 values less than (400)
+  ),
+  partition t1rp2 values less than (400)
+  (
+    subpartition t1rp2sp0 values less than (100),
+    subpartition t1rp2sp1 values less than (200),
+    subpartition t1rp2sp2 values less than (300),
+    subpartition t1rp2sp3 values less than (400)
+  )
+);
+
+create table tb1_in_tg1(pk int primary key) partition by hash (pk) partitions 10;
+create table tb2_in_tg1(pk int primary key) partition by hash (pk) partitions 10;
+sleep 10;
+connect(sys_conn,$obs0,root@sys,,test,$port0);
+connection sys_conn;
+
+alter system change tenant tenant_id = 1001;
+select tenant_id, balance_group_id_high, balance_group_id_low, tablet_group_count, balance_group_name from oceanbase.__all_balance_group_ls_stat;

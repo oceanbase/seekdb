@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "storage/access/ob_table_param.h"
-#include "sql/resolver/expr/ob_raw_expr.h"
+#include "storage/access/ob_table_read_info.h"
+#include "query/resolver/ob_raw_expr_traits.h"
 
 namespace oceanbase
 {
@@ -557,7 +558,7 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     group_by_projector_(allocator),
     output_sel_mask_(allocator),
     pad_col_projector_(allocator),
-    main_read_info_(),
+    main_read_info_(nullptr),
     has_virtual_column_(false),
     use_lob_locator_(false),
     parser_name_(),
@@ -571,11 +572,22 @@ ObTableParam::ObTableParam(ObIAllocator &allocator)
     is_enable_semistruct_encoding_(false),
     access_virtual_col_cnt_(0)
 {
+  main_read_info_ = OB_NEWx(storage::ObTableReadInfo, &allocator_);
   reset();
 }
 
 ObTableParam::~ObTableParam()
 {
+  if (nullptr != main_read_info_) {
+    main_read_info_->~ObTableReadInfo();
+    main_read_info_ = nullptr;
+  }
+}
+
+const storage::ObITableReadInfo &ObTableParam::get_read_info() const
+{
+  OB_ASSERT(nullptr != main_read_info_);
+  return *main_read_info_;
 }
 
 void ObTableParam::reset()
@@ -590,7 +602,9 @@ void ObTableParam::reset()
   use_lob_locator_ = false;
   parser_name_.reset();
   parser_properties_.reset();
-  main_read_info_.reset();
+  if (nullptr != main_read_info_) {
+    main_read_info_->reset();
+  }
   enable_lob_locator_v2_ = false;
   is_spatial_index_ = false;
   is_fts_index_ = false;
@@ -605,19 +619,24 @@ OB_DEF_SERIALIZE(ObTableParam)
 {
   int ret = OB_SUCCESS;
 
-  LST_DO_CODE(OB_UNIS_ENCODE,
-              table_id_,
-              output_projector_,
-              aggregate_projector_,
-              output_sel_mask_,
-              pad_col_projector_,
-              has_virtual_column_,
-              use_lob_locator_,
-              main_read_info_,
-              enable_lob_locator_v2_,
-              is_spatial_index_,
-              group_by_projector_,
-              is_fts_index_);
+  if (OB_ISNULL(main_read_info_)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("table read info allocation failed", KR(ret));
+  } else {
+    LST_DO_CODE(OB_UNIS_ENCODE,
+                table_id_,
+                output_projector_,
+                aggregate_projector_,
+                output_sel_mask_,
+                pad_col_projector_,
+                has_virtual_column_,
+                use_lob_locator_,
+                *main_read_info_,
+                enable_lob_locator_v2_,
+                is_spatial_index_,
+                group_by_projector_,
+                is_fts_index_);
+  }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ENCODE(parser_name_);
   }
@@ -653,8 +672,11 @@ OB_DEF_DESERIALIZE(ObTableParam)
               pad_col_projector_,
               has_virtual_column_,
               use_lob_locator_);
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(main_read_info_.deserialize(allocator_, buf, data_len, pos))) {
+  if (OB_SUCC(ret) && OB_ISNULL(main_read_info_)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("table read info allocation failed", KR(ret));
+  } else if (OB_SUCC(ret)) {
+    if (OB_FAIL(main_read_info_->deserialize(allocator_, buf, data_len, pos))) {
       LOG_WARN("Fail to deserialize read info", K(ret));
     }
   }
@@ -715,19 +737,23 @@ OB_DEF_SERIALIZE_SIZE(ObTableParam)
   int ret = OB_SUCCESS;
   int64_t len = 0;
 
-  LST_DO_CODE(OB_UNIS_ADD_LEN,
-              table_id_,
-              output_projector_,
-              aggregate_projector_,
-              output_sel_mask_,
-              pad_col_projector_,
-              has_virtual_column_,
-              use_lob_locator_,
-              main_read_info_,
-              enable_lob_locator_v2_,
-              is_spatial_index_,
-              group_by_projector_,
-              is_fts_index_);
+  if (OB_ISNULL(main_read_info_)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    LST_DO_CODE(OB_UNIS_ADD_LEN,
+                table_id_,
+                output_projector_,
+                aggregate_projector_,
+                output_sel_mask_,
+                pad_col_projector_,
+                has_virtual_column_,
+                use_lob_locator_,
+                *main_read_info_,
+                enable_lob_locator_v2_,
+                is_spatial_index_,
+                group_by_projector_,
+                is_fts_index_);
+  }
   if (OB_SUCC(ret) && is_fts_index_) {
     OB_UNIS_ADD_LEN(parser_name_);
   }
@@ -856,7 +882,9 @@ int ObTableParam::construct_columns_and_projector(
   bool need_truncate_filter = false;
   int64_t rowkey_count = 0;
 
-  if (OB_FAIL(ret)) {
+  if (OB_ISNULL(main_read_info_)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("table read info allocation failed", KR(ret));
   } else {
     // column array
     const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
@@ -1057,7 +1085,7 @@ int ObTableParam::construct_columns_and_projector(
 
   // assign
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(main_read_info_.init(allocator_,
+    if (OB_FAIL(main_read_info_->init(allocator_,
                                      table_schema.get_column_count(),
                                      rowkey_count,
                                      tmp_access_cols_desc,
@@ -1072,7 +1100,7 @@ int ObTableParam::construct_columns_and_projector(
       LOG_WARN("assign failed", K(ret));
     }
   }
-  LOG_DEBUG("Generated main read info", K_(main_read_info));
+  LOG_DEBUG("Generated main read info", KPC_(main_read_info));
   return ret;
 }
 
@@ -1116,9 +1144,9 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
 
   if (OB_FAIL(construct_columns_and_projector(table_schema, access_column_ids, tsc_out_cols, force_mysql_mode, pd_pushdown_flag))) {
     LOG_WARN("construct failed", K(ret));
-  } else if (OB_ISNULL(cols_param = main_read_info_.get_columns())) {
+  } else if (OB_ISNULL(cols_param = main_read_info_->get_columns())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cols param array is unexpected null ", K(ret), K(main_read_info_));
+    LOG_WARN("cols param array is unexpected null ", K(ret), KPC_(main_read_info));
   } else if (OB_FAIL(construct_pad_projector(*cols_param, output_projector_, pad_col_projector_))) {
     LOG_WARN("Fail to construct pad projector, ", K(ret));
   } else if ((enable_lob_locator_v2_)
@@ -1131,7 +1159,7 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
   } else if (table_schema.is_fts_index() && OB_FAIL(convert_fulltext_index_info(table_schema))) {
     LOG_WARN("fail to convert fulltext index info", K(ret));
   } else {
-    LOG_DEBUG("construct columns", K(table_id_), K(access_column_ids), K_(main_read_info));
+    LOG_DEBUG("construct columns", K(table_id_), K(access_column_ids), KPC_(main_read_info));
   }
 
   return ret;

@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tablet_ddl_kv_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -56,7 +56,7 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mg
 {
   int ret = OB_SUCCESS;
   if (!tablet_iter_.is_valid()) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls_))) {
       SERVER_LOG(WARN, "get log stream failed", K(ret));
     } else if (OB_FAIL(ls_->build_tablet_iter(tablet_iter_))) {
       SERVER_LOG(WARN, "fail to build tablet iter", K(ret));

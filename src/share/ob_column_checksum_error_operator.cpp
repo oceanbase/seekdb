@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_column_checksum_error_operator.h"
-#include "share/ob_server_struct.h"
 #include "share/storage/ob_column_checksum_error_info_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
@@ -31,15 +30,15 @@ using namespace oceanbase::common::sqlclient;
 
 // Static storage instance
 ObColumnChecksumErrorInfoTableStorage ObColumnChecksumErrorOperator::storage_;
+ObSQLiteConnectionPool *ObColumnChecksumErrorOperator::meta_db_pool_ = nullptr;
 
-int ObColumnChecksumErrorOperator::init()
+int ObColumnChecksumErrorOperator::init(ObSQLiteConnectionPool &meta_db_pool)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.meta_db_pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ not initialized", K(ret));
-  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+  if (OB_FAIL(storage_.init(&meta_db_pool))) {
     LOG_WARN("failed to init storage", K(ret));
+  } else {
+    meta_db_pool_ = &meta_db_pool;
   }
   return ret;
 }
@@ -114,7 +113,7 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
       return OB_SUCCESS;
     };
 
-    ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+    ObSQLiteConnectionGuard guard(meta_db_pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
@@ -151,7 +150,7 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const int64_t com
       return OB_SUCCESS;
     };
 
-    ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
+    ObSQLiteConnectionGuard guard(meta_db_pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));

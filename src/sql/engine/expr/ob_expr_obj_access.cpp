@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_obj_access.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "src/sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
@@ -317,6 +317,11 @@ int ObExprObjAccess::ExtraInfo::get_record_attr(const pl::ObObjAccessIdx &curren
                                     *package_guard,
                                     *ctx.exec_ctx_.get_sql_proxy(),
                                     false);
+      resolve_ctx.params_.plan_cache_ = ctx.exec_ctx_.get_plan_cache();
+      resolve_ctx.params_.pl_sql_runtime_ = ctx.exec_ctx_.get_pl_sql_runtime();
+      resolve_ctx.params_.pl_engine_ = ctx.exec_ctx_.get_pl_engine();
+      resolve_ctx.params_.srs_provider_ = ctx.exec_ctx_.get_srs_provider();
+      resolve_ctx.params_.lob_read_service_ = ctx.exec_ctx_.get_lob_read_service();
       OZ (resolve_ctx.get_user_type(udt_id, user_type));
     }
   }
@@ -577,7 +582,8 @@ int ObExprObjAccess::eval_obj_access(const ObExpr &expr,
 
   OZ(expr_datum.from_obj(result, expr.obj_datum_map_));
   if (is_lob_storage(result.get_type())) {
-    OZ (ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), expr_datum));
+    OZ (ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
+                            ctx.exec_ctx_.get_allocator(), expr_datum));
   }
   return ret;
 }

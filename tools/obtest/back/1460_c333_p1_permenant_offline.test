@@ -1,0 +1,100 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试永久下线的时候，选择目的端会考虑磁盘是否够；
+
+#用例
+#1. FF，永久下线后，迁移空unit;补副本;
+#2. FF,永久下线后，副本数据量很大，等待永久下线踢成员后补副本；
+#3. FFR,永久下线后，R副本通过补副本转移，迁移空unit;
+#4. 正在迁入， revert掉；
+#5. 正在迁入，对端下线，等待踢成员后abort;
+#6. 正在迁入，带R副本，对端也下线，R通过补副本方式转移；最后空unit abort掉；
+
+ob1=OBI(cluster=3:3:3,  proxy_num=0, ct_num = 0);
+ob1.reboot;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_in_concurrency = 2;
+ob1.mysql alter system set server_data_copy_out_concurrency = 2;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql alter system set enable_rereplication = true;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1', 'z2','z3');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_2'), locality='F@z1,F@z2,F@z3,R@z3', primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob1.create_client tenant=tenant_1,user=root,passwd=,database=test;
+create table test(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+let $t_id = deploy_get_value(ob1.select select table_id from __all_table where table_name = 'test', table_id, 1);
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+let $resource_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where tenant_id = $tenant_id, resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob1.select select unit_id from __all_unit where zone='z2' and resource_pool_id = $resource_id, unit_id, 1);
+let $unit_addr = deploy_get_value(ob1.select select concat(svr_ip,":", svr_port) addr from __all_unit where unit_id=$unit_id, addr, 1);
+
+--disable_query_log
+#1. FF，永久下线后，迁移空unit;补副本;
+let $obi = deploy_get_value(ob1.get_obs_by_addr $unit_addr);
+$obi.force_stop;
+ob1.check_until_timeout select count(*)>5 from __all_virtual_server_event_history where event like '%remove%', 1, 60;
+ob1.check_until_timeout select count(*) from gv\$partition where tenant_id = $tenant_id and table_id = $t_id group by partition_id, 4, 60;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 0, 60;
+ob1.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%balance%' and name5 = 'comment' and value5 like '%migrate permanent offline replica%', 0, 3;
+$obi.start;
+ob1.check_until_timeout select count(*) from __all_server where start_service_time <=0, 0, 60;
+
+#2. FF,永久下线后，副本数据量很大，等待永久下线踢成员后补副本；
+#3. FFR,永久下线后，R副本通过unit迁移过去；
+###找到R所在的机器进行永久下线；
+let $r_addr = deploy_get_value(ob1.select select  concat(svr_ip,":", svr_port) addr from gv\$partition where zone = 'z3' and replica_type=16, addr, 1);
+let $obi = deploy_get_value(ob1.get_obs_by_addr $r_addr);
+let $count = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where replica_type = 16 and concat(svr_ip,":", svr_port) = '$r_addr', c, 1);
+ob1.mysql alter system set server_data_copy_in_concurrency = 200;
+ob1.mysql alter system set server_data_copy_out_concurrency = 200;
+$obi.force_stop;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 1, 60;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 0, 120;
+###检查R副本的迁移方式
+ob1.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%balance%' and value5 = 'replicate permanent offline replica' and value1 like '%tid:$t_id%', $count, 60;
+$obi.start;
+ob1.check_until_timeout select count(*) from __all_server where start_service_time <=0, 0, 60;
+
+#4. FFR,永久下线后，unit内的副本太大，不能通过unit迁移的方式过去；通过补副本的方式；最后迁移空unit;
+####unit无法迁移的话，导致R副本没有地方可以补齐
+create table test2(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+let $t_id2 = deploy_get_value(ob1.select select table_id from __all_table where table_name = 'test2', table_id, 1);
+sleep 3;
+ob1.mysql update oceanbase.__all_virtual_meta_table set required_size = 10737418240;
+let $r_addr = deploy_get_value(ob1.select select  concat(svr_ip,":", svr_port) addr from gv\$partition where zone = 'z3' and replica_type=16 and table_id=$t_id2, addr, 1);
+let $count = deploy_get_value(ob1.select select (count(*)) c from __all_virtual_meta_table where replica_type = 16 and concat(svr_ip,":", svr_port) = '$r_addr' and table_id=$t_id2, c, 1);
+let $obi = deploy_get_value(ob1.get_obs_by_addr $r_addr);
+ob1.mysql alter system set server_data_copy_in_concurrency = 200;
+ob1.mysql alter system set server_data_copy_out_concurrency = 200;
+$obi.force_stop;
+####unit无法迁移的话，导致R副本没有地方可以补齐,unit内有R副本，超过机器大小，不能进行迁移；
+sleep 60;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 1, 120;
+ob1.check_until_timeout select count(*) c from __all_virtual_server_event_history where module like '%balance%' and event like '%finish_add_replica%' and value4 = 0 and value1 like '%$t_id2%' and value4 like '%replica_type:16%', 0, 10;
+
+#4. 正在迁入， 对端下线，revert掉；
+#ob1.mysql alter system report replica;
+#let $unit_id = deploy_get_value(ob1.select select unit_id from __all_unit where zone='z2' and resource_pool_id = $resource_id, unit_id, 1);
+#let $unit_addr = deploy_get_value(ob1.select select concat(svr_ip,":", svr_port) addr from __all_unit where unit_id=$unit_id, addr, 1);
+#let $dest_addr = deploy_get_value(ob1.select select concat(svr_ip,":", svr_port) addr from __all_server where zone = 'z2' except select concat(svr_ip,":", svr_port) addr from __all_unit where zone='z2' and resource_pool_id = $resource_id, addr, 1);
+#ob1.mysql alter system enable_rebalance = false;
+#let $old_count = deploy_get_value( ob1.select select count(*) c from __all_virtual_server_event_history where event like '%finish_migrate_unit%' and value2 like '2' and value1 like '$unit_id', c, 1);
+#ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+#eval alter system migrate unit $unit_id destination '$dest_addr'; 
+#ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 1, 60;
+#let $obi = deploy_get_value(ob1.get_obs_by_addr $dest_addr);
+#$obi.force_stop;
+#inc $old_count;
+#ob1.check_until_timeout select count(*) from __all_virtual_server_event_history where event like '%finish_migrate_unit%' and value2 like '1' and value1 like '$unit_id', $old_count, 40;
+#ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_port != 0, 0, 60;
+#ob1.check_until_timeout select count(*) from __all_unit where unit_id=$unit_id and concat(svr_ip,":", svr_port) = '$unit_addr', 1, 3;
+#
+#

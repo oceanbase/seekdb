@@ -1,0 +1,37 @@
+# owner:yongle.xh
+# owner group:storage
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=4);
+
+ob1.reboot;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(conn0,$ip0,root@obtest,,test,$sql_port0);
+connection conn0;
+
+use test;
+create table test01 (pk1 int, pk2 int, primary key(pk1));
+set recyclebin='OFF';
+insert into test01(pk1, pk2) values(1,1);
+insert into test01(pk1, pk2) values(2,1);
+
+#ob1.mysql set ob_global_debug_sync = 'BEFORE_CREATE_INDEX_TASK wait_for signal';
+#sleep 3;
+
+--error 5703
+create unique index i2 on test01(pk2);
+ob1.mysql alter system minor freeze;
+#sleep 20;
+#ob1.mysql set ob_global_debug_sync = 'now signal signal';
+#ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where tenant_id=1001 and table_name like '%i2%', 5, 60;
+
+select * from test01;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+show index from test01;

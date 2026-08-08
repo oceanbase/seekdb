@@ -1,4 +1,4 @@
-#include "share/rc/ob_module_provider.h"
+#include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -40,6 +40,8 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
   ObString str_arg;
   ObUserResourceCalculateArg arg;
   ObMinPhyResourceResult res;
+  ObResourceLimitCalculator *resource_calculator =
+      ctx.get_resource_limit_calculator();
   ObCStringHelper helper;
   
   const char *str = NULL;
@@ -58,7 +60,10 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     LOG_WARN("convert cstring failed", K(ret));
   } else if (OB_FAIL(parse_dict_like_args_(str, arg))) {
     LOG_WARN("parse argument failed", K(ret));
-  } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_min_phy_resource_value(arg, res))) {
+  } else if (OB_ISNULL(resource_calculator)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("resource limit calculator is not initialized", K(ret));
+  } else if (OB_FAIL(resource_calculator->get_min_phy_resource_value(arg, res))) {
     LOG_WARN("get minimum physical resource requirement failed", K(ret));
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
     LOG_WARN("get json result failed", K(ret), K(res), K(pos));

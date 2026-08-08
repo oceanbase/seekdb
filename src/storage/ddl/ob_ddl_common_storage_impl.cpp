@@ -13,11 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// this file was  share/ob_ddl_common.cpp created by function-level splitting from:these ObDDLUtil static methods
-// implementation depends on this module,callers are all in upper layers;declaration remains in share/ob_ddl_common.h。
-#define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
+// Storage-owned DDL algorithms operating on tablets, macro blocks and LOBs.
+#define USING_LOG_PREFIX STORAGE
 
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
@@ -32,13 +31,14 @@
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
-#include "sql/engine/vector/ob_continuous_base.h"
-#include "sql/engine/vector/ob_discrete_format.h"
-#include "sql/engine/vector/ob_fixed_length_base.h"
-#include "sql/engine/vector/ob_uniform_base.h"
-#include "sql/engine/vector/type_traits.h"
 
-#include "sql/das/ob_das_utils.h"
+#include "query/engine/vector/ob_continuous_base.h"
+#include "query/engine/vector/ob_discrete_format.h"
+#include "query/engine/vector/ob_fixed_length_base.h"
+#include "query/engine/vector/ob_uniform_base.h"
+#include "query/engine/vector/type_traits.h"
+#include "data_plane/access/ob_datum_reshape.h"
+#include "data_plane/access/ob_parallel_range_task_planner.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_ddl_batch_rows.h"
@@ -46,7 +46,7 @@
 #include "storage/tablet/ob_tablet.h"
 #include "lib/worker.h"
 #include "storage/ddl/ob_ddl_write_stat_util.h"
-#include "share/ob_ddl_error_message_table_operator.h"
+#include "share/config/ob_server_config.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -58,7 +58,7 @@ namespace
 constexpr int64_t MACRO_STEP_SIZE = 0x1 << 25;
 }
 
-// lob-column handling free function(moved together from share/ob_ddl_common.cpp;must be defined before use)
+// File-local LOB helpers shared by the Storage DDL algorithms below.
 OB_INLINE int check_lob_column_inrow(
     char *ptr,
     uint32_t len,
@@ -172,7 +172,7 @@ int check_skip_handle_lob_column(
   return ret;
 }
 
-int ObDDLUtil::report_ddl_checksum_from_major_sstable(
+int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable(
       const ObTabletID &tablet_id,
       const uint64_t target_table_id,
       const int64_t execution_id,
@@ -181,20 +181,18 @@ int ObDDLUtil::report_ddl_checksum_from_major_sstable(
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletHandle tablet_handle;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == target_table_id || execution_id < 0 || ddl_task_id < 0 || data_format_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(target_table_id), K(execution_id), K(ddl_task_id), K(data_format_version));
   } else if (OB_ISNULL(ls_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service is null", K(ret));
+    ret = OB_NOT_INIT;
+    LOG_WARN("ls service is not initialized", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    LOG_WARN("get local ls failed", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local ls is null", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle))) {
+    LOG_WARN("get ls failed", K(ret));
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id));
   } else {
     ObSSTable *first_major_sstable = nullptr;
@@ -211,7 +209,7 @@ int ObDDLUtil::report_ddl_checksum_from_major_sstable(
   return ret;
 }
 
-int ObDDLUtil::report_ddl_sstable_checksum(
+int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
       const ObTabletID &tablet_id,
       const uint64_t target_table_id,
       const int64_t execution_id,
@@ -250,7 +248,7 @@ int ObDDLUtil::report_ddl_sstable_checksum(
   return ret;
 }
 
-int ObDDLUtil::init_macro_block_writer(
+int oceanbase::storage::ObDDLStorageUtil::init_macro_block_writer(
     const ObWriteMacroParam &param,
     ObIAllocator &allocator,
     ObDDLMacroBlockWriter *&macro_block_writer)
@@ -287,7 +285,7 @@ int ObDDLUtil::init_macro_block_writer(
   return ret;
 }
 
-int ObDDLUtil::prepare_lob_writer(const ObTabletID &tablet_id, const int64_t slice_idx, const ObWriteMacroParam &param, ObLobMacroBlockWriter *&lob_writer)
+int oceanbase::storage::ObDDLStorageUtil::prepare_lob_writer(const ObTabletID &tablet_id, const int64_t slice_idx, const ObWriteMacroParam &param, ObLobMacroBlockWriter *&lob_writer)
 {
   int ret = OB_SUCCESS;
   if (nullptr == lob_writer) {
@@ -310,7 +308,7 @@ int ObDDLUtil::prepare_lob_writer(const ObTabletID &tablet_id, const int64_t sli
   return ret;
 }
 
-int ObDDLUtil::handle_lob_columns(
+int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
     ObWriteMacroParam &param,
@@ -390,7 +388,7 @@ int ObDDLUtil::handle_lob_columns(
   return ret;
 }
 
-int ObDDLUtil::convert_to_storage_row(
+int oceanbase::storage::ObDDLStorageUtil::convert_to_storage_row(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
     const ObWriteMacroParam &param,
@@ -459,7 +457,7 @@ int ObDDLUtil::convert_to_storage_row(
         ObStorageDatum &datum = current_row.storage_datums_[idx];
         const bool need_reshape = !datum.is_null() && !datum.is_nop();
         const ObColumnSchemaItem &column_item = ddl_table_schema.column_items_.at(idx);
-        if (need_reshape && OB_FAIL(ObDASUtils::reshape_datum_value(column_item.col_type_,
+        if (need_reshape && OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(column_item.col_type_,
                                                                     column_item.col_accuracy_,
                                                                     row_arena,
                                                                     datum))) {
@@ -482,7 +480,7 @@ int ObDDLUtil::convert_to_storage_row(
   return ret;
 }
 
-int ObDDLUtil::get_task_ranges(
+int oceanbase::storage::ObDDLStorageUtil::get_task_ranges(
     const int64_t task_id,
     const common::ObTabletID &tablet_id,
     const int64_t tablet_size,
@@ -494,12 +492,17 @@ int ObDDLUtil::get_task_ranges(
   ObFreezeInfo frozen_status;
   const bool allow_not_ready = false;
   ObLS *ls = nullptr;
+  ObLSService *ls_service =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletTableIterator iterator;
   ObLSTabletService *tablet_service = nullptr;
   if (OB_UNLIKELY(task_id <= 0 || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_ISNULL(ls_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ls service is not initialized", K(ret));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("fail to get log stream", K(ret));
   } else if (OB_ISNULL(tablet_service = ls->get_tablet_svr())) {
     ret = OB_ERR_UNEXPECTED;
@@ -513,9 +516,11 @@ int ObDDLUtil::get_task_ranges(
     range.set_whole_range();
     ObSEArray<common::ObStoreRange, 32> ranges;
     ObArrayArray<ObStoreRange> multi_range_split_array;
-    ObParallelBlockRangeTaskParams params;
+    data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
     params.parallelism_ = hint_parallelism;
-    params.expected_task_load_ = tablet_size / 1024 <= 0 ? sql::OB_EXPECTED_TASK_LOAD : tablet_size / 1024;
+    if (tablet_size / 1024 > 0) {
+      params.expected_task_load_kb_ = tablet_size / 1024;
+    }
     if (OB_FAIL(ranges.push_back(range))) {
       LOG_WARN("push back range failed", K(ret));
     } else if (OB_FAIL(tablet_service->get_multi_ranges_cost(tablet_id,
@@ -527,9 +532,8 @@ int ObDDLUtil::get_task_ranges(
         ret = OB_EAGAIN;
       }
     } else if (OB_FALSE_IT(total_size = total_size / 1024 /* Byte -> KB */)) {
-    } else if (OB_FAIL(ObGranuleUtil::compute_total_task_count(params,
-                                                              total_size,
-                                                              expected_task_count))) {
+    } else if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(
+        params, total_size, expected_task_count))) {
       LOG_WARN("compute total task count failed", K(ret));
     } else if (OB_FAIL(tablet_service->split_multi_ranges(tablet_id,
                                                           ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
@@ -544,7 +548,9 @@ int ObDDLUtil::get_task_ranges(
     } else if (multi_range_split_array.count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected range split arr", K(ret), K(total_size), K(hint_parallelism),
-        K(expected_task_count), K(params), K(multi_range_split_array));
+        K(expected_task_count), K(params.parallelism_), K(params.expected_task_load_kb_),
+        K(params.min_task_count_per_thread_), K(params.max_task_count_per_thread_),
+        K(params.min_task_access_size_kb_), K(multi_range_split_array));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < multi_range_split_array.count(); i++) {
         ObIArray<ObStoreRange> &storage_task_ranges = multi_range_split_array.at(i);
@@ -561,13 +567,16 @@ int ObDDLUtil::get_task_ranges(
     }
     if (OB_SUCC(ret)) {
       FLOG_INFO("succeed to get range", K(ret), K(task_id), K(tablet_id), K(total_size),
-      K(hint_parallelism), K(expected_task_count), K(params), K(multi_range_split_array), K(report_ranges));
+      K(hint_parallelism), K(expected_task_count), K(params.parallelism_),
+      K(params.expected_task_load_kb_), K(params.min_task_count_per_thread_),
+      K(params.max_task_count_per_thread_), K(params.min_task_access_size_kb_),
+      K(multi_range_split_array), K(report_ranges));
     }
   }
   return ret;
 }
 
-int ObDDLUtil::get_tablet_physical_row_cnt(
+int oceanbase::storage::ObDDLStorageUtil::get_tablet_physical_row_cnt(
   const ObTabletID &tablet_id,
   const bool calc_sstable,
   const bool calc_memtable,
@@ -579,6 +588,8 @@ int ObDDLUtil::get_tablet_physical_row_cnt(
   // src_tablet_id -> tablet -> sstables -> sstable_metas -> row_count
   //                         -> memtables -> physical_row_cnt
   ObLS *ls = nullptr;
+  ObLSService *ls_service =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletHandle tablet_handle;
   ObTablet *tablet = nullptr;
   ObTableStoreIterator table_store_iter;
@@ -588,7 +599,10 @@ int ObDDLUtil::get_tablet_physical_row_cnt(
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_ISNULL(ls_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ls service is not initialized", K(ret));
+  } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_10_S, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("fail to get tablet", K(ret), K(tablet_id));
@@ -651,12 +665,13 @@ int ObDDLUtil::get_tablet_physical_row_cnt(
   return ret;
 }
 
-int ObDDLUtil::is_major_exist(const common::ObTabletID &tablet_id, bool &is_major_exist)
+int oceanbase::storage::ObDDLStorageUtil::is_major_exist(const common::ObTabletID &tablet_id, bool &is_major_exist)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
-  ObLSService* ls_svr = share::g_mp->ls_service();
+  ObLSService *ls_svr =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   is_major_exist = false;
   if (!tablet_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
@@ -676,7 +691,7 @@ int ObDDLUtil::is_major_exist(const common::ObTabletID &tablet_id, bool &is_majo
 }
 
 
-int ObDDLUtil::handle_lob_columns(
+int oceanbase::storage::ObDDLStorageUtil::handle_lob_columns(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
     ObWriteMacroParam &param,
@@ -735,7 +750,7 @@ int ObDDLUtil::handle_lob_columns(
   return ret;
 }
 
-int ObDDLUtil::fill_writer_param(
+int oceanbase::storage::ObDDLStorageUtil::fill_writer_param(
     const ObTabletID &tablet_id,
     const int64_t slice_idx,
     ObDDLIndependentDag *dag,
@@ -774,7 +789,7 @@ int ObDDLUtil::fill_writer_param(
   return ret;
 }
 
-int ObDDLUtil::init_batch_rows(
+int oceanbase::storage::ObDDLStorageUtil::init_batch_rows(
     const ObDDLTableSchema &ddl_table_schema,
     const int64_t batch_size,
     ObDDLBatchRows &batch_rows)
@@ -809,7 +824,7 @@ int ObDDLUtil::init_batch_rows(
   return ret;
 }
 
-int ObDDLUtil::ddl_get_tablet(
+int oceanbase::storage::ObDDLStorageUtil::ddl_get_tablet(
     ObLS *ls,
     const ObTabletID &tablet_id,
     storage::ObTabletHandle &tablet_handle,
@@ -829,33 +844,6 @@ int ObDDLUtil::ddl_get_tablet(
     if (OB_ALLOCATE_MEMORY_FAILED == ret) {
       ret = OB_TIMEOUT;
     }
-  }
-  return ret;
-}
-
-int ObDDLUtil::alloc_storage_macro_block_writer(
-    const ObWriteMacroParam &param,
-    ObIAllocator &allocator,
-    ObITabletSliceWriter *&tablet_slice_writer)
-{
-  int ret = OB_SUCCESS;
-  tablet_slice_writer = nullptr;
-  if (OB_UNLIKELY(!param.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the are invalid arguments", K(ret), K(param));
-  } else {
-    tablet_slice_writer = OB_NEWx(ObTabletSliceWriter, &allocator);
-  }
-  if (OB_UNLIKELY(nullptr == tablet_slice_writer)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for the storage macro block writer", K(ret));
-  } else if (OB_FAIL(tablet_slice_writer->init(param))) {
-    LOG_WARN("fail to initialize storage tablet slice writer", K(ret), K(param));
-  }
-  if (OB_FAIL(ret) && nullptr != tablet_slice_writer) {
-    tablet_slice_writer->~ObITabletSliceWriter();
-    allocator.free(tablet_slice_writer);
-    tablet_slice_writer = nullptr;
   }
   return ret;
 }
@@ -887,18 +875,7 @@ int oceanbase::storage::ObDDLStorageWriteUtil::get_ddl_write_stat(
   return ret;
 }
 
-// ===== definition moved from share/ob_ddl_common.cpp: accesses blocksstable::ObDatumRow/ObMacroDataSeq members =====
-// check_null_and_length moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// init_datum_row_with_snapshot moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// init_macro_block_seq moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// get_parallel_idx moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// ===== storage-clean static methods from ObDDLUtil demoted to storage::ObDDLStorageUtil members (A-set member-split cleanup)=====
-#include "storage/ddl/ob_ddl_storage_util.h"
-int ObDDLUtil::set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value)
+int oceanbase::storage::ObDDLStorageUtil::set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!tablet_id.is_valid() || seq_value < 0)) {

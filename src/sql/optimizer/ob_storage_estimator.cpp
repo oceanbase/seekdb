@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_storage_estimator.h"
-#include "share/rc/ob_module_provider.h"
-#include "storage/tx_storage/ob_access_service.h"
-#include "storage/tx/ob_ts_mgr.h"
+#include "data_plane/ob_i_storage_estimator.h"
+#include "data_plane/transaction/ob_i_read_timestamp_service.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 using namespace storage;
@@ -33,7 +33,12 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
   //est path rows
   ObTableScanParam param;
   share::SCN max_readable_scn;
-  if (OB_FAIL(OB_TS_MGR.get_gts(max_readable_scn))) {
+  data_plane::ObIReadTimestampService *read_timestamp_service =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIReadTimestampService>();
+  if (OB_ISNULL(read_timestamp_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("read timestamp service is not available", K(ret));
+  } else if (OB_FAIL(read_timestamp_service->latest_read_scn(max_readable_scn))) {
     LOG_WARN("failed to get gts", K(ret));
   } else {
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
@@ -127,24 +132,24 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimple
     int64_t rc_physical = 0;
     ObArenaAllocator allocator;
     const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
-    ObAccessService *access_service = NULL;
-    storage::ObTableScanRange table_scan_range;
+    data_plane::ObIStorageEstimator *storage_estimator =
+        ::oceanbase::share::server_service<::oceanbase::data_plane::ObIStorageEstimator>();
 
-    if (OB_ISNULL(access_service = share::g_mp->access_service())) {
+    if (OB_ISNULL(storage_estimator)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(access_service));
-    } else if (OB_FAIL(table_scan_range.init(table_scan_param, batch, allocator))) {
-      STORAGE_LOG(WARN, "Failed to init table scan range", K(ret), K(batch));
-    } else if (OB_FAIL(access_service->estimate_row_count(table_scan_param,
-                                                          table_scan_range,
-                                                          timeout_us,
-                                                          est_records,
-                                                          rc_logical,
-                                                          rc_physical))) {
+      LOG_WARN("get unexpected null", K(ret), KP(storage_estimator));
+    } else if (OB_FAIL(storage_estimator->estimate_row_count_for_batch(
+                   table_scan_param,
+                   batch,
+                   allocator,
+                   timeout_us,
+                   est_records,
+                   rc_logical,
+                   rc_physical))) {
       LOG_TRACE("OPT:[STORAGE EST FAILED, USE STAT EST]", "storage_ret", ret);
     } else {
       LOG_TRACE("storage estimate row count result", K(rc_logical), K(rc_physical),
-                K(table_scan_param), K(table_scan_range), K(timeout_us), K(ret));
+                K(table_scan_param), K(timeout_us), K(ret));
         logical_row_count = rc_logical < 0 ? 1.0 : static_cast<double>(rc_logical);
         physical_row_count = rc_physical < 0 ? 1.0 : static_cast<double>(rc_physical);
     }
@@ -173,16 +178,18 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
     
     SERVER_MODULE_SCOPE {
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
-      ObAccessService *access_service = NULL;
-      if (OB_ISNULL(access_service = share::g_mp->access_service())) {
+      data_plane::ObIStorageEstimator *storage_estimator =
+          ::oceanbase::share::server_service<::oceanbase::data_plane::ObIStorageEstimator>();
+      if (OB_ISNULL(storage_estimator)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(access_service));
-      } else if (OB_FAIL(access_service->estimate_block_count_and_row_count(arg.tablet_id_,
-                                                                            timeout_us,
-                                                                            macro_block_count,
-                                                                            micro_block_count,
-                                                                            sstable_row_count,
-                                                                            memtable_row_count))) {
+        LOG_WARN("get unexpected null", K(ret), KP(storage_estimator));
+      } else if (OB_FAIL(storage_estimator->estimate_block_count_and_row_count(
+                     arg.tablet_id_,
+                     timeout_us,
+                     macro_block_count,
+                     micro_block_count,
+                     sstable_row_count,
+                     memtable_row_count))) {
         LOG_WARN("OPT:[STORAGE EST BLOCK COUNT FAILED]", "storage_ret", ret);
       } else {
         LOG_TRACE("storage estimate block count and row count result", K(macro_block_count),

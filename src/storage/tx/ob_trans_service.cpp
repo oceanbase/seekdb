@@ -17,11 +17,10 @@
 
 #include "ob_trans_service.h"
 #include "ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_trans_functor.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "observer/ob_srv_network_frame.h"
 
 namespace oceanbase
 {
@@ -33,8 +32,6 @@ using namespace share;
 using namespace storage;
 //using namespace memtable;
 using namespace sql;
-using namespace observer;
-
 namespace transaction
 {
 ObTransService::ObTransService()
@@ -61,7 +58,7 @@ int ObTransService::server_module_init(ObTransService *&it)
   const ObAddr &self = GCTX.self_addr();
   share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   if (OB_FAIL(it->init(self,
-                              share::g_mp->trans_id_service(),
+                              ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>(),
                               &OB_TS_MGR,
                               schema_service))) {
     TRANS_LOG(ERROR, "trans-service init error", KR(ret), KPC(it));
@@ -257,14 +254,14 @@ int ObTransService::get_trans_start_session_id(const ObTransID &tx_id, uint32_t 
   int ret = OB_SUCCESS;
   transaction::ObTxCtx *part_ctx = nullptr;
   ObLS *tenant_ls = nullptr;
-  session_id = ObBasicSessionInfo::INVALID_SESSID;
+  session_id = common::INVALID_SESSID;
   if (IS_NOT_INIT) {
     TRANS_LOG(WARN, "ObTransService not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
     TRANS_LOG(WARN, "ObTransService is not running");
     ret = OB_NOT_RUNNING;
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     TRANS_LOG(WARN, "get transaction storage failed", K(ret), K(tx_id));
   } else if (OB_FAIL(tenant_ls->get_tx_start_session_id(tx_id, session_id))) {
     TRANS_LOG(WARN, "get ObTxCtx by tx_id failed", K(tx_id));
@@ -475,7 +472,7 @@ int ObTransService::register_mds_into_ctx_(ObTxDesc &tx_desc,
   if (OB_UNLIKELY(!tx_desc.is_valid() || OB_ISNULL(buf) || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_desc), KP(buf), K(buf_len));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     TRANS_LOG(WARN, "get ls fail", K(ret));
   } else {
     store_ctx.ls_ = tenant_ls;

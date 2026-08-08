@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
 #include "observer/change_stream/ob_change_stream_worker.h"
@@ -134,7 +134,7 @@ void ObCSExecutor::handle_drop(common::LinkTask *task)
     ATOMIC_AAF(&ctx->task_fail_, 1);
     const int64_t finished = ATOMIC_AAF(&ctx->task_finish_, 1);
     if (finished == ctx->task_count_) {
-      ObCSDispatcher &dispatcher = share::g_mp->change_stream_mgr()->get_dispatcher();
+      ObCSDispatcher &dispatcher = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_dispatcher();
       do_finish_batch_(ctx, dispatcher);
     }
   }
@@ -145,7 +145,7 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
   int ret = common::OB_SUCCESS;
   ObCSExecCtx *ctx = sub_task->get_exec_ctx();
   ATOMIC_CAS(&ctx->process_time_, 0, ObTimeUtil::current_time());
-  ObCSDispatcher &dispatcher = share::g_mp->change_stream_mgr()->get_dispatcher();
+  ObCSDispatcher &dispatcher = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_dispatcher();
   const int64_t row_count = sub_task->get_rows().count();
 
   // ── Phase 1: process ──

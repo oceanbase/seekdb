@@ -1,0 +1,31 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+CREATE RESOURCE UNIT test_unit MAX_CPU 4, MAX_MEMORY '10G', MAX_IOPS 100000, MAX_DISK_SIZE '1G', MAX_SESSION_NUM 64;
+CREATE RESOURCE POOL test_pool UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT test_tenant RESOURCE_POOL_LIST = ('test_pool') set ob_tcp_invited_nodes='%';
+use test;
+create table test_table (pk int, value int, str_val varchar(8192)) compression = 'none';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+count(*)
+80000
+4194176
+4194176
+4194176
+4194176
+pass
+pass

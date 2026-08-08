@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_merge_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "ob_compaction_progress.h"
@@ -199,7 +199,7 @@ int ObTabletMergeDag::get_tablet_and_check()
   // the last compaction dag is not finished yet, tablet is in old version
   ObLS *ls = nullptr;
   ObTabletHandle tmp_tablet_handle;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get single log stream", K(ret));
   } else if (OB_FAIL(ls->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -211,7 +211,7 @@ int ObTabletMergeDag::get_tablet_and_check()
   } else if (is_mini_merge(merge_type_)) {
     int64_t inc_sstable_cnt = 0;
     bool is_exist = false;
-    if (OB_FAIL(share::g_mp->dag_scheduler()->check_dag_exist(this, is_exist))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->check_dag_exist(this, is_exist))) {
       LOG_WARN("failed to check dag exist", K(ret), K_(param));
     } else if (FALSE_IT(inc_sstable_cnt = tmp_tablet_handle.get_obj()->get_minor_table_count() + (is_exist ? 1 : 0))) {
     } else if (ObPartitionMergePolicy::is_sstable_count_not_safe(inc_sstable_cnt)) {

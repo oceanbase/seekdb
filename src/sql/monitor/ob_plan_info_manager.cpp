@@ -17,7 +17,6 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_plan_info_manager.h"
-#include "observer/ob_server.h"
 namespace oceanbase
 {
 namespace sql

@@ -19,6 +19,7 @@
 #include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "share/ob_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h"
+#include "share/object/ob_obj_cast.h"
 
 namespace oceanbase
 {
@@ -27,8 +28,6 @@ namespace share
 namespace schema
 {
 using namespace common;
-using namespace sql;
-using namespace rootserver;
 
 
 bool is_hidden_partition(const PartitionType partition_type)

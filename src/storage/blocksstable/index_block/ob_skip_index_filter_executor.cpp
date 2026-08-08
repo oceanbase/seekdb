@@ -318,9 +318,9 @@ int ObSkipIndexFilterExecutor::eq_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res == 0 && max_cmp_res == 0 && !is_min_prefix && !is_max_prefix) {
       fal_desc.set_always_true();
@@ -353,9 +353,9 @@ int ObSkipIndexFilterExecutor::ne_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res == 0 && max_cmp_res == 0 && !is_min_prefix && !is_max_prefix) {
       fal_desc.set_always_false();
@@ -388,9 +388,9 @@ int ObSkipIndexFilterExecutor::gt_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0) {
       fal_desc.set_always_true();
@@ -429,9 +429,9 @@ int ObSkipIndexFilterExecutor::ge_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0 || (min_cmp_res == 0 && !is_min_prefix)) {
       fal_desc.set_always_true();
@@ -466,9 +466,9 @@ int ObSkipIndexFilterExecutor::lt_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0 || (min_cmp_res == 0 && !is_min_prefix)) {
       fal_desc.set_always_false();
@@ -504,9 +504,9 @@ int ObSkipIndexFilterExecutor::le_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int min_cmp_res = 0;
     int max_cmp_res = 0;
-    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0) {
       fal_desc.set_always_false();
@@ -545,7 +545,7 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
     int cmp_res = 0;
     bool equal = false;
-    ObDatumComparator cmp_rev(cmp_func, ret, equal, true);
+    ObDatumComparator cmp_rev(cmp_func, ret, equal, nullptr, true);
     int64_t pos = std::lower_bound(datums.get_data(), datums.get_data() + datums.count(), min_datum, cmp_rev) - datums.get_data();
     if (OB_FAIL(ret)) {
     } else if (pos < 0 || pos > datums.count()) {
@@ -555,7 +555,7 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
       fal_desc.set_always_false();
     } else {
       const ObDatum &ref_datum = datums.at(pos);
-      if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res))) {
+      if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res, nullptr))) {
         LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
       } else if (cmp_res > 0) { // min_datum <= datums[pos] < max_datum
         fal_desc.set_uncertain();
@@ -596,13 +596,13 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
     int max_left_cmp_res = 0;
     int max_right_cmp_res = 0;
 
-    if (OB_FAIL(cmp_func(min_datum, ref_left_datum, min_left_cmp_res))) {
+    if (OB_FAIL(cmp_func(min_datum, ref_left_datum, min_left_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_left_datum));
-    } else if (OB_FAIL(cmp_func(min_datum, ref_right_datum, min_right_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(min_datum, ref_right_datum, min_right_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_right_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_left_datum, max_left_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_left_datum, max_left_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_left_datum));
-    } else if (OB_FAIL(cmp_func(max_datum, ref_right_datum, max_right_cmp_res))) {
+    } else if (OB_FAIL(cmp_func(max_datum, ref_right_datum, max_right_cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_right_datum));
     } else if (min_right_cmp_res > 0 || max_left_cmp_res < 0) {
       fal_desc.set_always_false();

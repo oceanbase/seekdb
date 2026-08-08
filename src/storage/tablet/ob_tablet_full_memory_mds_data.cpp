@@ -174,11 +174,11 @@ int ObTabletFullMemoryMdsData::read_medium_info_list(
 
 int ObTabletFullMemoryMdsData::read_auto_inc_seq(
     common::ObArenaAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &auto_inc_seq_addr,
-    share::ObTabletAutoincSeq &auto_inc_seq)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &auto_inc_seq_addr,
+    ObTabletAutoincSeq &auto_inc_seq)
 {
   int ret = OB_SUCCESS;
-  share::ObTabletAutoincSeq *ptr = nullptr;
+  ObTabletAutoincSeq *ptr = nullptr;
 
   if (OB_FAIL(ObTabletMdsData::load_auto_inc_seq(allocator, auto_inc_seq_addr, ptr))) {
     LOG_WARN("failed to load auto inc seq", K(ret), K(auto_inc_seq_addr));
@@ -303,7 +303,7 @@ static int inner_mock_mds_node(
 
 int ObTabletFullMemoryMdsData::mock_convert_auto_inc_seq_to_mds_dump_kv(
       common::ObArenaAllocator &allocator,
-      const share::ObTabletAutoincSeq &auto_inc_seq,
+      const ObTabletAutoincSeq &auto_inc_seq,
       const share::SCN mds_ckpt_scn,
       mds::MdsDumpKV &dump_kv)
 {
@@ -313,7 +313,7 @@ int ObTabletFullMemoryMdsData::mock_convert_auto_inc_seq_to_mds_dump_kv(
   mds::MdsDumpNode &node = dump_kv.v_;
 
   constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
-  constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, share::ObTabletAutoincSeq>>::value;
+  constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletAutoincSeq>>::value;
   mds::DummyKey dummy_key;
   if (OB_FAIL(key.init(table_id, unit_id, dummy_key, allocator))) {
     LOG_WARN("failed to init mds dump key", K(ret));

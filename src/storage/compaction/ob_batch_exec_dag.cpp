@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "storage/compaction/ob_batch_exec_dag.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 namespace oceanbase
 {
@@ -49,7 +49,7 @@ void ObBatchExecCollector::add(
       ADD_COMMENT("errno", info_.errno_);
     }
 #undef ADD_COMMENT
-    if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->add_sstable_merge_info(merge_history_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->add_sstable_merge_info(merge_history_))) {
       STORAGE_LOG(WARN, "failed to add sstable merge info", KR(ret), K_(merge_history));
     }
   }

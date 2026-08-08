@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_information_kvcache_table.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "observer/omt/ob_server_runtime_controller.h"
 
 using namespace oceanbase::common;

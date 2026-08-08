@@ -19,7 +19,6 @@
 
 #include "lib/atomic/ob_atomic.h"
 #include "lib/container/ob_iarray.h"
-#include "share/rc/ob_module_provider.h"
 #include "lib/container/ob_id_map.h"
 #include "lib/allocator/ob_lf_fifo_allocator.h"
 

@@ -97,7 +97,7 @@ int ObExprJsonReplace::eval_json_replace(const ObExpr &expr, ObEvalCtx &ctx, ObD
     } else {
       ObString path_val = path_data->get_string();
       ObJsonPath *json_path;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *path_data,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *path_data,
                   expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), path_val))) {
         LOG_WARN("fail to get real data.", K(ret), K(path_val));
       } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, json_path, path_val, i, false))) {

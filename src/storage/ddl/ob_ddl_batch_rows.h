@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "data_plane/blocksstable/ob_datum_row.h"
 #include "storage/ddl/ob_ddl_vector.h"
 #include "share/ob_batch_selector.h"
 

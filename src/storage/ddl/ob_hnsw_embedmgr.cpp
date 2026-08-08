@@ -16,11 +16,13 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "lib/allocator/ob_malloc.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log.h"
+#include "query/ai/ob_ai_endpoint_resolver.h"
+#include "query/engine/expr/ob_ai_model_resolver.h"
+#include "query/engine/expr/ob_expr_lob_utils.h"
+#include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
-#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 
 using namespace oceanbase::storage;
@@ -63,11 +65,16 @@ int ObEmbeddingConfig::assign(const ObEmbeddingConfig &other)
 }
 
 // -------------------------------- ObEmbeddingResult --------------------------------
-int ObEmbeddingResult::set_text(const blocksstable::ObStorageDatum &text, ObArenaAllocator &allocator)
+int ObEmbeddingResult::set_text(
+    const blocksstable::ObStorageDatum &text,
+    ObArenaAllocator &allocator,
+    const common::ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   ObString tmp_text = text.get_string();
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, ObLongTextType, CS_TYPE_BINARY, true, tmp_text))) {
+  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
+          lob_read_options, &allocator, ObLongTextType,
+          CS_TYPE_BINARY, true, tmp_text))) {
     LOG_WARN("read real string data failed", K(ret));
   } else {
     if (tmp_text.length() > 0) {
@@ -244,7 +251,8 @@ int ObTaskBatchInfo::add_item(const blocksstable::ObStorageDatum &text,
   } else {
     ObEmbeddingResult *result = results_.at(current_count_);
     //deep copy
-    if (OB_FAIL(result->set_text(text, allocator_))) {
+    const common::ObLobReadOptions lob_read_options(lob_read_service_);
+    if (OB_FAIL(result->set_text(text, allocator_, lob_read_options))) {
       LOG_WARN("set text failed", K(ret));
     } else if (OB_FAIL(result->set_extra_cols(extras, allocator_))) {
       LOG_WARN("set extra cols failed", K(ret));
@@ -575,7 +583,7 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   } else if (OB_FAIL(get_ai_config(model_id))) {
     LOG_WARN("load cfg from sys table failed", K(ret));
   } else {
-    ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+    ObIVectorIndexRuntime *service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     if (OB_ISNULL(service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("plugin vector index service is null", K(ret));
@@ -740,33 +748,36 @@ int ObEmbeddingTaskMgr::get_ai_config(const common::ObString &model_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("model_id is empty", K(ret), K(model_id));
   } else {
-    ObAIFuncExprInfo *info = nullptr;
-    const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
-    omt::ObAiServiceGuard ai_service_guard;
-    omt::ObAiService *ai_service = share::g_mp->ai_service();
+    ObString model_name;
+    share::ObAiModelEndpointInfo endpoint_info;
+    query::ObIAiEndpointResolver *endpoint_resolver =
+        ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
     bool use_request_model_name = false;
-    if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator_, const_cast<common::ObString&>(model_id), info))) {
-      LOG_WARN("failed to get ai func info", K(ret), K(model_id));
-    } else if (OB_ISNULL(info)) {
+    if (OB_FAIL(query::ObAIModelResolver::resolve_model_name(
+            allocator_, model_id, model_name))) {
+      LOG_WARN("failed to resolve AI model name", K(ret), K(model_id));
+    } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ai func info is null", K(ret));
-    } else if (OB_ISNULL(ai_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ai service is null", K(ret));
-    } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-      LOG_WARN("failed to get ai service guard", K(ret));
-    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
+      LOG_WARN("AI endpoint resolver is unavailable", K(ret));
+    } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
+                   model_id, allocator_, endpoint_info))) {
       LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
-    } else if (OB_FALSE_IT(use_request_model_name = !endpoint_info->get_request_model_name().empty())) {
-    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_url(), cfg_.model_url_))) {
+    } else if (OB_FALSE_IT(use_request_model_name =
+                              !endpoint_info.get_request_model_name().empty())) {
+    } else if (OB_FAIL(ob_write_string(
+                   allocator_, endpoint_info.get_url(), cfg_.model_url_))) {
       LOG_WARN("failed to copy model_url", K(ret));
-    } else if (use_request_model_name && OB_FAIL(ob_write_string(allocator_, endpoint_info->get_request_model_name(), cfg_.model_name_))) {
+    } else if (use_request_model_name && OB_FAIL(ob_write_string(
+                   allocator_, endpoint_info.get_request_model_name(), cfg_.model_name_))) {
       LOG_WARN("failed to copy model_name", K(ret));
-    } else if (!use_request_model_name && OB_FAIL(ob_write_string(allocator_, info->model_, cfg_.model_name_))) {
+    } else if (!use_request_model_name && OB_FAIL(ob_write_string(
+                   allocator_, model_name, cfg_.model_name_))) {
       LOG_WARN("failed to copy model_name", K(ret));
-    } else if (OB_FAIL(endpoint_info->get_unencrypted_access_key(allocator_, cfg_.user_key_))) {
+    } else if (OB_FAIL(endpoint_info.get_unencrypted_access_key(
+                   allocator_, cfg_.user_key_))) {
       LOG_WARN("failed to copy user_key", K(ret));
-    } else if (OB_FAIL(ob_write_string(allocator_, endpoint_info->get_provider(), cfg_.provider_))) {
+    } else if (OB_FAIL(ob_write_string(
+                   allocator_, endpoint_info.get_provider(), cfg_.provider_))) {
       LOG_WARN("failed to copy provider", K(ret));
     }
   }

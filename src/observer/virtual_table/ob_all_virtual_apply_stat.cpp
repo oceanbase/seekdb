@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_apply_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -27,7 +27,7 @@ int ObAllVirtualApplyStat::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     logservice::LSApplyStat apply_stat;
-    logservice::ObLogService *log_service = share::g_mp->log_service();
+    logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
     if (NULL == log_service) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "log service is unavailable", K(ret));

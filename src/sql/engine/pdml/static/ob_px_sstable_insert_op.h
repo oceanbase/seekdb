@@ -19,16 +19,13 @@
 
 #include "sql/engine/pdml/static/ob_px_multi_part_insert_op.h"
 #include "share/ob_tablet_autoincrement_param.h"
+#include "data_plane/ddl/ob_direct_insert.h"
 
 namespace oceanbase
 {
 namespace storage
 {
-struct ObInsertMonitor;
 struct ObTabletSliceParam;
-class ObDDLInsertDag;
-class ObISliceWriter;
-struct ObDDLAutoincParam;
 }
 
 namespace sql
@@ -75,7 +72,7 @@ public:
       slice_info_expr_(nullptr),
       tablet_autoinc_expr_(nullptr),
       tablet_autoinc_column_idx_(-1),
-      ddl_dag_(nullptr),
+      direct_insert_session_(nullptr),
       need_idempotent_tablet_autoinc_(false),
       need_idempotent_table_autoinc_(false),
       need_idempotent_doc_id_(false)
@@ -86,7 +83,7 @@ public:
   virtual int inner_get_next_row() override;
   virtual void destroy() override;
 protected:
-  int get_next_row_from_child(ObInsertMonitor *insert_monitor);
+  int get_next_row_from_child(int64_t *inserted_row_cnt);
   int get_tablet_info_from_row(
       const ObExprPtrIArray &row,
       common::ObTabletID &tablet_id,
@@ -97,17 +94,28 @@ protected:
   bool is_heap_plan() const { return MY_SPEC.regenerate_heap_table_pk_ || is_vec_gen_vid_; }
   int write_heap_slice_by_row();
   int write_ordered_slice_by_row();
-  int finish_dag();
+  int complete_direct_insert_worker();
   bool need_autoinc_by_row();
   int get_data_tablet_id(const ObTabletID &tablet_id, ObTabletID &data_tablet_id);
-  int sync_tablet_doc_id(ObISliceWriter *slice_writer);
-  int init_table_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
-  int init_tablet_autoinc_param(const ObTabletID &tablet_id, const int64_t slice_idx, ObDDLAutoincParam &autoinc_param);
+  int sync_tablet_doc_id(data_plane::ObIDirectInsertWriter *slice_writer);
+  int init_table_autoinc_param(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      data_plane::ObDirectInsertAutoincParam &autoinc_param);
+  int init_tablet_autoinc_param(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      data_plane::ObDirectInsertAutoincParam &autoinc_param);
   int locate_exprs();
   int check_need_idempotence();
-  int get_or_create_heap_writer(const ObTabletID &tablet_id, ObISliceWriter *&slice_writer);
-  int switch_slice_if_need(const ObTabletID &tablet_id, const int64_t slice_idx,
-                           ObISliceWriter *&slice_writer, ObDDLAutoincParam *autoinc_param = nullptr);
+  int get_or_create_heap_writer(
+      const ObTabletID &tablet_id,
+      data_plane::ObIDirectInsertWriter *&slice_writer);
+  int switch_slice_if_need(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      data_plane::ObIDirectInsertWriter *&slice_writer,
+      data_plane::ObDirectInsertAutoincParam *autoinc_param = nullptr);
   
 protected:
   static const uint64_t MAP_HASH_BUCKET_NUM = 1543L;
@@ -122,9 +130,11 @@ protected:
   ObExpr *slice_info_expr_; // valid when ordered tablet and idempotent ddl
   ObExpr *tablet_autoinc_expr_; // valid when heap plan
   int64_t tablet_autoinc_column_idx_;
-  storage::ObDDLInsertDag *ddl_dag_;
+  data_plane::ObIDirectInsertSession *direct_insert_session_;
   // for heap plan, direct write tablet
-  typedef common::hash::ObHashMap<common::ObTabletID, ObISliceWriter *, common::hash::NoPthreadDefendMode> TabletWriterMap;
+  typedef common::hash::ObHashMap<common::ObTabletID,
+      data_plane::ObIDirectInsertWriter *,
+      common::hash::NoPthreadDefendMode> TabletWriterMap;
   TabletWriterMap heap_tablet_writer_map_;
   bool need_idempotent_tablet_autoinc_;
   bool need_idempotent_table_autoinc_;

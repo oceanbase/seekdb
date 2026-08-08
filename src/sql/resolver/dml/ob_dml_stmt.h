@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_STMT_H_
 #define OCEANBASE_SQL_STMT_H_
+#include "data_plane/access/ob_tablet_scan.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_mod_define.h"
@@ -29,8 +30,8 @@
 #include "sql/resolver/dml/ob_raw_expr_sets.h"
 #include "sql/resolver/expr/ob_raw_expr_copier.h"
 #include "sql/resolver/dml/ob_stmt_expr_visitor.h"
-#include "observer/vector_index/ob_vector_index_param.h"
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
+#include "query/vector/ob_vector_index_param.h"
 
 namespace oceanbase
 {

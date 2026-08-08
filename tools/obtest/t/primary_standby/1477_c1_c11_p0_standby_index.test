@@ -1,0 +1,155 @@
+# owner: rongxuan.lc
+# description: 本case是测试索引在备库创建的过程；
+# 分立即生效的索引和非立即生效的索引
+
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z2.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+
+let $tenant_1_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+let $tenant_2_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = "tenant_2", tenant_id, 1);
+let $tenant_3_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = "tenant_3", tenant_id, 1);
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int);
+insert into t values (1,2),(3,4),(5,6);
+select * from t;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+connection sys2_conn;
+ob2.mysql set ob_global_debug_sync = 'STANDBY_DATABASE_PARTITION_CREATE wait_for continue_signal';
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+##-------- 225之前 关闭迁移复制的情况下，备库索引不能生效；
+#@---------226之后，拷贝索引不再受迁移复制影响
+connection tt1_conn;
+create table t_test(c1 int primary key, c2 int);
+create index t_local on t_test(c1) local;
+let $data_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't_test', table_id, 1);
+let $index_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where data_table_id = $data_table_id, table_id, 1);
+##验证备库一直不生效；
+ob2.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%standby%' and event = 'record_ddl_operation' and value2 like '%$index_table_id%', 1, 30;
+#sleep 30;
+#ob2.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%standby%' and event = 'remove_ddl_operation', 1, 30;
+##检验备库索引不生效状态不回退
+##bugfix:
+connection tt2_conn;
+show index from test.t_test;
+## 触发其余租户DDL且等同步
+ob_connect(tenant_1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(tenant_3_conn, ob1.z1.obs0, root@tenant_3, , test, , USE_MYSQL_CONNECTOR);
+connection tenant_1_conn;
+create table tt(c1 int primary key, c2 int);
+connection tenant_3_conn;
+create table tt(c1 int primary key, c2 int);
+let $tenant_1_version = deploy_get_value(ob1.select select max(schema_version) as version from __all_virtual_ddl_operation where tenant_id = "$tenant_1_id", version, 1);
+let $tenant_3_version = deploy_get_value(ob1.select select max(schema_version) as version from __all_virtual_ddl_operation where tenant_id = "$tenant_3_id", version, 1);
+ob2.check_until_timeout select count(*) from __all_virtual_server_schema_info where (tenant_id = "$tenant_1_id" and refreshed_schema_version < "$tenant_1_version") or (tenant_id = "$tenant_3_id" and refreshed_schema_version < "$tenant_3_version"), 0, 30;
+## 索引不生效状态不回退
+connection tt2_conn;
+show index from test.t_test;
+
+connection sys2_conn;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+let $tenant_2_version = deploy_get_value(ob1.select select max(schema_version) as version from __all_virtual_ddl_operation where tenant_id = "$tenant_2_id", version, 1);
+ob2.check_until_timeout select count(*) from __all_virtual_server_schema_info where (tenant_id = "$tenant_2_id" and refreshed_schema_version < "$tenant_2_version"), 0, 30;
+
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+show index from t_test;
+
+##在主库建立局部索引；
+connection tt1_conn;
+create index t_local on t(c2) local;
+create index t_global on t(c2) global;
+create index t_partition_global on t(c2) global partition by key(c2) partitions 2;
+sleep 3;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+show index from t;
+connection tt1_conn;
+create table tt (c1 int primary key, c2 int, unique key (c2));
+create table ttt (c1 int primary key, c2 int, unique key (c2)) partition by hash(c1) partitions 4;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 30;
+show index from tt;
+show index from ttt;
+
+##新建局部索引,测试copy local sstable
+connection tt1_conn;
+create index t_local_2 on t(c2) local;
+create index t_global_2 on t(c2) global;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 1, 120;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+show index from t;
+ob1.mysql alter system major freeze;
+sleep 60;
+ob1.check_version 2;
+sleep 60;
+ob2.check_version 2;
+ob1.mysql alter system major freeze;
+sleep 60;
+ob1.check_version 3;
+sleep 60;
+ob2.check_version 3;
+
+###新增一张分区表，在分区表上创建索引,确保所有分区的索引都拷贝完成才生效；
+connection tt1_conn;
+set ob_query_timeout = 300000000;
+create table test_multi(c1 int primary key , c2 int) partition by hash(c1) partitions 50;
+create table test_multi2(c1 int primary key , c2 int) partition by hash(c1) partitions 150;
+sleep 10;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 120;
+create index t_index_multi on test_multi(c2) local;
+create index t_index_multi on test_multi2(c2) local;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 1, 120;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 'test_multi', table_id, 1);
+let $index_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where data_table_id = $table_id, 1, table_id);
+connection sys2_conn;
+eval select count(*) from __all_local_index_status where tenant_id= $tenant_2_id and index_table_id = $index_table_id;
+
+ob1.mysql alter system major freeze;
+sleep 60;
+ob1.check_version 4;
+sleep 60;
+ob2.check_version 4;

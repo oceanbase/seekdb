@@ -80,7 +80,8 @@ int ObExprPrivSTIsCollection::eval_priv_st_iscollection(
     ObGeometry *geo = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
+            arg1->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                    wkb,

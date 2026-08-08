@@ -90,7 +90,8 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
     ObIJsonBase *j_base = NULL;
     ObString j_str = data.get_string();
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+            ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(j_str));
     } else if (ob_is_string_type(type) && (j_str.length() < 2 || j_str[0] != '"' || j_str[j_str.length() - 1] != '"')) {
       if (OB_FAIL(j_buf.reserve(j_str.length()))) {

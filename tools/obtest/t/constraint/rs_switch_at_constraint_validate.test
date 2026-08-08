@@ -1,0 +1,53 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description:this case is use for create index test
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=1);
+ob1.reboot;
+
+ob1.create_client;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_auto_leader_switch='false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+let $ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $port0 = deploy_get_value(ob1.z2.obs0.port);
+let $mysql_port0 = deploy_get_value(ob1.z2.obs0.mysql_port);
+sleep 2;
+
+connect(conn_obtest1,$ip0,root@obtest,,test,$mysql_port0);
+connect(conn_obtest2,$ip0,root@obtest,,test,$mysql_port0);
+connect(conn_sys,$ip0,root@sys,,oceanbase,$mysql_port0);
+connection conn_obtest1;
+create table t1(c1 int, c2 int);
+create table t2(c1 int, c2 int);
+insert into t1 values(1,1);
+insert into t2 values(1,2);
+create unique index i1 on t1(c1, c2);
+create unique index i1 on t2(c1);
+create index i2 on t1(c2);
+alter table t1 add constraint check_cst11 check(c1 = c2);
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name like '%t1%', table_id, 1);
+let $leader_host = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+
+$leader_host.mysql set ob_global_debug_sync = 'CONSTRAINT_VALIDATE wait_for signal execute 10000';
+sleep 2;
+send alter table t1 add constraint fk1 foreign key(c1) references t2(c1);
+sleep 10;
+
+$leader_host.force_stop;
+sleep 20;
+
+sleep 60;
+ob1.z2.obs0.mysql set ob_global_debug_sync = 'CONSTRAINT_VALIDATE clear';
+sleep 2;
+ob1.z2.obs0.mysql set ob_global_debug_sync = 'now signal signal';
+sleep 2;
+
+connection conn_obtest1;
+reap;
+desc t1;
+select * from t1;

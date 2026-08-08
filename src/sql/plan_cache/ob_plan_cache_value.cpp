@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_plan_cache_value.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/plan_cache/ob_pcv_set.h"
@@ -1349,6 +1349,15 @@ int ObPlanCacheValue::match(ObPlanCacheCtx &pc_ctx,
                   || !not_param_var_[i].ps_param_.can_compare(*ps_param)) {
         is_same = false;
         LOG_WARN("can not compare", K(not_param_var_[i].ps_param_), K(*ps_param), K(i));
+      } else if (not_param_var_[i].ps_param_.is_outrow_lob()
+                 || ps_param->is_outrow_lob()) {
+        // Generic ObObj comparison cannot read an out-row LOB without an
+        // explicitly supplied LOB service. Treat it as a cache miss instead
+        // of either dereferencing the locator or materializing an unbounded
+        // value solely for cache matching.
+        is_same = false;
+        LOG_DEBUG("skip plan cache match for out-row LOB parameter",
+                  K(not_param_var_[i].idx_), K(i));
       } else if (not_param_var_[i].ps_param_.is_string_type()
           && not_param_var_[i].ps_param_.get_collation_type() != ps_param->get_collation_type()) {
         is_same = false;

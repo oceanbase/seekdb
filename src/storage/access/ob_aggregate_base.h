@@ -28,15 +28,30 @@ class ObBitmap;
 }
 namespace blocksstable
 {
+class ObAggRowReader;
 class ObIMicroBlockReader;
 struct ObMicroIndexInfo;
 }
+namespace share
+{
+namespace schema
+{
+class ObColumnParam;
+}
+}
+namespace sql
+{
+struct ObEvalCtx;
+class ObExpr;
+}
 namespace storage
 {
+struct ObTableAccessContext;
+struct ObTableAccessParam;
+struct ObTableIterParam;
 #define USE_GROUP_BY_MAX_DISTINCT_CNT 16384
 #define USE_GROUP_BY_BUF_BLOCK_SIZE 256
 #define USE_GROUP_BY_BUF_MAX_BLOCK_CNT USE_GROUP_BY_MAX_DISTINCT_CNT / USE_GROUP_BY_BUF_BLOCK_SIZE
-static const lib::ObLabel pd_agg_label = "PD_AGGREGATE";
 static constexpr int64_t INVALID_AGG_ROW_ID = -1;
 
 enum ObPDAggType

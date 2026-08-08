@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_PALF_HANDLE_
 #define OCEANBASE_LOGSERVICE_PALF_HANDLE_
 #include "common/ob_role.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "palf_handle_impl.h"
 #include "palf_handle_impl_guard.h"
 #include "palf_iterator.h"

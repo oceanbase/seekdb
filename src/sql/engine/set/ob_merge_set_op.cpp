@@ -167,13 +167,18 @@ int ObMergeSetOp::Compare::operator()(
 {
   int ret = OB_SUCCESS;
   cmp = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   const ObDatum *lcells = l.cells();
   ObDatum *r_datum = nullptr;
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
       LOG_WARN("failed to get expr value", K(ret), K(i));
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(lcells[idx], *r_datum, cmp))) {
+    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                   lcells[idx], *r_datum, cmp, datum_access_ctx))) {
       LOG_WARN("failed to compare", K(ret), K(i));
     } else {
       if (0 != cmp) {
@@ -193,14 +198,19 @@ int ObMergeSetOp::Compare::operator()(
 {
   int ret = OB_SUCCESS;
   cmp = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   ObDatum *l_datum = nullptr;
   ObDatum *r_datum = nullptr;
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     if (OB_FAIL(l.at(idx)->eval(eval_ctx, l_datum))) {
       LOG_WARN("failed to get expr value", K(ret), K(i));
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
+    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
       LOG_WARN("failed to compare", K(ret), K(i));
     } else {
       LOG_DEBUG("debug compare merge set op", K(EXPR2STR(eval_ctx, *l.at(idx))),
@@ -223,9 +233,13 @@ int ObMergeSetOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
 {
   int ret = OB_SUCCESS;
   cmp = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   ObDatum *l_datum = nullptr;
   ObDatum *r_datum = nullptr;
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     batch_info_guard.set_batch_idx(l_idx);
@@ -234,7 +248,8 @@ int ObMergeSetOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
     } else if (FALSE_IT(batch_info_guard.set_batch_idx(r_idx))) {
     } else if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
       LOG_WARN("failed to get expr value", K(ret), K(i));
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
+    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
       LOG_WARN("failed to compare", K(ret), K(i));
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
@@ -252,17 +267,22 @@ int ObMergeSetOp::Compare::operator() (const ObChunkDatumStore::StoredRow &l,
 {
   int ret = OB_SUCCESS;
   cmp = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   const ObDatum *l_datum = nullptr;
   ObDatum *r_datum = nullptr;
   const ObDatum *l_cells = l.cells();
   ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
   batch_info_guard.set_batch_idx(r_idx);
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); i++) {
     int64_t idx = sort_collations_->at(i).field_idx_;
     l_datum = &l_cells[idx];
     batch_info_guard.set_batch_idx(r_idx);
     if (OB_FAIL(r.at(idx)->eval(eval_ctx, r_datum))) {
-    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
+    } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                   *l_datum, *r_datum, cmp, datum_access_ctx))) {
       LOG_WARN("failed to compare", K(ret), K(i));
     } else if (0 != cmp) {
       cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;

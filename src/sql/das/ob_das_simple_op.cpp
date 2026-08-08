@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_simple_op.h"
-#include "share/rc/ob_module_provider.h"
-#include "storage/tx_storage/ob_access_service.h"
+#include "data_plane/ob_i_range_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 
@@ -53,8 +53,8 @@ ObDASSplitRangesOp::ObDASSplitRangesOp(ObIAllocator &op_alloc)
 int ObDASSplitRangesOp::open_op()
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
-  if (OB_FAIL(access_service->split_multi_ranges(tablet_id_,
+  data_plane::ObIRangeService *range_service = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>();
+  if (OB_FAIL(range_service->split_multi_ranges(tablet_id_,
                                                  timeout_us_,
                                                  ranges_,
                                                  expected_task_count_,
@@ -87,8 +87,8 @@ ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
 int ObDASRangesCostOp::open_op()
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
-  if (OB_FAIL(access_service->get_multi_ranges_cost(tablet_id_,
+  data_plane::ObIRangeService *range_service = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>();
+  if (OB_FAIL(range_service->get_multi_ranges_cost(tablet_id_,
                                                     timeout_us_,
                                                     ranges_,
                                                     total_size_))) {

@@ -19,12 +19,13 @@
 
 #include "blocksstable/ob_block_manager.h"
 #include "share/ob_define.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/container/ob_heap.h"
 #include "lib/container/ob_vector.h"
 #include "share/io/ob_io_manager.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "blocksstable/ob_block_sstable_struct.h"
 #include "tmp_file/ob_tmp_file_manager.h"
 #include "share/config/ob_server_config.h"
@@ -237,7 +238,7 @@ int ObFragmentWriterV2<T>::open(const int64_t buf_size, const int64_t expire_tim
     if (NULL == (buf_ = static_cast<char *>(allocator_.alloc(align_buf_size)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate buffer", K(ret), K(align_buf_size));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(fd_, dir_id_))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->open(fd_, dir_id_))) {
       STORAGE_LOG(WARN, "fail to open file", K(ret));
     } else {
       buf_size_ = align_buf_size;
@@ -319,7 +320,7 @@ int ObFragmentWriterV2<T>::flush_buffer()
     io_info.buf_ = buf_;
     io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_WRITE);
     io_info.io_timeout_ms_ = timeout_ms;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_write(io_info, file_io_handle_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_info, file_io_handle_))) {
       STORAGE_LOG(WARN, "fail to do aio write macro file", K(ret), K(io_info));
     } else {
       macro_buffer_writer_.assign(ObExternalSortConstant::BUF_HEADER_LENGTH, buf_size_, buf_);
@@ -563,7 +564,7 @@ int ObFragmentReaderV2<T>::prefetch()
       io_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_INDEX_BUILD_READ);
       if (OB_FAIL(ObExternalSortConstant::get_io_timeout_ms(expire_timestamp_, io_info.io_timeout_ms_))) {
         STORAGE_LOG(WARN, "fail to get io timeout ms", K(ret), K(expire_timestamp_), K(io_info.io_timeout_ms_));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_read(io_info, file_io_handles_[handle_index]))) {
+      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_read(io_info, file_io_handles_[handle_index]))) {
         if (common::OB_ITER_END != ret) {
           STORAGE_LOG(WARN, "fail to do aio read from macro file", K(ret), K(fd_), K(io_info));
         } else {
@@ -682,7 +683,7 @@ int ObFragmentReaderV2<T>::clean_up()
     for (int64_t i = 0; i < MAX_HANDLE_COUNT; ++i) {
       file_io_handles_[i].reset();
     }
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(fd_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->remove(fd_))) {
       STORAGE_LOG(WARN, "fail to remove macro file", K(ret));
     }
     reset();
@@ -1063,7 +1064,7 @@ int ObExternalSortRound<T, Compare>::init(
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(merge_count), K(file_buf_size),
         KP(compare));
-  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->alloc_dir(dir_id_))) {
     STORAGE_LOG(WARN, "fail to alloc dir", K(ret));
   } else {
     is_inited_ = true;

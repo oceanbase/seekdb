@@ -89,7 +89,7 @@ int cast(common::ObIAllocator &alloc, ObIArrayType *src, const ObCollectionTypeB
 class ObArrayCastUtils
 {
 public:
-  // moved down from sql ObArrayExprUtils(obj_cast is the only consumer,signature uses only share vocabulary)
+  // Encode a collection value into an object-cast result.
   static int set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj);
   static int string_cast_map(
       common::ObIAllocator &alloc, 

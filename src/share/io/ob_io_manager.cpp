@@ -16,12 +16,11 @@
 
 #define USING_LOG_PREFIX COMMON
 
-#include "share/resource_limit_calculator/ob_resource_commmon.h"
 #include "ob_io_manager.h"
-#include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
-#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
+#include "lib/ob_running_mode.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/ob_io_device_helper.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::lib;
@@ -76,6 +75,7 @@ int64_t get_norm_bw(const int64_t size, const ObIOMode mode)
 ObIOManager::ObIOManager()
   : is_inited_(false),
     is_working_(false),
+    server_memory_limit_(ObIORuntimeOptions::DEFAULT_SERVER_MEMORY_LIMIT),
     mutex_(ObLatchIds::GLOBAL_IO_CONFIG_LOCK),
     io_config_(),
     allocator_(),
@@ -98,14 +98,22 @@ int ObIOManager::init(const int64_t memory_limit,
                       const int32_t queue_depth,
                       const int32_t schedule_thread_count)
 {
+  return init(ObIORuntimeOptions(), memory_limit, queue_depth, schedule_thread_count);
+}
+
+int ObIOManager::init(const ObIORuntimeOptions &runtime_options,
+                      const int64_t memory_limit,
+                      const int32_t queue_depth,
+                      const int32_t schedule_thread_count)
+{
   int ret = OB_SUCCESS;
   int64_t schedule_queue_count = 0 != schedule_thread_count ? schedule_thread_count : (lib::is_mini_mode() ? 2 : 8);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(memory_limit <= 0|| schedule_queue_count <= 0)) {
+  } else if (OB_UNLIKELY(!runtime_options.is_valid() || memory_limit <= 0 || schedule_queue_count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(memory_limit), K(schedule_queue_count));
+    LOG_WARN("invalid arguments", K(ret), K(runtime_options), K(memory_limit), K(schedule_queue_count));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, "IO_MGR", memory_limit))) {
     LOG_WARN("init io allocator failed", K(ret));
   } else if (OB_FAIL(channel_map_.create(7, "IO_CHANNEL_MAP"))) {
@@ -118,6 +126,7 @@ int ObIOManager::init(const int64_t memory_limit,
   } else {
     ObMemAttr attr("IO_MGR");
     allocator_.set_attr(attr);
+    server_memory_limit_ = runtime_options.server_memory_limit_;
     io_config_.set_default_value();
     is_inited_ = true;
   }
@@ -543,9 +552,6 @@ int ObIOManager::get_io_service(ObRefHolder<ObIOService> &service_holder) const
   }
   return ret;
 }
-
-
-// moved definition to the upper-layer owner cpp(omt/timer real user)
 
 void ObIOManager::print_channel_status()
 {

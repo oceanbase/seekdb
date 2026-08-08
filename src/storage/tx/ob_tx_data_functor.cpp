@@ -16,9 +16,9 @@
 
 #include "ob_tx_data_functor.h"
 #include "logservice/ob_log_service.h"  // logservice::check_clog_disk_full_or_hang
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
-#include "observer/virtual_table/ob_all_virtual_tx_data.h"
+#include "data_plane/transaction/ob_virtual_tx_data.h"
 
 namespace oceanbase
 {
@@ -436,7 +436,12 @@ int LockForReadFunctor::check_clog_disk_full_()
   int ret = OB_SUCCESS;
   bool clog_is_full = false;
   bool clog_is_hang = false;
-  if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
+  if (OB_ISNULL(log_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "log service is null", KR(ret));
+  } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
+      *log_service, clog_is_full, clog_is_hang))) {
     TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
   } else if (clog_is_full) {
     ret = OB_LOG_OUTOF_DISK_SPACE;

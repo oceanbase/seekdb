@@ -18,6 +18,9 @@
 #define OCEANBASE_UNITTEST_TRUNCATE_INFO_HELPER
 
 #include <stdint.h>
+#undef protected
+#undef private
+
 #define protected public
 #define private public
 

@@ -18,7 +18,7 @@
 
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/ob_sstable_meta.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -288,16 +288,16 @@ int ObColDataStoreDesc::init_col_default_checksum_array(
 {
   int ret = OB_SUCCESS;
   default_col_checksum_array_valid_ = true;
-  common::ObArray<ObSSTableColumnMeta> meta_array;
-  if (OB_FAIL(merge_schema.init_column_meta_array(meta_array))) {
-    STORAGE_LOG(WARN, "fail to init column meta array", K(ret), K(merge_schema));
-  } else if (OB_FAIL(col_default_checksum_array_.init(meta_array.count()))) {
-    STORAGE_LOG(WARN, "fail to init column default checksum array", K(ret), K(meta_array));
+  common::ObArray<share::schema::ObColumnDefaultChecksum> checksums;
+  if (OB_FAIL(merge_schema.get_column_default_checksums(checksums))) {
+    STORAGE_LOG(WARN, "fail to get column default checksums", K(ret), K(merge_schema));
+  } else if (OB_FAIL(col_default_checksum_array_.init(checksums.count()))) {
+    STORAGE_LOG(WARN, "fail to init column default checksum array", K(ret), K(checksums));
   } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < meta_array.count(); ++i) {
-      if (OB_FAIL(col_default_checksum_array_.push_back(meta_array.at(i).column_default_checksum_))) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < checksums.count(); ++i) {
+      if (OB_FAIL(col_default_checksum_array_.push_back(checksums.at(i).default_checksum_))) {
         STORAGE_LOG(WARN, "fail to push default checksum into array", K(ret),
-                    K(i), K(meta_array));
+                    K(i), K(checksums));
       }
     }
   }

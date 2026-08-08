@@ -1,2 +1,0 @@
-ob_unittest(test_ob_searray)
-ob_unittest(test_ob_linear_hash_map)

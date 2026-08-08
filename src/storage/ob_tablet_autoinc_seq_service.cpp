@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_autoinc_seq_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/multi_data_source/mds_ctx.h"
 #include "storage/tx/ob_trans_service.h"
@@ -155,7 +155,7 @@ void ObTabletAutoincSeqService::destroy()
 static int get_local_ls(ObLS *&ls)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ls = nullptr;
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;

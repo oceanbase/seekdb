@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_table_insert_up_op.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "data_plane/blocksstable/ob_datum_row_iterator.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/expr/ob_expr_autoinc_nextval.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_insert_op.h"
@@ -1142,11 +1145,11 @@ int ObTableInsertUpOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
   int ret = OB_SUCCESS;
   bool got_row = false;
   while (OB_SUCC(ret) && !got_row) {
-    ObDatumRow *dup_row = nullptr;
+    blocksstable::ObDatumRow *dup_row = nullptr;
     ObChunkDatumStore::StoredRow *stored_row = nullptr;
     ObDASWriteBuffer::DmlShadowRow ssr;
     ObDASInsertOp *ins_op = static_cast<ObDASInsertOp*>(*task_iter);
-    ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
+    blocksstable::ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
     const ObDASInsCtDef *ins_ctdef = static_cast<const ObDASInsCtDef*>(ins_op->get_ctdef());
     // Because all returned are the primary keys of the main table, the primary keys of the main table must be stored in the storage layer, and there is no need for the upper layer to do further calculations,
     // So here there is no need to clear eval flag

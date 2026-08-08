@@ -19,7 +19,7 @@
 #include "sql/optimizer/stat/ob_hybrid_hist_estimator.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "pl/sys_package/ob_dbms_stats.h"
+#include "sql/pl/sys_package/ob_dbms_stats.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 
 namespace oceanbase {

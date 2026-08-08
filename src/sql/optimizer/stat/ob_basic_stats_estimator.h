@@ -19,6 +19,7 @@
 
 #include "sql/optimizer/stat/ob_stats_estimator.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
+#include "sql/optimizer/ob_phy_table_location_info.h"
 
 namespace oceanbase
 {

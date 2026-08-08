@@ -18,7 +18,7 @@
 
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"
-#include "storage/fts/ob_fts_struct.h"
+#include "data_plane/fts/ob_fts_struct.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
 #include "storage/fts/utils/ob_ft_char_utils.h"
 

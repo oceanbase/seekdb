@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/ob_server_runtime_access.h"
 #include "observer/mysql/obmp_stmt_send_long_data.h"
 
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "sql/session/ob_piece_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 namespace oceanbase
@@ -35,7 +36,7 @@ using namespace sql;
 namespace observer
 {
 
-ObMPStmtSendLongData::ObMPStmtSendLongData(const ObGlobalContext &gctx)
+ObMPStmtSendLongData::ObMPStmtSendLongData(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       single_process_timestamp_(0),
       exec_start_timestamp_(0),
@@ -122,7 +123,7 @@ int ObMPStmtSendLongData::process()
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
     session.get_raw_audit_record().request_memory_used_ = 0;
-    observer::ObProcessMallocCallback pmcb(0,
+    sql::ObProcessMallocCallback pmcb(0,
           session.get_raw_audit_record().request_memory_used_);
     lib::ObMallocCallbackGuard guard(pmcb);
     int64_t runtime_version = 0;
@@ -188,7 +189,6 @@ int ObMPStmtSendLongData::process_send_long_data_stmt(ObSQLSessionInfo &session)
   bool need_response_error = true;
   setup_wb(session);
 
-  ObVirtualTableIteratorFactory vt_iter_factory(*gctx_.vt_iter_creator_);
   ObThreadLogLevelUtils::init(session.get_log_id_level_map());
   ret = do_process(session);
   ObThreadLogLevelUtils::clear();
@@ -215,13 +215,14 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
       audit_record.exec_record_.record_start();
     }
     if (enable_sqlstat) {
-      sqlstat_record.record_sqlstat_start_value();
+      sqlstat_record.record_sqlstat_start_value(
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_is_in_retry(session.get_is_in_retry());
       session.sql_sess_record_sql_stat_start_value(sqlstat_record);
     }
     int64_t execution_id = 0;
     ObString sql = "send long data";
-    if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
+    if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
                                           obmysql::ObMySQLCmd::COM_STMT_SEND_LONG_DATA))) {
@@ -249,7 +250,8 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
     const int64_t time_cost = exec_end_timestamp_ - get_receive_timestamp();
   }
   if (enable_sqlstat) {
-    sqlstat_record.record_sqlstat_end_value();
+    sqlstat_record.record_sqlstat_end_value(
+        ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
   }
 
   // store the warning message from the most recent statement in the current session

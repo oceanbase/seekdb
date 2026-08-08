@@ -17,6 +17,7 @@
 
 #include "share/object/ob_array_cast.h"
 #include "common/json_type/ob_json_parse.h"
+#include "share/ob_lob_access_utils.h"
 #include <fast_float/fast_float.h>
 #include "share/object/ob_obj_cast_util.h"
 #include <string>
@@ -1347,7 +1348,7 @@ int ObArrayCastUtils::set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *
   int32_t res_size = arr_obj->get_raw_binary_len();
   char *res_buf = nullptr;
   int64_t res_buf_len = 0;
-  sql::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
+  common::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
   if (OB_FAIL(text_result.init(res_size, params->allocator_v2_))) {
     LOG_WARN("init lob result failed");
   } else if (OB_FAIL(text_result.get_reserved_buffer(res_buf, res_buf_len))) {

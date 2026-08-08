@@ -1,0 +1,54 @@
+##
+#       owner : tingshuai.yts
+# owner group : outline
+# description :
+#   测试outline功能，在restart和majore freeze后是否仍旧有效
+#
+
+## ob1=OBI(cluster=1:1:1);
+ob1=OBI(cluster=1,proxy_num=0);
+## ob1.proxy0.set extra_config=syslog_level=debug;
+ob1.reboot;
+sleep 5;
+
+let $scheduler_ip=deploy_get_value(ob1.z1.obs0.ip);
+##let $scheduler_port = deploy_get_value(ob1.select select inner_port from __all_server where svr_ip='$scheduler_ip', inner_port, 1);
+let $scheduler_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn_admin,$scheduler_ip,admin,admin,oceanbase,$scheduler_port);
+connection conn_admin;
+
+## create yts_tt tenant
+source t/outline/create_tenant_for_outline.sql;
+connect (conn_yts,$scheduler_ip,root@yts_tt,,,$scheduler_port);
+connection conn_yts;
+
+## create database/table/outline
+source t/outline/prepare_data_for_outline.sql;
+
+## execute outline_stmt,
+## get outline_hint/ outline_exlain query result
+source t/outline/test_outline.sql;
+
+##### test restart #####
+--echo
+ob1.z1.obs0.restart;
+sleep 90;
+--echo
+connect (conn_yts1,$scheduler_ip,root@yts_tt,,,$scheduler_port);
+connection conn_yts1;
+source t/outline/test_outline.sql;
+
+##### test major freeze #####
+--echo
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+--echo
+
+## execute outline_stmt,
+## get outline_hint/ outline_exlain
+source t/outline/test_outline.sql;
+
+## delete tenant
+connect (conn_admin,$scheduler_ip,admin,admin,oceanbase,$scheduler_port);
+connection conn_admin;
+source t/outline/delete_tenant_of_outline.sql;

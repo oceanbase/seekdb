@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/udt/ob_collection_type.h"
 #include "common/ob_accuracy.h"
-#include "share/ob_i_sql_expression.h"
+#include "query/engine/expr/ob_sql_expression.h"
 #include "ob_raw_expr_util.h"
 #include "share/ob_define.h"
 

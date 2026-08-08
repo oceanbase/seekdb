@@ -40,14 +40,11 @@ namespace rootserver
 {
 class ObDDLOperator;
 
-// DDL-execution helpers that relocate ObDependencyInfo / ObReferenceObjTable static
-// methods which take a rootserver::ObDDLOperator & (genuine DDL-transaction logic,
-// callers are all rootserver). Lift-and-shift: same static signatures, only the class
-// home and call-site prefix changed. rootserver -> share is a legal downward dependency.
+// Rootserver-owned mutation logic for dependency metadata. Share owns the
+// dependency values and persistence primitives; DDL orchestration remains here.
 class ObDependencyDDLHelper
 {
 public:
-  // relocated from share::schema::ObDependencyInfo
   static int cascading_modify_obj_status(common::ObMySQLTransaction &trans,
                                          uint64_t obj_id,
                                          rootserver::ObDDLOperator &ddl_operator,
@@ -61,7 +58,6 @@ public:
                                    rootserver::ObDDLOperator &ddl_operator,
                                    share::schema::ObMultiVersionSchemaService &schema_service);
 
-  // relocated from share::schema::ObReferenceObjTable
   static int batch_execute_insert_or_update_obj_dependency(
       const int64_t new_schema_version,
       const share::schema::ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
@@ -76,7 +72,6 @@ public:
       rootserver::ObDDLOperator &ddl_operator);
 
 private:
-  // relocated private helper of ObReferenceObjTable (sole caller was the batch method above)
   static int batch_fill_kv_pairs(const share::schema::ObReferenceObjTable::ObDependencyObjKey &dep_obj_key,
                                  const int64_t new_schema_version,
                                  common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,

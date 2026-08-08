@@ -107,7 +107,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;
   bool is_geog = false;
@@ -124,10 +124,10 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   } else if (wkb_datum->is_null()) {
     is_null_result = true;
   } else if (FALSE_IT(wkb = wkb_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
-  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(tmp_allocator,
+  } else if (OB_FAIL(ObGeoExprUtils::construct_geometry(ctx, tmp_allocator,
       wkb, srs_guard, srs, geo, get_func_name(), true, false))) {
     LOG_WARN("fail to create geo bin", K(ret), K(wkb));
   } else if (OB_NOT_NULL(srs)) {
@@ -144,7 +144,7 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
     } else if (option_datum->is_null()){
       is_null_result = true;
     } else if (FALSE_IT(option_str = option_datum->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *option_datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *option_datum,
               expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), option_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(option_str));
     } else if (is_blank_string(expr.args_[1]->datum_meta_.cs_type_, option_str)) {

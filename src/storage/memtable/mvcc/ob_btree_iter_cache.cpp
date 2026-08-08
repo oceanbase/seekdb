@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+#include <new>
+#include "data_plane/memtable/ob_btree_iter_cache_api.h"
 #include "storage/memtable/mvcc/ob_btree_iter_cache.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/worker.h"
-#include "sql/session/ob_sql_session_info.h"
+#include "query/session/ob_session_access.h"
 
 namespace oceanbase
 {
@@ -69,7 +71,8 @@ void *btree_iter_alloc(int64_t size)
   void *ptr = nullptr;
   sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
   if (OB_NOT_NULL(session)) {
-    ObBtreeIterCache *cache = session->get_btree_iter_cache();
+    ObBtreeIterCache *cache = static_cast<ObBtreeIterCache *>(
+        query::ObSessionAccess::get_btree_iter_cache(session));
     if (OB_NOT_NULL(cache)) {
       ptr = cache->alloc(size);
     }
@@ -87,7 +90,8 @@ void btree_iter_free(void *ptr)
   }
   sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
   if (OB_NOT_NULL(session)) {
-    ObBtreeIterCache *cache = session->get_btree_iter_cache();
+    ObBtreeIterCache *cache = static_cast<ObBtreeIterCache *>(
+        query::ObSessionAccess::get_btree_iter_cache(session));
     if (OB_NOT_NULL(cache)) {
       cache->free(ptr);
       return;
@@ -97,4 +101,27 @@ void btree_iter_free(void *ptr)
 }
 
 } // namespace memtable
+
+namespace data_plane
+{
+
+void *create_btree_iter_cache(common::ObIAllocator &allocator)
+{
+  void *buffer = allocator.alloc(sizeof(memtable::ObBtreeIterCache));
+  return nullptr == buffer ? nullptr : new (buffer) memtable::ObBtreeIterCache();
+}
+
+void destroy_btree_iter_cache(common::ObIAllocator &allocator, void *&cache)
+{
+  if (nullptr != cache) {
+    memtable::ObBtreeIterCache *typed_cache =
+        static_cast<memtable::ObBtreeIterCache *>(cache);
+    typed_cache->destroy();
+    typed_cache->~ObBtreeIterCache();
+    allocator.free(typed_cache);
+    cache = nullptr;
+  }
+}
+
+} // namespace data_plane
 } // namespace oceanbase

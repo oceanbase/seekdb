@@ -23,6 +23,7 @@
 #include "sql/engine/expr/ob_expr_lower.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "data_plane/encoding/ob_ascii_util.h"
 
 namespace oceanbase {
 using namespace common;
@@ -265,7 +266,8 @@ int ObExprLowerUpper::calc_common(const ObExpr &expr, ObEvalCtx &ctx,
       if (OB_UNLIKELY(!ObCharset::is_valid_collation(cs_type))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("charset is null", K(ret), K(cs_type));
-      } else if (OB_FAIL(src_iter.init(0, NULL, &calc_alloc))) {
+      } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                     src_iter, ctx.exec_ctx_, &calc_alloc))) {
         LOG_WARN("init src_iter failed ", K(ret), K(src_iter));
       } else if (OB_FAIL(src_iter.get_byte_len(src_byte_len))) {
         LOG_WARN("get input byte len failed", K(ret));

@@ -27,10 +27,11 @@
 namespace oceanbase {
 namespace share {
 class ObSQLiteConnection;
+class ObSQLiteConnectionPool;
 class ObTabletLocalChecksumTableStorage;
 }
 }
-#include "storage/compaction/ob_tablet_check_info.h"  // uses only ObTabletCheckInfo, use the pure header created in batch 5(L2)
+#include "share/compaction/ob_tablet_check_info.h"
 #include "share/compaction/ob_array_with_map.h"
 
 namespace oceanbase
@@ -120,7 +121,7 @@ class ObTabletLocalChecksumOperator
 {
 public:
   // Initialize SQLite storage (called once at startup)
-  static int init();
+  static int init(ObSQLiteConnectionPool *pool);
 
   // Get a batch of checksum_items
   // Default: checksum_items' compaction_scn = @compaction_scn

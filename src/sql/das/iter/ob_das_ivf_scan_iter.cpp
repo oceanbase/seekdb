@@ -16,11 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_ivf_scan_iter.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_scan_op.h"
-#include "storage/tx_storage/ob_access_service.h"
-#include "src/storage/access/ob_table_scan_iterator.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -705,6 +703,7 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
           ObString cid = cid_datum[i].get_string();
           ObString cid_vec = cid_vec_datum[i].get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                          *exec_ctx_,
                           &tmp_allocator,
                           ObLongTextType,
                           CS_TYPE_BINARY,
@@ -743,7 +742,9 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
         } else {
           ObString cid = cid_datum.get_string();
           ObString cid_vec = cid_vec_datum.get_string();
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, ObLongTextType, CS_TYPE_BINARY,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                *exec_ctx_,
+                                                                &tmp_allocator, ObLongTextType, CS_TYPE_BINARY,
                                                                 has_lob_header, cid_vec))) {
             LOG_WARN("failed to get real data.", K(ret));
           } else if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(cent_id, cid))) {
@@ -794,7 +795,8 @@ int ObDASIvfBaseScanIter::get_centers_cache(bool is_vectorized,
                                         bool &is_cache_usable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+  query::ObIVectorIndexService *vec_index_service =
+      ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
@@ -901,6 +903,7 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
         if (OB_FAIL(ObVectorKmeansClusterHelper::get_center_id_from_string(center_id, cid))) {
           LOG_WARN("failed to get center id from string", K(ret));
         } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                        *exec_ctx_,
                         &mem_context_->get_arena_allocator(),
                         ObLongTextType,
                         CS_TYPE_BINARY,
@@ -930,7 +933,9 @@ int ObDASIvfBaseScanIter::gen_near_cid_heap_from_table(
       } else {
         ObString cid = cid_datum.get_string();
         ObString cid_vec = cid_vec_datum.get_string();
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(&mem_context_->get_arena_allocator(), ObLongTextType,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                              *exec_ctx_,
+                                                              &mem_context_->get_arena_allocator(), ObLongTextType,
                                                               CS_TYPE_BINARY, has_lob_header, cid_vec))) {
           LOG_WARN("failed to get real data.", K(ret));
         } else if (cid_vec.empty()) {
@@ -981,7 +986,7 @@ int ObDASIvfBaseScanIter::scan_cid_range(
   int64_t cid_vec_pri_key_cnt, 
   const ObDASScanCtDef *cid_vec_ctdef, 
   ObDASScanRtDef *cid_vec_rtdef,
-  storage::ObTableScanIterator *&cid_vec_scan_iter)
+  common::ObNewRowIterator *&cid_vec_scan_iter)
 {
   int ret = OB_SUCCESS;
   ObNewRange cid_pri_key_range;
@@ -1000,7 +1005,7 @@ int ObDASIvfBaseScanIter::scan_cid_range(
                                         cid_vec_tablet_id_))) {
     LOG_WARN("fail to rescan cid vec table scan iterator.", K(ret));
   } else {
-    cid_vec_scan_iter = static_cast<storage::ObTableScanIterator *>(cid_vec_iter_->get_output_result_iter());
+    cid_vec_scan_iter = cid_vec_iter_->get_output_result_iter();
     if (OB_ISNULL(cid_vec_scan_iter)) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("invalid null scan iter", K(ret));
@@ -1183,7 +1188,7 @@ int ObDASIvfBaseScanIter::calc_vec_dis(T *a, T *b, int dim, float &dis, ObExprVe
   int ret = OB_SUCCESS;
   if (dis_type != oceanbase::sql::ObExprVectorDistance::ObVecDisType::EUCLIDEAN) {
     double distance = 0;
-    if (OB_FAIL(oceanbase::sql::ObExprVectorDistance::DisFunc<T>::distance_funcs[dis_type](a, b, dim, distance))) {
+    if (OB_FAIL(oceanbase::sql::ObExprVectorDistance::DisFunc<T>::distance_funcs[static_cast<int64_t>(dis_type)](a, b, dim, distance))) {
       LOG_WARN("failed to get distance type", K(ret), KP(a), KP(b), K(dim));
     } else {
       dis = distance;
@@ -1269,6 +1274,7 @@ int ObDASIvfScanIter::parse_cid_vec_datum(
     LOG_WARN("failed to get main rowkey from cid vec datum", K(ret));
   } else if (OB_FALSE_IT(com_key = vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_).get_string())) {
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                  *exec_ctx_,
                   &allocator,
                   ObLongTextType,
                   CS_TYPE_BINARY,
@@ -1288,7 +1294,7 @@ int ObDASIvfScanIter::get_rowkeys_to_heap(const ObString &cid_str, int64_t cid_v
   const ObDASScanCtDef *cid_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CID_VEC_SCAN);
   ObDASScanRtDef *cid_vec_rtdef = vec_aux_rtdef_->get_vec_aux_tbl_rtdef(vec_aux_ctdef_->get_ivf_cid_vec_tbl_idx());
-  storage::ObTableScanIterator *cid_vec_scan_iter = nullptr;
+  common::ObNewRowIterator *cid_vec_scan_iter = nullptr;
   bool is_first_vec = true;
   bool cid_vec_need_norm = true;
   if (OB_FAIL(scan_cid_range(cid_str, cid_vec_pri_key_cnt, cid_vec_ctdef, cid_vec_rtdef, cid_vec_scan_iter))) {
@@ -1307,6 +1313,7 @@ int ObDASIvfScanIter::get_rowkeys_to_heap(const ObString &cid_str, int64_t cid_v
         ObRowkey main_rowkey;
         ObString vec = cid_datum[i].get_string();
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                        *exec_ctx_,
                         &mem_context_->get_arena_allocator(),
                         ObLongTextType,
                         CS_TYPE_BINARY,
@@ -1871,6 +1878,7 @@ int ObDASIvfPQScanIter::calc_distance_between_pq_ids_by_table(
           guard.set_batch_idx(i);
           ObString vec = vec_datum[i].get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                          *exec_ctx_,
                           &mem_context_->get_arena_allocator(),
                           ObLongTextType,
                           CS_TYPE_BINARY,
@@ -1904,6 +1912,7 @@ int ObDASIvfPQScanIter::calc_distance_between_pq_ids_by_table(
         } else {
           ObString vec = vec_datum.get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                          *exec_ctx_,
                           &mem_context_->get_arena_allocator(),
                           ObLongTextType,
                           CS_TYPE_BINARY,
@@ -2216,7 +2225,7 @@ int ObDASIvfPQScanIter::calc_nearest_limit_rowkeys_in_cids(
     if (OB_FAIL(ret)) {
     } else {
       // 1.2 cid put the query in the ivf_pq_code table to find (rowkey, pq_center_ids)
-      storage::ObTableScanIterator *cid_vec_scan_iter = nullptr;
+      common::ObNewRowIterator *cid_vec_scan_iter = nullptr;
       if (OB_FALSE_IT(cid_str.assign_buffer(buf, buf_len))) {
       } else if (OB_FAIL(ObVectorKmeansClusterHelper::set_center_id_to_string(cur_cid, cid_str))) {
         LOG_WARN("failed to set center_id to string", K(ret), K(cur_cid), K(cid_str));
@@ -2415,6 +2424,7 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
           if (vec_datum[i].is_null()) {
             // do nothing for null vector
           } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                             *exec_ctx_,
                              &mem_context_->get_arena_allocator(),
                              ObLongTextType,
                              CS_TYPE_BINARY,
@@ -2449,6 +2459,7 @@ int ObDASIvfBaseScanIter::get_rowkey_brute_post(bool is_vectorized, IvfRowkeyHea
         } else {
           ObString c_vec = vec_datum.get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                      *exec_ctx_,
                       &mem_context_->get_arena_allocator(),
                       ObLongTextType,
                       CS_TYPE_BINARY,
@@ -2854,6 +2865,7 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
           ObString cid = cid_datum[i].get_string();
           ObString cid_vec = cid_vec_datum[i].get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                          *exec_ctx_,
                           &tmp_allocator,
                           ObLongTextType,
                           CS_TYPE_BINARY,
@@ -2892,6 +2904,7 @@ int ObDASIvfPQScanIter::try_write_pq_centroid_cache(
           ObString cid_vec = vec_datum.get_string();
           ObString cid = cid_datum.get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                          *exec_ctx_,
                           &mem_context_->get_arena_allocator(),
                           ObLongTextType,
                           CS_TYPE_BINARY,
@@ -2947,7 +2960,8 @@ int ObDASIvfPQScanIter::get_pq_precomputetable_cache(
     bool &is_cache_usable)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+  query::ObIVectorIndexService *vec_index_service =
+      ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
@@ -3256,6 +3270,7 @@ int ObDASIvfSQ8ScanIter::get_real_search_vec_u8(bool is_vectorized, ObString &re
           if (i == ObIvfConstant::SQ8_META_MIN_IDX || i == ObIvfConstant::SQ8_META_STEP_IDX) {
             ObString c_vec = meta_vec_datum[i].get_string();
             if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                    *exec_ctx_,
                     mem_context_->get_arena_allocator(),
                     meta_vec_expr->locate_expr_datum(*vec_aux_rtdef_->eval_ctx_),
                     sq_meta_ctdef->result_output_.at(META_VECTOR_IDX)->datum_meta_,
@@ -3287,6 +3302,7 @@ int ObDASIvfSQ8ScanIter::get_real_search_vec_u8(bool is_vectorized, ObString &re
       } else {
         ObString c_vec = meta_vec_datum.get_string();
         if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+                *exec_ctx_,
                 mem_context_->get_arena_allocator(),
                 meta_vec_datum,
                 sq_meta_ctdef->result_output_.at(META_VECTOR_IDX)->datum_meta_,

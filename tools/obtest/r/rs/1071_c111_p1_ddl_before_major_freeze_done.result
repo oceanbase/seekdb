@@ -1,0 +1,12 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_CHECK_MAJOR_FREEZE_DONE wait_for ddl timeout 1000000000';
+ob1.z2.obs0.switch_rs;
+create table test (value int, pk int primary key);
+ob1.destroy_client tenant=obtest,user=admin,passwd=admin;
+ob1.create_client tenant=obtest,user=admin,passwd=admin;
+ob1.mysql set ob_global_debug_sync = 'now signal ddl';
+create table test.test (value int, pk int primary key);

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tablet/ob_tablet_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 
 namespace oceanbase
@@ -85,7 +85,7 @@ int ObLSTabletIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls tablet service is nullptr", K(ret), KP(ls_tablet_service_));
   } else {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     do {
       ObTabletMapKey key;
       if (OB_UNLIKELY(tablet_ids_.count() == idx_)) {

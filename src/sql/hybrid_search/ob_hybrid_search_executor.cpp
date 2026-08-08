@@ -15,8 +15,9 @@
  */
 
 #include "ob_hybrid_search_executor.h"
-#include "observer/ob_inner_sql_connection.h"
-#include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
+#include "query/ob_sql_name_service.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/session/ob_inner_sql_connection.h"
 
 #define USING_LOG_PREFIX SHARE
 
@@ -73,7 +74,8 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
   int ret = OB_SUCCESS;
   ObString query_sql;
   common::ObMySQLProxy *sql_proxy = NULL;
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *base_conn = NULL;
+  sql::ObIInnerSQLConnection *conn = NULL;
   common::sqlclient::ObISQLConnectionGuard conn_guard;
   if (OB_ISNULL(ctx_)) {
     ret = OB_NOT_INIT;
@@ -87,16 +89,19 @@ int ObHybridSearchExecutor::execute_search(ObObj &query_res) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret), KP(sql_proxy));
   } else if (OB_FAIL(
-                 observer::ObInnerSQLConnection::create_spi_connection_with_external_session(
-                     session_info_, conn_guard))) {
+                 query::ObInnerSQLConnectionAccess::
+                     create_spi_connection_with_external_session(
+                         session_info_, conn_guard))) {
     LOG_WARN("failed to acquire connection with current session", K(ret));
-  } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
-                           conn_guard.get_ptr()))) {
+  } else if (OB_ISNULL(base_conn = conn_guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner sql connection is null", K(ret), KP(conn));
+    LOG_WARN("inner SQL connection is null", K(ret));
+  } else if (OB_ISNULL(conn = sql::as_inner_sql_connection(base_conn))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner sql connection does not implement SQL interface", K(ret), KP(base_conn));
   } else {
     sql::ObSQLSessionInfo::StmtSavedValue saved_session;
-    observer::ObInnerSQLConnection::SavedValue saved_conn;
+    sql::ObIInnerSQLConnection::SavedValue saved_conn;
     // Execute on the caller's session. begin/end_nested_session only isolates
     // statement state; retry state is intentionally left to inner SQL.
     if (OB_FAIL(conn->begin_nested_session(saved_session, saved_conn,
@@ -208,7 +213,7 @@ int ObHybridSearchExecutor::parse_search_params(
     LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     LOG_WARN("fail to get collation_connection", KR(ret));
-  } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
+  } else if (OB_FAIL(query::ObSQLNameService::resolve_table_name(
               cs_type, case_mode, search_arg_.table_name_,
               database_name, table_name))) {
     LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode), K(search_arg_.table_name_));

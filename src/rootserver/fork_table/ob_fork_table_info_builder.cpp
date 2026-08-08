@@ -125,7 +125,7 @@ int ObForkTableInfoBuilder::generate_fork_table_infos_(
   } else if (OB_ISNULL(src_main_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("src main table not exist", KR(ret), K(src_main_table_id));
-  } else if (OB_FAIL(share::ObForkTableUtil::collect_table_ids_from_table(
+  } else if (OB_FAIL(rootserver::ObForkTableUtil::collect_table_ids_from_table(
       schema_guard, *src_main_table_schema, src_table_ids))) {
     LOG_WARN("fail to collect src table ids", KR(ret), KPC(src_main_table_schema));
   } else if (OB_UNLIKELY(src_table_ids.count() != dest_table_ids.count())) {
@@ -202,5 +202,4 @@ int ObForkTableInfoBuilder::generate_fork_tablet_info_(
 
 } // rootserver
 } // oceanbase
-
 

@@ -15,8 +15,8 @@
  */
 #ifndef OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
 #define OB_STORAGE_COMPACTION_BATCH_EXEC_DAG_H_
-#include "observer/scheduler/ob_dag_scheduler.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "lib/lock/ob_mutex.h"
 #include "storage/compaction/ob_sstable_merge_history.h"
 namespace oceanbase

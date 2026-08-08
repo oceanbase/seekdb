@@ -51,7 +51,7 @@ class MdsRow : public MdsRowBase<K, V>// Row OWNS all UserMdsNode in list
 {
   template <typename MdsTableType>
   friend class MdsTableImpl;
-  friend class unittest::TestMdsRowAndMdsCtx;
+  friend class ::oceanbase::unittest::TestMdsRowAndMdsCtx;
   template <typename UnitK, typename UnitV>
   friend class MdsUnit;
   template <typename UnitK, typename UnitV>

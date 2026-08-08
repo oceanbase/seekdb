@@ -23,7 +23,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "lib/utility/ob_template_utils.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/list/ob_dlist.h"

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_sharding_info.h"
 #include "sql/optimizer/ob_log_plan.h"
+#include "sql/optimizer/ob_pwj_comparer.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

@@ -24,6 +24,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_placement_hashset.h"
+#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -84,7 +85,7 @@ class ObDDLSQLTransaction;
 class ObSnapshotInfoManager;
 struct ObTruncateInfoService;
 class ObPLDDLService;
-class ObDDLService
+class ObDDLService : public query::ObIAuxIndexSchemaChecker
 {
 public:
   friend class ObStandbyClusterSchemaProcessor;
@@ -1648,7 +1649,7 @@ public:
       ObSchemaGetterGuard &schema_guard,
       const ObTableSchema *data_schema,
       bool &is_exist,
-      const ObTableSchema *&index_schema);
+      const ObTableSchema *&index_schema) override;
   int check_parallel_ddl_conflict(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const obcall::ObDDLArg &arg);

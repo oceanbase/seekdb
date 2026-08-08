@@ -16,7 +16,7 @@
 
 # define USING_LOG_PREFIX SERVER
 #include "ob_all_virtual_server_schema_info.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

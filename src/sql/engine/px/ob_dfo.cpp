@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_dfo.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/exchange/ob_px_transmit_op.h"
@@ -839,7 +840,7 @@ void ObPxInitTaskArgs::set_deserialize_param(ObExecContext &exec_ctx,
   des_allocator_ = des_allocator;
 }
 
-int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::MemoryContext &mem_context, const observer::ObGlobalContext &gctx)
+int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::MemoryContext &mem_context, const share::ObGlobalContext &gctx)
 {
   int ret = OB_SUCCESS;
   void *plan_buf = NULL;
@@ -853,7 +854,9 @@ int ObPxInitTaskArgs::init_deserialize_param(const ObPxInitTaskArgs &arg, lib::M
     LOG_WARN("allocate memory failed", K(ret));
   } else {
     inner_phy_plan_ = new (plan_buf) ObPhysicalPlan(mem_context);
-    exec_ctx_ = new (ctx_buf) ObDesExecContext(mem_context->get_arena_allocator(), gctx.session_mgr_);
+    exec_ctx_ = new (ctx_buf) ObDesExecContext(
+        mem_context->get_arena_allocator(),
+        share::server_service<ObSQLSessionMgr>());
     des_allocator_ = &mem_context->get_arena_allocator();
   }
   return ret;
@@ -889,6 +892,7 @@ int ObPxInitTaskArgs::deep_copy_assign(ObPxInitTaskArgs &src,
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   }
   if (OB_SUCC(ret)) {
+    exec_ctx_->set_runtime_services(src.exec_ctx_->get_runtime_services());
     if (sqc_handler_->get_sqc_init_arg().sqc_.is_fulltree()
         && nullptr != src.exec_ctx_->get_group_pwj_map()) {
       exec_ctx_->deep_copy_group_pwj_map(src.exec_ctx_->get_group_pwj_map());

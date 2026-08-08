@@ -1,0 +1,30 @@
+##
+# owner:yuchen.wyc
+# owner group:global index
+# description:
+# 测试点：当全局索引的分区分布在多台机器上，执行任务的调度会并发的去读取或者写入多台机器，并发是通过异步RPC来完成，这里测试异步RPC接口是否正确
+# 测试场景：创建全局索引，然后将全局索引的分区打散到不同的机器上，然后写入数据，发起一个查询需要扫描多个分区的数据，观察结果是否正确
+##
+ob1=OBI(cluster=1:1:1,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.create_client;
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 int);
+sleep 5;
+create index gkey on t1(c1) partition by hash(c1) partitions 2;
+let $index_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%gkey", table_id, 1);
+ob1.check_until_timeout select index_status c from oceanbase.__all_virtual_table where table_id = $index_table_id, 2, 360;
+let $index_table_name = deploy_get_value(ob1.select select table_name from oceanbase.__all_virtual_table where table_name like "%gkey", table_name, 1);
+
+ob1.z2.obs0.switch_partition obtest:obtest:$index_table_name:1;
+ob1.z3.obs0.switch_partition obtest:obtest:$index_table_name:0;
+sleep 5;
+
+insert into t1 values(1, 2, 3), (2, 3, 4), (3, 4, 5), (4, 5, 6), (5, 6, 7), (6, 7, 8);
+select /*+index(t1 primary)*/ * from t1;
+select /*+index(t1 gkey)*/pk, c1, c2 from t1;

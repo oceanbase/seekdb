@@ -28,9 +28,9 @@
 #include "object/ob_object.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_json_access_utils.h"
-#include "storage/fts/dict/ob_gen_dic_loader.h"
-#include "storage/fts/ob_fts_parser_property.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/dict/ob_gen_dic_loader.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_json_func_helper.h" // file not self-contained, there're logs inside.
@@ -88,7 +88,7 @@ int ObExprTokenize::tokenize_fulltext(const TokenizeParam &param,
   storage::ObFTParseHelper tokenize_helper;
   const int64_t ft_word_bkt_cnt = MIN(MAX(param.fulltext_.length() / 2, 2), 997);
   int64_t doc_len = 0;
-  ObFTWordMap token_map;
+  storage::ObFTWordMap token_map;
 
   ObArenaAllocator tmp_parse_alloc(ObMemAttr("Tmp buffer"));
 
@@ -194,7 +194,7 @@ int ObExprTokenize::TokenizeParam::parse_json_param(const ObIJsonBase *obj)
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "parser arguments");
     } else {
       ObString json_str;
-      if (OB_FAIL(ObFTParserJsonProps::tokenize_array_to_props_json(allocator_, val, json_str))) {
+      if (OB_FAIL(storage::ObFTParserJsonProps::tokenize_array_to_props_json(allocator_, val, json_str))) {
         LOG_WARN("Fail to tokenize array to props json", K(ret));
         ObSqlString message;
         message.append_fmt("format in %s form", ADDITIONAL_ARGS_STR);
@@ -435,14 +435,14 @@ int ObExprTokenize::TokenizeParam::try_load_dictionary_for_ik()
 {
   int ret = OB_SUCCESS;
   bool need_to_load_dic = false;
-  ObDicLoaderHandle dic_loader_handle;
-  if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_to_load_dic(parser_name_,
-                                                            need_to_load_dic))) {
+  storage::ObDicLoaderHandle dic_loader_handle;
+  if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_need_to_load_dic(
+          parser_name_, need_to_load_dic))) {
     LOG_WARN("fail to check need to load dic",
         K(ret), K(parser_name_), K(need_to_load_dic));
   } else if (need_to_load_dic) {
-    if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
-                    ObString::make_string(ObFTSLiteral::PARSER_NAME_IK), // currently only ik, use parser_name_ without version suffix
+    if (OB_FAIL(storage::ObGenDicLoader::get_instance().get_dic_loader(
+                    ObString::make_string(storage::ObFTSLiteral::PARSER_NAME_IK), // currently only ik, use parser_name_ without version suffix
                     ObCharset::charset_type_by_coll(meta_.get_collation_type()),
                     dic_loader_handle))) {
       LOG_WARN("fail to get dic loader", K(ret));

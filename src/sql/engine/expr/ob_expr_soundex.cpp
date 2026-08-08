@@ -279,7 +279,8 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
                              const bool input_has_lob_header,
                              ObIAllocator &tmp_alloc, ObIAllocator &res_alloc,
                              ObString &out,
-                             bool has_lob_header)
+                             bool has_lob_header,
+                             const ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   const bool need_charset_convert = ObCharset::is_cs_nonascii(res_cs_type);
@@ -290,7 +291,7 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
   ObTextStringResult out_result(res_type, has_lob_header, &res_alloc);
   int64_t buf_size = 0;
   int64_t data_len = 0;
-  if (OB_FAIL(input_iter.init(0, NULL, &tmp_alloc))) {
+  if (OB_FAIL(input_iter.init(0, &lob_read_options, &tmp_alloc))) {
     LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
   } else if (OB_FAIL(input_iter.get_byte_len(data_len))) {
     LOG_WARN("get input iter data len failed ", K(ret), K(input_iter));
@@ -387,10 +388,16 @@ int ObExprSoundex::eval_soundex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     } else { // text tc
       const bool input_has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       bool has_lob_header = expr.obj_meta_.has_lob_header();
-      ret = calc_text(*param, input_type, res_type, input_cs_type, res_cs_type,
-                      input_has_lob_header,
-                      tmp_alloc_guard.get_allocator(),
-                      expr_res_alloc, out, has_lob_header);
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+        LOG_WARN("get datum access context failed", K(ret));
+      } else {
+        ret = calc_text(*param, input_type, res_type, input_cs_type, res_cs_type,
+                        input_has_lob_header,
+                        tmp_alloc_guard.get_allocator(),
+                        expr_res_alloc, out, has_lob_header,
+                        *access_ctx->lob_read_options_);
+      }
     }
     if (OB_FAIL(ret)) {
       LOG_WARN("calc soundex failed", K(ret));

@@ -1,0 +1,125 @@
+#owner : tingshuai.yts
+# owner group : session
+# description : 测试time_zone_info在集群各种情况下的有效性
+#
+
+ob1=OBI(cluster=2:2,proxy_num=0);
+ob1.z1.obs1.set status=disable;
+ob1.reboot;
+sleep 5;
+
+###################### 输入准备 #################################
+###
+## # 初始化连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+## let $ip=10.244.0.92;
+## let $port=46459;
+connect (conn_sys,$ip,root@sys,,test,$port);
+ob1.mysql CREATE RESOURCE POOL pl UNIT = 'sys_unit_config', UNIT_NUM = 1,ZONE_LIST =('z1','z2');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pl') set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt', tenant_id, 1);
+connect (conn1,$ip,root@tt,,test,$port);
+### 导入时区
+connection conn_sys;
+source sql/time_zone_info.sql;
+sleep 5;
+set global time_zone='Asia/Shanghai';
+
+### 创建表
+connection conn1;
+set session time_zone='Asia/Shanghai';
+create table t1(c1 int primary key, c2 timestamp);
+insert into t1 values(1, '2017-11-23 00:00:00');
+insert into t1 values(2, '2017-11-23 12:00:00');
+connection conn_sys;
+
+
+#################### 测试add server后，新的server时区可用#############
+ob1.z1.obs1.set status=enable;
+ob1.z1.obs1.start;
+ob1.z1.obs1.add;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+ob1.mysql alter resource pool pl unit_num = 2;
+let $z1_obs1_ip=deploy_get_value(ob1.z1.obs1.ip);
+let $z1_obs1_port=deploy_get_value(ob1.z1.obs1.mysql_port);
+## let $z1_obs1_ip=10.244.0.92;
+## let $z1_obs1_port=46460;
+connect (conn_z1_obs1,$z1_obs1_ip,root@sys,,test,$z1_obs1_port);
+connect (conn_z1_tt,$z1_obs1_ip,root@tt,,test,$z1_obs1_port);
+connection conn_z1_tt;
+show session variables like 'time_zone';
+select * from t1;
+connection conn_z1_obs1;
+show global variables like 'time_zone';
+connection conn_z1_tt;
+set session time_zone='America/Aruba';
+select * from t1;
+
+
+#################### 测试observer restart后，新的server时区可用#############
+ob1.z2.obs1.stop;
+sleep 30;
+ob1.z2.obs1.nstart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+
+let $z2_obs1_ip=deploy_get_value(ob1.z2.obs1.ip);
+let $z2_obs1_port=deploy_get_value(ob1.z2.obs1.mysql_port);
+## let $z2_obs1_ip=10.244.4.27;
+## let $z2_obs1_port=46462;
+
+connect (conn_z2_obs1,$z2_obs1_ip,root@sys,,test,$z2_obs1_port);
+connect (conn_z2_tt,$z2_obs1_ip,root@tt,,test,$z2_obs1_port);
+connection conn_z2_tt;
+show session variables like 'time_zone';
+select * from t1;
+
+connection conn_z2_obs1;
+show global variables like 'time_zone';
+connection conn_z2_tt;
+set session time_zone='America/Aruba';
+select * from t1;
+
+
+##################### 测试整个集群restart ############################
+### 集群restart后，需要rs自主读取时区信息，二不是通过alter system命令
+ob1.restart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+
+let $ip2=deploy_get_value(ob1.z1.obs0.ip);
+let $port2=deploy_get_value(ob1.z1.obs0.mysql_port);
+## let $ip2=10.244.0.92;
+## let $port2=46459;
+connect (conn_sys2,$ip2,root@sys,,test,$port2);
+connect (conn2,$ip2,root@tt,,test,$port2);
+connection conn2;
+show session variables like 'time_zone';
+select * from t1;
+connection conn_sys2;
+show global variables like 'time_zone';
+connection conn2;
+set session time_zone='America/Aruba';
+select * from t1;
+
+#################### 测试切主后，集群时区正常可用######################
+ob1.mysql alter tenant sys set primary_zone='z2';
+ob1.z2.obs0.switch_rs;
+sleep 5;
+ob1.check_until_timeout select count(1) from __all_virtual_core_meta_table where role=1 and zone='z2',1,120;
+ob1.check_until_timeout select count(1) from __all_virtual_server_stat,4,120;
+
+let $z2_obs0_ip=deploy_get_value(ob1.z2.obs0.ip);
+let $z2_obs0_port=deploy_get_value(ob1.z2.obs0.mysql_port);
+## let $z2_obs0_ip=10.244.4.27;
+## let $z2_obs0_port=46461;
+connect (conn_z2_obs0,$z2_obs0_ip,root@sys,,test,$z2_obs0_port);
+connect (conn_z2_tt,$z2_obs0_ip,root@tt,,test,$z2_obs0_port);
+
+connection conn_z2_tt;
+show session variables like 'time_zone';
+select * from t1;
+connection conn_z2_obs0;
+show global variables like 'time_zone';
+connection conn_z2_tt;
+set session time_zone='America/Aruba';
+select * from t1;

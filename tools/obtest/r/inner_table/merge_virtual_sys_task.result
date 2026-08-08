@@ -1,0 +1,15 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+case 1 start
+ob1.mysql set ob_global_debug_sync = 'AFTER_WRITE_MAJOR_FREEZE_COMMIT_LOG wait_for signal_1';
+true
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+case 1 finish
+ob1.check_version 2;
+case 2 start
+ob1.mysql set ob_global_debug_sync = 'AFTER_WRITE_MAJOR_FREEZE_COMMIT_LOG wait_for signal_1';
+true
+true
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+case 2 finish

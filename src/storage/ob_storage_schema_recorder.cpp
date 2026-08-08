@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_schema_recorder.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 
@@ -272,7 +272,7 @@ int ObStorageSchemaRecorder::get_schema(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard/schema/allocator is null", K(ret), K_(tablet_id), KP_(schema_guard),
         KP_(storage_schema), KP_(allocator));
-  } else if (OB_FAIL(share::g_mp->schema_runtime_service()->get_schema_service()->get_runtime_schema_guard(*schema_guard_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()->get_runtime_schema_guard(*schema_guard_))) {
     LOG_WARN("failed to get runtime schema guard", K(ret), K(table_id_));
   } else if (OB_FAIL(schema_guard_->get_schema_version(runtime_schema_version))) {
     LOG_WARN("fail to get schema version", KR(ret), K(runtime_schema_version));

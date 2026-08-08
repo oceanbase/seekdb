@@ -17,19 +17,19 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "observer/vector_index/ob_vector_index_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 #include "sql/engine/ob_exec_context.h"
 
 
 namespace oceanbase
 {
 using namespace common;
+using namespace share;
 namespace sql
 {
 ObExprVecIVFSQ8DataVector::ObExprVecIVFSQ8DataVector(ObIAllocator &allocator)
@@ -149,7 +149,7 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
       LOG_WARN("fail to calc location ids", K(ret), K(table_id), K(tablet_id), KP(calc_table_id_expr), KP(calc_part_id_expr));
     } else {
       ObFixedArray<float*, ObIAllocator> meta_vectors(tmp_allocator);
-      share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+      query::ObIVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
       float *min_vec = nullptr;
       float *step_vec = nullptr;
       uint8_t *res_vec = nullptr;
@@ -205,4 +205,3 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
 
 }  // namespace sql
 }  // namespace oceanbase
-

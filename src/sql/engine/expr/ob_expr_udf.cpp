@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_udf.h"
-#include "observer/ob_server.h"
-#include "pl/ob_pl_stmt.h"
+#include "share/ob_server_struct.h"
+#include "sql/pl/ob_pl_stmt.h"
+#include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
 namespace oceanbase
@@ -356,7 +357,9 @@ int ObExprUDF::process_singal_out_param(int64_t i,
                                          nullptr != cur_expr_allocator ? cur_expr_allocator : &alloc,
                                          iparams.at(i),
                                          params_type.at(i),
-                                         tmp));
+                                         tmp,
+                                         exec_ctx.get_srs_provider(),
+                                         exec_ctx.get_lob_read_service()));
       if (symbol_alloc != nullptr) {
         OZ (deep_copy_obj(*symbol_alloc, tmp, result));
       } else {
@@ -377,7 +380,9 @@ int ObExprUDF::process_singal_out_param(int64_t i,
                                         nullptr != cur_expr_allocator ? cur_expr_allocator : &alloc,
                                         iparams.at(i),
                                         params_type.at(i),
-                                        tmp));
+                                        tmp,
+                                        exec_ctx.get_srs_provider(),
+                                        exec_ctx.get_lob_read_service()));
     OZ (ObSPIService::spi_set_package_variable(
       &exec_ctx,
       NULL,
@@ -390,7 +395,9 @@ int ObExprUDF::process_singal_out_param(int64_t i,
                                         nullptr != cur_expr_allocator ? cur_expr_allocator : &alloc,
                                         iparams.at(i),
                                         params_type.at(i),
-                                        tmp));
+                                        tmp,
+                                        exec_ctx.get_srs_provider(),
+                                        exec_ctx.get_lob_read_service()));
     OZ (pl::ObPLContext::set_subprogram_var_from_local(
       *exec_ctx.get_my_session(),
       params_desc.at(i).get_package_id(),
@@ -420,7 +427,9 @@ int ObExprUDF::process_singal_out_param(int64_t i,
     OZ (sql::ObSPIService::spi_convert(exec_ctx.get_my_session(),
                                        &alloc, iparams.at(i),
                                        params_type.at(i),
-                                       tmp));
+                                       tmp,
+                                       exec_ctx.get_srs_provider(),
+                                       exec_ctx.get_lob_read_service()));
     if (composite_allocator != nullptr) {
       OZ (deep_copy_obj(*composite_allocator, tmp, result));
     } else {
@@ -505,7 +514,9 @@ int ObExprUDF::process_package_out_param(int64_t idx,
                                        &alloc,
                                        iparams.at(idx),
                                        params_type.at(idx),
-                                       tmp));
+                                       tmp,
+                                       exec_ctx.get_srs_provider(),
+                                       exec_ctx.get_lob_read_service()));
     if (allocator != nullptr) {
       OZ (deep_copy_obj(*allocator, tmp, result));
     } else {
@@ -590,7 +601,7 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
   if (OB_ISNULL(exec_ctx.get_sql_ctx())
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
     sql::ObSqlExecutorCtx &task_ctx = exec_ctx.get_sql_exec_ctx();
-    const observer::ObGlobalContext &gctx = observer::ObServer::get_instance().get_gctx();
+    const share::ObGlobalContext &gctx = GCTX;
     if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
                 schema_guard,
                 task_ctx.get_query_begin_schema_version()))) {
@@ -697,7 +708,7 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 
 
   CK (OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
-  CK (OB_NOT_NULL(pl_engine = session->get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine = ctx.exec_ctx_.get_pl_engine()));
   OZ (SMART_CALL(expr.eval_param_value(ctx)));
   OZ (build_udf_ctx(udf_ctx_id, expr.arg_cnt_, ctx.exec_ctx_, udf_ctx));
   CK (OB_NOT_NULL(udf_params = udf_ctx->get_param_store()));
@@ -832,7 +843,8 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       }
       OZ(res.from_obj(result, expr.obj_datum_map_));
       if (is_lob_storage(result.get_type())) {
-        OZ(ob_adjust_lob_datum(result, expr.obj_meta_, expr.obj_datum_map_,
+        OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
+                              expr.obj_datum_map_,
                               ctx.exec_ctx_.get_allocator(), res));
       }
       OZ(expr.deep_copy_datum(ctx, res));

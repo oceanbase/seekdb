@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_macro_meta_temp_store.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -143,7 +144,7 @@ int ObMacroMetaTempStore::init(const int64_t dir_id)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("double initialization", K(ret));
-  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(io_.fd_, io_.dir_id_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->open(io_.fd_, io_.dir_id_))) {
     LOG_WARN("open tmp file failed", K(ret));
   } else {
     
@@ -160,7 +161,7 @@ void ObMacroMetaTempStore::reset()
   int ret = OB_SUCCESS;
   if (io_.fd_ > 0) {
     io_handle_.reset();
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(io_.fd_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->remove(io_.fd_))) {
       LOG_WARN("remove tmp file failed", K(ret), K_(io));
     } else {
       LOG_INFO("remove tmp file success", K(ret), K_(io));
@@ -276,7 +277,7 @@ int ObMacroMetaTempStore::inner_append(const ObDataMacroBlockMeta &macro_meta, c
       const int64_t timeout_us = THIS_WORKER.get_timeout_remain();
       io_.io_timeout_ms_ = timeout_us <= 0 ? 0 : timeout_us / 1000;
       io_.io_desc_.set_wait_event(ObWaitEventIds::INTERM_RESULT_DISK_WRITE);
-      if (OB_FAIL(share::g_mp->tmp_file_manager()->aio_write(io_, io_handle_))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->aio_write(io_, io_handle_))) {
         LOG_WARN("failed to write store item to tmp file", K(ret), K_(io));
       }
     }
@@ -414,7 +415,7 @@ int ObMacroMetaTempStoreIter::init(ObMacroMetaTempStore &temp_meta_store)
     LOG_WARN("fail to init macro meta temp store iter, invalid argument", K(ret), K(temp_meta_store));
   } else if (OB_FAIL(temp_meta_store.wait())) {
     LOG_WARN("fail to wait temp meta store write finish", K(ret), K(temp_meta_store));
-  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->get_tmp_file_size(temp_meta_store.io_.fd_,
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_tmp_file_size(temp_meta_store.io_.fd_,
                                                                              meta_store_file_length_))) {
     LOG_WARN("fail to get temp file length", K(ret), K(temp_meta_store), K(temp_meta_store.io_.fd_));
   } else {
@@ -499,7 +500,7 @@ int ObMacroMetaTempStoreIter::try_submit_io()
       }
       if (OB_FAIL(ret)) {
         // pass
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->pread(io_info, meta_store_read_offset_, read_handle))) {
+      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->pread(io_info, meta_store_read_offset_, read_handle))) {
         LOG_WARN("failed to do tmp file pread", K(ret));
       } else if (OB_FAIL(read_handle.wait())) {
         LOG_WARN("failed to wait read io finish", K(ret));

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "query/das/ob_fts_eval_node_access.h"
 #include "sql/engine/ob_exec_context.h"
 #include "ob_das_text_retrieval_eval_node.h"
 
@@ -273,4 +274,26 @@ int ObFtsEvalNode::fts_boolean_node_create(
   return ret;
 }
 } // namespace sql
+
+namespace query
+{
+
+void release_fts_eval_node(sql::ObFtsEvalNode *node)
+{
+  if (OB_NOT_NULL(node)) {
+    node->release();
+  }
+}
+
+int evaluate_fts_boolean(
+    sql::ObFtsEvalNode *node,
+    const common::ObIArray<double> &relevances,
+    double &result)
+{
+  return OB_ISNULL(node)
+      ? common::OB_INVALID_ARGUMENT
+      : sql::ObFtsEvalNode::fts_boolean_eval(node, relevances, result);
+}
+
+} // namespace query
 } // namespace oceanbase

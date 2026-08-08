@@ -41,7 +41,7 @@ private:
   common::ObIAllocator &allocator_ __attribute__((unused));
   ObSQLMode sql_mode_ __attribute__((unused));
 };
-}  // namespace pl
+}  // namespace sql
 }  // namespace oceanbase
 
 

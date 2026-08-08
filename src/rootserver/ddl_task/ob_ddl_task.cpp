@@ -17,9 +17,10 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ob_local_management_service.h"
-#include "observer/ob_service.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 #include "storage/ob_common_id_utils.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/tx/ob_ts_mgr.h"
@@ -684,7 +685,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
       task_status_ = real_new_status;
       delay_schedule_time_ = 0; // when status changed, schedule immediately
       clear_old_status_context();
-      LOG_INFO("ddl_scheduler switch status", K(ret), "ddl_event_info", ObDDLEventInfo(), K(task_status_));
+      LOG_INFO("ddl_scheduler switch status", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_status_));
     }
 
     if (old_status != real_new_status) {
@@ -720,7 +721,7 @@ int ObDDLTask::refresh_schema_version()
     LOG_WARN("ObDDLTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REFRESH_SCHEMA_VERSION_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
-  } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(schema_version_))) {
+  } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(*GCTX.schema_service_, schema_version_))) {
     if (OB_SCHEMA_EAGAIN != ret) {
       LOG_WARN("check schema version refreshed failed", K(ret), K_(schema_version));
     }
@@ -930,13 +931,13 @@ int ObDDLTask::batch_release_snapshot(
     LOG_WARN("set timeout failed", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("fail to start trans", K(ret));
-  } else if (OB_ISNULL(GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
-  } else if (OB_UNLIKELY(!GCTX.local_management_service_->get_ddl_service().is_inited())) {
+    LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
+  } else if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().is_inited())) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
           trans, SNAPSHOT_FOR_DDL, schema_version_, snapshot_scn, tablet_ids))) {
     LOG_WARN("batch release snapshot failed", K(ret), K(tablet_ids));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version(trans,
@@ -1180,7 +1181,7 @@ int ObDDLWaitTransEndCtx::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ddl_task_id), K(table_id), K(wait_trans_type), K(wait_version));
   } else if (OB_FALSE_IT(tablet_ids_.reset())) {
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(table_id, tablet_ids_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, tablet_ids_))) {
     LOG_WARN("get table partitions failed", K(ret));
   } else if (OB_UNLIKELY(tablet_ids_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1393,7 +1394,7 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     arg.ddl_task_id_ = ddl_task_id_;
     auto schema_fn = [](const obcall::ObCheckSchemaVersionElapsedArg &a,
                         obcall::ObCheckSchemaVersionElapsedResult &r) -> int {
-      return GCTX.ob_service_->check_schema_version_elapsed(a, r);
+      return rootserver_local_runtime()->check_schema_version_elapsed(a, r);
     };
     if (OB_FAIL((check_trans_end<obcall::ObCheckSchemaVersionElapsedArg,
                     obcall::ObCheckSchemaVersionElapsedResult>(
@@ -1412,7 +1413,7 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
     const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   ObMySQLTransaction trans;
   int64_t timeout_us = 0;
   int64_t cur_task_status = 0;
@@ -1469,7 +1470,7 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts
     arg.ddl_task_id_ = ddl_task_id_;
     auto modify_fn = [](const obcall::ObCheckModifyTimeElapsedArg &a,
                         obcall::ObCheckModifyTimeElapsedResult &r) -> int {
-      return GCTX.ob_service_->check_modify_time_elapsed(a, r);
+      return rootserver_local_runtime()->check_modify_time_elapsed(a, r);
     };
     if (OB_FAIL((check_trans_end<obcall::ObCheckModifyTimeElapsedArg,
                     obcall::ObCheckModifyTimeElapsedResult>(
@@ -1586,7 +1587,7 @@ int ObDDLWaitTransEndCtx::try_wait(bool &is_trans_end, int64_t &snapshot_version
       "tablet_count", tablet_count,
       "snapshot_version", snapshot_version,
       "info", is_trans_end_);
-  LOG_INFO("ddl wait trans end ctx try_wait", K(ret), "ddl_event_info", ObDDLEventInfo(), K(wait_type_));
+  LOG_INFO("ddl wait trans end ctx try_wait", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(wait_type_));
   return ret;
 }
 
@@ -1612,7 +1613,7 @@ int ObDDLWaitTransEndCtx::get_snapshot(int64_t &snapshot_version)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(
+      if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(
               snapshot_version, ddl_task_id_, max_snapshot, INDEX_SNAPSHOT_VERSION_DIFF))) {
         LOG_WARN("calc snapshot with gts failed", K(ret), K(max_snapshot), K(snapshot_version));
       } else if (OB_UNLIKELY(snapshot_version <= 0)) { // defensive check.
@@ -1710,7 +1711,7 @@ int ObDDLWaitColumnChecksumCtx::init(
       if (OB_UNLIKELY(cur_table_id <= 0)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid table id", K(ret), K(i), K(cur_table_id));
-      } else if (OB_FAIL(ObDDLUtil::get_tablets(cur_table_id, tablet_ids))) {
+      } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, cur_table_id, tablet_ids))) {
         LOG_WARN("get table partition failed", K(ret), K(cur_table_id));
       } else if (OB_UNLIKELY(tablet_ids.count() <= 0)) {
         ret = OB_ERR_UNEXPECTED;
@@ -1805,7 +1806,7 @@ int ObDDLWaitColumnChecksumCtx::try_wait(bool &is_column_checksum_ready)
     }
   }
   if (REACH_TIME_INTERVAL(1000L * 1000L)) {
-    LOG_INFO("try wait checksum", K(ret), K(stat_array_.count()), K(success_count), K(send_succ_count), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("try wait checksum", K(ret), K(stat_array_.count()), K(success_count), K(send_succ_count), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     if (REACH_TIME_INTERVAL(600 * 1000L * 1000L)) { //10min
       MANAGEMENT_EVENT_ADD("ddl scheduler", "ddl wait column checksum ctx try_wait",
         "ret", ret,
@@ -1896,7 +1897,7 @@ int send_batch_calc_rpc(const ObCalcColumnChecksumRequestArg &arg,
 {
   int ret = OB_SUCCESS;
   const int64_t tablet_count = arg.calc_items_.count();
-  if (OB_FAIL(GCTX.ob_service_->calc_column_checksum_request(arg, res))) {
+  if (OB_FAIL(rootserver_local_runtime()->calc_column_checksum_request(arg, res))) {
     LOG_WARN("calculate column checksum request failed", K(ret), K(arg));
   } else if (res.ret_codes_.count() != tablet_count || send_array.count() != tablet_count) {
     ret = OB_ERR_UNEXPECTED;
@@ -2493,7 +2494,7 @@ int ObDDLTaskRecordOperator::update_published_schema_version(
   ObSqlString sql_string;
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(task_id <= 0
-                  || published_schema_version <= 0)) {
+                     || published_schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(task_id));
   } else if (OB_FAIL(sql_string.assign_fmt("UPDATE %s SET published_schema_version=%ld WHERE task_id=%lu ",

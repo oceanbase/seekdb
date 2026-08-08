@@ -20,8 +20,8 @@
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ob_ddl_service.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
@@ -281,8 +281,7 @@ int ObDDLService::fork_database(
     // This ensures the fork snapshot covers both main table data and async index data.
     if (OB_SUCC(ret) && user_table_schemas.count() > 0) {
       bool need_wait = false;
-      observer::ObInnerSQLConnection *iconn =
-          static_cast<observer::ObInnerSQLConnection *>(trans.get_connection());
+      common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
       const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
       if (OB_ISNULL(iconn)) {
         ret = OB_ERR_UNEXPECTED;
@@ -312,7 +311,11 @@ int ObDDLService::fork_database(
         }
       }
       if (OB_SUCC(ret) && need_wait) {
-        if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
+        ObIRootserverLocalRuntime *local_runtime = rootserver_local_runtime();
+        if (OB_ISNULL(local_runtime)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("rootserver local runtime is null", KR(ret));
+        } else if (OB_FAIL(local_runtime->wait_until_change_stream_refreshed(
                        get_sql_proxy(), lock_timeout_us))) {
           LOG_WARN("fail to wait change stream refresh", KR(ret));
         } else {

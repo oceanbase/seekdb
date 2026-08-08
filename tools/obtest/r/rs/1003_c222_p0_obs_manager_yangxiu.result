@@ -1,0 +1,74 @@
+ob1=OBI(cluster=3:2:2,init_unit_cpu=2,init_unit_num=1, node_cpu_count=64, node_cpu_reserved=2);
+ob1.reboot;
+ob1.source include/migrate.inc;
+ob1.source include/merge.inc;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.proxy0.mysql_root alter proxyconfig set server_state_refresh_interval = '2s';
+ob1.create_client;
+ob1.z3.obs0.stop;
+ob1.mysql_p $check_server;
+status
+active
+active
+active
+active
+active
+active
+inactive
+ob1.z2.obs1.stop;
+ob1.mysql_p $check_server;
+status
+active
+active
+active
+active
+inactive
+active
+inactive
+ob1.z3.obs0.nstart;
+ob1.z2.obs1.nstart;
+ob1.mysql_p $check_server;
+status
+active
+active
+active
+active
+active
+active
+active
+ob1.z1.obs1.delete;
+ob1.z1.obs1.check_delete 400;
+ob1.z1.obs1.add;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+$obs.stop;
+$obs.nstart;
+$leader.delete;
+$leader.check_delete 420;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql CREATE RESOURCE UNIT $unitname max_cpu 2, max_memory 1073741824, max_iops 100000, max_disk_size 536870912, max_session_num 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL $poolname UNIT = '$unitname', UNIT_NUM = 1, zone_list = ('$zone_name');
+ob1.mysql CREATE TENANT $ttname replica_num = 1, primary_zone='$zone_name', resource_pool_list=('$poolname');
+ob1.mysql alter tenant $ttname set variables ob_tcp_invited_nodes='%';
+ob1.mysql select * from oceanbase.__all_tenant where tenant_name='$ttname';
+ob1.mysql CREATE DATABASE $dbname;
+ob1.mysql_p select database();
+database()
+NULL
+ob1.mysql use $dbname;CREATE TABLE $dbname.$tbname (i1 int, i2 int, v1 varchar(1024),v2 varchar(1024), n1 numeric, n2 numeric, f1 float, d1 double, t1 timestamp,t2 timestamp, PRIMARY KEY(i1,v1,n1,f1,t1)) ;
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname;SELECT count(*) FROM $dbname.$tbname;
+ob1.mysql DROP TABLE $dbname.$tbname;
+ob1.mysql DROP DATABASE $dbname;
+ob1.mysql DROP TENANT $ttname;
+ob1.mysql DROP RESOURCE POOL $poolname;
+ob1.mysql DROP RESOURCE UNIT $unitname;

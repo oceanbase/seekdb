@@ -23,6 +23,108 @@ namespace oceanbase
 using namespace share;
 namespace sql
 {
+namespace
+{
+
+void set_doc_id_int(ObDatum &datum, const ObDocIdExt &id)
+{
+  datum.set_int(id.get_datum().get_int());
+}
+
+void set_doc_id_shallow(ObDatum &datum, const ObDocIdExt &id)
+{
+  datum.set_datum(id.get_datum());
+}
+
+class ObDASMatchSumRelevanceCollector final
+    : public ObDASMatchRelevanceCollector
+{
+public:
+  ObDASMatchSumRelevanceCollector()
+    : total_relevance_(0.0), matched_cnt_(0), should_match_(0)
+  {}
+  virtual ~ObDASMatchSumRelevanceCollector() = default;
+
+  int init(const int64_t should_match = 0)
+  {
+    total_relevance_ = 0.0;
+    should_match_ = should_match;
+    return OB_SUCCESS;
+  }
+
+  virtual void reset() override
+  {
+    total_relevance_ = 0.0;
+    matched_cnt_ = 0;
+  }
+
+  virtual void reuse() override
+  {
+    total_relevance_ = 0.0;
+    matched_cnt_ = 0;
+  }
+
+  virtual int collect_one_dim(
+      const int64_t dim_idx, const double relevance) override
+  {
+    UNUSED(dim_idx);
+    total_relevance_ += relevance;
+    ++matched_cnt_;
+    return OB_SUCCESS;
+  }
+
+  virtual int get_result(double &relevance, bool &is_valid) override
+  {
+    relevance = total_relevance_;
+    is_valid = matched_cnt_ >= should_match_;
+    total_relevance_ = 0.0;
+    matched_cnt_ = 0;
+    return OB_SUCCESS;
+  }
+
+private:
+  double total_relevance_;
+  int64_t matched_cnt_;
+  int64_t should_match_;
+};
+
+class ObDASMatchBestFieldCollector final
+    : public ObDASMatchRelevanceCollector
+{
+public:
+  ObDASMatchBestFieldCollector() : max_relevance_(0.0) {}
+  virtual ~ObDASMatchBestFieldCollector() = default;
+
+  int init()
+  {
+    max_relevance_ = 0.0;
+    return OB_SUCCESS;
+  }
+
+  virtual void reset() override { max_relevance_ = 0.0; }
+  virtual void reuse() override { max_relevance_ = 0.0; }
+
+  virtual int collect_one_dim(
+      const int64_t dim_idx, const double relevance) override
+  {
+    UNUSED(dim_idx);
+    max_relevance_ = std::max(max_relevance_, relevance);
+    return OB_SUCCESS;
+  }
+
+  virtual int get_result(double &relevance, bool &is_valid) override
+  {
+    is_valid = max_relevance_ > 0.0;
+    relevance = max_relevance_;
+    max_relevance_ = 0.0;
+    return OB_SUCCESS;
+  }
+
+private:
+  double max_relevance_;
+};
+
+} // namespace
 
 ObDASMatchIter::ObDASMatchIter()
   : ObDASIter(ObDASIterType::DAS_ITER_ES_MATCH),
@@ -55,6 +157,7 @@ ObDASMatchIter::~ObDASMatchIter()
 int ObDASMatchIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   ObDASMatchIterParam &match_param = static_cast<ObDASMatchIterParam &>(param);
   if (OB_ISNULL(match_param.eval_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -74,8 +177,10 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     if (OB_ISNULL(domain_id_expr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null domain id expr", K(ret));
-    } else if (domain_id_expr_->datum_meta_.type_ == common::ObUInt64Type && FALSE_IT(set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_int)) {
-    } else if (domain_id_expr_->datum_meta_.type_ != common::ObUInt64Type && FALSE_IT(set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_shallow)) {
+    } else if (domain_id_expr_->datum_meta_.type_ == common::ObUInt64Type
+               && FALSE_IT(set_datum_func_ = set_doc_id_int)) {
+    } else if (domain_id_expr_->datum_meta_.type_ != common::ObUInt64Type
+               && FALSE_IT(set_datum_func_ = set_doc_id_shallow)) {
     } else if (OB_NOT_NULL(ir_match_part_score_rtdef_)) {
       const double query_boost = ir_match_part_score_rtdef_->match_boost_;
       if (query_boost <= 0.0) {
@@ -86,8 +191,9 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(ir_match_part_score_ctdef_) && ir_match_part_score_rtdef_->match_fields_type_ == ObMatchFiledsType::MATCH_BEST_FIELDS) {
-      ObDasBestfieldCollector *bestfield_collector = nullptr;
-      if (OB_ISNULL(bestfield_collector = OB_NEWx(ObDasBestfieldCollector, &myself_allocator_))) {
+      ObDASMatchBestFieldCollector *bestfield_collector = nullptr;
+      if (OB_ISNULL(bestfield_collector = OB_NEWx(
+          ObDASMatchBestFieldCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(bestfield_collector->init())) {
@@ -96,8 +202,9 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
         relevance_collector_ = bestfield_collector;
       }
     } else {
-      ObSRDaaTInnerProductRelevanceCollector *inner_product_relevance_collector = nullptr;
-      if (OB_ISNULL(inner_product_relevance_collector = OB_NEWx(ObSRDaaTInnerProductRelevanceCollector, &myself_allocator_))) {
+      ObDASMatchSumRelevanceCollector *inner_product_relevance_collector = nullptr;
+      if (OB_ISNULL(inner_product_relevance_collector = OB_NEWx(
+          ObDASMatchSumRelevanceCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(inner_product_relevance_collector->init(0))) {
@@ -145,7 +252,12 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       LOG_WARN("failed to init buffered relevances", K(ret));
     } else if (OB_FAIL(buffered_relevances_.prepare_allocate(OB_MAX(1, eval_ctx_->max_batch_size_)))) {
       LOG_WARN("failed to prepare allocate buffered relevances", K(ret));
-    } else if (OB_FAIL(merge_cmp_.init(domain_id_expr_->datum_meta_, &iter_domain_ids_))) {
+    } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(
+                   datum_access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else if (OB_FAIL(merge_cmp_.init(
+                   domain_id_expr_->datum_meta_, &iter_domain_ids_,
+                   datum_access_ctx))) {
       LOG_WARN("failed to init loser tree comparator", K(ret));
     } else if (children_cnt > 1 && OB_ISNULL(merge_heap_ = OB_NEWx(ObDASMatchMergeLoserTree, &myself_allocator_, merge_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -443,7 +555,7 @@ int ObDASMatchIter::do_one_merge_round(int64_t &count)
 int ObDASMatchIter::fill_merge_heap()
 {
   int ret = OB_SUCCESS;
-  ObSRMergeItem item;
+  ObDASMatchMergeItem item;
   const bool is_min_max_norm = is_match_part_score_iter() && ir_match_part_score_rtdef_->score_norm_function_ == ObMatchScoreNorm::SCORE_NORM_MIN_MAX;
   const bool need_get_max_query_score = is_match_part_score_iter() && max_query_score_ < 0.0 && is_min_max_norm;
   if (need_get_max_query_score) {
@@ -515,7 +627,7 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
 {
   int ret = OB_SUCCESS;
 
-  const ObSRMergeItem *top_item = nullptr;
+  const ObDASMatchMergeItem *top_item = nullptr;
   bool curr_doc_end = false;
   int64_t iter_idx = 0;
   relevance = 0.0;
@@ -625,55 +737,28 @@ int ObDASMatchIter::project_results(const int64_t count)
   return ret;
 }
 
-int ObDasBestfieldCollector::init()
-{
-  int ret = OB_SUCCESS;
-  max_relevance_ = 0.0;
-  return ret;
-}
-
-void ObDasBestfieldCollector::reset()
-{
-  max_relevance_ = 0.0;
-}
-
-void ObDasBestfieldCollector::reuse()
-{
-  max_relevance_ = 0.0;
-}
-
-int ObDasBestfieldCollector::collect_one_dim(const int64_t dim_idx, const double relevance)
-{
-  int ret = OB_SUCCESS;
-  max_relevance_ = std::max(max_relevance_, relevance);
-  return ret;
-}
-
-int ObDasBestfieldCollector::get_result(double &relevance, bool &is_valid)
-{
-  int ret = OB_SUCCESS;
-  is_valid = max_relevance_ > 0.0;
-  relevance = max_relevance_;
-  max_relevance_ = 0.0;
-  return ret;
-}
-
 ObDASMatchMergeCmp::ObDASMatchMergeCmp()
   : cmp_func_(nullptr),
     iter_ids_(nullptr),
+    datum_access_ctx_(nullptr),
     is_inited_(false)
 {
 }
 
-int ObDASMatchMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids)
+int ObDASMatchMergeCmp::init(
+    ObDatumMeta id_meta,
+    const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids,
+    const common::ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(iter_ids)) {
+  if (OB_ISNULL(iter_ids) || OB_ISNULL(datum_access_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
+    LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids),
+             KP(datum_access_ctx));
   } else {
     iter_ids_ = iter_ids;
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
+    datum_access_ctx_ = datum_access_ctx;
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -686,8 +771,8 @@ int ObDASMatchMergeCmp::init(ObDatumMeta id_meta, const ObFixedArray<ObDocIdExt,
 }
 
 int ObDASMatchMergeCmp::cmp(
-    const ObSRMergeItem &l,
-    const ObSRMergeItem &r,
+    const ObDASMatchMergeItem &l,
+    const ObDASMatchMergeItem &r,
     int64_t &cmp_ret)
 {
   int ret = OB_SUCCESS;
@@ -696,7 +781,9 @@ int ObDASMatchMergeCmp::cmp(
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret))) {
+    if (OB_FAIL(cmp_func_(
+            get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret,
+            datum_access_ctx_))) {
       LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;

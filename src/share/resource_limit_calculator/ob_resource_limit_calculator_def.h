@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-// DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)
+// DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name)
 #ifdef DEF_RESOURCE_LIMIT_CALCULATOR
-DEF_RESOURCE_LIMIT_CALCULATOR(2, TABLET, tablet, share::g_mp->storage_meta_mem_mgr()->get_t3m_limit_calculator())
+DEF_RESOURCE_LIMIT_CALCULATOR(2, TABLET, tablet)
 #endif
 
 // DEF_PHY_RES(n, type, name)

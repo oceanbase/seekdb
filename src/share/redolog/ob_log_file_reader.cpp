@@ -15,16 +15,14 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "share/redolog/ob_log_file_reader.h"
 #include "share/redolog/ob_log_file_handler.h"
-#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace storage;
 namespace share
 {
 static const char *MEMORY_LABEL = "LogFileReader";
@@ -163,7 +161,7 @@ ObLogFileReader2::~ObLogFileReader2()
   destroy();
 }
 
-int ObLogFileReader2::init()
+int ObLogFileReader2::init(lib::IRunWrapper *run_wrapper)
 {
   int ret = OB_SUCCESS;
 
@@ -172,7 +170,7 @@ int ObLogFileReader2::init()
     LOG_WARN("already inited", K(ret));
   } else if (OB_FAIL(quick_map_.create(MAP_BUCKET_INIT_CNT, "LogFileReaderM"))) {
     LOG_WARN("already inited", K(ret));
-  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(share::server_runtime()))) {
+  } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(run_wrapper))) {
     LOG_WARN("timer set_run_wrapper fail", K(ret));
   } else if (OB_FAIL(timer_.init("ObLogFileReader2"))) {
     LOG_WARN("init timer fail", K(ret));

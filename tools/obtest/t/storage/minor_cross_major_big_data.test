@@ -1,0 +1,80 @@
+# owner: weixue.cx
+# owner group: storage
+# description: test minor cross major
+##
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set debug_sync_timeout = '10000000s';
+ob1.mysql alter system set minor_compact_trigger = 1;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+
+
+connection conn1;
+use test;
+
+# step1. prepare data
+create table t1(c1 int, c2 varchar(4096), primary key(c1, c2)) compression 'none';
+
+let $tid = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1', table_id, 1);
+--disable_query_log
+--disable_result_log
+let $cnt=1;
+while($cnt < 2000)
+{
+  eval insert into test.t1 values($cnt, repeat(rand(), 100));
+  inc $cnt;
+}
+
+--enable_query_log
+--enable_result_log
+
+# step2. stop update freeze_info
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_FREEZE_SNAPSHOT_INFO wait_for continue_signal';
+sleep 10;
+
+# step3. clear debug sync on z3
+ob1.z3.obs0.force_stop;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', inactive, 60; 
+ob1.z3.obs0.nstart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z3', active, 60; 
+
+# step4. major freeze
+ob1.mysql alter system major freeze;
+
+# step5. sleep for a while to ensure minor freeze timestamp will be larger than major_ts
+sleep 15;
+while($cnt < 2010)
+{
+  eval insert into test.t1 values($cnt, repeat(rand(), 100));
+  inc $cnt;
+}
+ob1.mysql alter system minor freeze;
+# step6. wait until we have minor sstable cross major_ts, then start merge
+let $major_ts = deploy_get_value(ob1.select select frozen_snapshot from oceanbase.__all_virtual_freeze_info where frozen_version = 2, frozen_snapshot, 1);
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 7 and base_version = 1 and snapshot_version > $major_ts and table_id = $tid, 2, 360;
+
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_version 2;
+
+# step7. insert some more rows at end
+--disable_query_log
+--disable_result_log
+while($cnt < 2100)
+{
+  eval insert into test.t1 values($cnt, repeat(rand(), 100));
+  inc $cnt;
+}
+--enable_query_log
+--enable_result_log
+
+# step8. major freeze again and check if 3 replicas have eqaul number of rows from incremental data
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.check_until_timeout select count(distinct(memtable_row_count)) from __all_virtual_partition_sstable_merge_info where table_id = $tid and version = '3-0-0', 1, 3;

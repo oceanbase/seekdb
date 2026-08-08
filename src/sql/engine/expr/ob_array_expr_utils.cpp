@@ -22,6 +22,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/object/ob_array_cast.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include <map>
 
@@ -76,7 +77,7 @@ int ObArrayExprUtils::get_type_vector(
     ObString blob_data = datum.get_string();
     const ObSqlCollectionInfo *coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_);
     ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_);
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &allocator,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -91,20 +92,25 @@ int ObArrayExprUtils::get_type_vector(
   return ret;
 }
 
-int ObArrayExprUtils::vector_datum_add(ObDatum &res, const ObDatum &data, ObIAllocator &allocator, ObDatum *tmp_res, bool negative)
+int ObArrayExprUtils::vector_datum_add(ObExecContext &exec_ctx,
+                                       ObDatum &res,
+                                       const ObDatum &data,
+                                       ObIAllocator &allocator,
+                                       ObDatum *tmp_res,
+                                       bool negative)
 {
   int ret = OB_SUCCESS;
   ObString blob_res = res.get_string();
   ObString blob_data = data.get_string();
   ObLobLocatorV2 locator(blob_res, true/*has_lob_header*/);
   bool is_outrow = !locator.has_inrow_data();
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx, &allocator,
                                                         ObLongTextType,
                                                         CS_TYPE_BINARY,
                                                         true,
                                                         blob_data))) {
     LOG_WARN("fail to get real data.", K(ret), K(blob_data));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx, &allocator,
                                                         ObLongTextType,
                                                         CS_TYPE_BINARY,
                                                         true,
@@ -843,7 +849,7 @@ int ObArrayExprUtils::get_array_obj(ObIAllocator &alloc, ObEvalCtx &ctx, const u
   ObString data_str = raw_data;
   if (res == NULL && OB_FAIL(construct_array_obj(alloc, ctx, subschema_id, res))) {
     LOG_WARN("construct array obj failed", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&alloc,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &alloc,
                                                               ObLongTextType,
                                                               CS_TYPE_BINARY,
                                                               true,
@@ -921,7 +927,7 @@ int ObArrayExprUtils::add_elem_to_nested_array(ObIAllocator &tmp_allocator, ObEv
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *arr_type, arr_obj))) {
       LOG_WARN("construct array obj failed", K(ret), K(subschema_id), K(coll_info));
     } else if (FALSE_IT(raw_bin = datum.get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                                           ObCollectionSQLType,
                                                           CS_TYPE_BINARY,
                                                           true,
@@ -1258,13 +1264,23 @@ int ObArrayExprUtils::calc_fixed_size_key_index(ObIArrayType *src_key_arr, uint3
   return ret;
 }
 
-int ObArrayExprUtils::get_collection_raw_data(ObIAllocator &allocator, const ObObjMeta &meta, const void *data, ObLength len, ObString &bin_str)
+int ObArrayExprUtils::get_collection_raw_data(
+    ObIAllocator &allocator,
+    const ObObjMeta &meta,
+    const void *data,
+    ObLength len,
+    ObString &bin_str,
+    const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   ObTextStringIter str_iter(ObCollectionSQLType, CS_TYPE_BINARY,
                             ObString(len, reinterpret_cast<const char *>(data)),
                             meta.has_lob_header());
-  if (OB_FAIL(str_iter.init(0, NULL, &allocator))) {
+  if (OB_ISNULL(access_ctx) || OB_ISNULL(access_ctx->lob_read_options_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("datum access context is not initialized", K(ret));
+  } else if (OB_FAIL(str_iter.init(
+                 0, access_ctx->lob_read_options_, &allocator))) {
     LOG_WARN("Lob: str iter init failed", K(ret));
   } else if (OB_FAIL(str_iter.get_full_data(bin_str))) {
     LOG_WARN("Lob: str iter get full data failed", K(ret));
@@ -1288,12 +1304,16 @@ int ObArrayExprUtils::convert_to_string(common::ObIAllocator &allocator, ObEvalC
   return ret;
 }
 
-int ObArrayExprUtils::calc_collection_hash_val(const ObObjMeta &meta, const void *data, ObLength len, hash_algo hash_func, uint64_t seed, uint64_t &hash_val)
+int ObArrayExprUtils::calc_collection_hash_val(
+    const ObObjMeta &meta, const void *data, ObLength len,
+    hash_algo hash_func, uint64_t seed, uint64_t &hash_val,
+    const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   ObString bin_str;
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  if (OB_FAIL(get_collection_raw_data(allocator, meta, data, len, bin_str))) {
+  if (OB_FAIL(get_collection_raw_data(
+          allocator, meta, data, len, bin_str, access_ctx))) {
     LOG_WARN("get collection raw data failed", K(ret));
   } else {
      hash_val = seed;
@@ -1307,15 +1327,18 @@ int ObArrayExprUtils::calc_collection_hash_val(const ObObjMeta &meta, const void
 int ObArrayExprUtils::collection_compare(const ObObjMeta &l_meta, const ObObjMeta &r_meta,
                                          const void *l_v, const ObLength l_len,
                                          const void *r_v, const ObLength r_len,
-                                         int &cmp_ret)
+                                         int &cmp_ret,
+                                         const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   ObString l_data;
   ObString r_data;
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-  if (OB_FAIL(get_collection_raw_data(allocator, l_meta, l_v, l_len, l_data))) {
+  if (OB_FAIL(get_collection_raw_data(
+          allocator, l_meta, l_v, l_len, l_data, access_ctx))) {
     LOG_WARN("get collection raw data failed", K(ret));
-  } else if (OB_FAIL(get_collection_raw_data(allocator, r_meta, r_v, r_len, r_data))) {
+  } else if (OB_FAIL(get_collection_raw_data(
+                 allocator, r_meta, r_v, r_len, r_data, access_ctx))) {
     LOG_WARN("get collection raw data failed", K(ret));
   } else {
     cmp_ret = ObCharset::strcmpsp(CS_TYPE_BINARY, l_data.ptr(), l_data.length(), r_data.ptr(),

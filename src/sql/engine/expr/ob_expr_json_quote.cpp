@@ -85,7 +85,7 @@ int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, con
     LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else { // string type
     ObString json_val = data.get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, data, meta, has_lob_header, json_val))) {
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, data, meta, has_lob_header, json_val))) {
       LOG_WARN("fail to get real data.", K(ret), K(json_val));
     } else if (json_val.length() == 0) {
       if (OB_FAIL(j_buf.append("\"\"", 2))) {

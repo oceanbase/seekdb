@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_all_virtual_dump_info.h"
 #include "observer/omt/ob_server_runtime.h"
 #include "observer/omt/ob_server_runtime_controller.h"
@@ -97,7 +98,7 @@ int ObAllVirtualDumpInfo::inner_get_next_row(common::ObNewRow *&row)
       return ret;
     };
 
-    omt::ObServerRuntimeController *controller = GCTX.server_runtime_controller_;
+    omt::ObServerRuntimeController *controller = ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>();
     if (OB_ISNULL(controller)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "runtime controller is null", K(ret));

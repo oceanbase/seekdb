@@ -1,0 +1,57 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 3, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 2, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+ob1.mysql alter system flush plan cache;
+select effective_tenant();
+effective_tenant()
+xy_tenant_1
+=========================== TEST OR EXPANSION REWRITE ================================
+select * from t where t.a = 1 or t.b = 1;
+// expect a table scan plan
+explain select * from t where t.a = 1 or t.b = 1;
+Query Plan
+====================================
+|ID|OPERATOR  |NAME|EST. ROWS|COST |
+------------------------------------
+|0 |TABLE SCAN|t   |237      |10036|
+====================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t.a], [t.b], [t.c], [t.d], [t.e]), filter([t.a = 1 OR t.b = 1]), 
+      access([t.a], [t.b], [t.c], [t.d], [t.e]), partitions(p0)
+
+delete from t;
+select * from t where t.a = 1 or t.b = 1;
+
+// expect a remote plan with or expansion rewriting
+explain select * from t where t.a = 1 or t.b = 1;
+Query Plan
+==================================================
+|ID|OPERATOR            |NAME    |EST. ROWS|COST |
+--------------------------------------------------
+|0 |EXCHANGE IN REMOTE  |        |1485     |13862|
+|1 | EXCHANGE OUT REMOTE|        |1485     |13510|
+|2 |  UNION ALL         |        |1485     |13510|
+|3 |   TABLE SCAN       |t(idx_a)|990      |6312 |
+|4 |   TABLE SCAN       |t(idx_b)|495      |6395 |
+==================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([UNION(t.a, t.a)], [UNION(t.b, t.b)], [UNION(t.c, t.c)], [UNION(t.d, t.d)], [UNION(t.e, t.e)]), filter(nil)
+  1 - output([UNION(t.a, t.a)], [UNION(t.b, t.b)], [UNION(t.c, t.c)], [UNION(t.d, t.d)], [UNION(t.e, t.e)]), filter(nil)
+  2 - output([UNION(t.a, t.a)], [UNION(t.b, t.b)], [UNION(t.c, t.c)], [UNION(t.d, t.d)], [UNION(t.e, t.e)]), filter(nil)
+  3 - output([t.a], [t.b], [t.c], [t.d], [t.e]), filter(nil), 
+      access([t.a], [t.b], [t.c], [t.d], [t.e]), partitions(p0)
+  4 - output([t.a], [t.b], [t.c], [t.d], [t.e]), filter([lnnvl(t.a = 1)]), 
+      access([t.a], [t.b], [t.c], [t.d], [t.e]), partitions(p0)
+
+
+// should success now
+select * from t where t.a = 1 or t.b = 1;
+a	b	c	d	e

@@ -24,7 +24,6 @@
 #include "sql/plan_cache/ob_plan_cache_value.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
-#include "observer/omt/ob_th_worker.h"
 
 namespace oceanbase
 {

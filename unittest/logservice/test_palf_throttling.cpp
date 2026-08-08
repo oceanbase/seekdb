@@ -37,7 +37,7 @@ public:
   virtual ~TestPalfThrottling();
   virtual void SetUp();
   virtual void TearDown();
-protected:
+public:
   bool g_need_purging_throttling;
   NeedPurgingThrottlingFunc g_need_purging_throttling_func;
 };
@@ -145,6 +145,9 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   palf_env_impl.disk_options_wrapper_.get_throttling_options(throttle_options);
 
   LogWritingThrottle throttle;
+  const auto elapse_update_interval = [&throttle]() {
+    throttle.last_update_ts_ -= LogWritingThrottle::UPDATE_INTERVAL_US + 1;
+  };
   ASSERT_EQ(false, throttle.need_throttling_not_guarded_by_lock_(g_need_purging_throttling_func));
   ASSERT_EQ(false, throttle.need_writing_throttling_notified());
   throttle.notify_need_writing_throttling(true);
@@ -173,7 +176,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
 
   //test no need throttling after update
   PALF_LOG(INFO, "case 3: test no need throttling while unrecyclable_log_disk_size is no more than trigger_size");
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   throttle.update_throttling_options(&palf_env_impl);
   throttle.notify_need_writing_throttling(true);
   throttle.throttling(1024, g_need_purging_throttling_func, &palf_env_impl);
@@ -185,7 +188,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   unrecyclable_size = total_disk_size * 70 / 100;
   palf_env_impl.disk_options_wrapper_.set_cur_unrecyclable_log_disk_size(unrecyclable_size);
   palf_env_impl.disk_options_wrapper_.disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = 100;
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   throttle.update_throttling_options(&palf_env_impl);
   throttle.throttling(1024, g_need_purging_throttling_func, &palf_env_impl);
   palf_env_impl.disk_options_wrapper_.get_throttling_options(throttle_options);
@@ -197,7 +200,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   palf_env_impl.disk_options_wrapper_.disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = throttling_percentage;
   unrecyclable_size = total_disk_size * 70 / 100;
   palf_env_impl.disk_options_wrapper_.set_cur_unrecyclable_log_disk_size(unrecyclable_size);
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   throttle.update_throttling_options(&palf_env_impl);
   throttle.throttling(1024, g_need_purging_throttling_func, &palf_env_impl);
   palf_env_impl.disk_options_wrapper_.get_throttling_options(throttle_options);
@@ -266,7 +269,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
 
   //test  notify_need_writing_throttling(false) changed
   PALF_LOG(INFO, "case 8: no need to throttle after notify_need_throttling(false)", K(throttle));
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   throttle.notify_need_writing_throttling(false);
   throttle.update_throttling_options(&palf_env_impl);
   throttle.throttling(1024, g_need_purging_throttling_func, &palf_env_impl);
@@ -284,7 +287,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
 
   //test need write throttling again
   PALF_LOG(INFO, "case 9: need to throttle after notify_need_throttling(true)", K(throttle));
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   throttle.notify_need_writing_throttling(true);
   throttle.update_throttling_options(&palf_env_impl);
   throttle.throttling(1024, g_need_purging_throttling_func, &palf_env_impl);
@@ -304,7 +307,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   double old_decay_factor = throttle.decay_factor_;
   //
   PALF_LOG(INFO, "case 10: test recalculate decay_factor", K(throttle));
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   palf_env_impl.disk_options_wrapper_.disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = 55;
   palf_env_impl.get_throttling_options(throttle_options);
   throttle.update_throttling_options(&palf_env_impl);
@@ -325,7 +328,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   //test reset appended_log_size_cur_round_
   PALF_LOG(INFO, "case 11: test reset appended_log_size_cur_round_ after unrecyclable_size changes", K(throttle));
   old_decay_factor = throttle.decay_factor_;
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   unrecyclable_size = total_disk_size * 65/100;
   palf_env_impl.disk_options_wrapper_.set_cur_unrecyclable_log_disk_size(unrecyclable_size);
   throttle.update_throttling_options(&palf_env_impl);
@@ -348,7 +351,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
 
 //test stop write throttling when trigger percentage changed
   PALF_LOG(INFO, "case 12: test stop write throttling when trigger percentage changed", K(throttle));
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   palf_env_impl.disk_options_wrapper_.disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = 80;
   palf_env_impl.get_throttling_options(throttle_options);
   throttle.update_throttling_options(&palf_env_impl);
@@ -365,7 +368,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   ASSERT_EQ(0, throttle.appended_log_size_cur_round_);
 
   PALF_LOG(INFO, "case 12: test stop writing throttling when unrecyclable size fallbacks", K(throttle));
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   palf_env_impl.disk_options_wrapper_.disk_opts_for_stopping_writing_.log_disk_throttling_percentage_ = 60;
   throttle.notify_need_writing_throttling(true);
   throttle.update_throttling_options(&palf_env_impl);
@@ -384,7 +387,7 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
   throttle.after_append_log(1024);
   ASSERT_EQ(1024, throttle.appended_log_size_cur_round_);
 
-  usleep(LogWritingThrottle::UPDATE_INTERVAL_US);
+  elapse_update_interval();
   unrecyclable_size = total_disk_size * 45/100;
   palf_env_impl.disk_options_wrapper_.set_cur_unrecyclable_log_disk_size(unrecyclable_size);
   throttle.update_throttling_options(&palf_env_impl);
@@ -395,13 +398,3 @@ TEST_F(TestPalfThrottling, test_log_write_throttle)
 
 } // END of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf ./test_palf_throttling.log*");
-  OB_LOGGER.set_file_name("test_palf_throttling.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_palf_throttling");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

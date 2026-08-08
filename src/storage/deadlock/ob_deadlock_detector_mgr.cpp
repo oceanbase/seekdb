@@ -15,7 +15,7 @@
  */
 
 #include "ob_deadlock_detector_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/deadlock/ob_lcl_scheme/ob_lcl_node.h"
 #include "ob_deadlock_inner_table_service.h"
 
@@ -363,7 +363,7 @@ void ObDeadLockDetectorMgr::InnerAllocHandle::InnerFactory::release(ObIDeadLockD
 // guard should only used on stack, auto-revert pointer when guard destructed
 ObDeadLockDetectorMgr::DetectorRefGuard::~DetectorRefGuard()
 {
-  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
+  ObDeadLockDetectorMgr *p_deadlock_detector_mgr = ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>();
   if (OB_ISNULL(p_deadlock_detector_mgr)) {
     DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
   } else {
@@ -635,7 +635,7 @@ int ObDeadLockDetectorMgr::process_parent_notification_(const UserBinaryKey &par
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_SUCCESS;
     ObMemAttr attr(MEMORY_LABEL);
-    ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
+    ObDeadLockDetectorMgr *p_deadlock_detector_mgr = ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>();
     if (OB_ISNULL(p_deadlock_detector_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));

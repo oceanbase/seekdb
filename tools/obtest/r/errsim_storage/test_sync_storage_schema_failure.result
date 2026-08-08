@@ -1,0 +1,21 @@
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = true;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set schema_drop_gc_delay_time = '10s';
+ob1.mysql alter system set _ob_clog_timeout_to_force_switch_leader = 10;
+ob1.check_until_timeout select count(*) from __all_virtual_clog_stat where role = 'LEADER' and status = 'ACTIVE' and table_id = '$table_id' , 20, 120;
+ob1.z1.obs0.block_net ob1.z2.obs0;
+ob1.z1.obs0.block_net ob1.z3.obs0;
+ob1.z2.obs0.block_net ob1.z1.obs0;
+ob1.z3.obs0.block_net ob1.z1.obs0;
+ERROR 25000: Statement is timeout
+ob1.z1.obs0.clean_net ob1.z2.obs0;
+ob1.z1.obs0.clean_net ob1.z3.obs0;
+ob1.z2.obs0.clean_net ob1.z1.obs0;
+ob1.z3.obs0.clean_net ob1.z1.obs0;
+ob1.z1.obs0.count_log 'schema log finish callback';
+1

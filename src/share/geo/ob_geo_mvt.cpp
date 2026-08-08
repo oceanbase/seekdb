@@ -65,7 +65,8 @@ int mvt_agg_result::generate_feature(ObObj *tmp_obj, uint32_t obj_cnt)
         str.reset();
       } else if (is_lob_storage(meta.get_type())) {
         ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, tmp_obj[geom_idx_].has_lob_header());
-        if (OB_FAIL(str_iter.init(0, NULL, temp_allocator_))) {
+        const ObLobReadOptions read_options(lob_read_service_);
+        if (OB_FAIL(str_iter.init(0, &read_options, temp_allocator_))) {
           LOG_WARN("Lob: init lob str iter failed ", K(ret), K(str_iter));
         } else if (OB_FAIL(str_iter.get_full_data(str))) {
           LOG_WARN("Lob: str iter get full data failed ", K(ret), K(str_iter));
@@ -160,7 +161,8 @@ int mvt_agg_result::transform_json_column(ObObj &json)
   int ret = OB_SUCCESS;
   ObString str;
   ObTextStringIter str_iter(json.get_meta().get_type(), json.get_meta().get_collation_type(), json.get_string(), json.has_lob_header());
-  if (OB_FAIL(str_iter.init(0, NULL, temp_allocator_))) {
+  const ObLobReadOptions read_options(lob_read_service_);
+  if (OB_FAIL(str_iter.init(0, &read_options, temp_allocator_))) {
     LOG_WARN("Lob: init lob str iter failed ", K(ret), K(str_iter));
   } else if (OB_FAIL(str_iter.get_full_data(str))) {
     LOG_WARN("Lob: str iter get full data failed ", K(ret), K(str_iter));

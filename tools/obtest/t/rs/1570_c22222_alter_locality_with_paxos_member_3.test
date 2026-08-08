@@ -1,0 +1,248 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 主要验证以下两种场景：
+#             1.验证locality变更的一些限制
+#             2.验证容灾场景的locality变更
+ob1=OBI(cluster=2:2:2:2:2, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz:hz);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+
+# case 1: 主要是验证以下限制
+# 一次locality变更需要满足以下限制：
+# 1）仅看前后locality的paxos分布，一次locality变更以下三种操作不能同时进行：
+#    - 只增加paxos成员：需满足 orig locality's paxos num >= majority(new locality's paxos num), 特殊地，允许paxos num 由1->2 (反之则不允许)
+#    - 只减少paxos成员：需满足 new locality's paxos num >= majority(orig locality's paxos num)
+#    - paxos成员间类型转换：F->L or L->F (目前不支持)，一次locality变更仅能做一次paxos成员间类型转换
+# 2）看前后locality，若存在L转其他副本类型的可能，且仅能由F->L (功能上暂不支持，后续要做)
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3','z4','z5');
+
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4', locality='F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+connection conn_sys;
+
+# case 1.1: 三种操作互斥
+# 目前locality = {F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4}
+
+# 减F，且F->L(视作类型转换)，类型转换，加paxos，减paxos这三种操作不能同时进行
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3";
+
+# 加F，且F->L(视作类型转换)，类型转换，加paxos，减paxos这三种操作不能同时进行
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3, F{1}@z4, F{1}@z5";
+
+# 加F，减F，类型转换，加paxos，减paxos这三种操作不能同时进行
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z4, F{1}@z5";
+
+# case 1.2: 主要验证paxos->non_paxos算作减paxos操作
+# 减F，且F->R(视作减paxos)，新locality的paxos成员数 <= 原locality的paxos成员数的majority，不允许
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3";
+
+# case 1.3: 一次类型转换只能转一个副本
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3, L{1}@z4";
+
+# case 1.4:验证一些合法的操作
+# 变更locality
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 5;
+# 目前locality = {F{1}@z1, F{1}@z2, R{1}@z3}
+
+# 加F, 且R->F(视作加paxos), 原locality的paxos成员数 <= 新locality的paxos成员数的majority，不允许
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+
+# 变更locality
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+# 目前locality = {F{1}@z1, F{1}@z2, R{1}@z3, F{1}@z4}
+
+# 加F, 且R->F
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+# 目前locality = {F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5}
+
+# 减F，且F->R
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+# 目前locality = {F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z4}
+
+# case 1.5: 验证类型转换的限制
+# 对于L副本，仅支持F->L的操作
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, L{1}@z4";
+
+# F->L
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,L{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+# 目前locality = {F{1}@z1, F{1}@z2, L{1}@z3}
+
+# 不允许L转其他副本
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3";
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,R{1}@z3";
+
+drop tenant tenant_1 force;
+
+# case 2: 验证locality回滚的场景
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1', locality='F{1}@z1' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+connection conn_sys;
+
+# case 2.1: 回滚不支持2->1
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+sleep 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z2";
+
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 5;
+
+# 变更locality
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+
+# case 2.2: 支持3->5的回滚操作
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+sleep 5;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+
+# 回滚操作需和previous_locality完全相等
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z3";
+# 回滚
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+
+# case 2.3: 支持5->3的回滚操作
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+sleep 5;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+# 回滚
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+
+# case 2.4: 不支持F->L的回滚操作
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+sleep 5;
+
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, L{1}@z5";
+# 回滚
+--error 4179
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+
+drop tenant tenant_1 force;
+
+# case 3: 容灾 + 减副本场景
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+ob1.mysql alter system set replica_safe_remove_time = '1m';
+sleep 5;
+
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4;z5', locality='F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+create table t1(c1 int primary key, c2 int);
+let $user_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant1_id" and table_name = "t1", table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+
+# z2永久下线
+let $stop_addr = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) as addr from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z2", addr, 1);
+let $stop_obs = deploy_get_value(ob1.get_obs_by_addr $stop_addr);
+$stop_obs.force_stop;
+
+# 检查此时z2缺副本, 需要补副本
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_replica_task where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and dst_replica_type = 0 and cmd_type = "ADD_REPLICA", 1, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0, 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z2", 0, 5;
+
+# 同时做减副本的locality变更
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3";
+
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+# 开启负载均衡
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0, 3, 180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 180;
+# 验证有补副本任务生成
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z2", 1, 5;

@@ -17,13 +17,13 @@
 
 #define USING_LOG_PREFIX SQL
 
-#include "observer/ob_inner_sql_connection.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
 #include "ob_sql_plan.h"
 using namespace oceanbase::common;
 using namespace oceanbase::json;
-using namespace oceanbase::observer;
 
 #define NEW_PLAN_STR(plan_strs)                                                   \
 do {                                                                              \
@@ -316,7 +316,7 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
   obutil::ObSysTime current_time = obutil::ObSysTime::now();
   std::string time_str = current_time.toDateTime();
   sql::ObSQLSessionInfo *session = NULL;
-  ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   ObSQLSessionInfo::StmtSavedValue *saved_session = NULL;
   transaction::ObTxDesc *save_tx_desc = NULL;
@@ -330,11 +330,11 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null sql proxy", K(ret));
   } else if (OB_FAIL(
-                 ObInnerSQLConnection::create_spi_connection_with_external_session(
-                     session, conn_guard))) {
+                 query::ObInnerSQLConnectionAccess::
+                     create_spi_connection_with_external_session(
+                         session, conn_guard))) {
     LOG_WARN("failed to get sql connection", K(ret));
-  } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(
-                           conn_guard.get_ptr()))) {
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null sql connection", K(ret));
   } else if (OB_FAIL(prepare_and_store_session(session,
@@ -472,7 +472,6 @@ int ObSqlPlan::inner_store_sql_plan_for_explain(ObExecContext *ctx,
       LOG_WARN("failed to exec inner sql", K(ret));
     }
   }
-  conn_guard.reset();
   if (OB_NOT_NULL(session) && need_restore_session) {
     int end_ret = restore_session(session,
                                   saved_session,
@@ -2508,11 +2507,11 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
     session_value = 0;
     // release curr
     if (OB_NOT_NULL(new_tx_desc)) {
-      auto txs = share::g_mp->trans_service();
+      auto txs = data_plane::query_transaction_service();
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("can not acquire server TransService", KR(ret));
-        new_tx_desc->dump_and_print_trace();
+        data_plane::dump_tx_desc_trace(new_tx_desc);
       } else if (OB_FAIL(txs->release_tx(*new_tx_desc))) {
         LOG_WARN("failed to release tx desc", K(ret));
       }

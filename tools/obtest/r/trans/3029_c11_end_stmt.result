@@ -1,0 +1,71 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+use test;
+create table test01(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+create table test02(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+insert into test01 values(1,1);
+insert into test01 values(2,2);
+insert into test01 values(3,3);
+insert into test01 values(4,4);
+insert into test02 values(1,1);
+insert into test02 values(2,2);
+insert into test02 values(3,3);
+insert into test02 values(4,4);
+ob1.z1.obs0.switch_partition obtest:test:test01:0;
+ob1.z2.obs0.switch_partition obtest:test:test01:1;
+ob1.z1.obs0.switch_partition obtest:test:test02:0;
+ob1.z2.obs0.switch_partition obtest:test:test02:1;
+ob1.mysql alter system set syslog_level="DEBUG";
+insert into test01 values(2,2);
+ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
+insert into test01 values(1,2);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test02 where pk=1;
+pk	c1
+1	1
+insert into test01 values(1,1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+insert into test02 values(2,2);
+ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test02 where pk=1;
+pk	c1
+1	1
+select * from test01 where pk=1;
+pk	c1
+1	1
+insert into test01 values(1,1), (2,2), (3,3),(4,4);
+ERROR 23000: Duplicated primary key
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+ob1.z1.obs0.switch_partition obtest:test:test01:1;
+ob1.z2.obs0.switch_partition obtest:test:test01:0;
+ob1.z1.obs0.switch_partition obtest:test:test02:1;
+ob1.z2.obs0.switch_partition obtest:test:test02:0;
+begin;
+select * from test01 where pk=1;
+pk	c1
+1	1
+select * from test02 where pk=1;
+pk	c1
+1	1
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test01 where pk=1 union select * from test02 where pk=1;
+pk	c1
+1	1
+ob1.z1.obs0.switch_partition obtest:test:test01:0;
+ob1.z2.obs0.switch_partition obtest:test:test01:1;
+select * from test01 where pk=1 union select * from test02 where pk=1;
+pk	c1
+1	1
+commit;
+ob1.mysql alter system set syslog_level="INFO";
+drop table test01;
+drop table test02;

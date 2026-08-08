@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_hybrid_vector_refresh_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "storage/ls/ob_ls.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/tx/ob_trans_service.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
@@ -162,7 +163,7 @@ int ObHybridVectorRefreshTask::do_work()
   int ret = OB_SUCCESS;
   int exec_finish = false;
   ObPluginVectorIndexAdapterGuard adpt_guard;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(task_ctx) || OB_ISNULL(vec_idx_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -432,7 +433,7 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
 
@@ -474,7 +475,7 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   int ret = OB_SUCCESS;
   bool use_request_model_name = false;
   ObAIFuncExprInfo *ai_func_info = nullptr;
-  omt::ObAiService *ai_service = share::g_mp->ai_service();
+  omt::ObAiService *ai_service = ::oceanbase::share::server_service<::oceanbase::omt::ObAiService>();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -645,7 +646,7 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
           ObString url;
           const ObAiModelEndpointInfo *endpoint = task_ctx->endpoint_; // endpoint should not be null after init.
           task_ctx->embedding_task_ = new(task_buf)ObEmbeddingTask(task_ctx->allocator_);
-          ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+          ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
           if (OB_ISNULL(service)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null ptr", K(ret), KPC(service));
@@ -711,7 +712,7 @@ int ObHybridVectorRefreshTask::do_refresh_only(
     ObDMLBaseParam dml_param;
     share::schema::ObTableDMLParam table_dml_param(allocator_);
     share::schema::ObTableDMLParam index_id_dml_param(allocator_);
-    ObAccessService *oas = share::g_mp->access_service();
+    ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     ObSEArray<uint64_t, 4> delta_delete_column_id;
 
     if (OB_FAIL(ret)) {
@@ -819,7 +820,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
 {
   int ret = OB_SUCCESS;
   int64_t loop_cnt = 0;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
   if (OB_ISNULL(task_ctx) || OB_ISNULL(tx_desc)) {
     ret = OB_ERR_UNEXPECTED;
@@ -827,7 +828,7 @@ int ObHybridVectorRefreshTask::delete_embedded_table(ObPluginVectorIndexAdaptor 
   } else if (task_ctx->delete_vids_.empty()) {
   } else {
     storage::ObValueRowIterator delete_iter;
-    ObAccessService *oas = share::g_mp->access_service();
+    ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     ObSEArray<uint64_t, 4> dml_column_ids;
     HEAP_VARS_2((storage::ObTableScanParam, table_scan_param), (schema::ObTableParam, table_param, allocator_)) {
       common::ObNewRowIterator *scan_iter = nullptr;
@@ -920,9 +921,9 @@ int ObHybridVectorRefreshTask::after_embedding(ObPluginVectorIndexAdaptor &adapt
   transaction::ObTxDesc *tx_desc = nullptr;
   oceanbase::transaction::ObTxReadSnapshot snapshot;
   storage::ObStoreCtxGuard store_ctx_guard;
-  ObAccessService *oas = share::g_mp->access_service();
-  ObAccessService *tsc_service = share::g_mp->access_service();
-  oceanbase::transaction::ObTransService *txs = share::g_mp->trans_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+  oceanbase::transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1155,7 +1156,7 @@ void ObHybridVectorRefreshTaskCtx::set_task_finish()
   task_status_.all_finished_ = true;
   status_ = ObHybridVectorRefreshTaskStatus::TASK_FINISH;
   delta_delete_iter_.reset();
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_NOT_NULL(oas) && OB_NOT_NULL(scan_iter_)) {
     ret = oas->revert_scan_iter(scan_iter_);
     if (ret != OB_SUCCESS) {

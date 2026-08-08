@@ -20,7 +20,9 @@ if(BUILD_EMBED_MODE)
   message(STATUS "BUILD_EMBED_MODE is deprecated and has no effect")
 endif()
 ob_define(OB_USE_CLANG ON)
+ob_define(OB_USE_LLD ON)
 ob_define(OB_ERRSIM OFF)
+ob_define(OB_SO_CACHE OFF)
 ob_define(BUILD_NUMBER 1)
 ob_define(OB_CMAKE_RULES_CHECK ON)
 ob_define(OB_BUILD_CCLS OFF)
@@ -136,7 +138,7 @@ set(ob_close_deps_static_name "")
 if (OB_BUILD_SYS_VEC_IDX)
  add_definitions(-DOB_BUILD_SYS_VEC_IDX)
 endif()
- 
+
 # Find objcopy - on macOS it may be installed via Homebrew or available as llvm-objcopy
 set(OB_CLANG_BIN "clang-17")
 set(OB_CLANGXX_BIN "clang++-17")
@@ -155,17 +157,25 @@ if(OB_ANDROID)
   # and Env.cmake runs before project() which would set ANDROID.
   set(OB_CLANG_BIN "clang")
   set(OB_CLANGXX_BIN "clang++")
-  # NDK toolchain bin dir (derive from ANDROID_NDK_HOME or CMAKE_TOOLCHAIN_FILE)
+  # NDK toolchain bin dir (derive from ANDROID_NDK_HOME or
+  # CMAKE_TOOLCHAIN_FILE).  Discover the NDK host tag instead of assuming the
+  # cross-compile is launched from macOS; Linux hosts use linux-x86_64.
   if(DEFINED ENV{ANDROID_NDK_HOME})
-    set(_NDK_TOOLCHAIN_BIN "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/darwin-x86_64/bin")
+    file(GLOB _NDK_TOOLCHAIN_BIN
+      "$ENV{ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/*/bin")
   else()
     # Derive from toolchain file path: .../build/cmake/android.toolchain.cmake -> .../toolchains/llvm/prebuilt/*/bin
     get_filename_component(_NDK_ROOT "${CMAKE_TOOLCHAIN_FILE}" DIRECTORY)
     get_filename_component(_NDK_ROOT "${_NDK_ROOT}" DIRECTORY)
     get_filename_component(_NDK_ROOT "${_NDK_ROOT}" DIRECTORY)
     file(GLOB _NDK_TOOLCHAIN_BIN "${_NDK_ROOT}/toolchains/llvm/prebuilt/*/bin")
-    list(GET _NDK_TOOLCHAIN_BIN 0 _NDK_TOOLCHAIN_BIN)
   endif()
+  list(LENGTH _NDK_TOOLCHAIN_BIN _NDK_TOOLCHAIN_BIN_COUNT)
+  if(NOT _NDK_TOOLCHAIN_BIN_COUNT EQUAL 1)
+    message(FATAL_ERROR
+      "Expected exactly one Android NDK host toolchain, found: ${_NDK_TOOLCHAIN_BIN}")
+  endif()
+  list(GET _NDK_TOOLCHAIN_BIN 0 _NDK_TOOLCHAIN_BIN)
   set(OB_CC "${_NDK_TOOLCHAIN_BIN}/clang")
   set(OB_CXX "${_NDK_TOOLCHAIN_BIN}/clang++")
   set(OB_LD_BIN "${_NDK_TOOLCHAIN_BIN}/ld.lld")

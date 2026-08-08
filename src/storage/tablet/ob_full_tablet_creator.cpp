@@ -15,7 +15,7 @@
  */
 
 #include "ob_full_tablet_creator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet.h"
 
 #define USING_LOG_PREFIX STORAGE
@@ -150,7 +150,7 @@ int ObFullTabletCreator::create_tablet(ObTabletHandle &tablet_handle)
     ATOMIC_INC(&created_tablets_cnt_);
   }
   if (OB_SUCC(ret)) {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     tablet_handle.set_obj(tablet, allocator, t3m);
     tablet_handle.set_wash_priority(WashTabletPriority::WTP_LOW);
   } else {

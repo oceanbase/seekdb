@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set __hash_area_size = '4MB';
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1");
+ob1.mysql create tenant t1 replica_num 1, resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+set global ob_sql_work_area_percentage = 2;
+create table t1 (c1 int, c2 varchar(20));
+insert into  t1 values (1, 'aaaaaaaaaaaaaa1');
+insert into  t1 values (2, 'aaaaaaaaaaaaaa2');
+insert into  t1 values (3, 'aaaaaaaaaaaaaa3');
+insert into  t1 values (4, 'aaaaaaaaaaaaaa4');
+insert into  t1 values (5, 'aaaaaaaaaaaaaa5');
+insert into  t1 values (6, 'aaaaaaaaaaaaaa6');
+insert into  t1 values (7, 'aaaaaaaaaaaaaa7');
+insert into  t1 values (8, 'aaaaaaaaaaaaaa8');
+insert into  t1 values (9, 'aaaaaaaaaaaaaa9');
+insert into  t1 values (0, 'aaaaaaaaaaaaaa0');
+set ob_query_timeout = 100000000;
+set ob_trx_timeout = 100000000;
+select count(*), sum(cnt) from (select a.c2 s1, b.c2 s2, c.c2 s3, d.c2 s4, e.c2 s5,g.c2 s6, count(*) cnt from t1 a, t1 b, t1 c, t1 d, t1 e, t1 g group by 1, 2, 3) x;
+count(*)	sum(cnt)
+1000	1000000
+select count(*), sum(cnt) from (select a.c2 s1, b.c2 s2, c.c2 s3, d.c2 s4, e.c2 s5,g.c2 s6, count(*) cnt from t1 a, t1 b, t1 c, t1 d, t1 e, t1 g group by 1, 2, 3, 4, 5, 6) x;
+count(*)	sum(cnt)
+1000000	1000000
+select count(*), sum(cnt) from (select a.c2 s1, b.c2 s2, c.c2 s3, d.c2 s4, e.c2 s5,g.c2 s6, count(*) cnt from t1 a, t1 b, t1 c, t1 d, t1 e, (select * from t1 union all select * from t1) g group by 1, 2, 3, 4, 5, 6) x;
+count(*)	sum(cnt)
+1000000	2000000
+ob1.mysql alter system set __hash_area_size = '100MB';
+select count(*), sum(cnt) from (select a.c2 s1, b.c2 s2, c.c2 s3, d.c2 s4, e.c2 s5,g.c2 s6, count(*) cnt from t1 a, t1 b, t1 c, t1 d, t1 e, t1 g group by 1, 2, 3) x;
+count(*)	sum(cnt)
+1000	1000000
+select count(*), sum(cnt) from (select a.c2 s1, b.c2 s2, c.c2 s3, d.c2 s4, e.c2 s5,g.c2 s6, count(*) cnt from t1 a, t1 b, t1 c, t1 d, t1 e, t1 g group by 1, 2, 3, 4, 5, 6) x;
+count(*)	sum(cnt)
+1000000	1000000

@@ -21,19 +21,26 @@
 
 #include "common/ob_tablet_id.h"
 #include "lib/task/ob_timer.h"
-#include "sql/ob_sql_trans_control.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "storage/tablelock/ob_table_lock_local_executor.h"
 
 namespace oceanbase
 {
+namespace common
+{
+class ObMySQLProxy;
+}
 namespace share
 {
 namespace schema
 {
 class ObMultiVersionSchemaService;
 }
+}
+namespace query
+{
+class ObIDeadlockSessionService;
 }
 
 namespace transaction
@@ -117,7 +124,10 @@ private:
     int64_t origin_timeout_us_;  // the origin timeout us specified by user.
     int64_t timeout_us_;         // the timeout us for every retry times.
     int64_t abs_timeout_ts_;     // the abstract timeout us.
-    sql::TransState trans_state_;
+    // This anonymous transaction belongs to the table-lock implementation.
+    // Keep only the state that implementation needs instead of depending on
+    // SQL's statement/transaction orchestration state machine.
+    bool tx_started_;
     transaction::ObTxDesc *tx_desc_;
     ObTxParam tx_param_;                      // the tx param for current tx
     transaction::ObTxSEQ current_savepoint_;  // used to rollback current sub tx.
@@ -189,6 +199,7 @@ public:
     ObOBJLockGarbageCollector();
     ~ObOBJLockGarbageCollector();
   public:
+    int init(common::ObMySQLProxy &sql_proxy);
     int start();
     void stop();
     void wait();
@@ -218,19 +229,28 @@ public:
     common::ObTimer timer_;
     TimerTask timer_task_;
     int64_t last_success_timestamp_;
+    common::ObMySQLProxy *sql_proxy_;
   };
 
   ObTableLockService()
     : sql_proxy_(nullptr),
+      session_service_(nullptr),
       obj_lock_garbage_collector_(),
       is_inited_(false) {}
   ~ObTableLockService() {}
-  int init();
-  static int server_module_init(ObTableLockService* &lock_service);
+  int init(query::ObIDeadlockSessionService &session_service);
+  static int server_module_init(
+      ObTableLockService* &lock_service,
+      query::ObIDeadlockSessionService &session_service);
   int start();
   void stop();
   void wait();
   void destroy();
+  query::ObIDeadlockSessionService &get_deadlock_session_service()
+  {
+    OB_ASSERT(nullptr != session_service_);
+    return *session_service_;
+  }
 
   // Generate an owner ID unique within the database runtime.
   // this owner id can be used to link OUT_TRANS_LOCK and OUT_TRANS_UNLOCK operation.
@@ -392,7 +412,7 @@ private:
                              const ObLockIDArray &lock_ids,
                              ObRetryCtx &retry_ctx);
   template<>
-  int pack_and_execute_task_(observer::ObLocalBatchLockExecutor<transaction::tablelock::ObLockTaskBatchRequest<transaction::tablelock::ObReplaceLockParam>> &executor,
+  int pack_and_execute_task_(ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> &executor,
                              ObTableLockCtx &ctx,
                              const ObLockIDArray &lock_ids,
                              ObRetryCtx &retry_ctx);
@@ -440,6 +460,7 @@ private:
   static const int64_t DEFAULT_TIMEOUT_US = 1500L * 1000L * 1000L; // 1500s
 
   common::ObMySQLProxy *sql_proxy_;
+  query::ObIDeadlockSessionService *session_service_;
   ObOBJLockGarbageCollector obj_lock_garbage_collector_;
   bool is_inited_;
 };

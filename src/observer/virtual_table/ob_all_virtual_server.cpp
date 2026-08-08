@@ -15,10 +15,10 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_server.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "observer/ob_service.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_server_role.h"
 #include "share/ob_server_info.h"
@@ -70,10 +70,10 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
   } else if (OB_ISNULL(cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", KR(ret));
-  } else if (OB_ISNULL(GCTX.ob_service_) || OB_ISNULL(config_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()) || OB_ISNULL(config_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(GCTX.ob_service_), KP(config_));
-  } else if (OB_FAIL(GCTX.ob_service_->get_server_resource_info(resource_info))) {
+    SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()), KP(config_));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()->get_server_resource_info(resource_info))) {
     SERVER_LOG(ERROR, "fail to get_server_resource_info", KR(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs,
       data_disk_abnormal_time))) {
@@ -86,7 +86,8 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     const int64_t ssl_cert_expired_time = GCTX.ssl_key_expired_time_;
 
     share::ObServerInfo server_info;
-    const int load_info_ret = share::ObServerInfoProxy::load_server_info(server_info);
+    const int load_info_ret = share::ObServerInfoProxy::load_server_info(
+        GCTX.config_mgr_, GCTX.server_role_, server_info);
 
     role_buf_[0] = '\0';
     switchover_status_buf_[0] = '\0';
@@ -116,7 +117,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     uint64_t sync_scn_val = 0;
     uint64_t readable_scn_val = 0;
     storage::ObLS *ls = nullptr;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))){
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))){
       SERVER_LOG(WARN, "get ls failed", K(ret));
     } else {
       share::SCN sync_scn;

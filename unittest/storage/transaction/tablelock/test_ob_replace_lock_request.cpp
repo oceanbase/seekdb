@@ -298,15 +298,3 @@ TEST(ObReplaceLockRequest, test_replace_all_locks)
 }
 }  // namespace unittest
 }  // namespace oceanbase
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_replace_lock_request.log");
-
-  oceanbase::ObLogger &logger = oceanbase::ObLogger::get_logger();
-  logger.set_file_name("test_ob_replace_lock_request.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-  ;
-}

@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_checkpoint_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_global_stat_proxy.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -142,7 +142,7 @@ void ObCheckPointService::ObCheckpointTask::runTimerTask()
   DEBUG_SYNC(BEFORE_CHECKPOINT_TASK);
   ObLS *tenant_ls = nullptr;
   palf::LSN checkpoint_lsn;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     STORAGE_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(tenant_ls->get_data_checkpoint()->check_can_move_to_active_in_newcreate())) {
     STORAGE_LOG(WARN, "check can move to active failed", K(ret));
@@ -176,7 +176,7 @@ int ObCheckPointService::flush_to_recycle_clog_()
 
   ObLS *tenant_ls = nullptr;
   bool flushed = false;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     STORAGE_LOG(WARN, "get log stream failed", K(ret));
   } else if (tenant_ls->get_data_checkpoint()->is_flushing()) {
     STORAGE_LOG(TRACE, "data_checkpoint is flushing");
@@ -198,7 +198,7 @@ void ObCheckPointService::ObTraversalFlushTask::runTimerTask()
   int ret = OB_SUCCESS;
   ObCurTraceId::init(GCONF.self_addr_);
   ObLS *tenant_ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     STORAGE_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(tenant_ls->get_checkpoint_executor()->traversal_flush())) {
     STORAGE_LOG(WARN, "traversal_flush failed", K(ret));
@@ -213,7 +213,7 @@ void ObCheckPointService::ObCheckClogDiskUsageTask::runTimerTask()
   STORAGE_LOG(INFO, "====== check clog disk timer task ======");
   int ret = OB_SUCCESS;
   bool need_flush = false;
-  logservice::ObLogService *log_service = share::g_mp->log_service();
+  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "unexpected error, ObLogService is nullptr", KP(log_service));
@@ -238,17 +238,17 @@ void ObCheckPointService::ObAdvanceCkptTask::runTimerTask()
   if (0 != advance_checkpoint_interval) {
     STORAGE_LOG(INFO, "====== Advance Checkpoint Task ======");
     const int64_t current_ts = ObClockGenerator::getClock();
-    const int64_t prev_advance_ckpt_task_ts = share::g_mp->check_point_service()->prev_advance_ckpt_task_ts();
+    const int64_t prev_advance_ckpt_task_ts = ::oceanbase::share::server_service<::oceanbase::storage::checkpoint::ObCheckPointService>()->prev_advance_ckpt_task_ts();
     if (current_ts - prev_advance_ckpt_task_ts > advance_checkpoint_interval) {
       ObLS *tenant_ls = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
         STORAGE_LOG(WARN, "get log stream failed", KR(ret));
       } else if (OB_FAIL(tenant_ls->advance_checkpoint_by_flush(
           SCN::max_scn(), INT64_MAX /*timeout*/, false /*is_global_freeze*/, ObFreezeSourceFlag::CLOG_CHECKPOINT))) {
         STORAGE_LOG(WARN, "flush ls to recycle clog failed", KR(ret));
       }
       if (OB_SUCC(ret)) {
-        share::g_mp->check_point_service()->set_prev_advance_ckpt_task_ts(current_ts);
+        ::oceanbase::share::server_service<::oceanbase::storage::checkpoint::ObCheckPointService>()->set_prev_advance_ckpt_task_ts(current_ts);
       }
     } else {
       STORAGE_LOG(INFO,

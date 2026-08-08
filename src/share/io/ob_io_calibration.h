@@ -17,14 +17,13 @@
 #ifndef OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 #define OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 
-#include "lib/allocator/ob_concurrent_fifo_allocator.h"
-#include "storage/blocksstable/ob_macro_block_handle.h"  // by-value member real user(already conf L2)
 #include "lib/thread/threads.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/lock/ob_drw_lock.h"
 #include "share/io/ob_io_define.h"
+#include "share/io/ob_i_io_bench_controller.h"
 
 namespace oceanbase
 {
@@ -83,46 +82,6 @@ private:
   
 };
 
-class ObIOBenchRunner : public lib::Threads
-{
-public:
-  ObIOBenchRunner();
-  ~ObIOBenchRunner();
-  int init(const int64_t block_count);
-  int do_benchmark(const ObIOBenchLoad &load, const int64_t thread_count, ObIOBenchResult &result);
-  void destroy();
-  virtual void run1() override;
-
-private:
-  bool is_inited_;
-  bool thread_inited_;
-  ObArray<blocksstable::ObMacroBlockHandle> block_handles_;
-  ObIOBenchLoad load_;
-  int64_t io_count_;
-  int64_t rt_us_;
-  char *write_buf_;
-  char *read_buf_;
-  int64_t block_count_;
-};
-
-class ObIOBenchController : public lib::Threads
-{
-public:
-  ObIOBenchController();
-  virtual ~ObIOBenchController();
-  int start_io_bench();
-  void run1();
-  int64_t get_start_timestamp();
-  int64_t get_finish_timestamp();
-  int get_ret_code();
-private:
-  bool thread_inited_;
-  lib::ObMutex running_mutex_;
-  int64_t start_ts_;
-  int64_t finish_ts_;
-  int ret_code_;
-};
-
 /**
  * load benchmark result file from the config directory
  */
@@ -131,7 +90,7 @@ class ObIOCalibration final
 public:
   static ObIOCalibration &get_instance();
   static int parse_calibration_string(const ObString &calibration_string, ObIOBenchResult &item);
-  int init();
+  int init(ObIIOBenchController &benchmark_controller);
   void destroy();
   int update_io_ability(const ObIOAbility &io_ability);
   int reset_io_ability();
@@ -152,7 +111,7 @@ private:
   double baseline_iops_;
   ObIOAbility io_ability_;
   DRWLock lock_;
-  ObIOBenchController benchmark_controller_;
+  ObIIOBenchController *benchmark_controller_;
 };
 
 }// end namespace oceanbase

@@ -1,0 +1,83 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：多partition，Scheduler同partitionA（事务参与者）之间网络阻塞（事务回滚）
+# 测试场景：开启事务，执行SQL, 阻塞网络，commit/rollback
+# 分析：由于当前SQL会对connect error进行重试，这个重试同时会导致事务内一条stmt的超时，这个时候整个事务就被回滚了，后面再发commit实际也不会进入两阶段了，单条stmt超时就让整个事务回滚这样合理么？
+##
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=11,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $scheduler_ip=deploy_get_value(ob1.z1.obs1.ip);
+let $scheduler_port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$scheduler_ip,admin@obtest,admin,oceanbase,$scheduler_port);
+
+connection conn1;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 2) partitions 2;
+
+sleep 10;
+
+ob1.z2.obs1.switch_partition obtest:obtest:t1:1;
+ob1.z3.obs1.switch_partition obtest:obtest:t1:0;
+sleep 5;
+
+let $scheduler=ob1.z1.obs1;
+let $participant=deploy_get_value(ob1.get_leader obtest:obtest:t1:0);
+let $coordinator=deploy_get_value(ob1.get_leader obtest:obtest:t1:1);
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##
+$scheduler.block_net $participant;
+
+update t1 set c2='aa' where pk=1;
+
+--error 4012,6002
+update t1 set c2='aa' where pk=2;
+
+--error 6002
+commit;
+
+rollback;
+
+$scheduler.clean_net $participant;
+commit;
+set autocommit=1;
+
+sleep 2;
+select /*+ read_consistency(weak)*/* from t1;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(3,3,'c');
+insert into t1 values(4,4,'d');
+
+
+##
+$scheduler.block_net $participant;
+
+update t1 set c2='aaa' where pk=1;
+
+--error 4012,6002
+update t1 set c2='aaa' where pk=2;
+
+rollback;
+
+commit;
+
+$scheduler.clean_net $participant;
+commit;
+set autocommit=1;
+sleep 2;
+select /*+ read_consistency(weak)*/* from t1;
+

@@ -1,0 +1,10 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+ob1.create_client;
+set ob_global_debug_sync = 'AFTER_INSERT_FLAG_REPLICA wait_for execute';
+create table t1 (k varchar(20), v int) partition by key (k) partitions 1000;
+ERROR HY000: Timeout
+set ob_global_debug_sync = 'now signal execute';
+create table t2 (k varchar(20), v int) partition by key (k) partitions 10;
+ob1.mysql alter system major freeze;

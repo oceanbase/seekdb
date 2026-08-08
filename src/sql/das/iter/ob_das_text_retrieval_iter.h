@@ -19,7 +19,7 @@
 
 #include "ob_das_iter.h"
 #include "lib/container/ob_se_array.h"
-#include "src/storage/access/ob_dml_param.h"
+#include "data_plane/access/ob_table_scan_param.h"
 
 namespace oceanbase
 {

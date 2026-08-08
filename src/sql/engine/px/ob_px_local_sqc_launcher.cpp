@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_local_sqc_launcher.h"
+#include "lib/signal/ob_signal_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/utility/serialization.h"
 #include "ob_px_sqc_handler.h"
@@ -26,14 +27,15 @@
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 
-int ObLocalSqcLauncher::init()
+int ObLocalSqcLauncher::init(
+    const ObExecContext::RuntimeServices &runtime_services)
 {
   int ret = OB_SUCCESS;
   ObPxSqcHandler *sqc_handler = nullptr;
   if (OB_ISNULL(sqc_handler = ObPxSqcHandler::get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected sqc handler", K(ret));
-  } else if (OB_FAIL(sqc_handler->init())) {
+  } else if (OB_FAIL(sqc_handler->init(runtime_services))) {
     LOG_WARN("Failed to init sqc handler", K(ret));
     sqc_handler->reset();
     op_reclaim_free(sqc_handler);
@@ -331,14 +333,15 @@ int ObLocalSqcFailureReporter::mock_sqc_finish_msg()
   return ret;
 }
 // ObLocalFastSqcLauncher related functions.
-int ObLocalFastSqcLauncher::init()
+int ObLocalFastSqcLauncher::init(
+    const ObExecContext::RuntimeServices &runtime_services)
 {
   int ret = OB_SUCCESS;
   ObPxSqcHandler *sqc_handler = nullptr;
  if (OB_ISNULL(sqc_handler = ObPxSqcHandler::get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected sqc handler", K(ret));
-  } else if (OB_FAIL(sqc_handler->init())) {
+  } else if (OB_FAIL(sqc_handler->init(runtime_services))) {
     LOG_WARN("Failed to init sqc handler", K(ret));
     sqc_handler->reset();
     op_reclaim_free(sqc_handler);
@@ -473,13 +476,16 @@ int ObLocalFastSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
 namespace oceanbase {
 namespace sql {
 
-int launch_sqc_async_local(const char *buf, const int64_t len,
-                              ObPxInitSqcResponse &resp)
+int launch_sqc_async_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services,
+    ObPxInitSqcResponse &resp)
 {
   int ret = OB_SUCCESS;
   ObLocalSqcLauncher p(GCTX);
   int64_t pos = 0;
-  if (OB_FAIL(p.init())) {
+  if (OB_FAIL(p.init(runtime_services))) {
     // init failed: handler not set, nothing to release here (init self-cleans).
     LOG_WARN("fail to init in-proc sqc processor", K(ret));
   } else {
@@ -507,12 +513,15 @@ int launch_sqc_async_local(const char *buf, const int64_t len,
   return ret;
 }
 
-int launch_sqc_fast_local(const char *buf, const int64_t len)
+int launch_sqc_fast_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services)
 {
   int ret = OB_SUCCESS;
   ObLocalFastSqcLauncher p(GCTX);
   int64_t pos = 0;
-  if (OB_FAIL(p.init())) {
+  if (OB_FAIL(p.init(runtime_services))) {
     LOG_WARN("fail to init in-proc fast sqc processor", K(ret));
   } else {
     if (OB_FAIL(p.decode_arg(buf, len, pos))) {

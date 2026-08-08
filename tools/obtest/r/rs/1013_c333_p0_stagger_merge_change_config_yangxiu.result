@@ -1,0 +1,11 @@
+ob1=OBI(cluster=3:3:3,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time='0s';
+ob1.z1.obs0.switch_partition sys:oceanbase:__all_core_table;
+ob1.create_client;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;

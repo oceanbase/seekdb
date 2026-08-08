@@ -1,0 +1,117 @@
+#rs
+#msy
+#测试备库的stop/delete zone server
+#起主库，起备库
+#验证备库delete server 然后成功后add回去
+#验证备库stop server 然后start
+#验证备库stop zone，然后start
+#验证备库delete zone，然后add回去
+ob1=OBI(cluster=1, proxy_num = 1);
+ob2=OBI(cluster=2:2:2, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+let $ob0_addr = deploy_get_value(ob2.z3.obs0.get_addr);
+let $id = deploy_get_value(ob2.select select id from oceanbase.__all_server where concat(svr_ip, ":", svr_port) = '$ob0_addr', id, 1);
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system reload server;
+ob1.mysql set @@global.ob_query_timeout=30000000;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 100;
+#需要同步一个proxy租户
+ob2.mysql alter system set enable_rereplication = true;
+ob2.mysql alter system set enable_rebalance = true;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+
+ob2.mysql alter tenant sys set locality = 'f@z1, f@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY', job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 300;
+
+ob2.mysql alter resource pool sys_pool zone_list = ('z1', 'z2');
+ob2.mysql alter tenant obproxy set locality = 'f@z1, f@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id > $job_id , job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 300;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'obproxy', tenant_id, 1);
+ob2.mysql alter resource pool __resource_pool_$tenant_id zone_list = ('z1', 'z2');
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system reload server;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+sleep 3;
+ob1.z1.obs0.check_until_timeout select count(*) from oceanbase.__all_server where zone='z1' and start_service_time > 0, 1, 60;
+ob_connect(conn3, ob1.z1.obs0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+connection conn3;
+create table t1(c1 int primary key);
+insert into t1 values(1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = 1001 and zone = 'z1', $partition_cnt, 120;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = 1001, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001 and zone = 'z1', $partition_cnt, 120;
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+
+# 确定备库同步到这个tenant, 并且unit num 等于1
+let $src = deploy_get_value(ob2.z3.obs1.get_addr);
+let $dest = deploy_get_value(ob2.z3.obs0.get_addr);
+#case 1 delete server and add server
+ob2.mysql alter system delete server '$dest';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'DELETE_SERVER' , job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 300;
+ob2.mysql alter system add server '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE' and start_service_time > 0, 6, 100; 
+
+#case 2 stop server and start 
+
+ob2.mysql alter system stop server '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE' and stop_time > 0, 1, 3;
+ob2.mysql alter system start server '$dest';
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'ACTIVE' and start_service_time > 0, 6, 100;
+
+#case 3 stop zone
+ob2.mysql alter system stop zone 'z3';
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where zone = 'z3' and name = 'status' and info = 'INACTIVE', 1, 10;
+ob2.mysql alter system start zone 'z3';
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where zone = 'z3' and name = 'status' and info = 'ACTIVE', 1, 10;
+
+#case 4 delete zone
+ob2.mysql alter tenant tt set locality = 'f@z1, f@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id > $job_id , job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 300;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+ob2.mysql alter resource pool __resource_pool_$tenant_id zone_list = ('z1', 'z2');
+
+ob2.mysql alter system delete server '$dest';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'DELETE_SERVER' and job_id > $job_id , job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 100;
+ob2.mysql alter system delete server '$src';
+ob2.mysql alter system stop zone 'z3';
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where zone = 'z3' and name = 'status' and info = 'INACTIVE', 1, 10;
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'DELETE_SERVER' and job_id > $job_id , job_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_admin_job where job_id= $job_id and job_status = 'SUCCESS', 1, 300;
+ob2.mysql alter system delete zone 'z3';
+
+
+ob1.mysql alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
+connection conn2;
+set @@session.ob_query_timeout=30000000;
+ob2.check_until_timeout select count(*) from oceanbase.v\$ob_cluster where switchover_status = 'TO PRIMARY', 1, 100;
+alter system COMMIT TO SWITCHOVER TO PRIMARY;
+
+#add zone
+ob2.mysql alter system add zone 'z3';
+ob2.mysql alter system start zone 'z3';
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where zone = 'z3' and name = 'status' and info = 'ACTIVE', 1, 100;
+#ob_connect(conn4, ob1.proxy0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+#create table t3(c1 int primary key);
+#ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;

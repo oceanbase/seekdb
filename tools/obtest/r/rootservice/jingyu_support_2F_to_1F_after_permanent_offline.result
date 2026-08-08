@@ -1,0 +1,38 @@
+ob1=OBI(cluster=2:2:1, proxy_num=0, asvr_num=0);
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z1.obs1.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+ob1.z2.obs1.set extra_config=$extra_conf;
+ob1.z3.obs0.set extra_config=$extra_conf;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+==================================================
+create mysql tenant with FF
+==================================================
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE='2G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'),  locality='F@z1, F@z2', primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+ob1.mysql alter tenant sys set primary_zone = "z3;z2;z1";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id = 1 and zone = 'z3', 0, 60;
+==================================================
+migrate unit in z2 and ERRSIM 2F in z2
+==================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 1;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id and role = 'LEADER' and member_list like "%$z2_dst0%" and member_list like "%$z2_dst1%", 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $mysql_tenant_id and role = 'LEADER' and member_list like "%$z2_dst0%" and member_list like "%$z2_dst1%", 2, 120;
+==================================================
+permanent offline replica in z1
+==================================================
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+ob1.z1.obs1.force_stop;
+ob1.check_until_timeout select count(*) as server_cnt from oceanbase.DBA_OB_SERVERS where status like "%INACTIVE%", 1, 30;
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 0;
+==================================================
+release debug sync and wait auto-recovery
+==================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id and role = 'LEADER' and member_list not like "%$z1_cur%" and paxos_replica_number = 2, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $mysql_tenant_id and role = 'LEADER' and member_list not like "%$z1_cur%" and paxos_replica_number = 2, $ls_cnt, 300;

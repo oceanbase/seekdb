@@ -1,0 +1,48 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=_private_buffer_size='64K';
+ob1.z2.obs0.set extra_config=_private_buffer_size='64K';
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql CREATE RESOURCE UNIT sys_unit2 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=$cpu, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool qc unit = 'sys_unit2', unit_num =1;
+ob1.mysql create tenant mysql replica_num = 1, resource_pool_list=('qc') set ob_tcp_invited_nodes='%';
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+pending_log_size	flushed_log_size
+172	0
+pending_log_size	flushed_log_size
+103	200241
+ob1.mysql alter system minor freeze server = ('$ip0:$port0');
+pending_log_size	flushed_log_size
+0	200516
+ob1.z2.obs0.switch_partition mysql:test:t1:0;
+ob1.z2.obs0.check_leader mysql:test:t1:0;
+pending_log_size	flushed_log_size
+181	200516
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+pending_log_size	flushed_log_size
+181	0
+pending_log_size	flushed_log_size
+181	0
+pending_log_size	flushed_log_size
+109	200253
+pending_log_size	flushed_log_size
+290	200253
+pending_log_size	flushed_log_size
+24	200253
+pending_log_size	flushed_log_size
+0	200253
+ob1.z1.obs0.switch_partition mysql:test:t1:0;
+ob1.z1.obs0.check_leader mysql:test:t1:0;
+pending_log_size	flushed_log_size
+181	0
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for qc execute 1000';
+pending_log_size	flushed_log_size
+325	0
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE clear';
+ob1.mysql set ob_global_debug_sync = 'now signal qc execute 10000';
+ERROR 23000: Duplicate entry '3-1' for key 'a'
+pending_log_size	flushed_log_size
+181	0

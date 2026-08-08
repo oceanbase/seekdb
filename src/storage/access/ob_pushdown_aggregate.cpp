@@ -16,10 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_pushdown_aggregate.h"
-#include "sql/engine/aggregate/ob_aggregate_util.h"
-#include "sql/engine/expr/ob_datum_cast.h"
-#include "sql/engine/expr/ob_array_expr_utils.h"
 #include "storage/lob/ob_lob_manager.h"
+#include "common/sql_mode/ob_sql_mode_utils.h"
+#include "data_plane/lob/ob_lob_value.h"
+#include "query/engine/aggregate/ob_aggregate_util.h"
+#include "query/engine/expr/ob_decimal_int_scale.h"
+#include "query/engine/expr/ob_array_expr_utils.h"
 
 namespace oceanbase
 {
@@ -266,7 +268,7 @@ int ObAggCell::prepare_def_datum()
         // lob def value must have no lob header when not null, should add lob header for default value
         ObString data = def_datum_.get_string();
         ObString out;
-        if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
+        if (OB_FAIL(data_plane::fill_lob_header(allocator_, data, out))) {
           LOG_WARN("failed to fill lob header for column.", K(ret), K(def_cell), K(data));
         } else {
           def_datum_.set_string(out);
@@ -675,6 +677,8 @@ int ObCountAggCell::collect_result(sql::ObEvalCtx &ctx)
 
 ObMinAggCell::ObMinAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
+      cmp_fun_(nullptr),
+      datum_access_ctx_(nullptr),
       group_by_ref_array_(nullptr),
       datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
@@ -685,6 +689,8 @@ ObMinAggCell::ObMinAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
 void ObMinAggCell::reset()
 {
   ObAggCell::reset();
+  cmp_fun_ = nullptr;
+  datum_access_ctx_ = nullptr;
   if (nullptr != group_by_ref_array_) {
     allocator_.free(group_by_ref_array_);
     group_by_ref_array_ = nullptr;
@@ -701,12 +707,15 @@ void ObMinAggCell::reuse()
 int ObMinAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
+  if (OB_ISNULL(eval_ctx) ||
+      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
       OB_ISNULL(basic_info_.agg_expr_->basic_funcs_->null_first_cmp_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected agg expr", K(ret), K(basic_info_.agg_expr_));
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
     LOG_WARN("Failed to init agg cell", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("Failed to get datum access context", K(ret));
   } else {
     cmp_fun_ = basic_info_.agg_expr_->basic_funcs_->null_first_cmp_;
   }
@@ -733,7 +742,8 @@ int ObMinAggCell::eval(
     if (OB_FAIL(result_datum_.deep_copy(storage_datum, datum_allocator_))) {
       LOG_WARN("Failed to deep copy datum", K(ret), K(storage_datum), K(basic_info_.col_offset_));
     }
-  } else if (OB_FAIL(cmp_fun_(result_datum_, storage_datum, cmp_ret))) {
+  } else if (OB_FAIL(cmp_fun_(
+                 result_datum_, storage_datum, cmp_ret, datum_access_ctx_))) {
       LOG_WARN("Failed to compare", K(ret), K(result_datum_), K(storage_datum));
   } else if (cmp_ret > 0 && OB_FAIL(deep_copy_datum(storage_datum, datum_allocator_))) {
     LOG_WARN("Failed to deep copy datum", K(ret), K(storage_datum), K(result_datum_), K(basic_info_.col_offset_));
@@ -759,7 +769,8 @@ int ObMinAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
       if (datum.is_null()) {
       } else if (tmp_min_datum.is_null()) {
         tmp_min_datum.shallow_copy_from_datum(datum);
-      } else if (OB_FAIL(cmp_fun_(tmp_min_datum, datum, cmp_ret))) {
+      } else if (OB_FAIL(cmp_fun_(
+                     tmp_min_datum, datum, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("Failed to compare", K(ret), K(tmp_min_datum), K(datum));
       } else if (cmp_ret > 0) {
         tmp_min_datum.shallow_copy_from_datum(datum);
@@ -770,7 +781,8 @@ int ObMinAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
       if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
         LOG_WARN("Failed to deep copy datum", K(ret), K(tmp_min_datum), K(result_datum_), K(basic_info_.col_offset_));
       }
-    } else if (OB_FAIL(cmp_fun_(result_datum_, tmp_min_datum, cmp_ret))) {
+    } else if (OB_FAIL(cmp_fun_(
+                   result_datum_, tmp_min_datum, cmp_ret, datum_access_ctx_))) {
       LOG_WARN("Failed to compare", K(ret), K(result_datum_), K(tmp_min_datum));
     } else if (cmp_ret > 0) {
       if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
@@ -821,7 +833,8 @@ int ObMinAggCell::eval_batch_in_group_by(
       } else {
         common::ObDatum &result_datum = group_by_result_datum_buf_->at(distinct_ref);
         int cmp_ret = 0;
-        if (!result_datum.is_null() && OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret))) {
+        if (!result_datum.is_null() &&
+            OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("Failed to cmp", K(ret), K(result_datum), K(datum));
         } else if (result_datum.is_null() || cmp_ret > 0) {
           // This function may be invoked for many times in one micro block,
@@ -877,6 +890,8 @@ int ObMinAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAlloc
 
 ObMaxAggCell::ObMaxAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
+      cmp_fun_(nullptr),
+      datum_access_ctx_(nullptr),
       group_by_ref_array_(nullptr),
       datum_allocator_("ObStorageAgg", OB_MALLOC_NORMAL_BLOCK_SIZE)
 {
@@ -887,6 +902,8 @@ ObMaxAggCell::ObMaxAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
 void ObMaxAggCell::reset()
 {
   ObAggCell::reset();
+  cmp_fun_ = nullptr;
+  datum_access_ctx_ = nullptr;
   if (nullptr != group_by_ref_array_) {
     allocator_.free(group_by_ref_array_);
     group_by_ref_array_ = nullptr;
@@ -903,12 +920,15 @@ void ObMaxAggCell::reuse()
 int ObMaxAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
+  if (OB_ISNULL(eval_ctx) ||
+      OB_ISNULL(basic_info_.agg_expr_->basic_funcs_) ||
       OB_ISNULL(basic_info_.agg_expr_->basic_funcs_->null_first_cmp_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected agg expr", K(ret), K(basic_info_.agg_expr_));
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
     LOG_WARN("Failed to init agg cell", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("Failed to get datum access context", K(ret));
   } else {
     cmp_fun_ = basic_info_.agg_expr_->basic_funcs_->null_first_cmp_;
   }
@@ -935,7 +955,8 @@ int ObMaxAggCell::eval(
     if (OB_FAIL(result_datum_.deep_copy(storage_datum, datum_allocator_))) {
       LOG_WARN("Failed to deep copy datum", K(ret), K(storage_datum), K(basic_info_.col_offset_));
     }
-  } else if (OB_FAIL(cmp_fun_(result_datum_, storage_datum, cmp_ret))) {
+  } else if (OB_FAIL(cmp_fun_(
+                 result_datum_, storage_datum, cmp_ret, datum_access_ctx_))) {
     LOG_WARN("Failed to compare", K(ret), K(result_datum_), K(storage_datum));
   } else if (cmp_ret < 0 && OB_FAIL(deep_copy_datum(storage_datum, datum_allocator_))) {
     LOG_WARN("Failed to deep copy datum", K(ret), K(storage_datum), K(result_datum_), K(basic_info_.col_offset_));
@@ -961,7 +982,8 @@ int ObMaxAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
       if (datum.is_null()) {
       } else if (tmp_min_datum.is_null()) {
         tmp_min_datum.shallow_copy_from_datum(datum);
-      } else if (OB_FAIL(cmp_fun_(tmp_min_datum, datum, cmp_ret))) {
+      } else if (OB_FAIL(cmp_fun_(
+                     tmp_min_datum, datum, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("Failed to compare", K(ret), K(tmp_min_datum), K(datum));
       } else if (cmp_ret < 0) {
         tmp_min_datum.shallow_copy_from_datum(datum);
@@ -972,7 +994,8 @@ int ObMaxAggCell::eval_batch(const common::ObDatum *datums, const int64_t count)
       if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
         LOG_WARN("Failed to deep copy datum", K(ret), K(tmp_min_datum), K(result_datum_), K(basic_info_.col_offset_));
       }
-    } else if (OB_FAIL(cmp_fun_(result_datum_, tmp_min_datum, cmp_ret))) {
+    } else if (OB_FAIL(cmp_fun_(
+                   result_datum_, tmp_min_datum, cmp_ret, datum_access_ctx_))) {
       LOG_WARN("Failed to compare", K(ret), K(result_datum_), K(tmp_min_datum));
     } else if (cmp_ret < 0) {
       if (OB_FAIL(deep_copy_datum(tmp_min_datum, datum_allocator_))) {
@@ -1023,7 +1046,8 @@ int ObMaxAggCell::eval_batch_in_group_by(
       } else {
         common::ObDatum &result_datum = group_by_result_datum_buf_->at(distinct_ref);
         int cmp_ret = 0;
-        if (!result_datum.is_null() && OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret))) {
+        if (!result_datum.is_null() &&
+            OB_FAIL(cmp_fun_(result_datum, datum, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("Failed to cmp", K(ret), K(result_datum), K(datum));
         } else if (result_datum.is_null() || cmp_ret < 0) {
           if (OB_FAIL(result_datum.from_storage_datum(datum, basic_info_.agg_expr_->obj_datum_map_))) {
@@ -1076,6 +1100,7 @@ int ObMaxAggCell::pad_column_in_group_by(const int64_t row_cap, common::ObIAlloc
 ObHyperLogLogAggCell::ObHyperLogLogAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllocator &allocator)
     : ObAggCell(basic_info, allocator),
       hash_func_(nullptr),
+      datum_access_ctx_(nullptr),
       ndv_calculator_(),
       def_hash_value_(0)
 {
@@ -1106,7 +1131,8 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  if (OB_ISNULL(basic_info_.agg_expr_->args_) ||
+  if (OB_ISNULL(eval_ctx) ||
+      OB_ISNULL(basic_info_.agg_expr_->args_) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]->basic_funcs_) ||
       OB_ISNULL(basic_info_.agg_expr_->args_[0]->basic_funcs_->murmur_hash_) ||
@@ -1115,6 +1141,8 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
     LOG_WARN("Unexpected agg expr", K(ret), K(basic_info_.agg_expr_));
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
     LOG_WARN("Failed to init agg cell", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("Failed to get datum access context", K(ret));
   } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObHyperLogLogCalculator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc memory for hyperloglog calculator", K(ret));
@@ -1133,7 +1161,8 @@ int ObHyperLogLogAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
     if (OB_FAIL(prepare_def_datum())) {
       LOG_WARN("Failed to prepare default datum", K(ret));
     } else if (def_datum_.is_null()) {
-    } else if (OB_FAIL(hash_func_(def_datum_, hash_value, hash_value))) {
+    } else if (OB_FAIL(hash_func_(
+                   def_datum_, hash_value, hash_value, datum_access_ctx_))) {
       LOG_WARN("Failed to do hash", K(ret));
     } else {
       def_hash_value_ = hash_value;
@@ -1162,7 +1191,8 @@ int ObHyperLogLogAggCell::eval(
     // ndv does not consider null
   } else if (OB_FAIL(pad_column_if_need(storage_datum, padding_allocator_))) {
     LOG_WARN("Failed to pad column", K(ret), K_(basic_info), K(storage_datum));
-  } else if (OB_FAIL(hash_func_(storage_datum, hash_value, hash_value))) {
+  } else if (OB_FAIL(hash_func_(
+                 storage_datum, hash_value, hash_value, datum_access_ctx_))) {
     LOG_WARN("Failed to do hash", K(ret));
   } else {
     ndv_calculator_->set(hash_value);
@@ -1187,7 +1217,8 @@ int ObHyperLogLogAggCell::eval_batch(const common::ObDatum *datums, const int64_
       const common::ObDatum &datum = datums[i];
       if (datum.is_null()) {
         // ndv does not consider null
-      } else if (OB_FAIL(hash_func_(datum, hash_value, hash_value))) {
+      } else if (OB_FAIL(hash_func_(
+                     datum, hash_value, hash_value, datum_access_ctx_))) {
         LOG_WARN("Failed to do hash", K(ret));
       } else {
         ndv_calculator_->set(hash_value);
@@ -1458,6 +1489,7 @@ ObSumAggCell::ObSumAggCell(const ObAggCellBasicInfo &basic_info, common::ObIAllo
       eval_func_(nullptr),
       eval_batch_func_(nullptr),
       copy_datum_func_(nullptr),
+      exec_ctx_(nullptr),
       cast_datum_(),
       sum_temp_buffer_(nullptr),
       cast_temp_buffer_(nullptr),
@@ -1477,6 +1509,7 @@ void ObSumAggCell::reset()
   eval_func_ = nullptr;
   eval_batch_func_ = nullptr;
   copy_datum_func_ = nullptr;
+  exec_ctx_ = nullptr;
   if (is_sum_use_temp_buf_) {
     if (nullptr != sum_temp_buffer_) {
       allocator_.free(sum_temp_buffer_);
@@ -1520,14 +1553,17 @@ void ObSumAggCell::clear_group_by_info()
 int ObSumAggCell::init(const bool is_group_by, sql::ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(nullptr == basic_info_.agg_expr_->args_ ||
+  if (OB_ISNULL(eval_ctx) ||
+      OB_UNLIKELY(nullptr == basic_info_.agg_expr_->args_ ||
       nullptr == basic_info_.agg_expr_->args_[0] ||
       T_REF_COLUMN != basic_info_.agg_expr_->args_[0]->type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("args is NULL", K(ret), KPC(basic_info_.agg_expr_));
+    LOG_WARN("invalid sum aggregate initialization arguments",
+             K(ret), KP(eval_ctx), KPC(basic_info_.agg_expr_));
   } else if (OB_FAIL(ObAggCell::init(is_group_by, eval_ctx))) {
     LOG_WARN("Failed to init agg cell", K(ret));
   } else {
+    exec_ctx_ = &eval_ctx->exec_ctx_;
     obj_tc_ = ob_obj_type_class(basic_info_.agg_expr_->args_[0]->datum_meta_.type_);
     const ObObjTypeClass res_tc = ob_obj_type_class(basic_info_.agg_expr_->datum_meta_.type_);
     const int16_t precision = basic_info_.agg_expr_->datum_meta_.precision_;
@@ -2204,7 +2240,8 @@ int ObSumAggCell::eval_collection(const common::ObDatum &datum, const int32_t da
     if (OB_FAIL(result_datum.deep_copy(datum, datum_allocator_))) {
       LOG_WARN("fail to deep copy datum", K(ret));
     }
-  } else if (OB_FAIL(sql::ObArrayExprUtils::vector_datum_add(result_datum, datum, datum_allocator_))){
+  } else if (OB_FAIL(sql::ObArrayExprUtils::vector_datum_add(
+                 *exec_ctx_, result_datum, datum, datum_allocator_))) {
     LOG_WARN("fail to add vector", K(ret));
   }
   return ret;
@@ -2249,11 +2286,12 @@ int ObSumAggCell::eval_number_decimal_int(const common::ObDatum &datum, const in
   int32_t out_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
   if (OB_FAIL(wide::from_number(nmb, tmp_alloc, in_scale, decint, int_bytes))) {
     LOG_WARN("from_number failed", K(ret), K(out_scale));
-  } else if (sql::ObDatumCast::need_scale_decimalint(in_scale, int_bytes, out_scale, out_bytes)) {
+  } else if (query::ObDecimalIntScale::is_needed(in_scale, int_bytes, out_scale, out_bytes)) {
     // upcasting
     ObDecimalIntBuilder res_val;
-    if (OB_FAIL(sql::ObDatumCast::common_scale_decimalint(decint, int_bytes, in_scale, out_scale, out_prec,
-                                        basic_info_.agg_expr_->extra_, res_val))) {
+    if (OB_FAIL(query::ObDecimalIntScale::scale(
+            decint, int_bytes, in_scale, out_scale, out_prec,
+            basic_info_.agg_expr_->extra_, res_val))) {
       LOG_WARN("scale decimal int failed", K(ret), K(in_scale), K(out_scale));
     } else {
       cast_datum_.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());

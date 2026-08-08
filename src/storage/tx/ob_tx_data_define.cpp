@@ -16,7 +16,7 @@
 
 #include "ob_tx_data_define.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -408,7 +408,7 @@ int ObTxData::deserialize_(const char *buf,
     } else if (OB_FAIL(op_guard_->get_undo_status_list().deserialize(buf, data_len, pos, tx_data_allocator))) {
       STORAGE_LOG(WARN, "deserialize undo_status_list fail.", KR(ret), K(pos), K(data_len));
     } else if (pos < data_len && OB_FAIL(op_guard_->get_tx_op_list().deserialize(buf, data_len, pos,
-            share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator()))) {
+            ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator()))) {
       STORAGE_LOG(WARN, "deserialize tx_op_list fail.", KR(ret), K(pos), K(data_len));
     }
   }
@@ -741,10 +741,10 @@ int ObTxData::init_tx_op()
   void *ptr = nullptr;
   if (!op_guard_.is_valid()) {
     if (OB_ISNULL(tx_data_allocator_)) {
-      tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator();
+      tx_data_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_allocator();
     }
     if (OB_ISNULL(op_allocator_)) {
-      op_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
+      op_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
     }
     if (OB_ISNULL(ptr = tx_data_allocator_->alloc())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

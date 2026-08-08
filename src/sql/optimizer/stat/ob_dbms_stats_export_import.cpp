@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_export_import.h"
+#include "query/engine/expr/ob_expr_lob_utils.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/ob_sql_client_decorator.h"
@@ -975,7 +976,8 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            min_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -992,7 +994,8 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            max_obj))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1008,7 +1011,8 @@ int ObDbmsStatsExportImport::get_opt_stat(ObExecContext &ctx,
                 LOG_WARN("Invalid or inconsistent input values", K(ret), K(result_objs.at(i)));
                 LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "Invalid or inconsistent input values");
               }
-            } else if (OB_FAIL(convert_bin_hex_text_to_obj(*param.allocator_,
+            } else if (OB_FAIL(convert_bin_hex_text_to_obj(ctx,
+                                                           *param.allocator_,
                                                            result_objs.at(i),
                                                            hist_bucket.endpoint_value_))) {
               LOG_WARN("failed to convert bin hex text to obj", K(ret));
@@ -1376,20 +1380,20 @@ int ObDbmsStatsExportImport::convert_bin_hex_raw_to_obj(ObIAllocator &allocator,
   return ret;
 }
 
-int ObDbmsStatsExportImport::convert_bin_hex_text_to_obj(ObIAllocator &allocator,
-                                                        const ObObj &src_obj,
-                                                        ObObj &dst_obj)
+int ObDbmsStatsExportImport::convert_bin_hex_text_to_obj(
+    ObExecContext &ctx,
+    ObIAllocator &allocator,
+    const ObObj &src_obj,
+    ObObj &dst_obj)
 {
   int ret = OB_SUCCESS;
   ObString str;
-  ObTextStringIter text_iter(src_obj);
   if (OB_UNLIKELY(!src_obj.is_text())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(src_obj), K(src_obj.get_type()));
-  } else if (OB_FAIL(text_iter.init(0, nullptr, &allocator))) {
-    LOG_WARN("failed to init text iter", K(ret), K(text_iter));
-  } else if (OB_FAIL(text_iter.get_full_data(str))) {
-    LOG_WARN("failed to get full string", K(ret), K(text_iter));
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                 ctx, &allocator, src_obj, str))) {
+    LOG_WARN("failed to read text value", K(ret), K(src_obj));
   } else if (OB_FAIL(ObOptStatSqlService::hex_str_to_obj(str.ptr(), str.length(), allocator, dst_obj))) {
     LOG_WARN("deserialize object value failed.", K(stat), K(ret));
   } else {

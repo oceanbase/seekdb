@@ -1,0 +1,24 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+select job_id, job_type, job_status from oceanbase.__all_admin_job;
+job_id	job_type	job_status
+1	LOAD_SYSTEM_PACKAGE	SUCCESS
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time <= 0 or status='INACTIVE',0,180;
+ob1.check_until_timeout select count(1) as unsync_cnt from GV\$OB_LOG_STAT where in_sync = 'NO',0,600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server a left join oceanbase.__all_virtual_server_schema_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port where b.svr_ip is null, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
+ob1.check_until_timeout select count(*) from __all_admin_job where job_status!='SUCCESS', 0, 600;
+ob1.mysql alter tenant sys set primary_zone='z1';
+ob1.check_until_timeout select role from __all_ls_meta_table where ls_id=1 and tenant_id=1 and zone='z1', 1, 600;
+ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time <= 0 or status='INACTIVE',0,180;
+ob1.check_until_timeout select count(1) as unsync_cnt from GV\$OB_LOG_STAT where in_sync = 'NO',0,600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server a left join oceanbase.__all_virtual_server_schema_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port where b.svr_ip is null, 0, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
+ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where ls_id=1 and tenant_id=1 and zone='z1', 1, 600;
+ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
+ob1.z1.obs0.check_rs_log_until_success -c "admin job is not INPROGRESS, no need to load package";

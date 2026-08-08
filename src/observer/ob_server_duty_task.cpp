@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "ob_server_duty_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_sql_memory_manager.h"
 #include "observer/omt/ob_server_runtime.h"
 
@@ -96,7 +96,7 @@ void ObSqlMemoryTimerTask::runTimerTask()
   int ret = OB_SUCCESS;
   {
     SERVER_MODULE_SCOPE {
-      ObSqlMemoryManager *sql_mem_mgr = share::g_mp->sql_memory_manager();
+      ObSqlMemoryManager *sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (OB_UNLIKELY(nullptr == sql_mem_mgr)) {
         LOG_WARN("sql memory manager is null");
       } else if (OB_FAIL(sql_mem_mgr->calculate_global_bound_size())) {

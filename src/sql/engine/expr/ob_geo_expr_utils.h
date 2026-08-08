@@ -25,8 +25,8 @@
 #include "sql/engine/expr/ob_expr.h" // for ObExpr
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
-#include "share/ob_i_sql_expression.h" // for ObExprCtx
-#include "observer/omt/ob_srs_service.h"
+#include "query/engine/expr/ob_sql_expression.h" // for ObExprCtx
+#include "share/geo/ob_srs_provider.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 //#include "lib/rc/context.h"
@@ -113,11 +113,12 @@ class ObGeoExprUtils
 public:
   ObGeoExprUtils();
   virtual ~ObGeoExprUtils() = default;
-  static int get_srs_item(omt::ObSrsCacheGuard &srs_guard,
+  static int get_srs_item(ObEvalCtx &ctx,
+                          common::ObSrsCacheGuard &srs_guard,
                           const uint32_t srid,
                           const common::ObSrsItem *&srs);
   static int get_srs_item(ObEvalCtx &ctx,
-                          omt::ObSrsCacheGuard &srs_guard,
+                          common::ObSrsCacheGuard &srs_guard,
                           const common::ObString &wkb,
                           const common::ObSrsItem *&srs,
                           bool use_little_bo = false,
@@ -128,9 +129,10 @@ public:
                             const common::ObSrsItem *srs,
                             const char *func_name,
                             uint8_t build_flag = ObGeoBuildFlag::GEO_DEFAULT);
-  static int construct_geometry(common::ObIAllocator &allocator,
+  static int construct_geometry(ObEvalCtx &ctx,
+                                common::ObIAllocator &allocator,
                                 const common::ObString &wkb,
-                                omt::ObSrsCacheGuard &srs_guard,
+                                common::ObSrsCacheGuard &srs_guard,
                                 const common::ObSrsItem *&srs,
                                 common::ObGeometry *&geo,
                                 const char *func_name,
@@ -190,7 +192,7 @@ public:
   static int reverse_coordinate(ObGeometry *geo, const char *func_name);
   static int length_unit_conversion(const ObString &unit_str, const ObSrsItem *srs, double in_num, double &out_num);
   static int get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, ObDatum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
-    omt::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo);
+    common::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo);
   static int make_valid_polygon_inner(
     ObCartesianPolygon &poly, lib::MemoryContext &mem_ctx, ObGeometry *&valid_poly);
   static int union_polygons(
@@ -199,7 +201,13 @@ public:
   static int create_3D_empty_collection(ObIAllocator &allocator, uint32_t srid, bool is_3d, bool is_geog, ObGeometry *&geo);
   static ObGeoConstParamCache* get_geo_constParam_cache(const uint64_t& id, ObExecContext *exec_ctx);
   static void expr_get_const_param_cache(ObGeoConstParamCache* const_param_cache, ObGeometry *&geo, uint32_t& srid, bool& is_geo_cached, int cache_idx);
-  static int expr_prepare_build_geometry(MultimodeAlloctor &allocator, const ObDatum &datum, const ObExpr &gis_arg, ObString& wkb, ObGeoType& type, uint32_t& srid);
+  static int expr_prepare_build_geometry(ObExecContext &exec_ctx,
+                                         MultimodeAlloctor &allocator,
+                                         const ObDatum &datum,
+                                         const ObExpr &gis_arg,
+                                         ObString &wkb,
+                                         ObGeoType &type,
+                                         uint32_t &srid);
   static int string_to_double(const common::ObString &in_str, ObCollationType cs_type, double &res);
   static int get_intersects_res(ObGeometry &geo1, ObGeometry &geo2, 
                                 ObExpr *gis_arg1, ObExpr *gis_arg2,

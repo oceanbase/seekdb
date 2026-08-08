@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SQL_ENG
+#include "share/ob_server_struct.h"
 #include "sql/engine/cmd/ob_database_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
 #include "share/ob_ex_rpc.h"
@@ -57,12 +58,12 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
-  } else if (OB_ISNULL(GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(ctx.get_root_command_service())) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "local_management_service_ not initialized");
   } else {
     // sync_call: direct business call, bypasses entire RPC stack
-    if (OB_FAIL(oceanbase::rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_database(create_database_arg, database_id); }))) {
+    if (OB_FAIL(oceanbase::query::serialize_root_service_call([&]{ return ctx.root_command_service().create_database(create_database_arg, database_id); }))) {
       SQL_ENG_LOG(WARN, "create database failed", K(ret));
     } else {
       ctx.get_physical_plan_ctx()->set_affected_rows(1);
@@ -133,7 +134,7 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_database(alter_database_arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_database(alter_database_arg); }))) {
     SQL_ENG_LOG(WARN, "rpc proxy alter table failed", K(ret));
   } else if (! stmt.get_alter_option_set().has_member(obcall::ObAlterDatabaseArg::COLLATION_TYPE)) {
     // do nothing
@@ -151,7 +152,7 @@ int ObAlterDatabaseExecutor::execute(ObExecContext &ctx, ObAlterDatabaseStmt &st
     "rpc_dst", GCTX.self_addr(),
     "database_info", alter_database_arg.database_schema_.get_database_id(),
     "schema_version", alter_database_arg.database_schema_.get_schema_version());
-  SQL_ENG_LOG(INFO, "finish execute alter database", K(ret), "ddl_event_info", ObDDLEventInfo());
+  SQL_ENG_LOG(INFO, "finish execute alter database", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -188,9 +189,7 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
   } else {
     obcall::UInt64 affected_row(0);
     obcall::ObDropDatabaseRes drop_database_res;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{
-          return GCTX.local_management_service_->drop_database(drop_database_arg, drop_database_res);
-        }))) {
+    if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().drop_database(drop_database_arg, drop_database_res); }))) {
       SQL_ENG_LOG(WARN, "rpc proxy drop table failed",
                   "timeout", THIS_WORKER.get_timeout_remain(), K(ret));
     } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
@@ -224,7 +223,7 @@ int ObDropDatabaseExecutor::execute(ObExecContext &ctx, ObDropDatabaseStmt &stmt
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
     "database_info", database_id);
-  SQL_ENG_LOG(INFO, "finish execute drop database.", K(ret), "ddl_event_info", ObDDLEventInfo());
+  SQL_ENG_LOG(INFO, "finish execute drop database.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -244,7 +243,7 @@ int ObRecyclebinRestoreDatabaseExecutor::execute(ObExecContext &ctx, ObRecyclebi
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->restore_database(restore_database_arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().restore_database(restore_database_arg); }))) {
     SQL_ENG_LOG(WARN, "rpc proxy restore database failed", K(ret));
   }
 
@@ -254,7 +253,7 @@ int ObRecyclebinRestoreDatabaseExecutor::execute(ObExecContext &ctx, ObRecyclebi
       "rpc_dst", GCTX.self_addr(),
       "origin_db_name", restore_database_arg.origin_db_name_,
       "new_db_name", restore_database_arg.new_db_name_);
-  SQL_ENG_LOG(INFO, "finish execute restore database.", K(ret), "ddl_event_info", ObDDLEventInfo());
+  SQL_ENG_LOG(INFO, "finish execute restore database.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -274,7 +273,7 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "get task executor context failed");
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_database(purge_database_arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().purge_database(purge_database_arg); }))) {
     SQL_ENG_LOG(WARN, "rpc proxy purge database failed", K(ret));
   }
 
@@ -283,7 +282,7 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
     "trace_id", *ObCurTraceId::get_trace_id(),
     "rpc_dst", GCTX.self_addr(),
     "database_info", purge_database_arg.db_name_);
-  SQL_ENG_LOG(INFO, "finish purge database.", K(ret), "ddl_event_info", ObDDLEventInfo());
+  SQL_ENG_LOG(INFO, "finish purge database.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -311,7 +310,7 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "get task executor context failed");
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->fork_database(fork_database_arg, res); }))) {
+    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().fork_database(fork_database_arg, res); }))) {
       SQL_ENG_LOG(WARN, "rpc proxy fork database failed", K(ret), K(res), K(fork_database_arg));
     } else {
       SQL_ENG_LOG(INFO, "fork database executor finished", K(fork_database_arg), K(res));

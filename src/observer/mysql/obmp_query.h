@@ -19,10 +19,10 @@
 
 #include "lib/string/ob_string.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 namespace oceanbase
 {
@@ -45,7 +45,7 @@ public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_QUERY;
 
 public:
-  explicit ObMPQuery(const ObGlobalContext &gctx);
+  explicit ObMPQuery(const share::ObGlobalContext &gctx);
   virtual ~ObMPQuery();
 
 public:
@@ -120,7 +120,7 @@ private:
 private:
   //Lifecycle in process_single_stmt()
   sql::ObSqlCtx ctx_;
-  ObQueryRetryCtrl retry_ctrl_;
+  sql::ObQueryRetryCtrl retry_ctrl_;
   common::ObString sql_;
   int64_t single_process_timestamp_;
   int64_t exec_start_timestamp_;

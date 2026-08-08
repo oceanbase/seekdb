@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 #include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
 

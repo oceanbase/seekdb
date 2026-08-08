@@ -1,0 +1,73 @@
+#rs
+#msy
+#验证failover和switchover 过程中的disable
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob_connect(conn2, ob2.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+#case 1
+#建租户
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+
+ob2.force_stop;
+#集群中只有一个主库时不能convert
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+--error 4179
+alter system convert to physical standby;
+ob3.reboot;
+ob_connect(conn3, ob3.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+connection conn3;
+source include/standby_ddl.inc;
+
+#ob2处于宕机状态，ob1不能切换
+connection conn1;
+--error 4179
+alter system commit to switchover to physical standby;
+--disable_query_log
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+#等待ob3同步完成
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+alter system commit to switchover to physical standby;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+ob3.mysql alter system commit to switchover to primary;
+ob3.mysql_p select cluster_id, cluster_idx, cluster_status from oceanbase.__all_cluster;
+
+#把ob1disable掉，ob3不能进行convert
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+connection conn3;
+--disable_query_log
+eval alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob1.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, DISABLED, 10;
+--error 4179
+alter system convert to physical standby;
+--disable_query_log
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob1.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, VALID, 10;
+
+

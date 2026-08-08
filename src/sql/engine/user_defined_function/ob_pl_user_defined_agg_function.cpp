@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_pl_user_defined_agg_function.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 
@@ -58,6 +58,11 @@ int ObPlAggUdfFunction::pick_routine(ObSEArray<const ObIRoutineInfo *, 4> &routi
                                   package_guard,
                                   *exec_ctx_->get_sql_proxy(),
                                   false /*is_ps*/);
+      resolve_ctx.params_.plan_cache_ = exec_ctx_->get_plan_cache();
+      resolve_ctx.params_.pl_sql_runtime_ = exec_ctx_->get_pl_sql_runtime();
+      resolve_ctx.params_.pl_engine_ = exec_ctx_->get_pl_engine();
+      resolve_ctx.params_.srs_provider_ = exec_ctx_->get_srs_provider();
+      resolve_ctx.params_.lob_read_service_ = exec_ctx_->get_lob_read_service();
       OZ (ObResolverUtils::pick_routine(resolve_ctx, mock_exec_expr, routine_infos, routine_info));
     }
   }
@@ -110,7 +115,7 @@ int ObPlAggUdfFunction::call_pl_engine_exectue_udf(ParamStore& udf_params,
   ObSEArray<int64_t, 8> empty_subprogram_path;
   uint64_t loc = 0;
   if (OB_ISNULL(routine_info) || OB_ISNULL(session_info_) ||
-      OB_ISNULL(pl_engine = session_info_->get_pl_engine()) || OB_ISNULL(allocator_) ||
+      OB_ISNULL(pl_engine = exec_ctx_->get_pl_engine()) || OB_ISNULL(allocator_) ||
       OB_ISNULL(exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(pl_engine), K(allocator_), K(exec_ctx_),

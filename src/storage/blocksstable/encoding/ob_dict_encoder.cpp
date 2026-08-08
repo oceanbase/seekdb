@@ -150,7 +150,7 @@ int ObDictEncoder::build_dict()
         OB_ASSERT(precision != PRECISION_UNKNOWN_YET);
       }
       bool has_lob_header = is_lob_storage(column_type_.get_type());
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(
           column_type_.get_type(), column_type_.get_collation_type(), column_type_.get_scale(),
           has_lob_header, precision);
       ObCmpFunc cmp_func;
@@ -337,7 +337,8 @@ bool ObDictEncoder::DictCmp::operator()(
     LOG_WARN_RET(ret_, "invalid argument", K_(ret), KP(lhs.header_), KP(rhs.header_));
   } else {
     int cmp_ret = 0;
-    ret_ = cmp_func_.cmp_func_(*lhs.header_->datum_, *rhs.header_->datum_, cmp_ret);
+    ret_ = cmp_func_.cmp_func_(
+        *lhs.header_->datum_, *rhs.header_->datum_, cmp_ret, nullptr);
     if (ret_ != OB_SUCCESS) {
       LOG_WARN_RET(ret_, "failed to compare", K_(ret), KP(lhs.header_), KP(rhs.header_));
     } else {

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "sql/engine/expr/ob_expr_bm25.h"
+#include "query/engine/expr/ob_expr_bm25.h"
 #include "ob_block_stat_collector.h"
 
 namespace oceanbase

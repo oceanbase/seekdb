@@ -38,7 +38,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestJsonPath);
 };
@@ -1429,16 +1429,4 @@ TEST_F(TestJsonPath, test_pathcache_reset) {
   path_cache.reset();
   ASSERT_EQ(path_cache.path_stat_at(ok_path1_idx), ObPathParseStat::UNINITIALIZED);
   ASSERT_EQ(path_cache.size(), 0);
-}
-
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  /*
-  system("rm -f test_json_path.log");
-  OB_LOGGER.set_file_name("test_json_path.log");
-  OB_LOGGER.set_log_level("INFO");
-  */
-  return RUN_ALL_TESTS();
 }

@@ -26,7 +26,7 @@
 #include "common/row/ob_row_iterator.h"
 #include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
-#include "storage/tmp_file/ob_tmp_file_manager.h"
+#include "data_plane/tmp_file/ob_tmp_file.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
 #include "sql/engine/basic/ob_batch_result_holder.h"
 
@@ -493,10 +493,6 @@ public:
                     const int64_t cnt,
                     const int64_t extra_size,
                     StoredRow **dst_sr);
-    int copy_storage_datums(const blocksstable::ObStorageDatum *storage_datums,
-                            const int64_t cnt,
-                            const int64_t extra_size,
-                            StoredRow **dst_sr);
     //the memory of shadow stored row is not continuous,
     //so you cannot directly copy the memory of the entire stored row,
     //and you should make a deep copy of each datum in turn
@@ -836,7 +832,7 @@ public:
      // cp from chunk iter
      ObChunkDatumStore* store_;
      Block* cur_iter_blk_;
-     tmp_file::ObTmpFileIOHandle aio_read_handle_;
+     data_plane::ObTmpFileIOHandle aio_read_handle_;
      int64_t cur_nth_blk_;     //reading nth blk start from 1
      int64_t cur_chunk_n_blocks_; //the number of blocks of current chunk
      int64_t cur_iter_pos_;    //pos in file
@@ -1135,11 +1131,11 @@ private:
   int aio_read_file(void *buf,
                     const int64_t size,
                     const int64_t offset,
-                    tmp_file::ObTmpFileIOHandle &handle);
+                    data_plane::ObTmpFileIOHandle &handle);
   bool need_dump(int64_t extra_size);
   BlockBuffer* new_block();
   void set_io(int64_t size, char *buf) { io_.size_ = size; io_.buf_ = buf; }
-  static void set_io(int64_t size, char *buf, tmp_file::ObTmpFileIOInfo &io) { io.size_ = size; io.buf_ = buf; }
+  static void set_io(int64_t size, char *buf, data_plane::ObTmpFileIOInfo &io) { io.size_ = size; io.buf_ = buf; }
   bool find_block_can_hold(const int64_t size, bool &need_shrink);
   int get_store_row(RowIterator &it, const StoredRow *&sr);
   inline void callback_alloc(int64_t size) { if (callback_ != nullptr) callback_->alloc(size); }
@@ -1168,7 +1164,7 @@ private:
   int64_t row_cnt_;
   int64_t col_count_;
 
-  tmp_file::ObTmpFileIOHandle aio_write_handle_;
+  data_plane::ObTmpFileIOHandle aio_write_handle_;
 
   bool enable_dump_;
   bool has_dumped_;
@@ -1177,7 +1173,7 @@ private:
   ObIOEventObserver *io_event_observer_;
 
   //int fd_;
-  tmp_file::ObTmpFileIOInfo io_;
+  data_plane::ObTmpFileIOInfo io_;
   int64_t file_size_;
   int64_t n_block_in_file_;
 

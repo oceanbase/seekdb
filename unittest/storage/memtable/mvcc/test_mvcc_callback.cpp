@@ -20,6 +20,8 @@
 #define protected public
 #include "src/storage/tx/ob_tx_log_cb_define.h"
 #include "src/storage/tx/ob_trans_ctx.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -1426,12 +1428,3 @@ int ObTxCallbackList::remove_callbacks_for_remove_memtable(
 } // namespace memtable
 
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tx_callback_list.log*");
-  oceanbase::common::ObLogger::get_logger().set_file_name("test_tx_callback_list.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_worker.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "query/runtime/ob_query_runtime_environment.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/px/ob_px_admission.h"
-#include "observer/omt/ob_server_runtime.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -37,11 +37,11 @@ using namespace oceanbase::share;
 //////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////
 
-ObPxCoroWorker::ObPxCoroWorker(const observer::ObGlobalContext &gctx,
+ObPxCoroWorker::ObPxCoroWorker(const share::ObGlobalContext &gctx,
                                common::ObIAllocator &alloc)
   : gctx_(gctx),
     alloc_(alloc),
-    exec_ctx_(alloc, gctx_.session_mgr_),
+    exec_ctx_(alloc, share::server_service<ObSQLSessionMgr>()),
     phy_plan_(),
     task_arg_(),
     task_proc_(gctx, task_arg_),
@@ -89,6 +89,8 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
     ret = OB_DESERIALIZE_ERROR;
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));
   } else {
+    dest.exec_ctx_->set_runtime_services(
+        src.exec_ctx_->get_runtime_services());
     // PLACE_HOLDER: if want to shared trans_desc
     // dest.exec_ctx_->get_my_session()->set_effective_trans_desc(src.exec_ctx_->get_my_session()->get_effective_trans_desc());
   }
@@ -168,7 +170,8 @@ void PxWorkerFunctor::operator ()(bool need_exec)
             lib::ContextTLOptGuard guard(true);
             // In the worker thread, perform a deep copy of args to alleviate the burden on the sqc thread.
             ObPxInitTaskArgs runtime_arg;
-            if (OB_FAIL(runtime_arg.init_deserialize_param(task_arg_, mem_context, *env_arg_.get_gctx()))) {
+            if (OB_FAIL(runtime_arg.init_deserialize_param(
+                    task_arg_, mem_context, *env_arg_.get_gctx()))) {
               LOG_WARN("fail to init args", K(ret));
             } else if (OB_FAIL(runtime_arg.deep_copy_assign(task_arg_, mem_context->get_arena_allocator()))) {
               LOG_WARN("fail deep copy assign arg", K(task_arg_), K(ret));
@@ -224,7 +227,7 @@ void PxWorkerFinishFunctor::operator ()()
 }
 
 
-ObPxThreadWorker::ObPxThreadWorker(const observer::ObGlobalContext &gctx)
+ObPxThreadWorker::ObPxThreadWorker(const share::ObGlobalContext &gctx)
   : gctx_(gctx),
     task_co_id_(0)
 {
@@ -237,65 +240,26 @@ ObPxThreadWorker::~ObPxThreadWorker()
 int ObPxThreadWorker::run(ObPxInitTaskArgs &task_arg)
 {
   int ret = OB_SUCCESS;
-  int64_t group_id = 0;
-  omt::ObPxPools* px_pools = share::g_mp->px_pools();
-  if (OB_ISNULL(px_pools)) {
+  static constexpr int64_t DEFAULT_PX_GROUP_ID = 0;
+  query::ObIQueryRuntimeEnvironment *runtime = OB_ISNULL(task_arg.exec_ctx_)
+      ? nullptr : task_arg.exec_ctx_->get_query_runtime_environment();
+  if (OB_ISNULL(runtime)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail get px pools", K(ret));
+    LOG_WARN("query runtime environment is unavailable", K(ret));
   } else {
-    omt::ObPxPool *pool = nullptr;
-    if (OB_FAIL(px_pools->get_or_create(group_id, pool))) {
-      LOG_WARN("fail get px pool", K(group_id), K(ret));
-    } else if (OB_FAIL(run_at(task_arg, *pool))) {
-      LOG_WARN("fail sched worker thread", K(ret));
+    ObPxWorkerEnvArgs env_args;
+    env_args.set_enqueue_timestamp(ObTimeUtility::current_time());
+    env_args.set_trace_id(*ObCurTraceId::get_trace_id());
+    env_args.set_gctx(&gctx_);
+    if (OB_LOG_LEVEL_NONE != common::ObThreadLogLevelUtils::get_level()) {
+      env_args.set_log_level(common::ObThreadLogLevelUtils::get_level());
+    }
+    PxWorkerFunctor task(env_args, task_arg);
+    if (OB_FAIL(runtime->submit_px_task(DEFAULT_PX_GROUP_ID, task))) {
+      LOG_WARN("schedule px worker failed", K(ret));
     }
   }
-  return ret;
-}
-
-int ObPxThreadWorker::run_at(ObPxInitTaskArgs &task_arg, omt::ObPxPool &px_pool)
-{
-  int ret = OB_SUCCESS;
-  int retry_times = 0;
-  ObPxWorkerEnvArgs env_args;
-
-  env_args.set_enqueue_timestamp(ObTimeUtility::current_time());
-  env_args.set_trace_id(*ObCurTraceId::get_trace_id());
-  env_args.set_gctx(&gctx_);
-  if (OB_LOG_LEVEL_NONE != common::ObThreadLogLevelUtils::get_level()) {
-    env_args.set_log_level(common::ObThreadLogLevelUtils::get_level());
-  }
-
-  PxWorkerFunctor func(env_args, task_arg);
-  /*
-   * Submit task to px pool
-   * If there are not enough threads in px pool, it will scale up the pool until it can accommodate this task
-   */
-  if (OB_SUCC(ret)) {
-    do {
-      if (OB_FAIL(px_pool.submit(func))) {
-        if (retry_times++ % 10 == 0) {
-          LOG_WARN("fail submit task, will allocate thread and do inplace retry",
-                   K(retry_times), K(ret));
-        }
-        if (OB_SIZE_OVERFLOW == ret) {
-          // Threads are insufficient, dynamically increase threads and retry
-          int tmp_ret = px_pool.inc_thread_count(1);
-          if (OB_SUCCESS != tmp_ret) {
-            LOG_WARN("fail increase thread count. abort!", K(tmp_ret), K(ret));
-            ret = tmp_ret;
-            break;
-          }
-        }
-        ob_usleep(5000);
-      }
-    } while (OB_SIZE_OVERFLOW == ret);
-  }
-  if (OB_FAIL(ret)) {
-    LOG_ERROR("Failed to submit px func to thread pool",
-              K(retry_times), "px_pool_size", px_pool.get_pool_size(),  K(ret));
-  }
-  LOG_DEBUG("submit px worker to poll", K(ret));
+  LOG_DEBUG("submit px worker to pool", K(ret));
   return ret;
 }
 

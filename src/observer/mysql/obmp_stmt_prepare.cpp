@@ -37,7 +37,7 @@ using namespace sql;
 namespace observer
 {
 
-ObMPStmtPrepare::ObMPStmtPrepare(const ObGlobalContext &gctx)
+ObMPStmtPrepare::ObMPStmtPrepare(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       retry_ctrl_(/*ctx_.retry_info_*/),
       sql_(),
@@ -343,13 +343,15 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator()) {
+  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_allocator(),
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
     {
       {
         audit_record.exec_record_.record_start();
       }
       if (enable_sqlstat) {
-        sqlstat_record.record_sqlstat_start_value();
+        sqlstat_record.record_sqlstat_start_value(
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -367,14 +369,14 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
           LOG_WARN("newest schema is NULL", K(ret));
         } else if (OB_FAIL(result.init())) {
           LOG_WARN("result set init failed", K(ret));
-        } else if (OB_ISNULL(gctx_.sql_engine_)) {
+        } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-        } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
+        } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
           //nothing to do
         } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), obmysql::ObMySQLCmd::COM_STMT_PREPARE))) {
           LOG_WARN("fail to set session active", K(ret));
-        } else if (OB_FAIL(gctx_.sql_engine_->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
+        } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
           exec_start_timestamp_ = ObTimeUtility::current_time();
           int cli_ret = OB_SUCCESS;
           retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
@@ -428,11 +430,14 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       }
     }
     if (enable_sqlstat) {
-      sqlstat_record.record_sqlstat_end_value();
+      sqlstat_record.record_sqlstat_end_value(
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }

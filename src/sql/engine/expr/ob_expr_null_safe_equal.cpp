@@ -110,6 +110,10 @@ int ObExprNullSafeEqual::ns_equal(const ObExpr &expr, ObDatum &res,
   ObDatum *r = NULL;
   bool equal = true;
   int cmp_ret = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(lctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   for (int64_t i = 0; OB_SUCC(ret) && equal && i < expr.inner_func_cnt_; i++) {
     if (NULL == expr.inner_functions_[i]) {
       ret = OB_INVALID_ARGUMENT;
@@ -121,7 +125,9 @@ int ObExprNullSafeEqual::ns_equal(const ObExpr &expr, ObDatum &res,
       if (l->is_null() && r->is_null()) {
         equal = true;
       } else if (!l->is_null() && !r->is_null()) {
-        if (OB_FAIL(reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[i])(*l, *r, cmp_ret))) {
+        if (OB_FAIL(reinterpret_cast<DatumCmpFunc>(
+                        expr.inner_functions_[i])(
+                *l, *r, cmp_ret, datum_access_ctx))) {
           LOG_WARN("cmp failed", K(ret));
         } else {
           equal = (0 == cmp_ret);

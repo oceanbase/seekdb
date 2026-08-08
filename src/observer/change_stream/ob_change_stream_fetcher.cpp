@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_debug_sync.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/thread/ob_thread_name.h"
@@ -32,8 +32,9 @@
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_schema_publish_signal.h"
 #include "observer/vector_index/ob_vector_index_util.h"
-#include "logservice/ob_log_base_header.h"
+#include "share/log/ob_log_base_header.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "logservice/ob_log_handler.h"
@@ -50,6 +51,7 @@ ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
     dispatcher_(nullptr),
+    log_storage_(nullptr),
     iter_(),
     current_lsn_(),
     current_scn_(),
@@ -58,7 +60,9 @@ ObCSFetcher::ObCSFetcher()
     running_mode_(IDLE),
     has_async_index_tables_(false),
     last_checked_schema_version_(0),
-    current_processing_tx_id_()
+    current_processing_tx_id_(),
+    schema_publish_signal_(nullptr),
+    observed_schema_publish_epoch_(0)
 {
 }
 
@@ -67,7 +71,11 @@ ObCSFetcher::~ObCSFetcher()
   destroy();
 }
 
-int ObCSFetcher::init(ObCSDispatcher *dispatcher)
+int ObCSFetcher::init(
+    ObCSDispatcher *dispatcher,
+    logservice::ObILogStorage &log_storage,
+    schema::ObSchemaPublishSignal &schema_publish_signal,
+    lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
@@ -77,13 +85,14 @@ int ObCSFetcher::init(ObCSDispatcher *dispatcher)
     LOG_WARN("CSFetcher: dispatcher is null", KR(ret));
   } else if (OB_FAIL(tx_info_.create(CS_FETCHER_TX_INFO_BUCKET_CNT, "CSFetcherTx"))) {
     LOG_WARN("CSFetcher: fail to create tx_info map", KR(ret));
-  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(share::server_runtime()))) {
+  } else if (FALSE_IT(ObThreadPool::set_run_wrapper(run_wrapper))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
     LOG_WARN("CSFetcher: fail to init thread pool", KR(ret));
-  } else if (OB_FAIL(idle_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
-    LOG_WARN("CSFetcher: fail to init idle_cond", KR(ret));
   } else {
     dispatcher_ = dispatcher;
+    log_storage_ = &log_storage;
+    schema_publish_signal_ = &schema_publish_signal;
+    observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
     current_scn_.set_min();
     total_tx_committed_ = 0;
     is_inited_ = true;
@@ -111,7 +120,8 @@ int ObCSFetcher::init_consumption_position_()
       start_lsn = current_lsn_;
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(logservice::seek_log_iterator(start_lsn, iter_))) {
+      if (OB_FAIL(logservice::seek_log_iterator(
+          *log_storage_, start_lsn, iter_))) {
         LOG_WARN("CSFetcher: fail to seek_log_iterator by min_dep_lsn", KR(ret), K(start_lsn));
       } else {
         current_lsn_ = start_lsn;
@@ -165,7 +175,8 @@ int ObCSFetcher::init_consumption_position_()
             LOG_INFO("CSFetcher: schema version initialized by SCN", K(current_schema_version_));
           }
         }
-        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(start_lsn, iter_))) {
+        if (OB_SUCC(ret) && OB_FAIL(logservice::seek_log_iterator(
+            *log_storage_, start_lsn, iter_))) {
           LOG_WARN("CSFetcher: fail to seek back after schema init", KR(ret));
         }
       }
@@ -188,8 +199,9 @@ int ObCSFetcher::start()
 void ObCSFetcher::stop()
 {
   ObThreadPool::stop();
-  ObThreadCondGuard guard(idle_cond_);
-  idle_cond_.signal();
+  if (OB_NOT_NULL(schema_publish_signal_)) {
+    schema_publish_signal_->wake_waiters();
+  }
 }
 
 void ObCSFetcher::wait()
@@ -211,8 +223,10 @@ void ObCSFetcher::destroy()
       }
     }
     tx_info_.destroy();
-    idle_cond_.destroy();
     dispatcher_ = nullptr;
+    log_storage_ = nullptr;
+    schema_publish_signal_ = nullptr;
+    observed_schema_publish_epoch_ = 0;
     current_lsn_.reset();
     current_scn_.reset();
     is_inited_ = false;
@@ -245,7 +259,7 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 
   palf::LSN end_lsn;
   storage::ObLS *ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
       || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
     LOG_WARN("CSFetcher: fail to get end_lsn for min_dep_lsn", KR(ret));
     return ret;
@@ -321,7 +335,7 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   palf::LSN max_lsn;
   {
     storage::ObLS *ls = nullptr;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
         || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
       LOG_WARN("CSFetcher: fail to get max_lsn in get_refresh_scn", KR(ret));
       return ret;
@@ -506,12 +520,6 @@ int ObCSFetcher::release_committed_tx(int64_t tx_id)
     OB_DELETE(ObCSTxInfo, "CSTxInfo", tx);
   }
   return ret;
-}
-
-void ObCSFetcher::notify_schema_changed()
-{
-  ObThreadCondGuard guard(idle_cond_);
-  idle_cond_.signal();
 }
 
 // ---------------------------------------------------------------------------
@@ -849,14 +857,15 @@ void ObCSFetcher::run1()
 
     // IDLE branch: wait for schema change notification, with 10s timeout as fallback.
     if (IDLE == running_mode_) {
-      ObThreadCondGuard guard(idle_cond_);
       if (IDLE == running_mode_ && !has_set_stop()) {
         int64_t current_version = 0;
         if (OB_NOT_NULL(GCTX.schema_service_)) {
           GCTX.schema_service_->get_runtime_refreshed_schema_version(current_version);
         }
-        if (current_version == last_checked_schema_version_) {
-          idle_cond_.wait(CS_FETCHER_IDLE_COND_WAIT_MS);
+        if (current_version == last_checked_schema_version_
+            && OB_NOT_NULL(schema_publish_signal_)) {
+          (void)schema_publish_signal_->wait_after(
+              observed_schema_publish_epoch_, CS_FETCHER_IDLE_COND_WAIT_MS);
         }
       }
       continue;

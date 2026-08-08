@@ -23,7 +23,7 @@
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "share/schema/ob_table_sql_service.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 

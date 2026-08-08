@@ -18,7 +18,7 @@
 #define STORAGE_COMPACTION_OB_TABLET_MERGE_TASK_H_
 
 #include "share/ob_occam_time_guard.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_datum_range.h"
 #include "storage/compaction/ob_i_compaction_filter.h"

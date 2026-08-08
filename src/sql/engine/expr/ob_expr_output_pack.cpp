@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_output_pack.h"
 #include "share/ob_lob_access_utils.h"
 #include "lib/container/ob_se_array.h"
-#include "observer/mysql/ob_mysql_rust_row.h"
+#include "query/protocol/ob_mysql_rust_row.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 namespace oceanbase{
@@ -254,7 +254,8 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
       ObString data_str;
       ObLobLocatorV2 loc(raw_str, value.has_lob_header());
       ObTextStringIter str_iter(value);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(str_iter, &exec_ctx, &my_session, &alloc))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              str_iter, exec_ctx, &alloc))) {
         LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
       } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
         LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
@@ -309,7 +310,8 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
     ObString data;
     // lob locator v2
     ObTextStringIter instr_iter(value);
-    if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, &exec_ctx, &my_session, &alloc))) {
+    if (OB_FAIL(ObTextStringHelper::build_text_iter(
+            instr_iter, exec_ctx, &alloc))) {
       LOG_WARN("init lob str inter failed", K(ret), K(value));
     } else if (OB_FAIL(instr_iter.get_full_data(data))) {
       LOG_WARN("Lob: init lob str iter failed ", K(value));
@@ -466,7 +468,7 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
       nio_mysql_cell_view view = {};
-      if (OB_FAIL(observer::build_nio_mysql_cell_view(values.at(i), view))) {
+      if (OB_FAIL(query::build_nio_mysql_cell_view(values.at(i), view))) {
         LOG_WARN("failed to build packed Rust MySQL Row cell view", K(ret),
                  K(i));
       } else if (OB_FAIL(views.push_back(view))) {
@@ -478,8 +480,8 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
       nio_mysql_row_view row_view = {};
       row_view.cells = &views.at(0);
       row_view.cell_count = views.count();
-      if (OB_FAIL(observer::get_nio_mysql_row_protocol(encode_type,
-                                                       row_view.protocol))) {
+      if (OB_FAIL(query::get_nio_mysql_row_protocol(encode_type,
+                                                    row_view.protocol))) {
         LOG_WARN("invalid packed MySQL Row protocol", K(ret), K(encode_type));
       } else {
         int frame_ret =

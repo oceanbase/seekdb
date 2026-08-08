@@ -19,7 +19,7 @@
 
 #include "sql/parser/ob_parser.h"
 #include "lib/string/ob_string.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"
 #include "sql/parser/ob_char_type.h"
 #include "sql/parser/ob_fast_parser.h"

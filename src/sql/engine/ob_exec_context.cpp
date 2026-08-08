@@ -15,18 +15,70 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "data_plane/lob/ob_lob_access_context.h"
+#include "query/engine/ob_exec_context_access.h"
+#include "query/session/ob_session_access.h"
 #include "ob_exec_context.h"
+#include "share/datum/ob_datum_funcs.h"
+#include "share/ob_lob_access_utils.h"
+#include "share/ob_server_struct.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "observer/ob_server.h"
-#include "storage/lob/ob_lob_persistent_reader.h"
+#include "sql/engine/table/ob_i_virtual_table_iterator_factory.h"
+#include "query/virtual_table/ob_virtual_table_factory_provider.h"
 #include "sql/executor/ob_memory_tracker.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
 using namespace oceanbase::common;
 namespace sql
 {
+
+OB_SERIALIZE_MEMBER(GroupPWJTabletIdInfo, group_id_, tablet_id_array_);
+
+query::ObIRootCommandService *ObExecContext::get_root_command_service() const
+{
+  return root_command_service_;
+}
+
+query::ObILocalCommandService *ObExecContext::get_local_command_service() const
+{
+  return local_command_service_;
+}
+
+query::ObIRootCommandService &ObExecContext::root_command_service() const
+{
+  query::ObIRootCommandService *service = get_root_command_service();
+  OB_ASSERT_MSG(nullptr != service, "root command service is not bound to SQL session");
+  return *service;
+}
+
+query::ObILocalCommandService &ObExecContext::local_command_service() const
+{
+  query::ObILocalCommandService *service = get_local_command_service();
+  OB_ASSERT_MSG(nullptr != service, "local command service is not bound to SQL session");
+  return *service;
+}
+
+const ObPartIdRowMapManager::ObRowIdList *ObPartIdRowMapManager::get_row_id_list(int64_t part_index)
+{
+  const ObRowIdList *ret = NULL;
+  // Linear search is sufficient for the current small partition list.
+  if (part_index >= 0 && part_index < manager_.count()) {
+    ret = &(manager_.at(part_index).list_);
+  }
+  return ret;
+}
+
+int ObPartIdRowMapManager::MapEntry::assign(const MapEntry &other)
+{
+  int ret = OB_SUCCESS;
+  if (this != &other && OB_FAIL(list_.assign(other.list_))) {
+    LOG_WARN("copy list failed", K(ret));
+  }
+  return ret;
+}
 
 int ObOpKitStore::init(ObIAllocator &alloc, const int64_t size)
 {
@@ -135,7 +187,8 @@ int ObDiagnosisManager::do_diagnosis(ObBitVector &skip, int64_t limit_num) {
   return ret;
 }
 
-ObExecContext::ObExecContext(ObIAllocator &allocator)
+ObExecContext::ObExecContext(ObIAllocator &allocator,
+                             ObSQLSessionMgr *session_mgr)
   : allocator_(allocator),
     phy_op_size_(0),
     phy_op_ctx_store_(NULL),
@@ -145,6 +198,21 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     expr_op_ctx_store_(NULL),
     sql_executor_ctx_(),
     my_session_(NULL),
+    session_mgr_(session_mgr),
+    lob_read_service_(nullptr),
+    plan_cache_(nullptr),
+    ps_cache_(nullptr),
+    plan_cache_access_service_(nullptr),
+    pl_sql_runtime_(nullptr),
+    pl_engine_(nullptr),
+    prepared_statement_runtime_(nullptr),
+    sql_execution_id_provider_(nullptr),
+    query_runtime_environment_(nullptr),
+    root_command_service_(nullptr),
+    local_command_service_(nullptr),
+    change_stream_service_(nullptr),
+    ddl_execution_limiter_(nullptr),
+    srs_provider_(nullptr),
     exec_stat_collector_(NULL),
     stmt_factory_(NULL),
     expr_factory_(NULL),
@@ -152,6 +220,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     has_non_trivial_expr_op_ctx_(false),
     sql_ctx_(NULL),
     pl_stack_ctx_(nullptr),
+    procedural_context_(nullptr),
     need_disconnect_(true),
     pl_ctx_(NULL),
     package_guard_(NULL),
@@ -179,6 +248,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     group_pwj_map_(nullptr),
     check_status_times_(0),
     vt_ift_(nullptr),
+    vt_factory_provider_(nullptr),
     px_batch_id_(0),
     admission_acquired_(false),
     use_temp_expr_ctx_cache_(false),
@@ -200,11 +270,56 @@ ObExecContext::ObExecContext(ObIAllocator &allocator)
     slice_row_idx_(0),
     autoinc_range_interval_(0),
     lob_access_ctx_(nullptr),
+    lob_read_options_(nullptr),
+    datum_access_ctx_(nullptr),
+    resource_limit_calculator_(nullptr),
     auto_dop_map_(),
     force_local_plan_(false),
     diagnosis_manager_(),
     current_granule_type_(OB_GRANULE_UNINITIALIZED)
 {
+}
+
+ObExecContext::RuntimeServices ObExecContext::get_runtime_services() const
+{
+  RuntimeServices services;
+  services.lob_read_service_ = lob_read_service_;
+  services.plan_cache_ = plan_cache_;
+  services.ps_cache_ = ps_cache_;
+  services.plan_cache_access_service_ = plan_cache_access_service_;
+  services.pl_sql_runtime_ = pl_sql_runtime_;
+  services.pl_engine_ = pl_engine_;
+  services.prepared_statement_runtime_ = prepared_statement_runtime_;
+  services.sql_execution_id_provider_ = sql_execution_id_provider_;
+  services.query_runtime_environment_ = query_runtime_environment_;
+  services.root_command_service_ = root_command_service_;
+  services.local_command_service_ = local_command_service_;
+  services.change_stream_service_ = change_stream_service_;
+  services.ddl_execution_limiter_ = ddl_execution_limiter_;
+  services.virtual_table_factory_provider_ = vt_factory_provider_;
+  services.srs_provider_ = srs_provider_;
+  services.resource_limit_calculator_ = resource_limit_calculator_;
+  return services;
+}
+
+void ObExecContext::set_runtime_services(const RuntimeServices &services)
+{
+  lob_read_service_ = services.lob_read_service_;
+  plan_cache_ = services.plan_cache_;
+  ps_cache_ = services.ps_cache_;
+  plan_cache_access_service_ = services.plan_cache_access_service_;
+  pl_sql_runtime_ = services.pl_sql_runtime_;
+  pl_engine_ = services.pl_engine_;
+  prepared_statement_runtime_ = services.prepared_statement_runtime_;
+  sql_execution_id_provider_ = services.sql_execution_id_provider_;
+  query_runtime_environment_ = services.query_runtime_environment_;
+  root_command_service_ = services.root_command_service_;
+  local_command_service_ = services.local_command_service_;
+  change_stream_service_ = services.change_stream_service_;
+  ddl_execution_limiter_ = services.ddl_execution_limiter_;
+  vt_factory_provider_ = services.virtual_table_factory_provider_;
+  srs_provider_ = services.srs_provider_;
+  resource_limit_calculator_ = services.resource_limit_calculator_;
 }
 
 ObExecContext::~ObExecContext()
@@ -245,9 +360,14 @@ ObExecContext::~ObExecContext()
     group_pwj_map_ = nullptr;
   }
   if (OB_NOT_NULL(vt_ift_)) {
-    vt_ift_->~ObIVirtualTableIteratorFactory();
+    if (OB_NOT_NULL(vt_factory_provider_)) {
+      vt_factory_provider_->destroy_virtual_table_factory(vt_ift_);
+    } else {
+      vt_ift_->~ObIVirtualTableIteratorFactory();
+    }
     vt_ift_ = nullptr;
   }
+  vt_factory_provider_ = nullptr;
   clean_resolve_ctx();
   sqc_handler_ = nullptr;
   if (OB_LIKELY(NULL != convert_allocator_)) {
@@ -272,10 +392,21 @@ ObExecContext::~ObExecContext()
   errcode_ = OB_SUCCESS;
 
   if (OB_NOT_NULL(lob_access_ctx_)) {
-    lob_access_ctx_->~ObLobAccessCtx();
-    lob_access_ctx_ = nullptr;
+    data_plane::destroy_lob_access_context(lob_access_ctx_);
   }
   auto_dop_map_.destroy();
+}
+
+void ObExecContext::set_my_session(ObSQLSessionInfo *session)
+{
+  my_session_ = session;
+  if (OB_NOT_NULL(session)) {
+    session_mgr_ = session->get_session_manager();
+  }
+  if (OB_NOT_NULL(session)) {
+    set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT,
+                          ObCtxIds::EXECUTE_CTX_ID));
+  }
 }
 
 void ObExecContext::clean_resolve_ctx()
@@ -290,6 +421,7 @@ void ObExecContext::clean_resolve_ctx()
   }
   sql_ctx_ = nullptr;
   pl_stack_ctx_ = nullptr;
+  procedural_context_ = nullptr;
 }
 
 uint64_t ObExecContext::get_ser_version() const
@@ -635,7 +767,7 @@ int ObExecContext::init_pl_ctx()
 
 const common::ObAddr& ObExecContext::get_addr() const
 {
-  return MYADDR;
+  return GCTX.self_addr();
 }
 
 int ObExecContext::get_gi_task_map(GIPrepareTaskMap *&gi_task_map)
@@ -758,13 +890,11 @@ ObVirtualTableCtx ObExecContext::get_virtual_table_ctx()
   int ret = OB_SUCCESS;
   ObVirtualTableCtx vt_ctx;
   if (OB_ISNULL(vt_ift_)) {
-    int64_t len = sizeof(observer::ObVirtualTableIteratorFactory);
-    void *buf = allocator_.alloc(len);
-    if (OB_ISNULL(buf)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate ObVirtualTableIteratorFactory failed", K(ret), K(len));
-    } else {
-      vt_ift_ = new(buf) observer::ObVirtualTableIteratorFactory(*GCTX.vt_iter_creator_);
+    if (OB_ISNULL(vt_factory_provider_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("virtual table factory provider is null", K(ret));
+    } else if (OB_FAIL(vt_factory_provider_->create_virtual_table_factory(allocator_, vt_ift_))) {
+      LOG_WARN("create virtual table iterator factory failed", K(ret));
     }
   }
   vt_ctx.vt_iter_factory_ = vt_ift_;
@@ -951,7 +1081,7 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
             if (OB_FAIL(param_datum.from_obj(one_params.at(i), expr->obj_datum_map_))) {
               LOG_WARN("fail to cast datum", K(ret));
             } else if (is_lob_storage(one_params.at(i).get_type()) &&
-                       OB_FAIL(ob_adjust_lob_datum(one_params.at(i), expr->obj_meta_,
+                       OB_FAIL(ob_adjust_lob_datum(*this, one_params.at(i), expr->obj_meta_,
                                                    expr->obj_datum_map_, get_allocator(), param_datum))) {
               LOG_WARN("adjust lob datum failed", K(ret), K(i),
                        K(one_params.at(i).get_meta()), K(expr->obj_meta_));
@@ -1270,20 +1400,144 @@ int ObExecContext::get_subschema_id_by_type_string(const ObString &type_string, 
   return ret;
 }
 
-int ObExecContext::get_lob_access_ctx(ObLobAccessCtx *&lob_access_ctx)
+int ObExecContext::get_lob_access_ctx(common::ObILobAccessContext *&lob_access_ctx)
 {
   int ret = OB_SUCCESS;
-  ObIAllocator &allocator = get_allocator();
   if (OB_NOT_NULL(lob_access_ctx_)) {
     lob_access_ctx = lob_access_ctx_;
-  } else if (OB_ISNULL(lob_access_ctx_ = OB_NEWx(ObLobAccessCtx, &allocator))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc", K(ret), "size", sizeof(ObLobAccessCtx));
+  } else if (OB_FAIL(data_plane::create_lob_access_context(
+                 get_allocator(), lob_access_ctx_))) {
+    LOG_WARN("failed to create lob access context", K(ret));
   } else {
     lob_access_ctx = lob_access_ctx_;
   }
   return ret;
 }
 
+int ObExecContext::get_lob_read_options(
+    const common::ObLobReadOptions *&lob_read_options)
+{
+  int ret = OB_SUCCESS;
+  lob_read_options = nullptr;
+  common::ObILobReadService *read_service = lob_read_service_;
+  common::ObILobAccessContext *lob_access_ctx = nullptr;
+  if (OB_ISNULL(read_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed in execution context", K(ret));
+  } else if (OB_FAIL(get_lob_access_ctx(lob_access_ctx))) {
+    LOG_WARN("get LOB access context failed", K(ret));
+  } else {
+    const int64_t timeout_ts = OB_ISNULL(my_session_)
+        ? 0
+        : query::ObSessionAccess::get_query_timeout_ts(my_session_);
+    if (OB_ISNULL(lob_read_options_)) {
+      void *buf = allocator_.alloc(sizeof(common::ObLobReadOptions));
+      if (OB_ISNULL(buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("allocate LOB read options failed", K(ret));
+      } else {
+        lob_read_options_ = new (buf) common::ObLobReadOptions(
+            *read_service, timeout_ts, lob_access_ctx);
+      }
+    } else {
+      lob_read_options_->read_service_ = read_service;
+      lob_read_options_->timeout_ts_ = timeout_ts;
+      lob_read_options_->access_context_ = lob_access_ctx;
+    }
+    if (OB_SUCC(ret)) {
+      lob_read_options = lob_read_options_;
+    }
+  }
+  return ret;
+}
+
+int ObExecContext::get_datum_access_ctx(
+    const common::ObDatumAccessContext *&datum_access_ctx)
+{
+  int ret = OB_SUCCESS;
+  datum_access_ctx = nullptr;
+  const common::ObLobReadOptions *lob_read_options = nullptr;
+  common::ObILobReadService *read_service = lob_read_service_;
+  // Datum comparison and hashing only need this context when they encounter
+  // an out-row LOB.  Keep it absent for pure in-row execution; the LOB
+  // iterator rejects a missing read service at the actual dereference point.
+  if (OB_ISNULL(read_service)) {
+  } else if (OB_FAIL(get_lob_read_options(lob_read_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
+  } else if (OB_ISNULL(datum_access_ctx_)) {
+    void *buf = allocator_.alloc(sizeof(common::ObDatumAccessContext));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate datum access context failed", K(ret));
+    } else {
+      datum_access_ctx_ =
+          new (buf) common::ObDatumAccessContext(*lob_read_options);
+    }
+  } else {
+    datum_access_ctx_->lob_read_options_ = lob_read_options;
+  }
+  if (OB_SUCC(ret)) {
+    datum_access_ctx = datum_access_ctx_;
+  }
+  return ret;
+}
+
 }  // namespace sql
 }  // namespace oceanbase
+
+namespace oceanbase
+{
+namespace query
+{
+
+sql::ObSQLSessionInfo *ObExecContextAccess::get_session(sql::ObExecContext &ctx)
+{
+  return ctx.get_my_session();
+}
+
+void ObExecContextAccess::configure_obj_cast(
+    sql::ObExecContext &ctx,
+    common::ObObjCastParams &params)
+{
+  if (OB_NOT_NULL(ctx.get_my_session())) {
+    ctx.get_my_session()->configure_obj_cast(
+        params, ctx.get_srs_provider(), ctx.get_lob_read_service());
+  }
+}
+
+common::ObMySQLProxy *ObExecContextAccess::get_sql_proxy(sql::ObExecContext &ctx)
+{
+  return ctx.get_sql_proxy();
+}
+
+share::schema::ObSchemaGetterGuard *ObExecContextAccess::get_schema_guard(
+    sql::ObExecContext &ctx)
+{
+  sql::ObSqlCtx *sql_ctx = ctx.get_sql_ctx();
+  return nullptr == sql_ctx ? nullptr : sql_ctx->schema_guard_;
+}
+
+int ObExecContextAccess::check_status(sql::ObExecContext &ctx)
+{
+  return ctx.check_status();
+}
+
+int ObExecContextAccess::get_error_code(const sql::ObExecContext &ctx)
+{
+  return ctx.get_errcode();
+}
+
+uint64_t ObExecContextAccess::get_server_session_id(
+    const sql::ObSQLSessionInfo *session)
+{
+  return nullptr == session ? common::OB_INVALID_ID : session->get_server_sid();
+}
+
+uint64_t ObExecContextAccess::get_priv_user_id(
+    const sql::ObSQLSessionInfo *session)
+{
+  return nullptr == session ? common::OB_INVALID_ID : session->get_priv_user_id();
+}
+
+} // namespace query
+} // namespace oceanbase

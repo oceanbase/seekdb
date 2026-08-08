@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_ddl_service.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "common/ob_timeout_ctx.h"
@@ -40,7 +41,7 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
   int ret = OB_SUCCESS;
   is_create_index_on_empty_table_opt = false;
   if (!share::schema::is_index_support_empty_table_opt(index_type) && index_type != ObIndexType::INDEX_TYPE_IS_NOT) {
-  } else if (OB_FAIL(ObDDLUtil::check_table_empty(sys_var_schema, database_name,
+  } else if (OB_FAIL(ObDDLTaskUtil::check_table_empty(sys_var_schema, database_name,
                                                   table_schema,
                                                   sql_mode,
                                                   is_create_index_on_empty_table_opt))) {
@@ -53,7 +54,7 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
     } else {
       LOG_WARN("failed to lock table", KR(ret), K(table_schema));
     }
-  } else if (OB_FAIL(ObDDLUtil::check_table_empty(sys_var_schema, database_name,
+  } else if (OB_FAIL(ObDDLTaskUtil::check_table_empty(sys_var_schema, database_name,
                                                   table_schema,
                                                   sql_mode,
                                                   is_create_index_on_empty_table_opt))) {

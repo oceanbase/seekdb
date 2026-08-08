@@ -1,0 +1,95 @@
+# owner: msy164651
+# # description: 本case是为了复现failover未提交的事务的处理
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob2=OBI(cluster=2:2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.z1.obs1.set status = disable;
+ob2.reboot;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1, f@z2';
+let $zone_list = 'z1','z2';
+source include/create_tenant_1.inc;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int, c3 int);
+create table tttt(c1 int primary key, c2 int, c3 int);
+insert into t values (1,1,1);
+select * from t;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+source include/standby_ddl.inc;
+alter system set resource_soft_limit=100;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 500;
+ob2.z1.obs1.set status = enable;
+ob2.z1.obs1.start;
+sleep 10;
+ob2.z1.obs1.add;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active' and start_service_time > 0, 4, 200;
+sleep 10;
+ob2.mysql alter resource pool __resource_pool_1001 unit_num = 2;
+ob2.mysql set global ob_query_timeout = 100000000;
+connection tt1_conn;
+create table t1(c1 int primary key, c2 int, c3 int);
+insert into t1 values (1,1,1);
+create table t2(c1 int primary key, c2 int, c3 int);
+create table t3(c1 int primary key, c2 int, c3 int);
+create table t4(c1 int primary key, c2 int, c3 int);
+create table t5(c1 int primary key, c2 int, c3 int);
+create table t6(c1 int primary key, c2 int, c3 int);
+create table t7(c1 int primary key, c2 int, c3 int);
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 50;
+##t和t1大概率不在一台机器上
+ob2.z1.obs1.force_stop;
+
+let $t_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't', table_id, 1);
+let $t1_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+
+##切主，构造分布式事务
+ob1.z1.obs0.switch_partition tenant_1:test:t:0;
+ob1.z2.obs0.switch_partition tenant_1:test:t1:0;
+
+sleep 10;
+ob1.z1.obs0.check_leader tenant_1:test:t:0;
+ob1.z2.obs0.check_leader tenant_1:test:t1:0;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DIST_COMMIT wait_for continue_signal2 execute 1000';
+
+connection tt1_conn;
+set ob_query_timeout = 100000000000;
+set ob_trx_timeout = 100000000000;
+
+begin;
+insert into t values(2, 2, 2);
+insert into t1 values(6, 6, 6);
+insert into t2 values(6, 6, 6);
+insert into t3 values(6, 6, 6);
+insert into t4 values(6, 6, 6);
+insert into t5 values(6, 6, 6);
+insert into t6 values(6, 6, 6);
+insert into t7 values(6, 6, 6);
+send commit;
+sleep 30;
+
+ob1.force_stop;
+ob2.z1.obs1.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active' and start_service_time > 0, 4, 200;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z1', 1, 100;
+
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+set ob_query_timeout=1000000000;
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+
+ob_connect(conn2, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+select * from t;
+select * from t1;

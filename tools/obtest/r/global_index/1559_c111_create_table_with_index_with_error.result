@@ -1,0 +1,146 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+use test;
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) local partition by hash(c1) partitions 2);
+ERROR 0A000: local partition index not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) global partition by hash (c1) subpartition by range (c2) subpartition template (SUBPARTITION p0 VALUES LESS THAN (1990),  SUBPARTITION p1 VALUES LESS THAN (2000),  SUBPARTITION p2 VALUES LESS THAN MAXVALUE) partitions 2);
+ERROR 0A000: index table with two level partitions not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c3) global partition by hash(c3) partitions 2);
+ERROR HY000: Field 'c3' is of a not allowed type for this type of partitioning
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c3) global partition by range (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR HY000: Field 'c3' is of a not allowed type for this type of partitioning
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c3) global partition by key(c3) partitions 2);
+'partition num: 2'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677778;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677778	__idx_1099511677777_idx	1099511628776	1099511677777	3	2	1	6	c3	2	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677778;
+tenant_id	table_id	part_id	part_name	high_bound_val
+1	1099511677778	0	p0	NULL
+1	1099511677778	1	p1	NULL
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677778;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677778	16	c1	0	63	NULL
+1	1099511677778	18	c3	0	45	NULL
+drop table tt;
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN ('1990'), partition p1 values less than('2000')));
+'partition num: 2'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677780;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677780	__idx_1099511677779_idx	1099511628776	1099511677779	3	2	1	4	c3	2	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677780;
+tenant_id	table_id	part_id	part_name	high_bound_val
+1	1099511677780	0	p0	'1990'
+1	1099511677780	1	p1	'2000'
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677780;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677780	16	c1	0	63	NULL
+1	1099511677780	18	c3	0	45	NULL
+drop table tt;
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c3, c2) global partition by range columns (c3, c2) (PARTITION p0 VALUES LESS THAN ('1990'), partition p1 values less than('2000')));
+ERROR HY000: Inconsistency in usage of column lists for partitioning
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c3) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(2000)));
+ERROR HY000: Partition column values of incorrect type
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global partition by hash(c3) partitions 2);
+ERROR 42S22: Unknown column 'c3' in 'partition function'
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global partition by key(c3) partitions 2);
+ERROR 42S22: Unknown column 'c3' in 'partition function'
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global partition by range (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42S22: Unknown column 'c3' in 'partition function'
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global partition by range columns (c3) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42S22: Unknown column 'c3' in 'partition function'
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c4) global partition by hash(c1) partitions 2);
+ERROR 42000: Key column 'c4' doesn't exist in table
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c4) global partition by key(c1) partitions 2);
+ERROR 42000: Key column 'c4' doesn't exist in table
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c4) global partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42000: Key column 'c4' doesn't exist in table
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c4) global partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42000: Key column 'c4' doesn't exist in table
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global storing(c4) partition by hash(c1) partitions 2);
+ERROR 42S22: Unknown column 'c4' in 'tt'
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global storing(c4) partition by key(c1) partitions 2);
+ERROR 42S22: Unknown column 'c4' in 'tt'
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global storing(c4) partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42S22: Unknown column 'c4' in 'tt'
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1) global storing(c4) partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 42S22: Unknown column 'c4' in 'tt'
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c2) global partition by hash(c1) partitions 2);
+ERROR HY000: A GLOBAL INDEX must include all columns in the table's partitioning function
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c2, c3) local) partition by hash(c1) partitions 2;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677782;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677782	__idx_1099511677781_idx	1099511628776	1099511677781	1	2	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677782;
+tenant_id	table_id	part_id	part_name	high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677782;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677782	16	c1	0	63	NULL
+1	1099511677782	17	c2	0	63	NULL
+1	1099511677782	18	c3	0	45	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20), unique index idx(c2, c3) local) partition by hash(c1) partitions 2;
+ERROR HY000: A UNIQUE INDEX must include all columns in the table's partitioning function
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) global partition by hash(c2) partitions 2);
+'partition num: 2'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677785;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677785	__idx_1099511677784_idx	1099511628776	1099511677784	3	2	1	0	c2	2	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677785;
+tenant_id	table_id	part_id	part_name	high_bound_val
+1	1099511677785	0	p0	NULL
+1	1099511677785	1	p1	NULL
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677785;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677785	16	c1	0	63	NULL
+1	1099511677785	17	c2	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) global partition by key(c2) partitions 2);
+'partition num: 2'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677787;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677787	__idx_1099511677786_idx	1099511628776	1099511677786	3	2	1	6	c2	2	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677787;
+tenant_id	table_id	part_id	part_name	high_bound_val
+1	1099511677787	0	p0	NULL
+1	1099511677787	1	p1	NULL
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677787;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677787	16	c1	0	63	NULL
+1	1099511677787	17	c2	0	63	NULL
+drop table tt;
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) global partition by range (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 0A000: partition columns not prefix of index columns not supported
+create table tt (c1 int primary key, c2 int, c3 varchar(20), index idx(c1, c2) global partition by range columns (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than(20000)));
+ERROR 0A000: partition columns not prefix of index columns not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), fulltext index idx(c3) local);
+ERROR 0A000: GLOBAL/LOCAL index option in domain ctxcat index not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), fulltext index idx(c3) global);
+ERROR 0A000: GLOBAL/LOCAL index option in domain ctxcat index not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), fulltext index idx(c3) partition by hash(c3) partitions 2);
+ERROR 0A000: non global index with partition option not supported
+create table tt(c1 int primary key, c2 int, c3 varchar(20), fulltext index idx(c3));
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677789;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677789	__idx_1099511677788_idx	1099511628776	1099511677788	8	2	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677789;
+tenant_id	table_id	part_id	part_name	high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677789;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677789	16	c1	0	63	NULL
+1	1099511677789	19	__word_segment_18	1	45	WORD_SEGMENT(`c3`)
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20), index idx1(c1) global partition by hash(c1) partitions 2, index idx2(c2) local);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table1_id" and index_status = 2, 1, 120;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table2_id" and index_status = 2, 1, 120;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

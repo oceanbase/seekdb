@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tmp_file/ob_tmp_file_io_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tmp_file/ob_tmp_file_io_handle.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 
@@ -171,7 +171,7 @@ int ObTmpFileIOHandle::wait()
     } else if (OB_UNLIKELY(done_size_ > buf_size_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("done size is larger than total todo size", KR(ret), KPC(this));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->get_tmp_file(fd_, file_handle))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_tmp_file(fd_, file_handle))) {
       LOG_WARN("fail to get tmp file handle", KR(ret), K(fd_));
     } else {
       while (OB_SUCC(ret) && !is_finished()) {

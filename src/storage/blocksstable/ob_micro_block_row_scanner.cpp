@@ -16,11 +16,13 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_micro_block_row_scanner.h"
+#include "data_plane/access/ob_micro_block_filter.h"
 #include "storage/access/ob_aggregate_base.h"
 #include "storage/access/ob_block_batched_row_store.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
 #include "storage/compaction/ob_compaction_trans_cache.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
+#include "storage/truncate_info/ob_truncate_filter_evaluator.h"
 
 namespace oceanbase
 {
@@ -640,15 +642,6 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
   if (OB_UNLIKELY(nullptr == reader_ || nullptr == filter || !filter->is_filter_node())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(reader_), KPC(filter));
-  } else if (filter->is_truncate_node()) {
-    if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
-        ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
-      if (OB_FAIL(decoder_->filter_pushdown_truncate_filter(parent, *filter, pd_filter_info, bitmap))) {
-        LOG_WARN("Failed to pushdown truncate scn filter", K(ret));
-      }
-    } else if (OB_FAIL(flat_reader_->filter_pushdown_truncate_filter(parent, *filter, pd_filter_info, bitmap))) {
-      LOG_WARN("Failed to execute black pushdown filter", K(ret));
-    }
   } else if (filter->is_sample_node()) {
     if (OB_FAIL(static_cast<ObSampleFilterExecutor *>(filter)->apply_sample_filter(
                 pd_filter_info,
@@ -706,6 +699,35 @@ int ObIMicroBlockRowScanner::filter_pushdown_filter(
     }
   }
 
+  return ret;
+}
+
+int ObIMicroBlockRowScanner::filter_truncate_evaluator(
+    storage::ObTruncateFilterEvaluator &evaluator,
+    const int64_t start,
+    const int64_t count,
+    const common::ObBitmap *candidate_rows,
+    common::ObBitmap &result)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(nullptr == reader_ || !evaluator.is_valid() || start < 0 || count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid truncate evaluator input", K(ret), KP_(reader), K(start), K(count));
+  } else if (ObIMicroBlockReader::Decoder == reader_->get_type() ||
+             ObIMicroBlockReader::CSDecoder == reader_->get_type()) {
+    if (OB_FAIL(decoder_->filter_truncate_evaluator(
+            evaluator, start, count, candidate_rows, result))) {
+      LOG_WARN("failed to evaluate truncate filter with decoder", K(ret), K(start), K(count));
+    }
+  } else if (ObIMicroBlockReader::Reader == reader_->get_type()) {
+    if (OB_FAIL(flat_reader_->filter_truncate_evaluator(
+            evaluator, start, count, candidate_rows, result))) {
+      LOG_WARN("failed to evaluate truncate filter with flat reader", K(ret), K(start), K(count));
+    }
+  } else {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("truncate evaluator requires a storage micro-block reader", K(ret), K(reader_->get_type()));
+  }
   return ret;
 }
 
@@ -2289,5 +2311,20 @@ int ObMultiVersionMicroBlockMinorMergeRowScanner::check_uncommit_tx_info_correct
 }
 #endif
 
+} // namespace blocksstable
+
+namespace data_plane
+{
+int filter_micro_block(
+    blocksstable::ObIMicroBlockRowScanner &scanner,
+    sql::ObPushdownFilterExecutor *parent,
+    sql::ObPushdownFilterExecutor &filter,
+    sql::PushdownFilterInfo &filter_info,
+    bool can_use_vectorize,
+    common::ObBitmap &bitmap)
+{
+  return scanner.filter_pushdown_filter(
+      parent, &filter, filter_info, can_use_vectorize, bitmap);
 }
-}
+} // namespace data_plane
+} // namespace oceanbase

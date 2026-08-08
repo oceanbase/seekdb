@@ -27,13 +27,17 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_ddl_common.h"
 #include "rootserver/ddl_task/ob_ddl_longops.h"
-#include "rootserver/ddl_task/ob_ddl_local_build_executor.h"
-#include "sql/engine/px/ob_px_dtl_msg.h"
+#include "query/engine/px/ob_px_tablet_range.h"
+#include "storage/blocksstable/ob_datum_range.h"
 
 namespace oceanbase
 {
 namespace rootserver
 {
+using share::schema::ObTableSchema;
+
+class ObLocalManagementService;
+
 static constexpr int64_t DEFAULT_EXECUTION_ID = 1;
 
 struct ObDDLTaskRecord;
@@ -631,8 +635,8 @@ public:
   static int deep_copy_table_arg(common::ObIAllocator &allocator, 
                                  const obcall::ObDDLArg &source_arg, 
                                  obcall::ObDDLArg &dest_arg);
-  void set_longops_stat(share::ObDDLLongopsStat *longops_stat) { longops_stat_ = longops_stat; }
-  share::ObDDLLongopsStat *get_longops_stat() const { return longops_stat_; }
+  void set_longops_stat(rootserver::ObDDLLongopsStat *longops_stat) { longops_stat_ = longops_stat; }
+  rootserver::ObDDLLongopsStat *get_longops_stat() const { return longops_stat_; }
   uint64_t get_data_format_version() const { return data_format_version_; }
   static int fetch_new_task_id(ObMySQLProxy &sql_proxy, int64_t &new_task_id);
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const;
@@ -737,7 +741,7 @@ protected:
   common::ObArenaAllocator allocator_;
   TraceId sys_task_id_;
   int64_t err_code_occurence_cnt_; // occurence count for all error return codes not in white list.
-  share::ObDDLLongopsStat *longops_stat_;
+  rootserver::ObDDLLongopsStat *longops_stat_;
   uint64_t gmt_create_;
   share::ObDDLTaskStatInfo stat_info_;
   int64_t delay_schedule_time_;

@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1, proxy_num=0);
+ob1.reboot;
+ob1.force_stop;
+ob1.z1.obs0.rmdir;
+ob1.deploy;
+ob1.mysql_root_p ALTER SYSTEM BOOTSTRAP ZONE 'z1' SERVER '$z1_ip:$z1_port';
+ob1.z1.obs0.sh_p cd $work_dir/log; grep "data_version file exists" observer.log* | wc -l | awk '{if (\$1 > 0) print 1}';
+ob1.force_stop;
+ob1.set keep_data_version=1;
+ob1.z1.obs0.rmdir;
+ob1.deploy;
+ob1.mysql_root_p ALTER SYSTEM BOOTSTRAP ZONE 'z1' SERVER '$z1_ip:$z1_port';
+ob1.z1.obs0.sh_p cd $work_dir/log; grep "data_version file exists" observer.log* | wc -l | awk '{if (\$1 > 0) print 1}';
+1

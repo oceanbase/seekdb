@@ -22,7 +22,6 @@
 #include "ob_partition_merge_iter.h"
 #include "ob_tablet_merge_task.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/engine/expr/ob_expr_frame_info.h"
 #include "storage/ob_row_fuse.h"
 #include "storage/blocksstable/ob_datum_row.h"
 

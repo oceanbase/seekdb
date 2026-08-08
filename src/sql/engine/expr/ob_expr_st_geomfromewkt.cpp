@@ -65,7 +65,7 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
   uint32_t srid = 0;
   ObString wkt;
   const ObSrsItem *srs_item = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   ObGeometry *geo = NULL;
   bool is_geog = false;
@@ -78,7 +78,7 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
     is_null_result = true;
   } else {
     wkt = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkt));
     } 
@@ -93,9 +93,8 @@ int ObExprPrivSTGeomFromEwkt::eval_st_geomfromewkt(const ObExpr &expr, ObEvalCtx
       ret = OB_OPERATE_OVERFLOW;
       LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (ObGeoTypeUtil::need_get_srs(srid)) {
-      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-        LOG_WARN("failed to get srs guard", K(ret));
-      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+              ctx, srs_guard, srid, srs_item))) {
         LOG_WARN("failed to get srs item", K(ret));
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;

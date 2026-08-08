@@ -1057,7 +1057,7 @@ int ObSqlPlanSet::add_plan(ObPhysicalPlan &plan,
       OB_ISNULL(pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_PC_LOG(WARN, "invalid argument", KP(plan_cache_value_), K(ret));
-  } else if (OB_FAIL(get_phy_locations(sql_ctx.partition_infos_,
+  } else if (OB_FAIL(get_phy_locations(sql_ctx.get_partition_infos(),
                                        //table_locs,
                                        candi_table_locs))) {
     LOG_WARN("fail to get physical locations", K(ret));
@@ -1092,14 +1092,14 @@ int ObSqlPlanSet::add_plan(ObPhysicalPlan &plan,
             array_binding_plan_ = &plan;
           }
         } else {
-          is_single_table_ = (1 == sql_ctx.partition_infos_.count());
+          is_single_table_ = (1 == sql_ctx.get_partition_info_count());
           if (OB_FAIL(add_physical_plan(OB_PHY_PLAN_LOCAL, pc_ctx, plan))) {
             SQL_PC_LOG(TRACE, "fail to add local plan", K(ret));
           }
         }
       } break;
       case OB_PHY_PLAN_DISTRIBUTED: {
-        is_single_table_ = (1 == sql_ctx.partition_infos_.count());
+        is_single_table_ = (1 == sql_ctx.get_partition_info_count());
         SQL_PC_LOG(TRACE, "plan set add plan, distr plan",  K(ret));
         if (OB_FAIL(add_physical_plan(OB_PHY_PLAN_DISTRIBUTED, pc_ctx, plan))) {
           LOG_WARN("failed to add dist plan", K(ret), K(plan));
@@ -1135,7 +1135,7 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     LOG_WARN("pc_allocator has not been initialized.", K(ret));
   } else if (OB_FAIL(ObPlanSet::init_new_set(pc_ctx, plan, pc_malloc_))) {
     LOG_WARN("init new set failed", K(ret));
-  } else if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(sql_ctx.partition_infos_.count(),
+  } else if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(sql_ctx.get_partition_info_count(),
                                                         *plan_cache_value_->get_pcv_set()->get_allocator()))) {
     LOG_WARN("fail to init table location count", K(ret));
   } else if (OB_FAIL(dist_plans_.init(this))) {
@@ -1178,7 +1178,7 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     LOG_DEBUG("using px", K(enable_inner_part_parallel_exec_));
   }
   if (OB_SUCC(ret) && (!contain_index_location || is_multi_stmt_plan())) {
-    const ObTablePartitionInfoArray &partition_infos = sql_ctx.partition_infos_;
+    const ObTablePartitionInfoArray &partition_infos = sql_ctx.get_partition_infos();
     int64_t N = partition_infos.count();
     //copy table location
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {

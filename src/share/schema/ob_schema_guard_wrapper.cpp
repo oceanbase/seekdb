@@ -31,7 +31,24 @@ ObSchemaGuardWrapper::ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaSe
 
 ObSchemaGuardWrapper::~ObSchemaGuardWrapper() {}
 
-
+int ObSchemaGuardWrapper::init()
+{
+  int ret = OB_SUCCESS;
+  if (is_local_guard_) {
+    if (OB_ISNULL(schema_service_)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("schema service is null", KR(ret));
+    } else if (OB_FAIL(
+        schema_service_->get_runtime_schema_guard_with_version_in_inner_table(
+            local_schema_guard_))) {
+      LOG_WARN("fail to get runtime schema guard with version in inner table",
+               KR(ret));
+    } else {
+      LOG_INFO("get local schema guard success");
+    }
+  }
+  return ret;
+}
 
 int ObSchemaGuardWrapper::check_inner_stat_() const
 {

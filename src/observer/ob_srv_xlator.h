@@ -18,7 +18,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "rpc/frame/ob_req_translator.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 union EP_CALLP_BUF;
 RLOCAL_EXTERN(EP_CALLP_BUF, co_ep_callp_buf);
@@ -37,19 +37,19 @@ template <typename T> void worker_allocator_delete(T *&ptr) {
 
 class ObSrvMySQLXlator : public rpc::frame::ObReqTranslator {
 public:
-  explicit ObSrvMySQLXlator(const ObGlobalContext &gctx) : gctx_(gctx) {}
+  explicit ObSrvMySQLXlator(const share::ObGlobalContext &gctx) : gctx_(gctx) {}
   int translate(rpc::ObRequest &req, ObReqProcessor *&processor);
 protected:
   ObReqProcessor *get_processor(rpc::ObRequest &) { return NULL; }
   int get_mp_connect_processor(ObReqProcessor *&ret_proc);
 private:
-  const ObGlobalContext &gctx_;
+  const share::ObGlobalContext &gctx_;
   DISALLOW_COPY_AND_ASSIGN(ObSrvMySQLXlator);
 };
 
 class ObSrvXlator : public rpc::frame::ObReqTranslator {
 public:
-  explicit ObSrvXlator(const ObGlobalContext &gctx)
+  explicit ObSrvXlator(const share::ObGlobalContext &gctx)
       : mysql_xlator_(gctx) {}
   int th_init();
   int th_destroy();

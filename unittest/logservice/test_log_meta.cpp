@@ -106,10 +106,3 @@ TEST(TestLogMeta, reject_invalid_base_info)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_meta.log", true);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

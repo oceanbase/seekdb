@@ -16,12 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_func_helper.h"
-#include "share/rc/ob_module_provider.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
 #include "sql/engine/expr/ob_expr_cast.h"
 #include "sql/ob_spi.h"
-#include "storage/lob/ob_lob_manager.h"
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/expr/ob_json_param_type.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
@@ -67,7 +65,7 @@ int ObJsonExprHelper::get_json_or_str_data(ObExpr *expr, ObEvalCtx &ctx,
               && !ob_is_string_type(val_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, *json_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, allocator, *json_datum,
                 expr->datum_meta_, expr->obj_meta_.has_lob_header(), str))) {
     LOG_WARN("fail to get real data.", K(ret), K(str));
   }
@@ -165,11 +163,15 @@ int ObJsonExprHelper::get_json_doc(const ObExpr &expr, ObEvalCtx &ctx,
   return ret;
 }
 
-int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data, const char* func_name, 
-                                            common::ObIAllocator *allocator, ObIJsonBase*& j_schema)
+int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data,
+                                            const char *func_name,
+                                            ObExecContext &exec_ctx,
+                                            common::ObIAllocator *allocator,
+                                            ObIJsonBase *&j_schema)
 {
   INIT_SUCC(ret);
   ObObjType val_type = data.get_type();
+  const common::ObLobReadOptions *lob_options = nullptr;
   if (data.is_null()) {
     void *json_node_buf = allocator->alloc(sizeof(ObJsonNull));
     if (OB_ISNULL(json_node_buf)) {
@@ -181,6 +183,8 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data, const cha
         LOG_WARN("failed: json tree to bin", K(ret));
       }
     }
+  } else if (OB_FAIL(exec_ctx.get_lob_read_options(lob_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
   } else if (ObJsonExprHelper::is_convertible_to_json(val_type)) {
     ObCollationType cs_type = data.get_collation_type();
     ObIJsonBase* j_base = nullptr;
@@ -189,7 +193,8 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data, const cha
     if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                   cs_type, j_base, ObConv2JsonParam(false,
                                                                   data.has_lob_header(), false,
-                                                                  false, true, true)))) {
+                                                                  false, true, true),
+                                                                  lob_options))) {
       if (ret == OB_ERR_NULL_VALUE || ret == OB_ERR_INVALID_JSON_TEXT) { // json_str is null
         ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
@@ -219,20 +224,26 @@ int ObJsonExprHelper::get_const_json_schema(const common::ObObj &data, const cha
 
 int ObJsonExprHelper::get_partial_json_bin(
     ObIAllocator &allocator,
-    ObILobCursor *cursor,
+    data_plane::ObJsonLobHandle &lob_handle,
     ObJsonBinUpdateCtx *update_ctx, 
     ObIJsonBase *&j_base)
 {
   INIT_SUCC(ret);
   ObJsonBinCtx *bin_ctx = nullptr;
   ObJsonBin *j_bin = nullptr;
-  if (OB_ISNULL(cursor)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cursor is null", KR(ret));
-  } else if (OB_ISNULL(update_ctx) && OB_ISNULL(update_ctx = OB_NEWx(ObJsonBinUpdateCtx, &allocator, &allocator))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc update ctx fail", K(ret));
-  } else if (OB_FALSE_IT(update_ctx->set_lob_cursor(cursor))) {
+  bool update_context_allocated = false;
+  if (OB_ISNULL(update_ctx)) {
+    if (OB_ISNULL(update_ctx =
+            OB_NEWx(ObJsonBinUpdateCtx, &allocator, &allocator))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("alloc update ctx fail", K(ret));
+    } else {
+      update_context_allocated = true;
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(data_plane::bind_json_lob(lob_handle, *update_ctx))) {
+    LOG_WARN("bind JSON LOB fail", K(ret));
   // build json bin
   } else if (OB_ISNULL(bin_ctx = OB_NEWx(ObJsonBinCtx, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -248,6 +259,10 @@ int ObJsonExprHelper::get_partial_json_bin(
   } else {
     j_base = j_bin;
   }
+  if (OB_FAIL(ret) && update_context_allocated && OB_NOT_NULL(update_ctx)) {
+    update_ctx->~ObJsonBinUpdateCtx();
+    update_ctx = nullptr;
+  }
   return ret;
 }
 
@@ -262,11 +277,8 @@ int ObJsonExprHelper::get_json_for_partial_update(
   INIT_SUCC(ret);
   ObString lob_str = json_datum.get_string();
   ObLobLocatorV2 locator(lob_str);
-  bool allow_partial_update = false;
-  ObString metas;
-  storage::ObLobCursor *cursor = nullptr;
+  data_plane::ObJsonLobHandle *lob_handle = nullptr;
   int64_t query_timeout_ts = ObTimeUtility::current_time() + 60 * USECS_PER_SEC;
-  storage::ObLobManager *lob_mgr = share::g_mp->lob_manager();
   uint8_t root_type = 0;
   if (lob_str.empty()) {
     ret = OB_ERR_UNEXPECTED;
@@ -286,21 +298,25 @@ int ObJsonExprHelper::get_json_for_partial_update(
   } else if (! locator.is_persist_lob() || locator.is_inrow()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("persis lob or no-delta inrow lob locator not support", KR(ret), K(locator));
-  } else if (OB_FAIL(lob_mgr->query(&allocator, locator, query_timeout_ts, false, nullptr, cursor))) {
-    LOG_WARN("build lob cursor fail", K(ret), K(locator));
-  } else if (OB_FAIL(cursor->read_i8(0, reinterpret_cast<int8_t*>(&root_type)))) {
-    LOG_WARN("read root type fail", KR(ret), KPC(cursor));
+  } else if (OB_FAIL(data_plane::open_json_lob(
+                 allocator, locator, query_timeout_ts, lob_handle))) {
+    LOG_WARN("open JSON LOB fail", K(ret), K(locator));
+  } else if (OB_FAIL(data_plane::read_json_lob_root_type(
+                 *lob_handle, root_type))) {
+    LOG_WARN("read root type fail", KR(ret));
   } else if (! ObJsonBin::is_doc_header(root_type)) {
     // if root type not doc header, means that old json data.
     // old json is not binary charset in lob, so can not use partial lob
     ObString j_str;
-    if (cursor->has_one_chunk_with_all_data()) {
-      LOG_DEBUG("one chunk will all data", K(lob_str), K(root_type), KPC(cursor), K(json_datum), K(json_expr));
-      if (OB_FAIL(cursor->get_one_chunk_with_all_data(j_str))) {
-        LOG_WARN("get real data fail", KR(ret), K(json_datum), K(json_expr));
-      }
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, json_datum,
-                json_expr.datum_meta_, json_expr.obj_meta_.has_lob_header(), j_str, &ctx.exec_ctx_))) {
+    bool is_single_chunk = false;
+    if (OB_FAIL(data_plane::try_get_single_chunk_json_lob(
+            *lob_handle, is_single_chunk, j_str))) {
+      LOG_WARN("get real data fail", KR(ret), K(json_datum), K(json_expr));
+    } else if (is_single_chunk) {
+      LOG_DEBUG("one chunk with all data", K(lob_str), K(root_type),
+                K(json_datum), K(json_expr));
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, allocator, json_datum,
+                json_expr.datum_meta_, json_expr.obj_meta_.has_lob_header(), j_str))) {
       LOG_WARN("get real data fail", KR(ret), K(json_datum), K(json_expr));
     }
     if (OB_FAIL(ret)) {
@@ -308,9 +324,7 @@ int ObJsonExprHelper::get_json_for_partial_update(
           &allocator, j_str, ObJsonInType::JSON_BIN, ObJsonInType::JSON_TREE, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
       LOG_WARN("get json base fail", K(ret), K(j_str));
     }
-    cursor->~ObLobCursor();
-    cursor = nullptr;
-  } else if (OB_FAIL(get_partial_json_bin(allocator, cursor, nullptr, j_base))) {
+  } else if (OB_FAIL(get_partial_json_bin(allocator, *lob_handle, nullptr, j_base))) {
     LOG_WARN("fail to reset iter", K(ret));
   } else if (OB_ISNULL(j_base)) {
     ret = OB_ERR_UNEXPECTED;
@@ -322,29 +336,30 @@ int ObJsonExprHelper::get_json_for_partial_update(
       j_base->reset();
       j_base = nullptr;
     }
-    if (OB_NOT_NULL(cursor)) {
-      cursor->~ObLobCursor();
-      cursor = nullptr;
-    }
   }
+  data_plane::destroy_json_lob_handle(lob_handle);
   return ret;
 }
 
 int ObJsonExprHelper::refine_range_json_value_const(
-  const common::ObObj &data, ObExecContext *ctx,
+  const common::ObObj &data, ObExecContext &ctx,
   bool is_bool, common::ObIAllocator *allocator,
   ObIJsonBase*& j_base, bool to_bin)
 {
   int ret = OB_SUCCESS;
   ObObjType val_type = data.get_type();
   ObCollationType cs_type = data.get_collation_type();
-  
+  const common::ObLobReadOptions *lob_options = nullptr;
+
   if (!ObJsonExprHelper::is_convertible_to_json(val_type)) {
     ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
+  } else if (OB_FAIL(ctx.get_lob_read_options(lob_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
   } else if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                 cs_type, j_base, ObConv2JsonParam(to_bin,
-                                                                data.has_lob_header(), false, false, true, true)))) {
+                                                                data.has_lob_header(), false, false, true, true),
+                                                                lob_options))) {
     LOG_WARN("failed: parse value to jsonBase", K(ret), K(val_type));
   }
 
@@ -361,7 +376,10 @@ int ObJsonExprHelper::get_json_val(const common::ObDatum &data,
                                    ObIJsonBase*& j_base, bool to_bin)
 {
   INIT_SUCC(ret);
-  if (data.is_null()) {
+  const common::ObLobReadOptions *lob_options = nullptr;
+  if (OB_FAIL(ctx.get_lob_read_options(lob_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
+  } else if (data.is_null()) {
     void *json_node_buf = allocator->alloc(sizeof(ObJsonNull));
     if (OB_ISNULL(json_node_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -380,7 +398,8 @@ int ObJsonExprHelper::get_json_val(const common::ObDatum &data,
     if (OB_FAIL(ObJsonExprHelper::transform_convertible_2jsonBase(data, val_type, allocator,
                                                                   cs_type, j_base, ObConv2JsonParam(to_bin,
                                                                   expr->obj_meta_.has_lob_header(), 
-                                                                  false, false, true)))) {
+                                                                  false, false, true),
+                                                                  lob_options))) {
       LOG_WARN("failed: parse value to jsonBase", K(ret), K(val_type));
     }
   } else {
@@ -454,6 +473,10 @@ int ObJsonExprHelper::cast_to_res(ObIAllocator &allocator,
       const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
       ObCastCtx cast_ctx(&allocator, &dtc_params, get_cur_time(phy_plan_ctx), def_cm,
                          cs_type, NULL, NULL);
+      session->configure_obj_cast(
+          cast_ctx,
+          ctx.exec_ctx_.get_srs_provider(),
+          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(obj_type, cs_type, cast_ctx, src_obj, dst_obj))) {
         LOG_WARN("failed to cast object to ", K(ret), K(src_obj), K(obj_type));
       } else if (FALSE_IT(get_accuracy_from_expr(expr, out_acc))) {
@@ -521,7 +544,10 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
   ObExpr *json_arg = expr.args_[index];
   ObObjType val_type = json_arg->datum_meta_.type_;
   MultimodeAlloctor *alloc = nullptr;
-  if (OB_ISNULL(alloc = static_cast<MultimodeAlloctor*>(allocator))) {
+  const common::ObLobReadOptions *lob_options = nullptr;
+  if (OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_options))) {
+    LOG_WARN("get LOB read options failed", K(ret));
+  } else if (OB_ISNULL(alloc = static_cast<MultimodeAlloctor*>(allocator))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null alloc.", K(ret));
   } else if (OB_FAIL(alloc->eval_arg(json_arg, ctx, json_datum))) {
@@ -564,7 +590,8 @@ int ObJsonExprHelper::get_json_val(const ObExpr &expr, ObEvalCtx &ctx,
                                                                   json_arg->obj_meta_.has_lob_header(),
                                                                   false,
                                                                   HAS_FLAG(parse_flag, ObJsonParser::JSN_RELAXED_FLAG),
-                                                                  format_json)))) {
+                                                                  format_json),
+                                                                  lob_options))) {
       LOG_WARN("failed: parse value to jsonBase", K(ret), K(val_type));
     }
   } else if (val_type == ObCollectionSQLType) {
@@ -619,7 +646,8 @@ int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
                                         bool is_bool_data_type,
                                         bool is_format_json,
                                         bool is_strict,
-                                        bool is_bin)
+                                        bool is_bin,
+                                        const common::ObLobReadOptions *lob_options)
 {
   INIT_SUCC(ret);
   ObObjType val_type = data_meta.get_type();
@@ -651,8 +679,8 @@ int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
       ObString j_str = json_datum->get_string();
       ObString out_str;
       bool need_convert = (cs_type != CS_TYPE_INVALID && cs_type != CS_TYPE_BINARY);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                    allocator, val_type, cs_type, data_meta.has_lob_header(), j_str))) {
+      if (OB_FAIL(common::lob_helper::read_real_string_data(
+              allocator, val_type, cs_type, data_meta.has_lob_header(), j_str, lob_options))) {
         LOG_WARN("fail to get real data.", K(ret), K(j_str));
       } else if (need_convert && OB_FAIL(ObExprUtil::convert_string_collation(j_str, cs_type, out_str, CS_TYPE_UTF8MB4_BIN, *allocator))) {
         LOG_WARN("fail to convert charset.", K(ret), K(j_str), K(cs_type));
@@ -692,8 +720,8 @@ int ObJsonExprHelper::datum_to_json_val(const ObDatum *json_datum,
     } else if (val_type == ObJsonType) {
       ObJsonInType to_type = is_bin ? ObJsonInType::JSON_BIN : ObJsonInType::JSON_TREE;
       ObString j_str = json_datum->get_string();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-                    allocator, val_type, cs_type, data_meta.has_lob_header(), j_str))) {
+      if (OB_FAIL(common::lob_helper::read_real_string_data(
+              allocator, val_type, cs_type, data_meta.has_lob_header(), j_str, lob_options))) {
         LOG_WARN("fail to get real data.", K(ret), K(j_str));
       } else if (OB_FAIL(deep_copy_ob_string(*allocator, j_str, j_str))) {
         LOG_WARN("fail to deep copy string.", K(ret), K(j_str));
@@ -1363,7 +1391,8 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
                                                       common::ObIAllocator *allocator,
                                                       ObCollationType cs_type,
                                                       ObIJsonBase*& j_base,
-                                                      ObConv2JsonParam flags)
+                                                      ObConv2JsonParam flags,
+                                                      const common::ObLobReadOptions *lob_options)
 {
   int ret = OB_SUCCESS;
   void* buf = NULL;
@@ -1391,7 +1420,8 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
         LOG_WARN("Invalid collation type for input string.", K(ret));
       } else {
         j_str = datum.get_string();
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, type, cs_type, flags.has_lob_header_, j_str))) {
+        if (OB_FAIL(common::lob_helper::read_real_string_data(
+                allocator, type, cs_type, flags.has_lob_header_, j_str, lob_options))) {
           LOG_WARN("fail to get real data.", K(ret), K(j_str));
         } else if (flags.deep_copy_) {
           ret = deep_copy_ob_string(*allocator, j_str, j_str);
@@ -1443,7 +1473,8 @@ int ObJsonExprHelper::transform_convertible_2jsonBase(const T &datum,
       ObString j_str = datum.get_string();
       if (OB_SUCC(ret)) {
         ObString tmp_str = j_str;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, type, cs_type, flags.has_lob_header_, tmp_str))) {
+        if (OB_FAIL(common::lob_helper::read_real_string_data(
+                allocator, type, cs_type, flags.has_lob_header_, tmp_str, lob_options))) {
           LOG_WARN("fail to get real data.", K(ret), K(j_str));
         } else if (flags.deep_copy_) {
           if (OB_FAIL(deep_copy_ob_string(*allocator, tmp_str, j_str))) {
@@ -2444,25 +2475,41 @@ int ObJsonExprHelper::get_sub_column_path_from_json_expr(ObIAllocator& allocator
 int ObJsonDeltaLob::init(ObJsonBin *j_bin)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(update_ctx_ = j_bin->get_update_ctx())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update ctx is null", K(ret), KPC(j_bin));
-  } else {
-    cursor_ = static_cast<storage::ObLobCursor*>(update_ctx_->cursor_);
-    partial_data_ = cursor_->partial_data_;
+  if (OB_ISNULL(j_bin)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("json bin is null", K(ret));
+  } else if (OB_ISNULL(update_ctx_ = j_bin->get_update_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("update ctx is null", K(ret), KPC(j_bin));
   }
   return ret;
 }
 
-int ObJsonDeltaLob::init(ObIAllocator *allocator, ObLobLocatorV2 locator, int64_t query_timeout_ts)
+int ObJsonDeltaLob::init(
+    ObIAllocator *allocator,
+    ObLobLocatorV2 locator,
+    int64_t query_timeout_ts)
 {
   int ret = OB_SUCCESS;
   allocator_ = allocator;
   query_timeout_ts_ = query_timeout_ts;
-  if (OB_FAIL(deserialize(locator))) {
-    LOG_WARN("deserialize json delta lob fail", K(ret), K(locator));
+  if (OB_ISNULL(allocator_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("allocator is null", K(ret));
+  } else if (OB_ISNULL(
+                 update_ctx_ =
+                     OB_NEWx(ObJsonBinUpdateCtx, allocator_, allocator_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("alloc update ctx fail", K(ret));
+  } else if (OB_FAIL(data_plane::restore_json_lob_delta(
+                 *allocator_, locator, query_timeout_ts_,
+                 *update_ctx_, lob_handle_))) {
+    LOG_WARN("restore json delta lob fail", K(ret), K(locator));
+  } else if (OB_FAIL(ObJsonExprHelper::get_partial_json_bin(
+                 *allocator_, *lob_handle_, update_ctx_, j_base_))) {
+    LOG_WARN("get partial json bin fail", K(ret));
   }
-  return ret; 
+  return ret;
 }
 
 void ObJsonDeltaLob::reset()
@@ -2470,194 +2517,45 @@ void ObJsonDeltaLob::reset()
   if (OB_NOT_NULL(j_base_)) {
     j_base_->reset();
     j_base_ = nullptr;
-  }
-  if (OB_NOT_NULL(update_ctx_)) {
+    update_ctx_ = nullptr;
+  } else if (OB_NOT_NULL(update_ctx_)) {
     update_ctx_->~ObJsonBinUpdateCtx();
     update_ctx_ = nullptr;
   }
-  if (OB_NOT_NULL(cursor_)) {
-    cursor_->~ObLobCursor();
-    cursor_ = nullptr;
-  }
-  if (OB_NOT_NULL(partial_data_)) {
-    partial_data_->~ObLobPartialData();
-    partial_data_ = nullptr;
-  }
+  data_plane::destroy_json_lob_handle(lob_handle_);
 }
 
-int64_t ObJsonDeltaLob::get_lob_diff_serialize_size() const
+int64_t ObJsonDeltaLob::get_serialize_size() const
 {
-  int64_t len = 0;
-  // binary diff (lob diff)
-  const ObJsonBinaryDiffArray &binary_diffs = update_ctx_->binary_diffs_;
-  len += sizeof(storage::ObLobDiff) * binary_diffs.count();
+  return OB_ISNULL(update_ctx_)
+      ? 0
+      : data_plane::get_json_lob_delta_serialize_size(*update_ctx_);
+}
 
-  // json diff
-  const ObJsonDiffArray &json_diffs = update_ctx_->json_diffs_;
-  ObJsonDiffHeader json_diff_header;
-  json_diff_header.cnt_ = json_diffs.count();
-  len += json_diff_header.get_serialize_size();
-  for (int i = 0; i < json_diffs.count(); ++i) {
-    const ObJsonDiff& diff = json_diffs[i];
-    len += json_diffs[i].get_serialize_size();
+int ObJsonDeltaLob::serialize(
+    char *buf,
+    int64_t buf_len,
+    int64_t &pos) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(update_ctx_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON delta LOB is not initialized", K(ret));
+  } else if (OB_FAIL(data_plane::serialize_json_lob_delta(
+                 *update_ctx_, buf, buf_len, pos))) {
+    LOG_WARN("serialize JSON delta LOB fail", K(ret), K(buf_len), K(pos));
   }
-  return len;
-}
-
-uint32_t ObJsonDeltaLob::get_lob_diff_cnt() const
-{
-  return  update_ctx_->binary_diffs_.count();
-}
-
-int64_t ObJsonDeltaLob::get_partial_data_serialize_size() const
-{
-  return nullptr == partial_data_ ? 0 : partial_data_->get_serialize_size();   
+  return ret;
 }
 
 int ObJsonDeltaLob::check_binary_diff() const
 {
-  INIT_SUCC(ret);
-  for (int i = 0; OB_SUCC(ret) && i < partial_data_->index_.count(); ++i) {
-    ObLobChunkIndex &chunk_index = partial_data_->index_[i];
-    uint64_t chunk_start_offset = chunk_index.offset_;
-    uint64_t chunk_end_offset = chunk_index.offset_ + chunk_index.byte_len_;
-    uint64_t max_end_offset = chunk_start_offset + partial_data_->chunk_size_;
-    bool is_chunk_updated = false;
-    for (int j = 0; ! chunk_index.is_add_ && j < update_ctx_->binary_diffs_.count(); ++j) {
-      const ObJsonBinaryDiff &diff = update_ctx_->binary_diffs_[j];
-      uint64_t diff_start_offset = diff.dst_offset_;
-      uint64_t diff_end_offset = diff.dst_offset_ + diff.dst_len_;
-      if (diff_start_offset >= chunk_start_offset && diff_start_offset < chunk_end_offset) {
-        is_chunk_updated = true;
-      } else if (diff_end_offset > chunk_start_offset && diff_end_offset <= chunk_end_offset) {
-        is_chunk_updated = true;
-      } else if (diff_start_offset <= chunk_start_offset &&  chunk_end_offset <= diff_end_offset) {
-        is_chunk_updated = true;
-      }
-    }
-    // if it should be updated and it's exist chunk, but no modified flag and old data, this is unexpected.
-    if (is_chunk_updated 
-        && ! chunk_index.is_add_ // exist chunk
-        && ! (chunk_index.is_modified_ && chunk_index.old_data_idx_ >= 0))  { // no modified flag and old data
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("old data not set", KR(ret), K(i), K(chunk_index));
-    }
-  }
-  return ret; 
-}
-
-int ObJsonDeltaLob::serialize_partial_data(char* buf, const int64_t buf_len, int64_t& pos) const
-{
-  INIT_SUCC(ret);
-  if (OB_ISNULL(partial_data_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partial_data_ is null", KR(ret));
-  } else if (OB_FAIL(partial_data_->serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize fail", K(ret), K(buf_len), K(pos));
-  }
-  return ret; 
-}
-
-int ObJsonDeltaLob::deserialize_partial_data(storage::ObLobDiffHeader *diff_header)
-{
-  INIT_SUCC(ret);
-  storage::ObLobAccessParam *param = nullptr;
-  char *buf = diff_header->data_;
-  int64_t data_len = diff_header->persist_loc_size_;
-  int64_t pos = 0;
-  ObLobLocatorV2 locator;
-  ObLobManager* lob_mgr = share::g_mp->lob_manager();
-  if (OB_ISNULL(partial_data_ = OB_NEWx(storage::ObLobPartialData, allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc lob param fail", K(ret), "size", sizeof(ObLobPartialData));
-  } else if (OB_FAIL(partial_data_->init())) {
-    LOG_WARN("map create fail", K(ret));
-  } else if (OB_FAIL(partial_data_->deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize fail", K(ret), K(data_len), K(pos), KPC(diff_header));
-  } else if (OB_FALSE_IT(locator.assign_buffer(partial_data_->locator_.ptr(), partial_data_->locator_.length()))) {
-  } else if (OB_FAIL(lob_mgr->query(allocator_, locator,
-                    query_timeout_ts_, false, partial_data_, cursor_))) {
-    LOG_WARN("build_lob_param fail", K(ret));
-  }
-  return ret;
-}
-
-int ObJsonDeltaLob::serialize_lob_diffs(char* buf, const int64_t buf_len, storage::ObLobDiffHeader *diff_header) const
-{
   int ret = OB_SUCCESS;
-  char *diff_data_ptr = diff_header->get_inline_data_ptr();
-  storage::ObLobDiff *lob_diffs = diff_header->get_diff_ptr();
-  int64_t data_len = buf_len - (diff_data_ptr - buf);
-  int64_t data_pos = 0;
-
-  for (int i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
-    const ObJsonBinaryDiff &diff = update_ctx_->binary_diffs_[i];
-    storage::ObLobDiff *lob_diff = new (lob_diffs + i) storage::ObLobDiff();
-    lob_diff->type_ = get_diff_type();
-    lob_diff->dst_offset_ = diff.dst_offset_;
-    lob_diff->dst_len_ = diff.dst_len_;
-  }
-
-  const ObJsonDiffArray &json_diffs = update_ctx_->json_diffs_;
-  ObJsonDiffHeader json_diff_header;
-  json_diff_header.cnt_ = json_diffs.count();
-  if (OB_FAIL(json_diff_header.serialize(diff_data_ptr, data_len, data_pos))) {
-    LOG_WARN("serialize json diff header fail", KR(ret), K(buf_len), K(data_pos));
-  }
-  for (int i = 0; OB_SUCC(ret) && i < json_diffs.count(); ++i) {
-    const ObJsonDiff& diff = json_diffs[i];
-    if (OB_FAIL(diff.serialize(diff_data_ptr, data_len, data_pos))) {
-      LOG_WARN("serialize json diff fail", KR(ret), K(i), K(buf_len), K(data_pos), K(json_diffs));
-    }
-  }
-  return ret;
-}
-
-int ObJsonDeltaLob::deserialize_lob_diffs(char* buf, const int64_t buf_len, storage::ObLobDiffHeader *diff_header)
-{
-  INIT_SUCC(ret);
-  ObJsonBinUpdateCtx *update_ctx = nullptr;
-  storage::ObLobDiff *lob_diffs = nullptr;
-  char *data_ptr = nullptr;
-  if (OB_ISNULL(update_ctx_ = OB_NEWx(ObJsonBinUpdateCtx, allocator_, allocator_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc update ctx fail", K(ret), "size", sizeof(ObJsonBinUpdateCtx));
-  } else if (OB_ISNULL(data_ptr = diff_header->get_inline_data_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data_ptr is null", K(ret), KPC(diff_header));
-  } else if (OB_ISNULL(lob_diffs = diff_header->get_diff_ptr())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_diffs is null", K(ret), KPC(diff_header));
-  } else {
-    int64_t data_len = buf_len - (data_ptr - buf);
-    int64_t data_pos = 0;
-    for (int64_t i = 0 ; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
-      ObLobDiff &lob_diff = lob_diffs[i];
-      ObJsonBinaryDiff binary_diff;
-      binary_diff.dst_offset_ = lob_diff.dst_offset_;
-      binary_diff.dst_len_ = lob_diff.dst_len_;
-      if (OB_FAIL(update_ctx_->binary_diffs_.push_back(binary_diff))) {
-        LOG_WARN("push diff fail", KR(ret), K(lob_diff), K(binary_diff), K(i), KPC(diff_header));
-      }
-    }
-
-    ObJsonDiffHeader json_diff_header;
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(json_diff_header.deserialize(data_ptr, data_len, data_pos))) {
-      LOG_WARN("deserialize json diff header fail", K(ret), K(data_len), K(data_pos), K(json_diff_header));
-    }
-    for (int64_t i = 0 ; OB_SUCC(ret) && i < json_diff_header.cnt_; ++i) {
-      ObJsonDiff json_diff;
-      if (OB_FAIL(json_diff.deserialize(data_ptr, data_len, data_pos))) {
-        LOG_WARN("deserialize fail", K(ret), K(i), K(json_diff_header), K(data_len), K(data_pos));
-      } else if (OB_FAIL(update_ctx_->json_diffs_.push_back(json_diff))) {
-        LOG_WARN("push diff fail", KR(ret), K(i), K(json_diff), K(i), K(json_diff_header), KPC(diff_header));
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObJsonExprHelper::get_partial_json_bin(*allocator_, cursor_, update_ctx_, j_base_))) {
-      LOG_WARN("get_partial_json_bin fail", K(ret)); 
-    }
+  if (OB_ISNULL(update_ctx_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON delta LOB is not initialized", K(ret));
+  } else if (OB_FAIL(data_plane::validate_json_lob_delta(*update_ctx_))) {
+    LOG_WARN("validate JSON delta LOB fail", K(ret));
   }
   return ret;
 }
@@ -2666,14 +2564,3 @@ int ObJsonDeltaLob::deserialize_lob_diffs(char* buf, const int64_t buf_len, stor
 
 }
 }
-
-
-// ── share/object obj_cast json max-depth hook registration ──
-#include "share/object/ob_obj_cast_hooks.h"
-namespace oceanbase {
-namespace sql {
-static const bool g_reg_obj_cast_json_depth_hook =
-    (common::g_obj_cast_json_max_depth =
-         &ObJsonExprHelper::get_json_max_depth_config, true);
-}  // namespace sql
-}  // namespace oceanbase

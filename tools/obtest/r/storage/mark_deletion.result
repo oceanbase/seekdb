@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+use test;
+create table t1_tg1(c1 int primary key, c2 int);
+alter system set minor_compact_trigger = 10;
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and table_id = $tgid and is_active = 0, 0, 180;
+delete from test.t1_tg1;
+alter system minor freeze;
+insert into test.t1_tg1 values (2,2);
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and table_id = $tgid and is_active = 0, 0, 180;
+set ob_log_level = 'DEBUG';
+select * from test.t1_tg1;
+c1	c2
+2	2
+set ob_log_level = 'INFO';
+ob1.z1.obs0.check_log_until_success "RangeSkip: skip range.*299";

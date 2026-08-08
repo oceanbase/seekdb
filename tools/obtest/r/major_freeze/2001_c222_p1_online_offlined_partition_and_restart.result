@@ -1,0 +1,10 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance = 'False';
+ob1.mysql create table oceanbase.t1(c1 int primary key, c2 int);
+ob1.mysql alter resource pool sys_pool unit_num = 2;
+ob1.mysql alter system move replica partition_id = '0%1@$tid' source= '$ip20:$port20' destination = '$ip21:$port21';
+ob1.mysql alter system move replica partition_id = '0%1@$tid' source= '$ip21:$port21' destination = '$ip20:$port20';
+ob1.restart;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select case when frozen_version=last_merged_version then true else false end from (select max(case when name = 'frozen_version' then value end) frozen_version, max(case when name = 'last_merged_version' then value end) last_merged_version from oceanbase.__all_zone where zone = '') a, 1, 1200;

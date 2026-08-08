@@ -18,7 +18,6 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_
 
 #include "storage/allocator/ob_memstore_allocator.h"
-#include "share/rc/ob_module_provider.h"
 #include "lib/literals/ob_literals.h"
 #include "lib/worker.h"
 

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_modify_autoinc_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_local_management_service.h"
@@ -48,7 +49,7 @@ int ObUpdateAutoincSequenceTask::process()
 {
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   int64_t max_value = 0;
   int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(local_management_service)) {
@@ -124,7 +125,7 @@ int ObUpdateAutoincSequenceTask::process()
     if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::notify_update_autoinc_end(task_key, max_value + 1, ret))) {
       LOG_WARN("fail to finish update autoinc task", KR(tmp_ret), K(max_value));
     }
-    LOG_INFO("execute finish update autoinc task finish", K(ret), "ddl_event_info", ObDDLEventInfo(), K(task_key), K(data_table_id_), K(column_id_), K(max_value));
+    LOG_INFO("execute finish update autoinc task finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_key), K(data_table_id_), K(column_id_), K(max_value));
   }
   char table_id_buffer[256];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld", 
@@ -280,7 +281,7 @@ int ObModifyAutoincTask::process()
     }
     if (OB_FAIL(ret)) {
       add_event_info("modify autoinc task process fail");
-      LOG_INFO("modify autoinc task process fail", "ddl_event_info", ObDDLEventInfo());
+      LOG_INFO("modify autoinc task process fail", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     }
   }
   return ret;
@@ -318,7 +319,7 @@ int ObModifyAutoincTask::modify_autoinc()
 {
   int ret = OB_SUCCESS;
   bool is_update_autoinc_end = false;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -399,7 +400,7 @@ int ObModifyAutoincTask::wait_trans_end()
   int tmp_ret = OB_SUCCESS;
   ObDDLTaskStatus new_status = WAIT_TRANS_END;
   const ObDDLTaskStatus next_task_status = SUCCESS;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -467,9 +468,10 @@ int ObModifyAutoincTask::set_schema_available()
     ObSArray<uint64_t> unused_ids;
     alter_table_arg_.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
     
-    if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
+    if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+            *GCTX.schema_service_, object_id_, rpc_timeout))) {
       LOG_WARN("get rpc timeout failed", K(ret));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
       LOG_WARN("alter table failed", K(ret));
     }
   }
@@ -495,9 +497,10 @@ int ObModifyAutoincTask::rollback_schema()
         alter_table_arg.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
         
         alter_table_arg.alter_table_schema_.reset_column_info();
-        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
+        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                *GCTX.schema_service_, object_id_, rpc_timeout))) {
           LOG_WARN("get rpc timeout failed", K(ret));
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
           LOG_WARN("alter table failed", K(ret));
         }
       }

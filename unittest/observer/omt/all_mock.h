@@ -25,6 +25,8 @@
 #endif
 
 #include "observer/ob_server.h"
+#undef protected
+#undef private
 
 using namespace oceanbase::storage;
 
@@ -35,8 +37,8 @@ void all_mock_init()
     OBSERVER.init_global_context();
     OBSERVER.init_schema();
     OBSERVER.init_tz_info_mgr();
-    GCTX.sql_engine_->plan_cache_manager_.init(GCTX.self_addr());
-    GCTX.sql_engine_->plan_cache_manager_.inited_ = false;
+    OBSERVER.get_sql_engine().plan_cache_manager_.init(GCTX.self_addr());
+    OBSERVER.get_sql_engine().plan_cache_manager_.inited_ = false;
     inited = true;
   }
 }

@@ -74,7 +74,7 @@ int ObExprCrc32::calc_crc32_expr(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& re
     ObString str_val;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *s_datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *s_datum,
                 datum_meta, expr.args_[0]->obj_meta_.has_lob_header(), str_val))) {
       LOG_WARN("get string data failed", K(ret));
     } else {

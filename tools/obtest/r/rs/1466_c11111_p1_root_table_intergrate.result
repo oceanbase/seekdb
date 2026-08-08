@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1:1:1:1:1,proxy_num=1,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_0 UNIT = 'unit_0', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2','z3','z4','z5');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_0'), locality='F@z1,F@z2,L@z3,L@z4,L@z5', primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+ob1.create_client tenant=tenant_0,user=root,passwd=,database=test;
+create table t(c1 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

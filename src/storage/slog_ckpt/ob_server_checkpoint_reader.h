@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_reader.h"
-#include "observer/omt/ob_server_runtime_meta.h"
+#include "storage/meta_store/ob_server_runtime_meta.h"
 namespace oceanbase
 {
 namespace storage

@@ -1,0 +1,170 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+drop tenant yts_tt force;
+drop database if exists CHARGE00;
+create database CHARGE00;
+USE CHARGE00;
+CREATE TABLE `GP_REFUND_INFO_00` (
+`REFUND_INFO_NO` VARCHAR(64) NOT NULL,
+`TX_ID` VARCHAR(128) NOT NULL,
+`SERVICE_TARGET` VARCHAR(64) NOT NULL,
+`REFUND_ID` VARCHAR(128) NOT NULL,
+`SERVICE_TYPE` VARCHAR(8) NOT NULL,
+`REFUND_SERVICE_AMOUNT` DECIMAL(20,4),
+`REFUND_AMOUNT` DECIMAL(15,4),
+`REFUND_ACCOUNT` VARCHAR(20),
+`EXTRA_INFO` VARCHAR(100),
+`REAL_AMOUNT` DECIMAL(15,4),
+`MEMO` VARCHAR(100),
+`GMT_CREATE` TIMESTAMP (6) NOT NULL,
+`GMT_MODIFIED` TIMESTAMP (6) NOT NULL,
+`TRANS_LOG_ID` DECIMAL(15,0),
+`TRANS_DATE` TIMESTAMP (6),
+`BILL_NO` VARCHAR(64),
+UNIQUE KEY UK_BILL_NO(BILL_NO),
+KEY IDX_TXID_SERVICE_TARGET_TYPE (TX_ID, SERVICE_TARGET, SERVICE_TYPE),
+PRIMARY KEY (`REFUND_INFO_NO`)
+);
+create outline charge_ol_1 on delete from gp_refund_info_00 where (tx_id = '0000000100');
+create outline charge_ol_1_1 on delete  /*+FULL(gp_refund_info_00)*/from gp_refund_info_00 where (tx_id = '0000000100');
+create outline charge_ol_1_2 on delete   /*+INDEX(gp_refund_info_00 UK_BILL_NO)*/from gp_refund_info_00 where (tx_id = '0000000100');
+create outline charge_ol_1_3 on delete    /*+INDEX(gp_refund_info_00 IDX_TXID_SERVICE_TARGET_TYPE)*/from gp_refund_info_00 where (tx_id = '0000000100');
+USE CHARGE00;
+##### test #####
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN
+
+## test use FULL
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_1';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA FULL(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1") END_OUTLINE_DATA*/ from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00	   PHY_TABLE_SCAN
+
+## test use UK_BILL_NO
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_2';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "UK_BILL_NO") END_OUTLINE_DATA*/  from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(UK_BILL_NO)	   PHY_TABLE_SCAN
+
+## test use IDX_TXID_SERVICE_TARGET_TYPE
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_3';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/   from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN
+
+ob1.z1.obs0.restart;
+
+USE CHARGE00;
+##### test #####
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN
+
+## test use FULL
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_1';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA FULL(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1") END_OUTLINE_DATA*/ from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00	   PHY_TABLE_SCAN
+
+## test use UK_BILL_NO
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_2';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "UK_BILL_NO") END_OUTLINE_DATA*/  from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(UK_BILL_NO)	   PHY_TABLE_SCAN
+
+## test use IDX_TXID_SERVICE_TARGET_TYPE
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_3';
+hit_count	outline_sql
+1	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/   from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+USE CHARGE00;
+##### test #####
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+delete from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1';
+hit_count	outline_sql
+3	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN
+
+## test use FULL
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+delete  from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_1';
+hit_count	outline_sql
+3	delete /*+ BEGIN_OUTLINE_DATA FULL(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1") END_OUTLINE_DATA*/ from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00	   PHY_TABLE_SCAN
+
+## test use UK_BILL_NO
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+delete   from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_2';
+hit_count	outline_sql
+3	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "UK_BILL_NO") END_OUTLINE_DATA*/  from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(UK_BILL_NO)	   PHY_TABLE_SCAN
+
+## test use IDX_TXID_SERVICE_TARGET_TYPE
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+delete    from gp_refund_info_00 where (tx_id = '0000000100');
+select hit_count, outline_sql from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT as a join oceanbase.DBA_OB_OUTLINES as b on a.outline_id = b.outline_id where b.outline_name = 'charge_ol_1_3';
+hit_count	outline_sql
+3	delete /*+ BEGIN_OUTLINE_DATA INDEX(@"DEL$1" "charge00.gp_refund_info_00"@"DEL$1" "IDX_TXID_SERVICE_TARGET_TYPE") END_OUTLINE_DATA*/   from gp_refund_info_00 where (tx_id = '0000000100')
+name	operator
+NULL	 PHY_ROOT_TRANSMIT
+NULL	  PHY_DELETE
+gp_refund_info_00(IDX_TXID_SERVICE_TARGET_TYPE)	   PHY_TABLE_SCAN

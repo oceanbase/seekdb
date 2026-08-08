@@ -1,0 +1,32 @@
+load(":seekdb_build_settings.bzl", "seekdb_bool_flag")
+load(":defs.bzl", cc_library = "seekdb_cc_library")
+
+exports_files([
+    "defs.bzl",
+    "seekdb_cc_library.bzl",
+    "seekdb_build_config.bzl",
+    "seekdb_build_settings.bzl",
+    "seekdb_final_link.bzl",
+    "seekdb_cc_test.bzl",
+    "seekdb_partial_link.bzl",
+    "third_party_headers_repo.bzl",
+])
+
+seekdb_bool_flag(
+    name = "enable_sanity",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "sanity_enabled",
+    flag_values = {":enable_sanity": "true"},
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "sanity_abort_runtime",
+    srcs = ["sanity_abort.cpp"],
+    tags = ["manual"],
+    visibility = ["//src/oblib:__pkg__"],
+)

@@ -1,0 +1,35 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+select tenant_name, tenant_id from __all_tenant;
+tenant_name	tenant_id
+sys	1
+alter system set rpc_timeout='3s';
+alter system set balancer_idle_time='12s';
+alter system set _ob_trans_rpc_timeout='5s';
+alter system set merger_check_interval='12m';
+alter system set trx_2pc_retry_interval='120ms';
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'rpc_timeout' order by zone;
+zone	name	value	scope
+z1	rpc_timeout	3s	CLUSTER
+z2	rpc_timeout	3s	CLUSTER
+z3	rpc_timeout	3s	CLUSTER
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = '_ob_trans_rpc_timeout' order by zone;
+zone	name	value	scope
+z1	_ob_trans_rpc_timeout	5s	CLUSTER
+z2	_ob_trans_rpc_timeout	5s	CLUSTER
+z3	_ob_trans_rpc_timeout	5s	CLUSTER
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'trx_2pc_retry_interval' order by zone;
+zone	name	value	scope
+z1	trx_2pc_retry_interval	120ms	CLUSTER
+z2	trx_2pc_retry_interval	120ms	CLUSTER
+z3	trx_2pc_retry_interval	120ms	CLUSTER
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'balancer_idle_time' order by zone;
+zone	name	value	scope
+z1	balancer_idle_time	10s	TENANT
+z2	balancer_idle_time	10s	TENANT
+z3	balancer_idle_time	10s	TENANT
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'merger_check_interval' order by zone;
+zone	name	value	scope
+z1	merger_check_interval	10m	TENANT
+z2	merger_check_interval	10m	TENANT
+z3	merger_check_interval	10m	TENANT

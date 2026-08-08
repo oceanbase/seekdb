@@ -1,0 +1,130 @@
+#owner: zongmei.zzm
+#owner group: sql1
+##
+## Test Name: plan_cache_variable
+##
+## Scope: Miscellaneous test for plan cache
+##
+## INFO:  if you want to add case; you should read ../README.md;
+#         don't use sys tenant, because when parallel run on obfarm, the hit_count can't be expected;
+#         so we use new tenant, new plan cache will be  used for this case only;
+##
+##
+## Date: 2018-8-14
+##
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+--disable_info
+--disable_metadata
+--disable_abort_on_error
+
+--disable_query_log
+--disable_result_log
+--error 0,5157
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 3, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 2, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+let $zone_name=deploy_get_value(ob1.select select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
+
+let $obs_num = deploy_get_value(ob1.select select count(1) as cnt from oceanbase.__all_server group by zone asc limit 1,cnt, 1);
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+
+--disable_abort_on_error
+--sleep 10
+
+ob1.mysql alter system flush plan cache;
+
+--sleep 3
+ob_connect(conn1, ob1.z1.obs0, root@xy_tenant_1,,test,USE_OB_CONNECTOR);
+ob_connect(conn_admin, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
+--sleep 3
+--enable_query_log
+--enable_result_log
+connection conn1;
+select effective_tenant();
+--disable_query_log
+--disable_result_log
+
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+create database xy_db;
+use xy_db;
+
+--echo =========================== TEST OR EXPANSION REWRITE ================================
+--disable_query_log
+--disable_result_log
+
+--disable_warnings
+drop table if exists t;
+--enable_warnings
+create table t (a int, b int, c int, d int, e int, index idx_a(a), index idx_b(b), index idx_c(c), index idx_d(d));
+
+connection conn_admin;
+
+let $table_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 't', table_id, 1);
+let $backup_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id=$table_id and role = 2, svr_ip, 1);
+let $backup_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id=$table_id and role = 2, svr_port, 1);
+
+connection conn1;
+
+--let $count = 0
+while ($count < 10000)
+{
+  --let $stmt = insert into t values (1, 1, 1, 1, 1)
+  eval $stmt;
+  inc $count;
+}
+
+--enable_query_log
+select * from t where t.a = 1 or t.b = 1;
+
+--enable_result_log
+--echo // expect a table scan plan
+explain select * from t where t.a = 1 or t.b = 1;
+
+--disable_result_log
+delete from t;
+
+--disable_query_log
+connection conn_admin;
+eval alter system switch replica leader partition_id='0%1@$table_id' server='$backup_ip:$backup_port';
+--sleep 10
+
+connection conn1;
+--enable_query_log
+
+select * from t where t.a = 1 or t.b = 1;
+--enable_result_log
+--echo
+--echo // expect a remote plan with or expansion rewriting
+explain select * from t where t.a = 1 or t.b = 1;
+
+--enable_result_log
+--enable_query_log
+--echo
+--echo // should success now
+select * from t where t.a = 1 or t.b = 1;
+
+--disable_result_log
+--disable_query_log
+--disable_warnings
+drop database if exists xy_db;
+--enable_warnings
+connection conn_admin;
+
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1 force;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;

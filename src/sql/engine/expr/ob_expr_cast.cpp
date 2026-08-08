@@ -20,7 +20,7 @@
 #include "share/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 
 // from sql_parser_base.h
 #define DEFAULT_STR_LENGTH -1
@@ -723,13 +723,13 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprCast, raw_expr) {
     ObObjType src = raw_expr->get_param_expr(0)->get_result_type().get_type();
     ObObjType dst = raw_expr->get_result_type().get_type();
     SET_LOCAL_SYSVAR_CAPACITY(3);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
-    EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_COLLATION_CONNECTION);
+    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
+    EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_COLLATION_CONNECTION);
     if (ob_is_datetime_tc(src)
         || ob_is_datetime_tc(dst)
         || ob_is_otimestampe_tc(src)
         || ob_is_otimestampe_tc(dst)) {
-      EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_TIME_ZONE);
+      EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_TIME_ZONE);
     }
   }
   return ret;

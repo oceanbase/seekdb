@@ -1,0 +1,106 @@
+##########################
+#owner : fenggu.yh
+#owner group: storage
+#description: quick test
+# 测试点：
+# 1.reboot
+# 2. 创建mysql租户
+# 3. 验证mysql租户下表的DML/SELECT 
+# 4. 触发转储
+# 5. 再次验证mysql租户下表的DML/SELECT
+# 6. 集群重启
+##########################
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=1);
+
+let $extra_conf = "enable_async_syslog=false,cpu_count='64',memory_budget='60G',cache_wash_threshold='1G',rpc_timeout='20s'";
+ob1.z1.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+ob1.z2.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+ob1.z3.obs0.set extra_config=_enable_defensive_check=0,$extra_conf;
+
+# case 1. 验证bootstrap
+ob1.force_stop;
+sleep 6;
+ob1.reboot;
+sleep 6;
+
+ob1.mysql alter system set enable_rebalance='false';
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--enable_sorted_result
+
+# case 2. 验证建租户
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+set @@session.ob_query_timeout = 1000000000;
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+#eval set @@session.ob_query_timeout = 1000000000; CREATE TENANT mysql REPLICA_NUM = 1, RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%', parallel_servers_target=10, ob_sql_work_area_percentage=20, secure_file_priv = "/";
+source include/check_schema_sync.inc;
+
+# case 3. 验证mysql租户下表的DML/SELECT
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql;
+create table t1_no_pk (c1 int);
+source include/check_schema_sync.inc;
+insert into t1_no_pk values (1), (2), (3);
+select * from t1_no_pk;
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk;
+
+create table t1_pk (c1 int primary key);
+source include/check_schema_sync.inc;
+insert into t1_pk values (1), (2), (3);
+select * from t1_pk;
+update t1_pk set c1=c1+10;
+select * from t1_pk;
+
+create table t1_part (c1 int primary key) partition by hash(c1) partitions 4;
+source include/check_schema_sync.inc;
+insert into t1_part values (1), (2), (3), (4);
+select * from t1_part;
+update t1_part set c1=c1+10;
+select * from t1_part;
+
+# case 4: test minor freeze
+connection conn_sys;
+alter system minor freeze;
+# case 5. 再次验证mysql租户下表的DML/SELECT
+connection conn_mysql;
+insert into t1_no_pk values (1001), (1002), (1003);
+select * from t1_no_pk;
+update t1_no_pk set c1=c1+10;
+select * from t1_no_pk;
+
+insert into t1_pk values (1011), (1012), (1013);
+select * from t1_pk;
+update t1_pk set c1=c1+10;
+select * from t1_pk;
+
+create table t1_part_1 (c1 int primary key) partition by hash(c1) partitions 4;
+source include/check_schema_sync.inc;
+insert into t1_part_1 values (1), (2), (3), (4);
+select * from t1_part_1;
+update t1_part_1 set c1=c1+10;
+select * from t1_part_1;
+
+# case 6. 集群重启
+ob1.force_stop;
+sleep 10;
+ob1.nstart;
+sleep 40;
+
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
+select * from t1_no_pk;
+select * from t1_pk;
+select * from t1_part_1;

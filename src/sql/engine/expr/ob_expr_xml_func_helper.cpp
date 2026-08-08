@@ -55,7 +55,7 @@ int ObXMLExprHelper::get_str_from_expr(const ObExpr *expr,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("input type error", K(val_type));
   } else if (FALSE_IT(res = datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, *datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, allocator, *datum,
                 expr->datum_meta_, expr->obj_meta_.has_lob_header(), res))) {
     LOG_WARN("fail to get real data.", K(ret), K(res));
   }

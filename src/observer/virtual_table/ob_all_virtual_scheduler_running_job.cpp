@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_scheduler_running_job.h"
+#include "query/scheduler/ob_scheduler_job.h"
 
 using namespace oceanbase::common;
 namespace oceanbase

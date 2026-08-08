@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/expr/ob_expr_timestamp_add.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_mul.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/ob_exec_context.h"
@@ -209,7 +210,7 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
     char *buf = NULL;
     int64_t buf_len = OB_CAST_TO_VARCHAR_MAX_LENGTH;
     int64_t out_len = 0;
-    if (OB_FAIL(ob_datum_to_ob_time_with_date(*timestamp_datum,
+    if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *timestamp_datum,
                 expr.args_[2]->datum_meta_.type_,
                 expr.args_[2]->datum_meta_.scale_,
                 cvrt_ctx.tz_info_, ot,

@@ -1,0 +1,31 @@
+# owner: msy164651
+# description:测试备库的报警日志
+# case1：有空闲的resource pool 
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z2';
+let $zone_list = 'z2';
+source include/create_tenant_1.inc;
+ob1.z2.force_stop;
+
+let $cpu = 2;
+let $memory = 2073741824;
+let $min_memory = 2073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+ob2.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+#手动修改resource pool的modify time时间
+ob2.mysql update oceanbase.__all_resource_pool set gmt_modified='2018-07-07' where name ='pool_1';
+#等待备库的报警日志
+ob2.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%standby_check%" and value1 like '%standby cluster inspection tasks failed%', 1, 600;
+ob2.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%standby_check%" and value1 like '%has unused resource pool%', 1, 60;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_server_event_history where event like "%active majority replica%", 1, 60;
+

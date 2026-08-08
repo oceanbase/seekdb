@@ -1,0 +1,150 @@
+#rs
+#msy
+#验证enable cluster synchronization
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+#case 1
+#单纯的disable之后，开启enable，不需要检查
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+--disable_query_log
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster where cluster_id = $cluster_id and cluster_status = 2, 1, 10;
+--disable_query_log
+ob1.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+#case 2 
+#在switchover之前disable掉，然后在switchover之后enable
+ob3.reboot;
+
+ob_connect(conn2, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $cluster_id = query_get_value(select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+--disable_query_log
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+sleep 4;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+ob2.mysql alter system commit to switchover to primary;
+--disable_query_log
+ob2.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+ob2.check_version 3;
+ob3.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+ob3.check_version 3;
+#case 3
+#跨一次failover的enable
+#ob2.force_stop;
+#ob1.mysql set global ob_query_timeout = 30000000;
+#ob1.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+#ob_connect(conn3, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+#connection conn3;
+#create table t1(c1 int primary key);
+#let $cur_scn = deploy_get_value(ob1.select select min(user_table_scn) as current_scn from oceanbase.__all_failover_info, current_scn, 1);
+##主库重新接入
+#sleep 120;
+#ob2.z1.obs0.nstart;
+##rs不能完全启动
+#ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active', 1, 200;
+##切换为备库
+#ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+#ob2.mysql alter system convert to physical standby;
+#let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#--disable_query_log
+#ob1.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#ob1.mysql alter system commit to switchover to physical standby;
+#ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+#ob2.mysql alter system commit to switchover to primary;
+#ob_connect(conn4, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+#connection conn4;
+#create table t1(c1 int primary key);
+#
+##case 4
+##跨一次failover和switchover的enable
+#sleep 120;
+#ob3.z1.obs0.nstart;
+#ob3.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+#let $cluster_id = deploy_get_value(ob3.select select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+#--disable_query_log
+#ob2.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#ob2.check_until_timeout select ddl_gap from oceanbase.__all_virtual_cluster_stats where tenant_id = 1 and cluster_id = $cluster_id, 0, 100;
+##case 5
+##在failover成功之后，enable成功之后，然后再次disable，然后enable掉
+#--disable_query_log
+#ob2.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#connection conn4;
+#create database test;
+#create user msy;
+#ob2.check_until_timeout select ddl_gap > 0 from oceanbase.__all_virtual_cluster_stats where tenant_id = 1 and cluster_id = $cluster_id, 1, 100;
+#--disable_query_log
+#ob2.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#ob2.check_until_timeout select ddl_gap from oceanbase.__all_virtual_cluster_stats where tenant_id = 1 and cluster_id = $cluster_id, 0, 100;
+##case 6
+##在上一次的基础之上，然后跨switchover的enable
+#let $cluster_id = deploy_get_value(ob1.select select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+#--disable_query_log
+#ob2.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#connection conn4;
+#drop user msy;
+#ob2.check_until_timeout select ddl_gap > 0 from oceanbase.__all_virtual_cluster_stats where tenant_id = 1 and cluster_id = $cluster_id, 1, 100;
+#ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#ob2.mysql alter system commit to switchover to physical standby;
+#ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+#ob3.mysql alter system commit to switchover to primary;
+#--disable_query_log
+#ob3.mysql alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+#--enable_query_log
+#ob3.check_until_timeout select ddl_gap from oceanbase.__all_virtual_cluster_stats where tenant_id = 1 and cluster_id = $cluster_id, 0, 100;
+##验证frozen 过大，不能删除的场景
+##case8 TODO
+##验证disable的备库不能跨failover，需要加force清理掉
+
+#case 9 enable不存在的备库
+ob_connect(conn4, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn4;
+--disable_query_log
+--error 4018
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = 100;
+--enable_query_log

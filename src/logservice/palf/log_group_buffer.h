@@ -19,8 +19,8 @@
 
 #include "lib/atomic/atomic128.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "log_define.h"
-#include "lsn.h"
+#include "share/log/palf/log_define.h"
+#include "share/log/palf/lsn.h"
 
 namespace oceanbase
 {

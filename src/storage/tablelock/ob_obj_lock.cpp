@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_obj_lock.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -751,10 +751,10 @@ void ObOBJLock::wakeup_waiters_(const ObTableLockOp &lock_op)
   // dml in trans lock does not need do this.
   if (OB_LIKELY(!lock_op.need_wakeup_waiter())) {
     // do nothing
-  } else if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
-    LOG_WARN_RET(OB_ERR_UNEXPECTED, "share::g_mp->lock_wait_mgr() is null");
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
+    LOG_WARN_RET(OB_ERR_UNEXPECTED, "::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>() is null");
   } else {
-    share::g_mp->lock_wait_mgr()->wakeup(lock_op.lock_id_);
+    ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->wakeup(lock_op.lock_id_);
     LOG_DEBUG("ObOBJLock::wakeup_waiters_ ", K(lock_op));
   }
 }

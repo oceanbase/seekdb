@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_memstore_allocator_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
@@ -67,9 +67,9 @@ int ObAllVirtualMemstoreAllocatorInfo::inner_open()
 {
   int ret = OB_SUCCESS;
   reset();
-  if (OB_UNLIKELY(NULL == GCTX.server_runtime_controller_)) {
+  if (OB_UNLIKELY(NULL == ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
     ret = OB_NOT_INIT;
-    SERVER_LOG(WARN, "GCTX.server_runtime_controller_ shouldn't be NULL", K(ret));
+    SERVER_LOG(WARN, "::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>() shouldn't be NULL", K(ret));
   } else if (OB_FAIL(fill_memstore_infos())) {
     SERVER_LOG(WARN, "fail to fill memstore info", K(ret));
   } else {
@@ -92,7 +92,7 @@ int ObAllVirtualMemstoreAllocatorInfo::fill_memstore_infos()
   memstore_infos_.reset();
   SERVER_MODULE_SCOPE
   {
-    ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+    ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
     MemstoreInfoFill fill_func(memstore_infos_);
     if (OB_FAIL(memstore_allocator.for_each(fill_func))) {
       SERVER_LOG(WARN, "fill memstore info fail", K(ret));

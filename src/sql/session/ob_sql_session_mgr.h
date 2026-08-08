@@ -18,11 +18,18 @@
 #define _OCEABASE_SQL_SESSION_OB_SQL_SESSION_MGR_H_
 
 #include "lib/container/ob_concurrent_bitset.h"
+#include "query/ob_i_active_snapshot_service.h"
+#include "query/session/ob_deadlock_session.h"
+#include "query/session/ob_free_session_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/ob_end_trans_callback.h"
 
 namespace oceanbase
 {
+namespace common
+{
+class ObIDebugSyncBroadcaster;
+}
 namespace observer
 {
 struct ObSMConnection;
@@ -30,21 +37,13 @@ struct ObSMConnection;
 namespace sql
 {
 
-class ObFreeSessionCtx
-{
-public:
-  ObFreeSessionCtx() :
-    has_inc_active_num_(false),
-    sessid_(0)
-  {
-  }
-  ~ObFreeSessionCtx() {}
-  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(sessid));
-  bool has_inc_active_num_;
-  uint32_t sessid_;
-};
+class ObConnectResourceMgr;
+class ObPlanCache;
+class ObPsCache;
 
-class ObSQLSessionMgr : public common::ObTimerTask
+class ObSQLSessionMgr : public common::ObTimerTask,
+                        public query::ObIActiveSnapshotService,
+                        public query::ObIDeadlockSessionService
 {
 public:
   static const int64_t SCHEDULE_PERIOD = 1000*1000*5; //5s
@@ -55,6 +54,15 @@ public:
   virtual ~ObSQLSessionMgr();
 
   int init();
+  void bind_lifecycle_services(
+      ObPsCache &ps_cache,
+      common::ObIDebugSyncBroadcaster &debug_sync_broadcaster,
+      ObConnectResourceMgr &connect_resource_manager)
+  {
+    ps_cache_ = &ps_cache;
+    debug_sync_broadcaster_ = &debug_sync_broadcaster;
+    connect_resource_manager_ = &connect_resource_manager;
+  }
 
   /**
    * @brief create a new ObSQLSessionInfo, and its session id is sessid
@@ -113,7 +121,18 @@ public:
   void try_check_session();
 
   // get min active snapshot version for all session
-  int get_min_active_snapshot_version(share::SCN &snapshot_version);
+  int get_min_active_snapshot_version(share::SCN &snapshot_version) override;
+
+  int acquire_session(uint32_t session_id, void *&session) override;
+  void release_session(void *session) override;
+  int get_deadlock_facts(
+      const void *session,
+      query::ObDeadlockSessionFacts &facts) const override;
+  int get_lock_wait_facts(
+      const void *session,
+      query::ObLockWaitSessionFacts &facts) const override;
+  int mark_transaction_victim(void *session) override;
+  int mark_statement_victim(void *session) override;
 
   //used for guarantee the unique sessid when observer generates sessid
   int create_sessid(uint32_t &sessid);
@@ -122,7 +141,8 @@ private:
   {
   public:
     ValueAlloc()
-      : session_allocator_(lib::ObMemAttr("SQLSessionInfo"), common::get_cpu_count(), 4),
+      : session_allocator_(
+            lib::ObMemAttr("SQLSessionInfo"), common::get_cpu_count(), 4),
         active_count_(0),
         alloc_total_count_(0),
         free_total_count_(0)
@@ -191,6 +211,9 @@ private:
   HashMap sessinfo_map_;
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
+  common::ObIDebugSyncBroadcaster *debug_sync_broadcaster_;
+  ObPsCache *ps_cache_;
+  ObConnectResourceMgr *connect_resource_manager_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
 }; // end of class ObSQLSessionMgr
 

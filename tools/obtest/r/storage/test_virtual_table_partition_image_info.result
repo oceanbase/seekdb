@@ -1,0 +1,5 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set enable_auto_leader_switch = false;

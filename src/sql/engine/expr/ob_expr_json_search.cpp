@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_search.h"
+#include "util/easy_string.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_func_helper.h"
 #include "sql/engine/ob_exec_context.h"

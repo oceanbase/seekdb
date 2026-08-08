@@ -115,7 +115,7 @@ int ObExprJsonArrayInsert::eval_json_array_insert(const ObExpr &expr, ObEvalCtx 
     } else {
       ObString j_path_text = json_datum->get_string();
       ObJsonPath *j_path;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *json_datum,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *json_datum,
                   arg->datum_meta_, arg->obj_meta_.has_lob_header(), j_path_text))) {
         LOG_WARN("fail to get real data.", K(ret), K(j_path_text));
       } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, i, false))) {

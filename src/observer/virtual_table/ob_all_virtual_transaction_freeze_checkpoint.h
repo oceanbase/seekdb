@@ -17,7 +17,9 @@
 #ifndef OB_ALL_VIRTUAL_TRANSACTION_FREEZE_CHECKPOINT_H_
 #define OB_ALL_VIRTUAL_TRANSACTION_FREEZE_CHECKPOINT_H_
 
+#include "common/ob_simple_iterator.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "storage/checkpoint/ob_freeze_checkpoint.h"
 
 namespace oceanbase
 {
@@ -28,7 +30,7 @@ class ObLS;
 namespace observer
 {
 static constexpr const char OB_FREEZE_CHECKPOINT[] = "ob_freeze_checkpoint";
-typedef common::ObSimpleIterator<checkpoint::ObFreezeCheckpointVTInfo,
+typedef common::ObSimpleIterator<storage::checkpoint::ObFreezeCheckpointVTInfo,
   OB_FREEZE_CHECKPOINT, 20> ObFreezeCheckpointVTIterator;
 
 

@@ -1,0 +1,103 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef _OCEANBASE_STORAGE_FTS_OB_FTS_LITERAL_H_
+#define _OCEANBASE_STORAGE_FTS_OB_FTS_LITERAL_H_
+
+#include <cstdint>
+namespace oceanbase
+{
+namespace storage
+{
+class ObFTSLiteral final
+{
+public:
+  static constexpr const char *PARSER_NAME_IK = "ik";
+  static constexpr const char *PARSER_NAME_BENG = "beng";
+  static constexpr const char *PARSER_NAME_SPACE = "space";
+  static constexpr const char *PARSER_NAME_NGRAM = "ngram";
+  static constexpr const char *PARSER_NAME_NGRAM2 = "ngram2";
+
+  static constexpr const char *CONFIG_NAME_MIN_TOKEN_SIZE = "min_token_size";
+  static constexpr const char *CONFIG_NAME_MAX_TOKEN_SIZE = "max_token_size";
+  static constexpr const char *CONFIG_NAME_NGRAM_TOKEN_SIZE = "ngram_token_size";
+  static constexpr const char *CONFIG_NAME_STOPWORD_TABLE = "stopword_table";
+  static constexpr const char *CONFIG_NAME_DICT_TABLE = "dict_table";
+  static constexpr const char *CONFIG_NAME_QUANTIFIER_TABLE = "quanitfier_table";
+  static constexpr const char *CONFIG_NAME_IK_MODE = "ik_mode";
+  static constexpr const char *CONFIG_NAME_MIN_NGRAM_SIZE = "min_ngram_size";
+  static constexpr const char *CONFIG_NAME_MAX_NGRAM_SIZE = "max_ngram_size";
+
+  // config bound
+  static constexpr int64_t FT_MIN_TOKEN_SIZE_LOWER_BOUND = 1;
+  static constexpr int64_t FT_MIN_TOKEN_SIZE_UPPER_BOUND = 16;
+
+  static constexpr int64_t FT_MAX_TOKEN_SIZE_LOWER_BOUND = 10;
+  static constexpr int64_t FT_MAX_TOKEN_SIZE_UPPER_BOUND = 84;
+
+  static constexpr int64_t FT_NGRAM_TOKEN_SIZE_LOWER_BOUND = 1;
+  static constexpr int64_t FT_NGRAM_TOKEN_SIZE_UPPER_BOUND = 10;
+
+  static constexpr int64_t FT_NGRAM_MIN_TOKEN_SIZE_LOWER_BOUND = 1;
+  static constexpr int64_t FT_NGRAM_MIN_TOKEN_SIZE_UPPER_BOUND = 16;
+
+  static constexpr int64_t FT_NGRAM_MAX_TOKEN_SIZE_LOWER_BOUND = 1;
+  static constexpr int64_t FT_NGRAM_MAX_TOKEN_SIZE_UPPER_BOUND = 16;
+
+  static constexpr const char *FT_IK_MODE_SMART = "smart";
+  static constexpr const char *FT_IK_MODE_MAX_WORD = "max_word";
+
+  // default config
+  static constexpr int64_t FT_DEFAULT_MIN_TOKEN_SIZE = 3;
+  static constexpr int64_t FT_DEFAULT_MAX_TOKEN_SIZE = 84;
+  static constexpr int64_t FT_DEFAULT_NGRAM_TOKEN_SIZE = 2;
+
+  static constexpr int64_t FT_DEFAULT_MIN_NGRAM_SIZE = 2;
+  static constexpr int64_t FT_DEFAULT_MAX_NGRAM_SIZE = 3;
+
+  static constexpr const char *FT_DEFAULT_IK_STOPWORD_UTF8_TABLE
+      = "oceanbase.__ft_stopword_ik_utf8";
+  static constexpr const char *FT_DEFAULT_IK_DICT_UTF8_TABLE = "oceanbase.__ft_dict_ik_utf8";
+  static constexpr const char *FT_DEFAULT_IK_QUANTIFIER_UTF8_TABLE
+      = "oceanbase.__ft_quantifier_ik_utf8";
+
+  static constexpr const char *FT_NONE = "none";
+  static constexpr const char *FT_DEFAULT = "default";
+
+  static constexpr const char *ADDITIONAL_ARGS_STR = "additional_args";
+  static constexpr const char *ADDITION_NGRAM_TOKEN_SIZE_STR = "token_size";
+
+  // err msg
+  static constexpr const char *MIN_TOKEN_SIZE_SCOPE_STR = "the min_token_size must be in [1, 16]";
+  static constexpr const char *MAX_TOKEN_SIZE_SCOPE_STR = "the max_token_size must be in [10, 84]";
+
+  static constexpr const char *MIN_NGRAM_SIZE_SCOPE_STR = "the min_ngram_size must be in [1, 16]";
+  static constexpr const char *MAX_NGRAM_SIZE_SCOPE_STR = "the max_ngram_size must be in [1, 16]";
+
+  static constexpr const char *NGRAM_TOKEN_SIZE_SCOPE_STR
+      = "the ngram_token_size must be in [1, 10]";
+  static constexpr const char *MIN_MAX_TOKEN_SIZE_SCOPE_STR
+      = "the max_token_size must be equal to or greater than min_token_size";
+  static constexpr const char *NGRAM_MIN_MAX_TOKEN_SIZE_SCOPE_STR
+      = "the max_ngram_size must be equal to or greater than min_ngram_size";
+
+  static constexpr const char *IK_MODE_SCOPE_STR = "the ik_mode should be max_word or smart";
+};
+
+} //  namespace storage
+} //  namespace oceanbase
+
+#endif // _OCEANBASE_STORAGE_FTS_OB_FTS_LITERAL_H_

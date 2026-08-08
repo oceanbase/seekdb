@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_lock_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "data_plane/ob_i_write_context_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/dml/ob_dml_service.h"
 namespace oceanbase
 {
@@ -52,35 +54,43 @@ ObDASLockOp::ObDASLockOp(ObIAllocator &op_alloc)
 int ObDASLockOp::open_op()
 {
   int ret = OB_SUCCESS;
-  ObDMLBaseParam dml_param;
+  data_plane::ObDmlExecution execution;
   int64_t affected_rows;
+  concurrent_control::ObWriteFlag write_flag;
 
-  ObDASDMLIterator dml_iter(lock_ctdef_, lock_buffer_, op_alloc_);
-  ObAccessService *as = share::g_mp->access_service();
-  storage::ObStoreCtxGuard store_ctx_guard;
+  ObDASDMLIterator dml_iter(
+      lock_ctdef_, lock_buffer_, op_alloc_, srs_provider_,
+      lob_read_options_);
+  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObWriteContext write_context;
 
-  if (OB_FAIL(as->get_write_store_ctx_guard(lock_rtdef_->timeout_ts_,
-                                            *trans_desc_,
-                                            *snapshot_,
-                                            write_branch_id_,
-                                            dml_param.write_flag_,
-                                            store_ctx_guard))) {
-    LOG_WARN("fail to get_write_access_tx_ctx_guard", K(ret));
-  } else if (OB_FAIL(ObDMLService::init_dml_param(
+  (void)ObDMLService::init_dml_write_flag(
+      *lock_ctdef_, *lock_rtdef_, write_flag,
+      das_snapshot_opt_info_.use_specify_snapshot_);
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>()->acquire_write_context(
+          lock_rtdef_->timeout_ts_,
+          *trans_desc_,
+          *snapshot_,
+          write_branch_id_,
+          write_flag,
+          write_context))) {
+    LOG_WARN("fail to acquire write context", K(ret));
+  } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
       *lock_ctdef_,
       *lock_rtdef_,
       *snapshot_,
       write_branch_id_,
       op_alloc_,
-      store_ctx_guard,
-      dml_param,
+      write_context,
+      execution,
       das_snapshot_opt_info_.use_specify_snapshot_))) {
     LOG_WARN("init dml param failed", K(ret));
   } else if (OB_FAIL(as->lock_rows(tablet_id_,
                                    *trans_desc_,
-                                   dml_param,
+                                   execution,
                                    lock_rtdef_->for_upd_wait_time_,
-                                   lock_ctdef_->lock_flag_,
+                                   static_cast<data_plane::ObRowLockMode>(
+                                       lock_ctdef_->lock_flag_),
                                    &dml_iter,
                                    affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {

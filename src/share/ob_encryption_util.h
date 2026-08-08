@@ -27,10 +27,6 @@ namespace common
 {
 class ObString;
 }
-namespace sql
-{
-class ObSQLSessionInfo;
-}
 namespace share
 {
 

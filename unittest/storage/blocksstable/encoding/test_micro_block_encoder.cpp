@@ -22,6 +22,8 @@
 #include "storage/blocksstable/encoding/ob_micro_block_encoder.h"
 #include "storage/blocksstable/encoding/ob_micro_block_decoder.h"
 #include "../ob_row_generate.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -50,7 +52,7 @@ public:
   virtual void SetUp();
   virtual void TearDown() {}
 
-protected:
+public:
   int64_t rowkey_cnt_;
   int64_t column_cnt_;
   ObObjType *col_types_;
@@ -443,13 +445,4 @@ TEST_F(TestEncodingRowBufHolder, test_encoding_row_buf_holder)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_micro_block_encoder.log*");
-  OB_LOGGER.set_file_name("test_micro_block_encoder.log");
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_virtual_resource_limit.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -47,7 +48,7 @@ int ObResourceLimitTable::get_next_resource_info_(ObResourceInfo &info)
 {
   int ret = OB_SUCCESS;
   if (!iter_.is_ready()
-      && OB_FAIL(iter_.set_ready())) {
+      && OB_FAIL(iter_.set_ready(*::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>()))) {
     LOG_WARN("iterator is not ready", K(ret));
   } else if (OB_FAIL(iter_.get_next(info))) {
     if (OB_ITER_END != ret) {

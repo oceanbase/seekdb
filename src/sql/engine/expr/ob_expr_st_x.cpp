@@ -76,7 +76,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObIWkbPoint *point = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   uint32_t srid = 0;
   ObGeometry *geo = NULL;
@@ -93,7 +93,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
     is_null_result = true;
   } else {
     ObString wkb = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, func_name))) {

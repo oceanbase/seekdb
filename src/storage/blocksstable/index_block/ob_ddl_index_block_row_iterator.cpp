@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ddl_index_block_row_iterator.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 

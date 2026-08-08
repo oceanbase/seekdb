@@ -18,6 +18,7 @@
 
 #include "lib/future/ob_future.h"
 #include <gtest/gtest.h>
+#include <atomic>
 #include <thread>
 
 namespace oceanbase {
@@ -58,20 +59,25 @@ TEST_F(TestObFuture, normal) {
   ObFuture<int> future = promise.get_future();
   ASSERT_EQ(future.is_ready(), false);
   ASSERT_EQ(future.is_valid(), true);
-  thread t([future]() {
-    auto start = std::chrono::system_clock::now();
+  int first_wait_ret = OB_SUCCESS;
+  int second_wait_ret = OB_SUCCESS;
+  std::atomic<bool> waits_finished(false);
+  thread t([future, &first_wait_ret, &second_wait_ret, &waits_finished]() {
     int *temp = nullptr;
-    ASSERT_EQ(future.wait_for(30), OB_TIMEOUT);
-    ASSERT_EQ(future.wait_for(30), OB_TIMEOUT);
+    first_wait_ret = future.wait_for(30);
+    second_wait_ret = future.wait_for(30);
+    waits_finished.store(true, std::memory_order_release);
     ASSERT_EQ(future.get(temp), OB_SUCCESS);
-    auto end = std::chrono::system_clock::now();
-    cout << "wait " << chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << endl;
     ASSERT_EQ(*temp, 5);
     ASSERT_EQ(future.is_ready(), true);
     ASSERT_EQ(future.is_valid(), true);
     ASSERT_EQ(future.get(temp), OB_SUCCESS);
   });
-  std::this_thread::sleep_for(chrono::milliseconds(100));
+  while (!waits_finished.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  EXPECT_EQ(OB_TIMEOUT, first_wait_ret);
+  EXPECT_EQ(OB_TIMEOUT, second_wait_ret);
   ASSERT_EQ(promise.set(5), OB_SUCCESS);
   ASSERT_EQ(promise.set(6), OB_OP_NOT_ALLOW);
   t.join();
@@ -92,18 +98,23 @@ TEST_F(TestObFuture, return_void) {
   ObFuture<void> future = promise.get_future();
   ASSERT_EQ(future.is_ready(), false);
   ASSERT_EQ(future.is_valid(), true);
-  thread t([future]() {
-    auto start = std::chrono::system_clock::now();
-    ASSERT_EQ(future.wait_for(30), OB_TIMEOUT);
-    ASSERT_EQ(future.wait_for(30), OB_TIMEOUT);
+  int first_wait_ret = OB_SUCCESS;
+  int second_wait_ret = OB_SUCCESS;
+  std::atomic<bool> waits_finished(false);
+  thread t([future, &first_wait_ret, &second_wait_ret, &waits_finished]() {
+    first_wait_ret = future.wait_for(30);
+    second_wait_ret = future.wait_for(30);
+    waits_finished.store(true, std::memory_order_release);
     ASSERT_EQ(future.wait(), OB_SUCCESS);
-    auto end = std::chrono::system_clock::now();
-    cout << "wait " << chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << "ms" << endl;
     ASSERT_EQ(future.is_ready(), true);
     ASSERT_EQ(future.is_valid(), true);
     ASSERT_EQ(future.wait(), OB_SUCCESS);
   });
-  std::this_thread::sleep_for(chrono::milliseconds(100));
+  while (!waits_finished.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
+  EXPECT_EQ(OB_TIMEOUT, first_wait_ret);
+  EXPECT_EQ(OB_TIMEOUT, second_wait_ret);
   ASSERT_EQ(promise.set(), OB_SUCCESS);
   t.join();
 }
@@ -154,14 +165,4 @@ TEST_F(TestObFuture, promise_destroy_first) {
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_future.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_ob_future.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -27,6 +27,10 @@ namespace oceanbase
 {
 namespace share
 {
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
 
 struct ObDDLChecksumItem
 {
@@ -79,7 +83,9 @@ public:
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
       common::hash::ObHashMap<int64_t, int64_t> &column_checksums, common::ObMySQLProxy &sql_proxy);
-  static int get_table_column_checksum_without_execution_id(const uint64_t table_id,
+  static int get_table_column_checksum_without_execution_id(
+      schema::ObMultiVersionSchemaService &schema_service,
+      const uint64_t table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
@@ -105,7 +111,9 @@ public:
       const ObIArray<int64_t> &ignore_col_ids,
       bool &is_equal,
       common::ObMySQLProxy &sql_proxy);
-  static int check_column_checksum_without_execution_id(const uint64_t data_table_id,
+  static int check_column_checksum_without_execution_id(
+      schema::ObMultiVersionSchemaService &schema_service,
+      const uint64_t data_table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,

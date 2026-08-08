@@ -22,6 +22,8 @@
 #include "storage/blocksstable/ob_micro_block_reader.h"
 #include "storage/blocksstable/ob_row_cache.h"
 #include "ob_row_generate.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -60,7 +62,7 @@ public:
     ObTimerService::get_instance().destroy();
   }
 
-protected:
+public:
   ObRowGenerate row_generate_;
   ObArenaAllocator allocator_;
   ObTableReadInfo read_info_;
@@ -374,10 +376,3 @@ TEST_F(TestMicroBlockReader, test_percise_compare)
 
 }//end namespace unittest
 }//end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

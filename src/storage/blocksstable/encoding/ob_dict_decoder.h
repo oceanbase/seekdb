@@ -21,7 +21,7 @@
 #include "ob_encoding_query_util.h"
 #include "ob_integer_array.h"
 #include "ob_dict_encoder.h"
-#include "sql/engine/ob_bit_vector.h"
+#include "share/vector/ob_bit_vector.h"
 
 namespace oceanbase
 {

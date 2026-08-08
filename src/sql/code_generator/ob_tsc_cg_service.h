@@ -16,11 +16,14 @@
 
 #ifndef DEV_SRC_SQL_CODE_GENERATOR_OB_TSC_CG_SERVICE_H_
 #define DEV_SRC_SQL_CODE_GENERATOR_OB_TSC_CG_SERVICE_H_
+#include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 namespace oceanbase
 {
 namespace sql
 {
+using blocksstable::ObSkipIndexColType;
+
 class ObStaticEngineCG;
 class ObTableScanSpec;
 class ObPushdownExprSpec;

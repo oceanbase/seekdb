@@ -188,7 +188,6 @@ int get_prefix_for_text_tc_datum(
   return ret;
 }
 
-// demoted from share::schema::ObTableSchema(truly blocksstable-bound: ObSkipIndexColMeta)
 int check_skip_index_valid(const share::schema::ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;

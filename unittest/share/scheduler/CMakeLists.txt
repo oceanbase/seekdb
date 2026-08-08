@@ -1,3 +1,0 @@
-storage_unittest(test_dag_scheduler)
-storage_unittest(test_dag_scheduler_error_handling)
-storage_unittest(test_independent_dag)

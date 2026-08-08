@@ -16,8 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func.h"
-#include "observer/ai_service/ob_ai_service_struct.h"
-#include "observer/omt/ob_ai_service.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 
 namespace oceanbase 
 {

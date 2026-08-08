@@ -62,7 +62,7 @@ int ObSRLookupIter::init(
       LOG_WARN("failed to inner init lookup iter", K(ret));
     } else {
       ObDatumMeta id_meta = iter_param_->id_proj_expr_->datum_meta_;
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
       cmp_func_ = basic_funcs->null_first_cmp_;
       if (iter_param_->id_proj_expr_->datum_meta_.type_ == common::ObUInt64Type) {
         set_datum_func_ = ObISparseRetrievalMergeIter::set_datum_int;
@@ -204,7 +204,11 @@ int ObSRSortedLookupIter::load_results()
       if (OB_UNLIKELY(cur_idx >= rangekey_size_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected cur idx", K(ret), K(cur_idx), K_(rangekey_size));
-      } else if (OB_FAIL(cmp_func_(cached_domain_ids_[cur_idx].get_datum(), *id_datums.at(i), cmp_result))) {
+      } else if (OB_FAIL(cmp_func_(
+                     cached_domain_ids_[cur_idx].get_datum(),
+                     *id_datums.at(i),
+                     cmp_result,
+                     nullptr))) {
         LOG_WARN("failed to compare id datums", K(ret));
       } else if (0 == cmp_result) {
         cached_relevances_[cur_idx] = relevance_datums.at(i)->get_double();

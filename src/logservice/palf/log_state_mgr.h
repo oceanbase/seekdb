@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_STATE_MGR_
 #define OCEANBASE_LOGSERVICE_LOG_STATE_MGR_
 
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "log_meta_info.h"
 #include "palf_callback_wrapper.h"
 

@@ -15,9 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "common/datum/ob_datum.h"
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(previously hidden behind the ddl_common include chain)
 #include "ob_table_schema.h"
-#include "share/schema/ob_part_mgr_util.h"
+#include "share/schema/ob_partition_array_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
 namespace oceanbase
 {
@@ -30,6 +31,11 @@ using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
 using namespace blocksstable;
+
+namespace
+{
+constexpr int64_t DEFAULT_MICRO_BLOCK_FORMAT_VERSION = 1;
+}
 
 const static char * ObTableModeFlagStr[] = {
     "NORMAL",
@@ -99,7 +105,32 @@ OB_SERIALIZE_MEMBER_SIMPLE(ObSemiStructEncodingType,
 
 common::ObString ObMergeSchema::EMPTY_STRING = common::ObString::make_string("");
 
-// get_mulit_version_rowkey_column_ids moved definition to storage/ob_i_store.cpp(uses ObMultiVersionRowkeyHelpper, share must not depend upward on storage)
+int ObMergeSchema::get_mulit_version_rowkey_column_ids(
+    common::ObIArray<share::schema::ObColDesc> &column_ids) const
+{
+  int ret = OB_SUCCESS;
+  ObColDesc desc;
+  if (OB_FAIL(get_rowkey_column_ids(column_ids))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to add rowkey cols", K(ret));
+  } else {
+    desc.col_id_ = common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID;
+    desc.col_type_.set_int();
+    desc.col_order_ = common::ObOrderType::ASC;
+    if (OB_FAIL(column_ids.push_back(desc))) {
+      SHARE_SCHEMA_LOG(WARN, "failed to add transaction version column", K(ret));
+    } else {
+      desc.col_id_ = common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID;
+      if (OB_FAIL(column_ids.push_back(desc))) {
+        SHARE_SCHEMA_LOG(WARN, "failed to add sql sequence column", K(ret));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(set_precision_to_column_desc(column_ids))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to set precision to cols", K(ret));
+  }
+  return ret;
+}
+
 ObSimpleTableSchemaV2::ObSimpleTableSchemaV2()
   : ObPartitionSchema()
 {
@@ -359,11 +390,11 @@ int64_t ObSimpleTableSchemaV2::get_convert_size() const
   convert_size += part_option_.get_convert_size() - sizeof(part_option_);
   convert_size += sub_part_option_.get_convert_size() - sizeof(sub_part_option_);
 
-  convert_size += ObSchemaUtils::get_partition_array_convert_size(
+  convert_size += ObPartitionArrayUtils::get_convert_size(
                   partition_array_, partition_num_);
-  convert_size += ObSchemaUtils::get_partition_array_convert_size(
+  convert_size += ObPartitionArrayUtils::get_convert_size(
                   def_subpartition_array_, def_subpartition_num_);
-  convert_size += ObSchemaUtils::get_partition_array_convert_size(
+  convert_size += ObPartitionArrayUtils::get_convert_size(
                   hidden_partition_array_, hidden_partition_num_);
   convert_size += simple_foreign_key_info_array_.get_data_size();
   for (int64_t i = 0; i < simple_foreign_key_info_array_.count(); ++i) {
@@ -1236,7 +1267,7 @@ ObTableSchema::ObTableSchema(ObIAllocator *allocator)
     depend_mock_fk_parent_table_ids_(SCHEMA_SMALL_MALLOC_BLOCK_SIZE, ModulePageAllocator(*allocator)),
     name_generated_type_(GENERATED_TYPE_UNKNOWN),
     lob_inrow_threshold_(OB_DEFAULT_LOB_INROW_THRESHOLD),
-    micro_block_format_version_(storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION),
+    micro_block_format_version_(DEFAULT_MICRO_BLOCK_FORMAT_VERSION),
     micro_index_clustered_(false),
     index_params_(),
     exec_env_(),
@@ -2472,8 +2503,6 @@ int ObTableSchema::get_default_row(
 }
 
 
-// get_orig_default_row moved definition to storage/ob_i_store.cpp(accesses blocksstable::ObDatumRow members)
-
 int ObTableSchema::get_column_schema_in_same_col_group(uint64_t column_id, uint64_t udt_set_id,
                                                        common::ObIArray<ObColumnSchemaV2 *> &column_group) const
 {
@@ -2777,7 +2806,7 @@ void ObTableSchema::reset()
   generated_columns_.reset();
   virtual_column_cnt_ = 0;
   micro_index_clustered_ = false;
-  micro_block_format_version_ = storage::ObMicroBlockFormatVersionHelper::DEFAULT_VERSION;
+  micro_block_format_version_ = DEFAULT_MICRO_BLOCK_FORMAT_VERSION;
 
   cst_cnt_ = 0;
   cst_array_capacity_ = 0;
@@ -3710,7 +3739,121 @@ int ObTableSchema::convert_char_to_byte_semantics(const ObColumnSchemaV2 *col_sc
   return ret;
 }
 
-// ObTableSchema::check_alter_column_accuracy moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
+static int check_type_info_incremental_change(
+    const ObColumnSchemaV2 &old_schema,
+    const ObColumnSchemaV2 &new_schema,
+    bool &is_incremental)
+{
+  int ret = OB_SUCCESS;
+  is_incremental = true;
+  const ObIArray<ObString> &old_type_info = old_schema.get_extended_type_info();
+  const ObIArray<ObString> &new_type_info = new_schema.get_extended_type_info();
+  if (OB_UNLIKELY(old_schema.get_charset_type() != new_schema.get_charset_type())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("changing enum or set charset is not supported", K(ret), K(old_schema), K(new_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "change column charset");
+  } else if (OB_UNLIKELY(old_schema.get_collation_type() != new_schema.get_collation_type())) {
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("changing enum or set collation is not supported", K(ret), K(old_schema), K(new_schema));
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "change column collation");
+  } else if (new_type_info.count() < old_type_info.count()) {
+    is_incremental = false;
+  } else {
+    const ObCollationType collation_type = old_schema.get_collation_type();
+    for (int64_t i = 0; OB_SUCC(ret) && i < old_type_info.count(); ++i) {
+      const ObString &old_value = old_type_info.at(i);
+      const ObString &new_value = new_type_info.at(i);
+      if (0 != ObCharset::strcmp(collation_type,
+                                 old_value.ptr(),
+                                 old_value.length(),
+                                 new_value.ptr(),
+                                 new_value.length())) {
+        is_incremental = false;
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableSchema::check_alter_column_accuracy(
+    const ObColumnSchemaV2 &src_column,
+    ObColumnSchemaV2 &dst_column,
+    const int32_t src_col_byte_len,
+    const int32_t dst_col_byte_len,
+    bool &is_offline) const
+{
+  int ret = OB_SUCCESS;
+  const ColumnType src_col_type = src_column.get_data_type();
+  const ObAccuracy &src_accuracy = src_column.get_accuracy();
+  const ObAccuracy &dst_accuracy = dst_column.get_accuracy();
+  const ObObjMeta &src_meta = src_column.get_meta_type();
+  if (src_column.get_data_type() == dst_column.get_data_type()) {
+    bool is_type_reduction = false;
+    if (ob_is_number_or_decimal_int_tc(src_col_type)) {
+      if (ObAccuracy::is_default_number(src_accuracy)
+          && !ObAccuracy::is_default_number(dst_accuracy)) {
+        is_type_reduction = true;
+      } else if (!ObAccuracy::is_default_number(src_accuracy)
+                 && ObAccuracy::is_default_number(dst_accuracy)) {
+        const int64_t precision = src_accuracy.get_fixed_number_precision();
+        const int64_t scale = src_accuracy.get_fixed_number_scale();
+        is_type_reduction = precision - scale > OB_MAX_NUMBER_PRECISION;
+      } else if (!ObAccuracy::is_default_number(src_accuracy)
+                 && !ObAccuracy::is_default_number(dst_accuracy)) {
+        const int64_t src_precision = src_accuracy.get_fixed_number_precision();
+        const int64_t src_scale = src_accuracy.get_fixed_number_scale();
+        const int64_t dst_precision = dst_accuracy.get_fixed_number_precision();
+        const int64_t dst_scale = dst_accuracy.get_fixed_number_scale();
+        is_type_reduction = !(src_scale <= dst_scale
+                              && src_precision - src_scale <= dst_precision - dst_scale);
+      }
+    } else if ((!src_column.is_string_type()
+                && !src_meta.is_integer_type()
+                && (src_accuracy.get_precision() > dst_accuracy.get_precision()
+                    || src_accuracy.get_scale() > dst_accuracy.get_scale()))
+               || (src_column.is_string_type() && src_col_byte_len > dst_col_byte_len)) {
+      is_type_reduction = true;
+    }
+
+    if (src_meta.is_date() || src_meta.is_year()) {
+      // These changes are online in MySQL mode.
+    } else if (ObEnumSetTC == src_column.get_data_type_class()) {
+      bool is_incremental = true;
+      if (src_column.get_extended_type_info().count()
+          > dst_column.get_extended_type_info().count()
+          || src_column.get_collation_type() != dst_column.get_collation_type()) {
+        is_offline = true;
+      } else if (OB_FAIL(check_type_info_incremental_change(
+                     src_column, dst_column, is_incremental))) {
+        LOG_WARN("failed to check enum or set type-info change", K(ret));
+      } else if (!is_incremental) {
+        is_offline = true;
+      }
+    } else if (is_type_reduction) {
+      is_offline = true;
+    } else if (ob_is_number_tc(src_col_type)
+               || src_meta.is_bit()
+               || src_meta.is_char()
+               || src_meta.is_varchar()
+               || src_meta.is_varbinary()
+               || src_meta.is_text()
+               || src_meta.is_blob()
+               || src_meta.is_timestamp()
+               || src_meta.is_datetime()
+               || src_meta.is_integer_type()
+               || src_meta.is_json()) {
+      // Increasing these types remains online.
+    } else if (ob_is_decimal_int_tc(src_col_type)
+               && dst_accuracy.get_scale() == src_accuracy.get_scale()
+               && get_decimalint_type(dst_accuracy.get_precision())
+                    == get_decimalint_type(src_accuracy.get_precision())) {
+      // The physical decimal-int representation is unchanged.
+    } else {
+      is_offline = true;
+    }
+  }
+  return ret;
+}
 
 int ObTableSchema::check_alter_column_type(const ObColumnSchemaV2 &src_column,
                                            ObColumnSchemaV2 &dst_column,
@@ -3974,6 +4117,150 @@ int ObTableSchema::check_alter_column_in_rowkey(const ObColumnSchemaV2 &src_colu
   return ret;
 }
 
+static int check_column_has_vector_index(
+    const ObTableSchema &data_table_schema,
+    ObSchemaGetterGuard &schema_guard,
+    const uint64_t column_id,
+    bool &has_vector_index)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
+  has_vector_index = false;
+  if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("failed to get simple index infos", K(ret));
+  } else {
+    for (int64_t i = 0;
+         OB_SUCC(ret) && i < simple_index_infos.count() && !has_vector_index;
+         ++i) {
+      const ObTableSchema *index_table_schema = nullptr;
+      if (OB_FAIL(schema_guard.get_table_schema(
+              simple_index_infos.at(i).table_id_, index_table_schema))) {
+        LOG_WARN("failed to get index table schema",
+                 K(ret), "table_id", simple_index_infos.at(i).table_id_);
+      } else if (OB_ISNULL(index_table_schema)) {
+        ret = OB_TABLE_NOT_EXIST;
+        LOG_WARN("index table schema is null",
+                 K(ret), "table_id", simple_index_infos.at(i).table_id_);
+      } else if (!index_table_schema->is_vec_index()
+                 || index_table_schema->is_built_in_vec_index()) {
+        // Only the user-visible vector index carries the source-column dependency.
+      } else {
+        const ObRowkeyInfo &rowkey_info = index_table_schema->get_rowkey_info();
+        for (int64_t j = 0;
+             OB_SUCC(ret) && j < rowkey_info.get_size() && !has_vector_index;
+             ++j) {
+          const ObRowkeyColumn *rowkey_column = rowkey_info.get_column(j);
+          const ObColumnSchemaV2 *index_column = nullptr;
+          if (OB_ISNULL(rowkey_column)
+              || OB_ISNULL(index_column = index_table_schema->get_column_schema(
+                               rowkey_column->column_id_))) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("vector index rowkey column is missing",
+                     K(ret), K(j), KPC(index_table_schema));
+          } else if (index_column->is_vec_hnsw_vid_column()) {
+            // The generated VID does not depend on the indexed vector column.
+          } else {
+            const ObColumnSchemaV2 *generated_column =
+                data_table_schema.get_column_schema(index_column->get_column_id());
+            ObArray<uint64_t> cascaded_column_ids;
+            if (OB_ISNULL(generated_column)) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("generated vector-index column is missing",
+                       K(ret), K(index_column->get_column_id()));
+            } else if (OB_FAIL(generated_column->get_cascaded_column_ids(
+                           cascaded_column_ids))) {
+              LOG_WARN("failed to get cascaded vector-index columns", K(ret));
+            } else {
+              for (int64_t k = 0;
+                   k < cascaded_column_ids.count() && !has_vector_index;
+                   ++k) {
+                has_vector_index = cascaded_column_ids.at(k) == column_id;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableSchema::check_alter_column_in_index(
+    const ObColumnSchemaV2 &src_column,
+    const ObColumnSchemaV2 &dst_column,
+    ObSchemaGetterGuard &schema_guard,
+    bool &is_in_index) const
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObColDesc> column_ids;
+  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
+  const uint64_t column_id = src_column.get_column_id();
+  bool has_vector_index = false;
+  if (OB_FAIL(check_column_has_vector_index(
+          *this, schema_guard, column_id, has_vector_index))) {
+    LOG_WARN("failed to check vector-index column dependency", K(ret));
+  } else if (has_vector_index) {
+    bool is_same_type = false;
+    if (src_column.is_collection() && dst_column.is_collection()) {
+      if (OB_FAIL(src_column.is_same_collection_column(dst_column, is_same_type))) {
+        LOG_WARN("failed to compare collection column types", K(ret));
+      }
+    } else {
+      is_same_type =
+          src_column.get_data_type() == dst_column.get_data_type()
+          && src_column.get_meta_type().get_type()
+               == dst_column.get_meta_type().get_type();
+    }
+    if (OB_SUCC(ret) && !is_same_type) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_USER_ERROR(
+          OB_NOT_SUPPORTED,
+          "For columns with vector indexes, altering the column type is");
+      LOG_WARN("cannot alter the type of a vector-indexed column",
+               K(ret), K(column_id), K(src_column.get_data_type()),
+               K(dst_column.get_data_type()));
+    }
+  }
+
+  if (OB_SUCC(ret)
+      && OB_FAIL(get_simple_index_infos(simple_index_infos))) {
+    LOG_WARN("failed to get simple index infos", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
+    const ObTableSchema *index_table_schema = nullptr;
+    if (OB_FAIL(schema_guard.get_table_schema(
+            simple_index_infos.at(i).table_id_, index_table_schema))) {
+      LOG_WARN("failed to get index table schema",
+               K(ret), "table_id", simple_index_infos.at(i).table_id_);
+    } else if (OB_ISNULL(index_table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("index table schema is null", K(ret));
+    } else {
+      column_ids.reuse();
+      if (OB_FAIL(index_table_schema->get_column_ids(column_ids))) {
+        LOG_WARN("failed to get index column ids", K(ret));
+      }
+      for (int64_t j = 0; OB_SUCC(ret) && j < column_ids.count(); ++j) {
+        if (column_id == column_ids.at(j).col_id_) {
+          is_in_index = true;
+        }
+      }
+      if (OB_SUCC(ret)
+          && is_in_index
+          && !index_table_schema->is_vec_index()
+          && dst_column.is_key_forbid_lob()) {
+        ret = OB_ERR_WRONG_KEY_COLUMN;
+        LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN,
+                       dst_column.get_column_name_str().length(),
+                       dst_column.get_column_name_str().ptr());
+        LOG_WARN("BLOB or TEXT column cannot be an index key",
+                 K(ret), K(dst_column));
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTableSchema::check_alter_column_is_offline(const ObColumnSchemaV2 *src_column,
                                                 ObColumnSchemaV2 *dst_column,
                                                 ObSchemaGetterGuard &schema_guard,
@@ -4025,7 +4312,44 @@ int ObTableSchema::check_alter_column_is_offline(const ObColumnSchemaV2 *src_col
   return ret;
 }
 
-// ObTableSchema::check_is_exactly_same_type moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
+int ObTableSchema::check_is_exactly_same_type(
+    const ObColumnSchemaV2 &src_column,
+    const ObColumnSchemaV2 &dst_column,
+    bool &is_same)
+{
+  int ret = OB_SUCCESS;
+  is_same = false;
+  if (src_column.get_data_type() == dst_column.get_data_type()) {
+    if (src_column.get_meta_type().is_enum_or_set()) {
+      if (src_column.get_charset_type() == dst_column.get_charset_type()
+          && src_column.get_collation_type() == dst_column.get_collation_type()) {
+        bool is_incremental = true;
+        if (OB_FAIL(check_type_info_incremental_change(
+                src_column, dst_column, is_incremental))) {
+          LOG_WARN("failed to check enum or set type-info change", K(ret));
+        } else if (src_column.get_extended_type_info().count()
+                     == dst_column.get_extended_type_info().count()
+                   && is_incremental) {
+          is_same = true;
+        }
+      }
+    } else if (src_column.is_collection()) {
+      if (OB_FAIL(src_column.is_same_collection_column(dst_column, is_same))) {
+        LOG_WARN("failed to compare collection column types", K(ret));
+      }
+    } else if (src_column.is_string_type() || src_column.is_json()) {
+      is_same = src_column.get_charset_type() == dst_column.get_charset_type()
+                && src_column.get_collation_type() == dst_column.get_collation_type()
+                && src_column.get_data_length() == dst_column.get_data_length()
+                && src_column.get_length_semantics() == dst_column.get_length_semantics();
+    } else {
+      is_same = (ob_is_int_tc(src_column.get_data_type())
+                 || src_column.get_data_precision() == dst_column.get_data_precision())
+                && src_column.get_data_scale() == dst_column.get_data_scale();
+    }
+  }
+  return ret;
+}
 
 int ObTableSchema::check_column_can_be_altered_offline(
                   const ObColumnSchemaV2 *src_column,
@@ -4633,6 +4957,55 @@ int ObTableSchema::get_multi_version_column_descs(common::ObIArray<ObColDesc> &c
     LOG_WARN("Fail to get column descs with out rowkey", K(ret));
   } else if (OB_FAIL(set_precision_to_column_desc(column_descs))) {
     LOG_WARN("failed to set precision to cols", K(ret));
+  }
+  return ret;
+}
+
+int ObTableSchema::get_column_default_checksums(
+    common::ObIArray<ObColumnDefaultChecksum> &checksums) const
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObColDesc> columns;
+  if (OB_FAIL(get_multi_version_column_descs(columns))) {
+    LOG_WARN("fail to get store column ids", K(ret));
+  } else {
+    common::ObDatum datum;
+    alignas(common::ObObj) char datum_buf[common::OBJ_DATUM_MAX_RES_SIZE];
+    for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
+      const uint64_t col_id = columns.at(i).col_id_;
+      int64_t default_checksum = 0;
+      if (common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == col_id
+          || common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == col_id) {
+        // Multi-version hidden columns have no schema default.
+      } else {
+        const ObColumnSchemaV2 *col_schema = get_column_schema(col_id);
+        if (OB_ISNULL(col_schema)) {
+          ret = OB_ERR_SYS;
+          LOG_ERROR("col_schema must not null", K(ret), K(col_id));
+        } else if (!col_schema->is_valid()) {
+          ret = OB_ERR_SYS;
+          LOG_ERROR("invalid col schema", K(ret), K(col_schema));
+        } else if (!col_schema->is_column_stored_in_sstable()
+                   && !is_storage_index_table()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("virtual generated column should be filtered already", K(ret), K(col_schema));
+        } else if (!ob_is_large_text(col_schema->get_data_type())) {
+          datum.reset();
+          datum.ptr_ = datum_buf;
+          const ObObj &default_value = col_schema->get_orig_default_value();
+          if (OB_FAIL(datum.from_obj(default_value))) {
+            LOG_WARN("failed to convert default object to datum", K(ret), K(default_value));
+          }
+          if (OB_SUCC(ret)) {
+            default_checksum = datum.checksum(0);
+          }
+        }
+      }
+      if (OB_SUCC(ret)
+          && OB_FAIL(checksums.push_back(ObColumnDefaultChecksum(col_id, default_checksum)))) {
+        LOG_WARN("fail to push column default checksum", K(ret), K(col_id), K(default_checksum));
+      }
+    }
   }
   return ret;
 }
@@ -5998,7 +6371,51 @@ int ObTableSchema::check_index_table_cover_partition_keys(
   return ret;
 }
 
-// check_skip_index_valid moved definition to storage/blocksstable/index_block/ob_index_block_util.cpp(storage blacklist validation)
+int ObTableSchema::is_range_col_part_type(bool &is_range_column_type) const
+{
+  int ret = OB_SUCCESS;
+  is_range_column_type = false;
+  if (!is_index_table()) {
+    ObRowkeyColumn rowkey_column;
+    const ObRowkeyInfo &rowkey_info = get_rowkey_info();
+    if (rowkey_info.get_size() > 1) {
+      is_range_column_type = true;
+    } else if (OB_FAIL(rowkey_info.get_column(0, rowkey_column))) {
+      LOG_WARN("failed to get the rowkey column", K(ret), K(rowkey_info));
+    } else {
+      const ObObjType type = rowkey_column.get_meta_type().get_type();
+      is_range_column_type =
+          ob_is_float_tc(type)
+          || ob_is_double_tc(type)
+          || ob_is_decimal_int_tc(type)
+          || ob_is_datetime_or_mysql_datetime_tc(type)
+          || ob_is_string_tc(type)
+          || ob_is_date_or_mysql_date(type)
+          || ob_is_time_tc(type)
+          || ob_is_number_tc(type);
+    }
+  } else {
+    ObIndexColumn index_column;
+    const ObIndexInfo &index_info = get_index_info();
+    if (index_info.get_size() > 1) {
+      is_range_column_type = true;
+    } else if (OB_FAIL(index_info.get_column(0, index_column))) {
+      LOG_WARN("failed to get the index key column", K(ret), K(index_info));
+    } else {
+      const ObObjType type = index_column.get_meta_type().get_type();
+      is_range_column_type =
+          ob_is_float_tc(type)
+          || ob_is_double_tc(type)
+          || ob_is_decimal_int_tc(type)
+          || ob_is_datetime_or_mysql_datetime_tc(type)
+          || ob_is_string_tc(type)
+          || ob_is_date_or_mysql_date(type)
+          || ob_is_time_tc(type)
+          || ob_is_number_tc(type);
+    }
+  }
+  return ret;
+}
 
 // A non-partitioned table has no partition expression. For a partitioned table,
 // key() uses the primary-key column count; other modes use the expression count.

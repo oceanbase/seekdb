@@ -23,7 +23,6 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/text_analysis/ob_text_analyzer.h"
-#include "sql/engine/expr/ob_expr_basic_funcs.h"
 
 
 namespace oceanbase
@@ -38,7 +37,7 @@ public:
   virtual ~TestTextAnalyzer() {}
   virtual void SetUp();
   virtual void TearDowm() {}
-private:
+public:
   void analyze_test(
       ObITextAnalyzer &analyzer,
       const char *raw_doc,
@@ -53,7 +52,7 @@ private:
       const int64_t *target_token_len,
       const int64_t target_token_cnt,
       int64_t &idx);
-private:
+public:
   ObArenaAllocator allocator_;
   ObTextAnalysisCtx analysis_ctx_;
   common::ObDatumCmpFuncType token_cmp_func_;
@@ -62,7 +61,7 @@ private:
 void TestTextAnalyzer::SetUp()
 {
   analysis_ctx_.cs_ = ObCharset::get_charset(CS_TYPE_UTF8MB4_GENERAL_CI);
-  sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
+  common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObVarcharType, CS_TYPE_UTF8MB4_GENERAL_CI);
   token_cmp_func_ = basic_funcs->null_first_cmp_;
 }
 
@@ -118,7 +117,9 @@ void TestTextAnalyzer::find_token_in_target_array(
     ObDatum target_token_datum;
     target_token_datum.set_string(target_tokens[i], target_token_len[i]);
     int cmp_ret = 0;
-    ASSERT_EQ(OB_SUCCESS, token_cmp_func_(target_token_datum, query_token, cmp_ret));
+    ASSERT_EQ(
+        OB_SUCCESS,
+        token_cmp_func_(target_token_datum, query_token, cmp_ret, nullptr));
     if (0 == cmp_ret) {
       idx = i;
       break;
@@ -219,13 +220,3 @@ TEST_F(TestTextAnalyzer, test_basic_english_analyzer)
 
 }; // namespace share
 }; // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_text_analyzer.log*");
-  OB_LOGGER.set_file_name("test_text_analyzer.log", true, false);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  // oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

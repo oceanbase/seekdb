@@ -84,11 +84,9 @@ max_partition_num
 max_stale_time_for_weak_consistency
 max_string_print_length
 max_syslog_file_count
+memory_budget
 memory_chunk_cache_size
-memory_hard_limit
 memory_limit
-memory_limit_percentage
-memstore_limit_percentage
 merger_check_interval
 micro_block_merge_verify_level
 minor_compact_trigger
@@ -239,7 +237,6 @@ _max_malloc_sample_interval
 _max_px_workers_per_cpu
 _max_schema_slot_num
 _max_tablet_cnt_per_gb
-_mds_memory_limit_percentage
 _memstore_limit_percentage
 _minor_compaction_amplification_factor
 _minor_merge_write_amplification_threshold
@@ -302,10 +299,8 @@ _sql_insert_multi_values_split_opt
 _storage_meta_memory_limit_percentage
 _temporary_file_io_area_size
 _trx_max_log_cb_limit
-_tx_data_memory_limit_percentage
 _tx_debug_level
 _tx_result_retention
-_tx_share_memory_limit_percentage
 _use_hash_rollup
 _with_subquery
 select section,info from oceanbase.__all_virtual_sys_parameter_stat where name like '%major%' group by name;

@@ -16,14 +16,17 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_dml_ctx_define.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_domain_utils.h"
 #include "sql/engine/dml/ob_dml_service.h"
-#include "storage/blocksstable/ob_datum_row_utils.h"
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
 namespace oceanbase
 {
 namespace sql
 {
+using blocksstable::ObDatumRow;
+
 OB_SERIALIZE_MEMBER(ObDASDMLBaseCtDef,
                     table_id_,
                     index_tid_,
@@ -110,7 +113,9 @@ int ObDASDMLIterator::get_next_domain_index_row(ObDatumRow *&row)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(domain_iter_)) {
-    ObDomainDMLParam param(allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_);
+    ObDomainDMLParam param(
+        allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_,
+        srs_provider_, lob_read_options_);
     if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !das_ctdef_->old_row_projector_.empty()) {
       param.mode_ = main_ctdef_->is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
       param.ft_doc_word_info_ = ft_doc_word_info_;
@@ -131,7 +136,9 @@ int ObDASDMLIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(domain_iter_)) {
-    ObDomainDMLParam param(allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_);
+    ObDomainDMLParam param(
+        allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_,
+        srs_provider_, lob_read_options_);
     if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !das_ctdef_->old_row_projector_.empty()) {
       param.mode_ = main_ctdef_->is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
       param.ft_doc_word_info_ = ft_doc_word_info_;
@@ -152,7 +159,7 @@ int ObDASDMLIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_datum_row_)) {
-    if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, row_projector_->count(), cur_datum_row_))) {
+    if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector_->count(), cur_datum_row_))) {
       LOG_WARN("create current datum row failed", K(ret), K(row_projector_));
     } else if (OB_FAIL(write_buffer_.begin(write_iter_))) {
       LOG_WARN("begin write iterator failed", K(ret));
@@ -203,7 +210,7 @@ int ObDASDMLIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     }
   } else {
     if (OB_ISNULL(cur_datum_rows_)) {
-      if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_rows(allocator_, batch_size_, row_projector_->count(), cur_datum_rows_))) {
+      if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, row_projector_->count(), cur_datum_rows_))) {
         LOG_WARN("Failed to create rows", K(ret), K_(row_projector));
       } else if (OB_FAIL(write_buffer_.begin(write_iter_))) {
         LOG_WARN("Failed to begin write iterator", K(ret));
@@ -683,7 +690,7 @@ int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<ObObjMeta> &col_t
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(*das_alloc_, col_types.count(), it.cur_new_row_))) {
+    if (OB_FAIL(data_plane::create_datum_row(*das_alloc_, col_types.count(), it.cur_new_row_))) {
       LOG_WARN("create new row failed", K(ret));
     } else {
       it.col_types_ = &col_types;
@@ -717,7 +724,7 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
       if (!das_base_ctdef.old_row_projector_.empty()) {
         // create old row
         if (OB_ISNULL(old_row)
-            && OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(tmp_alloc, das_base_ctdef.old_row_projector_.count(), old_row))) {
+            && OB_FAIL(data_plane::create_datum_row(tmp_alloc, das_base_ctdef.old_row_projector_.count(), old_row))) {
           LOG_WARN("create old row buffer failed", K(ret), K(das_base_ctdef.old_row_projector_.count()));
         } else if (OB_FAIL(ObDASUtils::project_storage_row(das_base_ctdef,
                                                             *store_row,
@@ -732,7 +739,7 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
     if (OB_SUCC(ret)) {
       if (!das_base_ctdef.new_row_projector_.empty()) {
         if (OB_ISNULL(new_row)
-            && OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(tmp_alloc, das_base_ctdef.new_row_projector_.count(), new_row))) {
+            && OB_FAIL(data_plane::create_datum_row(tmp_alloc, das_base_ctdef.new_row_projector_.count(), new_row))) {
           LOG_WARN("create new row buffer failed", K(ret), K(das_base_ctdef.new_row_projector_.count()));
         } else if (OB_FAIL(ObDASUtils::project_storage_row(das_base_ctdef,
                                                            *store_row,

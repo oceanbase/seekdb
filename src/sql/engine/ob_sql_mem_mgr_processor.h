@@ -18,7 +18,7 @@
 #define OB_SQL_MEM_MGR_PROCESSOR_H
 
 #include "share/rc/ob_server_runtime.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 
@@ -57,7 +57,7 @@ public:
   OB_INLINE ObSqlMemoryManager *get_sql_mem_mgr()
   {
     if (nullptr == sql_mem_mgr_) {
-      sql_mem_mgr_ = share::g_mp->sql_memory_manager();
+      sql_mem_mgr_ = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (OB_NOT_NULL(sql_mem_mgr_)) {
         mem_callback_ = sql_mem_mgr_->get_sql_memory_callback();
       }

@@ -28,6 +28,7 @@ namespace common
 {
 class ObMySQLProxy;
 class ObISQLClient;
+class ObConfigManager;
 }
 namespace share
 {
@@ -79,9 +80,13 @@ struct ObServerInfo
 class ObServerInfoProxy
 {
 public:
-  static int load_server_info(ObServerInfo &server_info);
+  static int load_server_info(
+      common::ObConfigManager *config_mgr,
+      const ObServerRole::Role fallback_role,
+      ObServerInfo &server_info);
 
   static int init_server_info_from_role(
+      common::ObConfigManager *config_mgr,
       const ObServerRole::Role server_role);
 
 };

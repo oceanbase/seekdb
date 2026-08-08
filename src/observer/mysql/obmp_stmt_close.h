@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_CLOSE_H_
 #define OCEANBASE_OBSERVER_MYSQL_OBMP_STMT_CLOSE_H_
 
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "observer/mysql/obmp_base.h"
 
 namespace oceanbase
@@ -30,7 +30,7 @@ class ObMPStmtClose : public ObMPBase
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STMT_CLOSE;
 public:
-  explicit ObMPStmtClose(const ObGlobalContext &gctx)
+  explicit ObMPStmtClose(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx), stmt_id_(common::OB_INVALID_STMT_ID)
   {}
   virtual ~ObMPStmtClose() {}

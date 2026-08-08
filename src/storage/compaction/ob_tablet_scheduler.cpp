@@ -16,13 +16,14 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_scheduler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_bloom_filter_task.h"
 #include "ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/ob_gc_upper_trans_helper.h"
@@ -81,7 +82,7 @@ int ObFastFreezeChecker::check_need_fast_freeze(
   ObITabletMemtable *memtable = nullptr;
   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   ObTableQueuingModeCfg queuing_cfg;
-  if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->get_queuing_cfg(tablet_id, queuing_cfg))) {
+  if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_queuing_cfg(tablet_id, queuing_cfg))) {
     LOG_WARN_RET(tmp_ret, "[FastFreeze] failed to get table queuing mode, treat it as normal table", K(tablet_id));
   }
   const int64_t memtable_alive_threshold = queuing_cfg.get_memtable_alive_threshold(FAST_FREEZE_INTERVAL_US);
@@ -196,7 +197,7 @@ void ObFastFreezeChecker::try_update_tablet_threshold(
   ObTabletStat tablet_stat;
   ObTabletStat total_stat;
   ObTableModeFlag mode = ObTableModeFlag::TABLE_MODE_NORMAL;
-  if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->get_latest_tablet_stat(key.tablet_id_, tablet_stat, total_stat, mode))) {
+  if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_latest_tablet_stat(key.tablet_id_, tablet_stat, total_stat, mode))) {
     if (OB_HASH_NOT_EXIST != tmp_ret) {
       LOG_WARN_RET(tmp_ret, "[FastFreeze] failed to get tablet stat", K(key));
     }
@@ -365,10 +366,15 @@ int ObTabletScheduler::update_upper_trans_version_and_gc_sstable()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletScheduler not init", K(ret));
-  } else if (OB_FAIL(gc_sst_tablet_iter_.build_iter(get_schedule_batch_size()))) {
+  } else if (OB_ISNULL(ls_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LS service is not configured", K(ret));
+  } else if (OB_FAIL(gc_sst_tablet_iter_.build_iter(
+                 get_schedule_batch_size(), *ls_service))) {
     LOG_WARN("failed to init iterator", K(ret));
   } else {
     gc_sst_tablet_iter_.set_tablet_get_mode(storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK);
@@ -441,8 +447,9 @@ int ObTabletScheduler::try_update_upper_trans_version_and_gc_sstable(
                   K(tablet_id), K(multi_version_start), KPC(tablet));
               if (max_resolved_upper_trans_version > 0
                   && INT64_MAX != max_resolved_upper_trans_version) {
-                if (OB_ISNULL(share::g_mp)
-                    || OB_ISNULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
+                if (OB_ISNULL(
+                        freeze_info_mgr = ::oceanbase::share::server_service<
+                            ::oceanbase::storage::ObFreezeInfoMgr>())) {
                   LOG_WARN_RET(OB_ERR_UNEXPECTED, "freeze info mgr is null",
                       K(tablet_id), K(max_resolved_upper_trans_version));
                 } else {
@@ -465,10 +472,15 @@ int ObTabletScheduler::schedule_all_tablets_minor()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("The ObTabletScheduler has not been inited", K(ret));
-  } else if (OB_FAIL(minor_tablet_iter_.build_iter(get_schedule_batch_size()))) {
+  } else if (OB_ISNULL(ls_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LS service is not configured", K(ret));
+  } else if (OB_FAIL(minor_tablet_iter_.build_iter(
+                 get_schedule_batch_size(), *ls_service))) {
     LOG_WARN("failed to init iterator", K(ret));
   } else {
     LOG_INFO("start schedule all tablet minor merge", K(minor_tablet_iter_));
@@ -490,7 +502,7 @@ int ObTabletScheduler::check_ls_compaction_finish()
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  if (OB_FAIL(share::g_mp->dag_scheduler()->check_compaction_dag_exist_with_cancel(exist))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->check_compaction_dag_exist_with_cancel(exist))) {
     LOG_WARN("failed to check compaction dag", K(ret));
   } else if (exist) {
     // the compaction dag exists, need retry later.
@@ -505,11 +517,11 @@ int ObTabletScheduler::gc_info()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("The ObTabletScheduler has not been inited", K(ret));
-  } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->gc_info())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->gc_info())) {
     LOG_WARN("failed to gc in ObScheduleSuspectInfoMgr", K(ret));
-  } else if (OB_FAIL(share::g_mp->dag_warning_history_manager()->gc_info())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagWarningHistoryManager>()->gc_info())) {
     LOG_WARN("failed to gc in ObDagWarningHistoryManager", K(ret));
-  } else if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->gc_info())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->gc_info())) {
     LOG_WARN("failed to gc in ObSSTableMergeInfoMgr", K(ret));
   }
   return ret;
@@ -521,11 +533,11 @@ int ObTabletScheduler::set_max()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("The ObTabletScheduler has not been inited", K(ret));
-  } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->set_max(ObScheduleSuspectInfoMgr::cal_max()))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->set_max(ObScheduleSuspectInfoMgr::cal_max()))) {
     LOG_WARN("failed to set_max int ObScheduleSuspectInfoMgr", K(ret));
-  } else if (OB_FAIL(share::g_mp->dag_warning_history_manager()->set_max(ObDagWarningHistoryManager::cal_max()))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagWarningHistoryManager>()->set_max(ObDagWarningHistoryManager::cal_max()))) {
     LOG_WARN("failed to set_max in ObDagWarningHistoryManager", K(ret));
-  } else if (OB_FAIL(share::g_mp->sstable_merge_info_mgr()->set_max(ObSSTableMergeInfoMgr::cal_max()))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->set_max(ObSSTableMergeInfoMgr::cal_max()))) {
     LOG_WARN("failed to set_max int ObSSTableMergeInfoMgr", K(ret));
   }
   return ret;
@@ -707,7 +719,7 @@ int ObTabletScheduler::schedule_tablet_meta_merge(
       }
 
       if (OB_SUCC(ret) && has_created_dag) {
-        share::g_mp->tablet_stat_mgr()->clear_tablet_stat(tablet_id);
+        ::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->clear_tablet_stat(tablet_id);
         LOG_INFO("success to schedule meta merge", K(ret), K(tablet_id));
       }
     }
@@ -847,7 +859,7 @@ int ObTabletScheduler::schedule_tablet_ddl_major_merge(
   ObDDLTableMergeDagParam param;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   bool is_major_sstable_exist = false;
   bool has_freezed_ddl_kv = false;
   SCN ddl_commit_scn;
@@ -909,13 +921,13 @@ int ObTabletScheduler::schedule_merge_execute_dag(
     ret = OB_EAGAIN;
     LOG_INFO("tx table is not ready. waiting for max_decided_log_ts ...", KR(ret),
              "merge_scn", result.scn_range_.end_scn_);
-  } else if (OB_FAIL(share::g_mp->dag_scheduler()->alloc_dag(merge_exe_dag))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->alloc_dag(merge_exe_dag))) {
     LOG_WARN("failed to alloc dag", K(ret), K(param));
   } else if (OB_FAIL(merge_exe_dag->prepare_init(param,
                                                  result,
                                                  ls))) {
     LOG_WARN("failed to init dag", K(ret), K(result));
-  } else if (OB_FAIL(share::g_mp->dag_scheduler()->add_dag(merge_exe_dag, emergency))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->add_dag(merge_exe_dag, emergency))) {
     if (OB_EAGAIN != ret) {
       LOG_WARN("failed to add dag", K(ret), KPC(merge_exe_dag));
     }
@@ -923,7 +935,7 @@ int ObTabletScheduler::schedule_merge_execute_dag(
     LOG_INFO("success to scheudle merge execute dag", K(ret), KP(merge_exe_dag), K(emergency));
   }
   if (OB_FAIL(ret) && nullptr != merge_exe_dag) {
-    share::g_mp->dag_scheduler()->free_dag(*merge_exe_dag);
+    ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->free_dag(*merge_exe_dag);
     merge_exe_dag = nullptr;
   }
   return ret;
@@ -1045,7 +1057,7 @@ int ObTabletScheduler::schedule_tablet_minor(
       LOG_WARN("failed to check need fast freeze", K(tmp_ret), K(tablet_handle));
     }
 
-    if (share::g_mp->tablet_stat_mgr()->contain_extreme_tablet()) {
+    if (::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->contain_extreme_tablet()) {
       bool unused_create_dag = false; // unused
       if (OB_TMP_FAIL(ObTabletScheduler::try_schedule_adaptive_merge(ls, tablet_handle,
             ObAdaptiveMergePolicy::SCHEDULE_META, 0 /*update_cnt*/, 0 /*delete_cnt*/, unused_create_dag))) {
@@ -1142,7 +1154,7 @@ int ObTabletScheduler::user_request_schedule_medium_merge(
   } else if (!could_major_merge_start()) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major compaction is suspended", K(ret), K(tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get ls", K(ret));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1172,7 +1184,7 @@ int ObTabletScheduler::get_min_dependent_schema_version(int64_t &min_schema_vers
   int ret = OB_SUCCESS;
   min_schema_version = OB_INVALID_VERSION;
   share::ObFreezeInfo freeze_info;
-  if (OB_FAIL(share::g_mp->freeze_info_mgr()->get_min_dependent_freeze_info(freeze_info))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_dependent_freeze_info(freeze_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_WARN("freeze info is not exist", K(ret));
     } else {

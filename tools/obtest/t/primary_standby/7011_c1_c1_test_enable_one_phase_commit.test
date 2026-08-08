@@ -1,0 +1,49 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_one_phase_commit=true;
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+
+# 为了避免备库add cluster，备库不走reboot
+ob3.reset;
+ob3.deploy;
+ob3.bootstrap;
+
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+let $cluster_id = query_get_value(select value from __all_virtual_sys_parameter_stat where name = 'cluster_id', cluster_id, 1);
+let $cluster_name = query_get_value(select value from __all_virtual_sys_parameter_stat where name = 'cluster', cluster_name, 1);
+connection conn1;
+#开启一阶段提交优化不允许接备库，测试add cluster命令
+--disable_query_log
+--error 4709
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+ob1.mysql alter system set enable_one_phase_commit=false;
+ob2.reboot;
+
+sleep 5;
+
+connection conn1;
+#主库接备库后不允许开启一阶段优化
+--error 4147
+eval alter system set enable_one_phase_commit=true;
+--error 4147
+eval alter system set enable_one_phase_commit = '1';
+--error 4147
+eval alter system set enable_one_phase_commit = 'on';
+
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+#备库不允许开启一阶段优化
+--error 4147
+eval alter system set enable_one_phase_commit=true;
+--error 4147
+eval alter system set enable_one_phase_commit = '1';
+--error 4147
+eval alter system set enable_one_phase_commit = 'on';

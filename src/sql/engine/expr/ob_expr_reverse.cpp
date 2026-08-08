@@ -139,7 +139,8 @@ int calc_reverse_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       ObTextStringIter input_iter(expr.args_[0]->datum_meta_.type_, arg_cs_type, arg->get_string(), has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
-      if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              input_iter, ctx.exec_ctx_, &calc_alloc))) {
         LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
       } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
         LOG_WARN("get input byte len failed", K(ret));

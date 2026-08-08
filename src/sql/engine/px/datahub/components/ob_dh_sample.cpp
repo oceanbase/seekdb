@@ -21,7 +21,7 @@
 #include "sql/engine/px/exchange/ob_px_dist_transmit_op.h"
 #include "sql/engine/px/exchange/ob_px_repart_transmit_op.h"
 #include "sql/engine/px/ob_px_coord_op.h"
-#include "rootserver/ddl_task/ob_ddl_task.h"
+#include "sql/engine/px/ob_ddl_slice_store.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -467,20 +467,23 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
     }
     if (OB_SUCC(ret) && ddl_task_id > 0) {
       // persist ddl slice info
-      rootserver::ObDDLSliceInfo ddl_slice_info;
       bool is_idempotent_mode = false;
-      if (OB_FAIL(ddl_slice_info.part_ranges_.assign(whole_msg.part_ranges_))) {
-        LOG_WARN("assign part ranges failed", K(ret), K(ddl_task_id), K(whole_msg.part_ranges_));
-      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_or_insert_schedule_info(ddl_task_id, exec_ctx_.get_allocator(), ddl_slice_info, is_idempotent_mode))) {
-        LOG_WARN("insert slice info failed", K(ret), K(ddl_task_id), K(ddl_slice_info));
+      ObIDdlSliceStore *slice_store = ddl_slice_store();
+      if (OB_ISNULL(slice_store)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("DDL slice store is not available", K(ret), K(ddl_task_id));
+      } else if (OB_FAIL(slice_store->get_or_insert_schedule_info(
+                     ddl_task_id,
+                     exec_ctx_.get_allocator(),
+                     whole_msg.part_ranges_,
+                     is_idempotent_mode))) {
+        LOG_WARN("insert slice info failed", K(ret), K(ddl_task_id));
       } else if (is_idempotent_mode) {
-        if (OB_UNLIKELY(!ddl_slice_info.is_valid())) {
+        if (OB_UNLIKELY(0 == whole_msg.part_ranges_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid ddl slice info", K(ret), K(ddl_task_id), K(ddl_slice_info));
-        } else if (OB_FAIL(whole_msg.part_ranges_.assign(ddl_slice_info.part_ranges_))) {
-          LOG_WARN("assign part ranges failed", K(ret), K(ddl_task_id), K(ddl_slice_info.part_ranges_));
+          LOG_WARN("invalid ddl slice info", K(ret), K(ddl_task_id));
         }
-        LOG_TRACE("build whole msg with ddl task record", K(ret), K(ddl_task_id), K(ddl_slice_info));
+        LOG_TRACE("build whole msg with ddl task record", K(ret), K(ddl_task_id), K(whole_msg.part_ranges_));
       }
     }
   }

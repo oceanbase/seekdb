@@ -1,0 +1,23 @@
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+alter system set major_freeze_duty_time = 'Disable';
+alter system set ob_compaction_schedule_interval = '10s';
+alter system set _enable_adaptive_compaction = 'False';
+drop table if exists test_tablet_full_merge;
+Warnings:
+Note	1051	Unknown table 'oceanbase.test_tablet_full_merge'
+create table test_tablet_full_merge(i int primary key, c1 char(30), c256 char(255), dt datetime(6), d  datetime(6));
+ob1.mysql alter table oceanbase.test_tablet_full_merge SET PROGRESSIVE_MERGE_NUM=1;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0 and tenant_id=$tenant_id and tablet_id =$tablet_id, 0, 300;
+ob1.check_until_timeout select count(*) as c from oceanbase.__all_virtual_tablet_compaction_info where tenant_id=$__tenant_id__ and tablet_id=$__tablet_id__ and wait_check_scn != 0 and svr_port = $leader_port, 0, 500;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_tablet_compaction_history where tenant_id=$__tenant_id__ and tablet_id=$__tablet_id__ and type ='MAJOR_MERGE' and is_full_merge=true, 1, 500;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN , 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN , 0, 300;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0 and tenant_id=$tenant_id and tablet_id =$tablet_id, 0, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tablet_compaction_info where tenant_id=$__tenant_id__ and tablet_id=$__tablet_id__ and wait_check_scn != 0 and svr_port = $leader_port, 0, 500;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_tablet_compaction_history where tenant_id=$__tenant_id__ and tablet_id=$__tablet_id__ and compaction_scn > $last_major_scn and type ='MAJOR_MERGE' and is_full_merge=true, 1, 500;

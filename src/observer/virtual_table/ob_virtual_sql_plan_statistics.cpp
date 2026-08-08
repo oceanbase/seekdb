@@ -15,8 +15,9 @@
  */
 
 #include "observer/virtual_table/ob_virtual_sql_plan_statistics.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 using namespace oceanbase;
@@ -93,7 +94,7 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
   is_end = false;
   sql::ObPlanCache *plan_cache = NULL;
   if (OB_INVALID_ID == static_cast<uint64_t>(operator_stat_array_idx_)) {
-    plan_cache = share::g_mp->plan_cache();
+    plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
     ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
     if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
       SERVER_LOG(WARN, "fail to traverse id2stat_map");

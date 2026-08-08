@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_delete_lob_meta_row_task.h"
-#include "share/rc/ob_module_provider.h"
-#include "rootserver/ob_local_management_service.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "data_plane/ddl/ob_ddl_coordinator.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
 namespace oceanbase
@@ -29,13 +29,12 @@ using namespace compaction;
 using namespace share;
 using namespace share::schema;
 using namespace sql;
-using namespace observer;
 using namespace name;
 
 namespace storage
 {
 
-int ObDeleteLobMetaRowParam::init(const ObDDLLocalBuildArg &arg)
+int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg)
 {
   int ret = OB_SUCCESS;
   
@@ -74,7 +73,7 @@ ObDeleteLobMetaRowDag::~ObDeleteLobMetaRowDag()
 {
 }
 
-int ObDeleteLobMetaRowDag::init(const ObDDLLocalBuildArg &arg)
+int ObDeleteLobMetaRowDag::init(const obcall::ObDDLLocalBuildArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -228,7 +227,7 @@ int ObDeleteLobMetaRowDag::report_local_build_status()
     arg.server_addr_ = GCTX.self_addr();
     FLOG_INFO("send local build status response to RS", K(ret), K(arg));
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.local_management_service_->handle_ddl_local_build_response(arg))) {
+    } else if (OB_FAIL(data_plane::report_ddl_single_replica_response(arg))) {
       LOG_WARN("fail to send build ddl local build response", K(ret), K(arg));
     }
   }
@@ -373,12 +372,12 @@ int ObDeleteLobMetaRowTask::process()
   } else {
     ObTableScanParam scan_param;
     transaction::ObTxDesc *tx_desc = nullptr;
-    transaction::ObTransService *txs = share::g_mp->trans_service();
+    transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     ObNewRowIterator *scan_iter = nullptr;
-    ObAccessService *tsc_service = share::g_mp->access_service();
+    ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     blocksstable::ObDatumRow *datum_row = nullptr;
     ObTableScanIterator *table_scan_iter = nullptr;
-    storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
+    storage::ObLobManager* lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
     ObIDag *tmp_dag = get_dag();
     const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     if (OB_ISNULL(txs) || OB_ISNULL(tsc_service) || OB_ISNULL(lob_mngr)) {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_trans_define.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -26,25 +26,9 @@ using namespace share;
 using namespace sql;
 using namespace storage;
 using namespace memtable;
-using namespace observer;
 
 namespace transaction
 {
-int ObTransID::compare(const ObTransID& other) const
-{
-  int compare_ret = 0;
-  if (this == &other) {
-    compare_ret = 0;
-  } else if (tx_id_ != other.tx_id_) {
-    // iterate transaction ctx sequentially
-    compare_ret = tx_id_ > other.tx_id_ ? 1 : -1;
-  } else {
-    compare_ret = 0;
-  }
-  return compare_ret;
-}
-
-OB_SERIALIZE_MEMBER(ObTransID, tx_id_);
 OB_SERIALIZE_MEMBER(ObStartTransParam, access_mode_, type_, isolation_, consistency_type_,
                     is_inner_trans_, read_snapshot_type_);
 OB_SERIALIZE_MEMBER(ObElrTransInfo, trans_id_, commit_version_, result_);

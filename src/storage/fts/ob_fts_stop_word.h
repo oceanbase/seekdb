@@ -20,7 +20,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/hash/ob_hashset.h"
 #include "object/ob_object.h"
-#include "storage/fts/ob_fts_struct.h"
+#include "data_plane/fts/ob_fts_struct.h"
 
 namespace oceanbase
 {

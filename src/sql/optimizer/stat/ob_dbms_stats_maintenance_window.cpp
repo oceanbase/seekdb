@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_scheduled_job_utils.h"
 #include "share/ob_timezone_mgr.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
+#include "query/scheduler/ob_scheduler_job.h"
+#include "query/scheduler/ob_scheduler_service.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -49,7 +50,12 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   int64_t job_id = 1;
   int64_t pos = 0;
   int32_t offset_sec = 0;
-  if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
+  query::ObISchedulerService *scheduler =
+      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+  if (OB_ISNULL(scheduler)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("scheduler service is unavailable", K(ret));
+  } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
     LOG_WARN("failed to gen exec env", K(ret));
   } else if (OB_FAIL(get_time_zone_offset(sys_variable, offset_sec))) {
     LOG_WARN("failed to get time zone offset", K(ret));
@@ -74,7 +80,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
                                                     job_action,
                                                     job_info))) {
             LOG_WARN("failed to get stat window job info", K(ret));
-          } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+          } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
             LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
           } else {
             ++ job_id;
@@ -86,7 +92,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         if (OB_FAIL(get_stats_history_manager_job_info(
                                                       job_id, exec_env, job_info))) {
           LOG_WARN("failed to get stats history manager job sql", K(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+        } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
           LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;
@@ -97,7 +103,7 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         } else if (OB_FAIL(get_async_gather_stats_job_info(
                                                   job_id, exec_env, job_info))) {
           LOG_WARN("failed to get async gather stats job sql", K(ret));
-        } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(sql_client, job_id, job_info))) {
+        } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
           LOG_WARN("failed to create dbms sched job", K(ret), K(job_info));
         } else {
           ++ job_id;

@@ -18,6 +18,7 @@
 #define OB_STORAGE_BLOCKSSTABLE_DATUM_RANGE_H
 
 #include "common/ob_store_range.h"
+#include "share/schema/ob_col_desc.h"
 #include "ob_datum_rowkey.h"
 #include "lib/utility/ob_print_kv.h"
 

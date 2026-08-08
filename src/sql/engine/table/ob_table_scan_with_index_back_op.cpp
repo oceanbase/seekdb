@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/table/ob_table_scan_with_index_back_op.h"
-#include "storage/access/ob_table_scan_iterator.h"
+#include "data_plane/access/ob_table_scan_access.h"
 namespace oceanbase
 {
 using namespace common;
@@ -173,16 +173,15 @@ int ObTableScanWithIndexBackOp::do_table_scan_with_index()
 int ObTableScanWithIndexBackOp::do_table_rescan_with_index()
 {
   int ret = OB_SUCCESS;
-  storage::ObTableScanIterator *table_iter = NULL;
   if (OB_FAIL(extract_range_from_index())) {
     LOG_WARN("extract range from index failed", K(ret));
   } else if (scan_param_.key_ranges_.count() <= 0) {
     //do nothing
     read_action_ = READ_ITER_END;
-  } else if (OB_ISNULL(table_iter = static_cast<storage::ObTableScanIterator*>(result_))) {
+  } else if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table iterator is null");
-  } else if (OB_FAIL(table_iter->rescan(scan_param_))) {
+  } else if (OB_FAIL(data_plane::table_scan_rescan(result_, scan_param_))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("failed to rescan", K(ret), "scan_param", scan_param_);
     }

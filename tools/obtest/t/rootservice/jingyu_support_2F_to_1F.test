@@ -1,0 +1,73 @@
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test 2F can be removed to 1F
+#    When migrate a replica, 2F may in same zone,
+#    We should have the ability to remove one of F.
+#
+
+ob1=OBI(cluster=2, proxy_num=0, init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z1_dst_ip1 = deploy_get_value(ob1.z1.obs1.ip);
+let $z1_dst_port1 = deploy_get_value(ob1.z1.obs1.port);
+let $z1_dst1 = $z1_dst_ip1:$z1_dst_port1;
+
+# create mysql tenant(1F)
+--echo =========================================================
+--echo                    create mysql tenant
+--echo =========================================================
+--enable_query_log
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE='2G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'),  locality='F@z1', primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql", meta_tenant_id, 1);
+let $ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.__all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id, ls_cnt, 1);
+
+--echo =========================================================
+--echo     debug sync for migrate replica not remove old one
+--echo =========================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 1;
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $mysql_tenant_id, resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $resource_pool_id AND zone = 'z1', unit_id, 1);
+let $ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_ip, 1);
+let $port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_port, 1);
+let $z1_cur = $ip:$port;
+
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+if ($z1_cur != $z1_dst0)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z1_dst0";
+}
+if ($z1_cur != $z1_dst1)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z1_dst1";
+}
+
+--echo ===================================================
+--echo        check member_list has 2F in one zone
+--echo ===================================================
+ob1.check_until_timeout select count(*) > 0 from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and member_list like "%$z1_dst0%" and member_list like "%$z1_dst1%" and paxos_replica_number = 2, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 1, 0, 120;
+
+--echo ===================================================
+--echo          release debug_sync and errsim
+--echo ===================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 0;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 1, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 2, 0, 120;

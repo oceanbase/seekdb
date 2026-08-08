@@ -15,11 +15,11 @@
  */
 
 #include "storage/tmp_file/ob_tmp_file_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "storage/blocksstable/ob_storage_object_handle.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::share;
@@ -481,7 +481,7 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     p_handle.value_ = new (buf) ObTmpPageCacheValue(buf + sizeof(ObTmpPageCacheValue));
   }
   if (OB_SUCC(ret)) {
-    ObTmpFileBlockManager &block_manager = share::g_mp->tmp_file_manager()->get_sn_file_manager().get_tmp_file_block_manager();
+    ObTmpFileBlockManager &block_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_sn_file_manager().get_tmp_file_block_manager();
     blocksstable::ObStorageObjectHandle obj_handle;
     blocksstable::MacroBlockId macro_block_id;
     //TODO: io_desc and io_timeout_ms value settings

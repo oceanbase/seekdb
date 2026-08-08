@@ -17,11 +17,10 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_pl_expr_subquery.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/ob_query_retry_ctrl.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -155,8 +154,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   CK(OB_NOT_NULL(info));
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
+  CK (OB_NOT_NULL(ctx.exec_ctx_.get_plan_cache_access_service()));
 
-  observer::ObQueryRetryCtrl retry_ctrl;
+  ObQueryRetryCtrl retry_ctrl;
   int64_t database_schema_version = 0;
   bool is_stack_overflow = false;
 
@@ -182,7 +182,9 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
     pl::ObPLExecCtx pl_exec_ctx(&alloc, &ctx.exec_ctx_, params, nullptr, &ret, nullptr);
 
     SMART_VAR(ObSPIResultSet, spi_result) {
-      OZ (spi_result.init(*session));
+      OZ (spi_result.init(
+          *session,
+          *ctx.exec_ctx_.get_plan_cache_access_service()));
       OZ (spi_result.start_nested_stmt_if_need(&pl_exec_ctx, info->route_sql_, static_cast<stmt::StmtType>(info->type_), false));
 
       if (OB_SUCC(ret)) {
@@ -233,7 +235,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
             ret = OB_SUCCESS == ret ? close_ret : ret;
           }
           is_retry = true;
-        } while (observer::RETRY_TYPE_NONE != retry_ctrl.get_retry_type());
+        } while (RETRY_TYPE_NONE != retry_ctrl.get_retry_type());
         session->get_retry_info_for_update().clear();
         session->set_query_start_time(old_query_start_time);
       }
@@ -255,6 +257,8 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
                                              result,
                                              info->result_type_,
                                              conv_res,
+                                             ctx.exec_ctx_.get_srs_provider(),
+                                             ctx.exec_ctx_.get_lob_read_service(),
                                              info->is_ignore_fail_,
                                              &info->type_info_));
           OX (result = conv_res);
@@ -266,7 +270,8 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
   if (OB_SUCC(ret)) {
     OZ(res.from_obj(result));
     if (is_lob_storage(result.get_type())) {
-      OZ(ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
+      OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
+                             ctx.exec_ctx_.get_allocator(), res));
     }
     OZ(expr.deep_copy_datum(ctx, res));
   }

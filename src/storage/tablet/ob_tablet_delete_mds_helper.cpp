@@ -15,7 +15,7 @@
  */
 
 #include "ob_tablet_delete_mds_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_delete_replay_executor.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -117,13 +117,13 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   bool exist = false;
   ObTabletHandle tablet_handle;
   ObTabletMapKey key;
 
   ObLS *tenant_ls = nullptr;
-  if (CLICK_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (CLICK_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
       LOG_WARN("failed to get ls", K(ret));
   } else {
     CLICK();

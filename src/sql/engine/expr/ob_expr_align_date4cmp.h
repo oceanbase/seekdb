@@ -72,7 +72,8 @@ private:
   static int double_to_ob_time(const double &date, DateArgType &date_arg_type, ObTime &ob_time);
   static int number_to_ob_time(const number::ObNumber &date, DateArgType &date_arg_type, ObTime &ob_time);
   static int str_to_ob_time(const ObString &date, DateArgType &date_arg_type, ObTime &ob_time);
-  static int datum_to_ob_time(const ObExpr &expr,
+  static int datum_to_ob_time(ObExecContext &exec_ctx,
+                              const ObExpr &expr,
                               const ObDatum *date_datum,
                               const ObObjType &date_arg_obj_type,
                               DateArgType &date_arg_type,

@@ -25,7 +25,6 @@
 #include "storage/memtable/ob_memtable_context.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_light_hashmap.h"
-#include "sql/ob_end_trans_callback.h"
 #include "lib/utility/utility.h"
 #include "ob_trans_define.h"
 #include "ob_trans_timer.h"
@@ -35,9 +34,10 @@
 #include "ob_tx_version_mgr.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/container/ob_iarray.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "common/storage/ob_sequence.h"
 #include "ob_tx_elr_util.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
 #include "src/storage/tx_storage/ob_tx_leak_checker.h"
 
 #define MAX_REDO_SYNC_TASK_COUNT 10
@@ -107,7 +107,8 @@ public:
   ObThreadLocalTransCtxState state_;
 } CACHE_ALIGNED;
 
-class ObTransService : public common::ObLinkQueueThreadPool
+class ObTransService : public common::ObLinkQueueThreadPool,
+                       public data_plane::ObITransactionService
 {
 public:
   ObTransService();
@@ -149,6 +150,7 @@ public:
                            const ObRegisterMdsFlag &register_flag = ObRegisterMdsFlag(),
                            const transaction::ObTxSEQ seq_no = transaction::ObTxSEQ());
   ObTxELRUtil &get_tx_elr_util() { return elr_util_; }
+  bool can_elr() const override { return elr_util_.is_can_elr(); }
 #ifdef ENABLE_DEBUG_LOG
   transaction::ObDefensiveCheckMgr *get_defensive_check_mgr() { return defensive_check_mgr_; }
 #endif

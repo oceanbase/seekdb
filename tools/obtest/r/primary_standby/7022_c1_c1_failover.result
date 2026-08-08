@@ -1,0 +1,27 @@
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2','z3');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_2'), locality='F@z1,F@z2,L@z3', primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob1.z1.obs0.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout_for_obs select switchover_status from oceanbase.v\$ob_cluster,TO PRIMARY,100;
+ob2.z1.obs0.mysql alter system commit to switchover to primary;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+insert into t1 values(1,1,'a');
+commit;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob2.force_stop;
+set ob_query_timeout=240000000;
+ob1.mysql alter system set _mini_merge_concurrency = 16;
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob1.mysql alter system set _mini_merge_concurrency = 3;
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob1.mysql_p select cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+cluster_role	protection_mode	protection_level
+PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where is_restore !=0, 0, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_root_table where is_restore !=0, 0, 5;

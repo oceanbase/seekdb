@@ -29,7 +29,7 @@
   #include "src/storage/tablet/ob_tablet_binding_helper.h"
   #include "src/storage/tablet/ob_tablet_binding_mds_user_data.h"
   #include "src/storage/tablet/ob_tablet_fork_mds_helper.h"
-  #include "src/share/ob_tablet_autoincrement_param.h"
+  #include "storage/tablet/ob_tablet_autoincrement_state.h"
   #include "src/storage/compaction/ob_medium_compaction_info.h"
   #include "src/storage/multi_data_source/ob_tablet_create_mds_ctx.h"
   #include "src/storage/truncate_info/ob_truncate_info.h"
@@ -137,7 +137,7 @@ _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION)
                     ::oceanbase::storage::ObTabletBindingMdsUserData,\
                     false)
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
-                    ::oceanbase::share::ObTabletAutoincSeq,\
+                    ::oceanbase::storage::ObTabletAutoincSeq,\
                     false)
   GENERATE_MDS_UNIT(::oceanbase::compaction::ObMediumCompactionInfoKey,\
                     ::oceanbase::compaction::ObMediumCompactionInfo,\

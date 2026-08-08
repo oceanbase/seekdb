@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX TABLELOCK
 
 #include "ob_lock_table.h"
-#include "share/rc/ob_module_provider.h"
 
 #include "storage/ls/ob_ls.h"                  // ObLS
 #include "storage/tablelock/ob_table_lock_iterator.h"

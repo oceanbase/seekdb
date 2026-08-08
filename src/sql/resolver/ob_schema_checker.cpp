@@ -15,10 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include <new>
+#include "query/resolver/ob_schema_lookup.h"
 #include "ob_schema_checker.h"
+#include "lib/allocator/ob_malloc.h"
 
-#include "observer/virtual_table/ob_table_columns.h"
-#include "pl/ob_pl_stmt.h"
+#include "sql/pl/ob_pl_stmt.h"
 #include "sql/privilege_check/ob_privilege_check.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -1237,106 +1239,74 @@ int ObSchemaChecker::check_set_default_role_priv(
 }//end of namespace sql
 }//end of namespace oceanbase
 
-// ===== definition moved from share/schema/ob_schema_getter_guard_priv.cpp(check_priv, sql security domain) =====
 namespace oceanbase
 {
-namespace share
-{
-namespace schema
+namespace query
 {
 
-int ObSchemaGetterGuard::check_priv(const ObSessionPrivInfo &session_priv,
-                                    const common::ObIArray<uint64_t> &enable_role_id_array,
-                                    const ObStmtNeedPrivs &stmt_need_privs)
+ObSchemaLookup::ObSchemaLookup()
+  : impl_(nullptr)
 {
-  int ret = OB_SUCCESS;
-  const ObStmtNeedPrivs::NeedPrivs &need_privs = stmt_need_privs.need_privs_;
-
-  if (session_priv.is_valid()) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < need_privs.count(); ++i) {
-      const ObNeedPriv &need_priv = need_privs.at(i);
-      switch (need_priv.priv_level_) {
-        case OB_PRIV_USER_LEVEL: {
-          if (OB_FAIL(check_user_priv(session_priv,
-                                      enable_role_id_array,
-                                      need_priv.priv_set_,
-                                      OB_PRIV_CHECK_ALL == need_priv.priv_check_type_))) {
-            LOG_WARN("No privilege",
-                     "user_id", session_priv.user_id_,
-                     "need_priv", need_priv.priv_set_,
-                     "user_priv", session_priv.user_priv_set_,
-                     KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_DB_LEVEL: {
-          if (OB_FAIL(check_db_priv(session_priv, enable_role_id_array, need_priv.db_, need_priv.priv_set_))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_TABLE_LEVEL: {
-          if (OB_PRIV_CHECK_ALL == need_priv.priv_check_type_) {
-            if (OB_FAIL(check_single_table_priv(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege",
-                  "user_id", session_priv.user_id_,
-                  "need_priv", need_priv.priv_set_,
-                  "table", need_priv.table_,
-                  "db", need_priv.db_,
-                  "user_priv", session_priv.user_priv_set_,
-                  KR(ret));//need print priv
-            }
-          } else if (OB_PRIV_CHECK_ANY == need_priv.priv_check_type_) {
-            if (OB_FAIL(check_single_table_priv_or(session_priv, enable_role_id_array, need_priv))) {
-              LOG_WARN("No privilege",
-                       "user_id", session_priv.user_id_,
-                       "need_priv", need_priv.priv_set_,
-                       "table", need_priv.table_,
-                       "db", need_priv.db_,
-                       "user_priv", session_priv.user_priv_set_,
-                       KR(ret));
-            }
-          } else {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("Privilege checking of other not use this function yet", KR(ret));
-          }
-          break;
-        }
-        case OB_PRIV_ROUTINE_LEVEL: {
-          if (OB_ISNULL(this)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("schema guard is null", K(ret));
-          } else if (OB_FAIL(check_routine_priv(session_priv, enable_role_id_array, need_priv))) {
-            LOG_WARN("No privilege",
-                "user_id", session_priv.user_id_,
-                "need_priv", need_priv.priv_set_,
-                "table", need_priv.table_,
-                "db", need_priv.db_,
-                "user_priv", session_priv.user_priv_set_,
-                KR(ret));//need print priv
-          }
-          break;
-        }
-        case OB_PRIV_DB_ACCESS_LEVEL: {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Privilege checking of database access should not use this function", KR(ret));
-          break;
-        }
-        default: {
-          break;
-        }
-      }
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
+  void *checker_buf = ob_malloc(sizeof(sql::ObSchemaChecker), "SchemaLookupAPI");
+  if (nullptr != checker_buf) {
+    impl_ = new (checker_buf) sql::ObSchemaChecker();
   }
-  return ret;
 }
 
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
+ObSchemaLookup::~ObSchemaLookup()
+{
+  if (nullptr != impl_) {
+    sql::ObSchemaChecker *checker = static_cast<sql::ObSchemaChecker *>(impl_);
+    checker->~ObSchemaChecker();
+    ob_free(impl_);
+    impl_ = nullptr;
+  }
+}
+
+int ObSchemaLookup::init(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const uint64_t session_id)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->init(
+            schema_guard, session_id);
+}
+
+int ObSchemaLookup::get_table_schema(
+    const common::ObString &database_name,
+    const common::ObString &table_name,
+    const bool is_index_table,
+    const share::schema::ObTableSchema *&table_schema,
+    const bool with_hidden_flag,
+    const bool is_built_in_index)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_table_schema(
+            database_name, table_name, is_index_table, table_schema,
+            with_hidden_flag, is_built_in_index);
+}
+
+int ObSchemaLookup::get_table_schema(
+    const uint64_t table_id,
+    const share::schema::ObTableSchema *&table_schema)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_table_schema(
+            table_id, table_schema);
+}
+
+int ObSchemaLookup::get_database_schema(
+    const uint64_t database_id,
+    const share::schema::ObDatabaseSchema *&database_schema)
+{
+  return nullptr == impl_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : static_cast<sql::ObSchemaChecker *>(impl_)->get_database_schema(
+            database_id, database_schema);
+}
+
+} // namespace query
+} // namespace oceanbase

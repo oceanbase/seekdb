@@ -17,12 +17,14 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_opt_stat_monitor_manager.h"
 #include "share/ob_ex_rpc.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ob_shared_timer.h"
+#include "share/ob_server_struct.h"
 #include "sql/ob_sql_init.h"
 #include "share/ob_sql_client_decorator.h"
-#include "observer/ob_server.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "query/optimizer/stat/ob_optimizer_stat_service.h"
 
 namespace oceanbase
 {
@@ -144,7 +146,7 @@ int ObOptStatMonitorManager::init()
     LOG_WARN("failed to create dml stat map", K(ret));
   } else {
     inited_ = true;
-    mysql_proxy_ = &ObServer::get_instance().get_mysql_proxy();
+    mysql_proxy_ = GCTX.sql_proxy_;
     
     destroyed_ = false;
   }
@@ -186,7 +188,7 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
     } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
       SERVER_MODULE_SCOPE {
-        return share::g_mp->opt_stat_monitor_manager()->update_opt_stat_monitoring_info(arg);
+        return ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>()->update_opt_stat_monitoring_info(arg);
       }
       return OB_SUCCESS;
     }))) {
@@ -606,11 +608,11 @@ int ObOptStatMonitorManager::get_dml_stat_sql(const ObOptDmlStat &dml_stat,
   return ret;
 }
 
-int ObOptStatMonitorManager::generate_opt_stat_monitoring_info_rows(observer::ObOptDmlStatMapGetter &getter)
+int ObOptStatMonitorManager::generate_opt_stat_monitoring_info_rows(ObIOptDmlStatConsumer &consumer)
 {
   int ret = OB_SUCCESS;
   SpinRLockGuard guard(lock_);
-  if (OB_FAIL(dml_stat_map_.foreach_refactored(getter))) {
+  if (OB_FAIL(dml_stat_map_.foreach_refactored(consumer))) {
     LOG_WARN("fail to generate opt stat monitoring info rows", K(ret));
   } else {/*do nothing*/}
   return ret;
@@ -672,11 +674,11 @@ int ObOptStatMonitorManager::server_module_start(ObOptStatMonitorManager* &optst
 {
   int ret = OB_SUCCESS;
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->schedule(
         optstat_monitor_mgr->get_flush_all_task(),
         ObOptStatMonitorFlushAllTask::FLUSH_INTERVAL, true))) {
       LOG_WARN("failed to scheduler flush all task", K(ret));
-    } else if (OB_FAIL(share::g_mp->shared_timer()->schedule(
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->schedule(
         optstat_monitor_mgr->get_check_task(),
         ObOptStatMonitorCheckTask::CHECK_INTERVAL, true))) {
       LOG_WARN("failed to scheduler check task", K(ret));
@@ -693,16 +695,16 @@ int ObOptStatMonitorManager::server_module_start(ObOptStatMonitorManager* &optst
 void ObOptStatMonitorManager::server_module_stop(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    share::g_mp->shared_timer()->cancel_task(optstat_monitor_mgr->get_flush_all_task());
-    share::g_mp->shared_timer()->cancel_task(optstat_monitor_mgr->get_check_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->cancel_task(optstat_monitor_mgr->get_flush_all_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->cancel_task(optstat_monitor_mgr->get_check_task());
   }
 }
 
 void ObOptStatMonitorManager::server_module_wait(ObOptStatMonitorManager* &optstat_monitor_mgr)
 {
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    share::g_mp->shared_timer()->wait_task(optstat_monitor_mgr->get_flush_all_task());
-    share::g_mp->shared_timer()->wait_task(optstat_monitor_mgr->get_check_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->wait_task(optstat_monitor_mgr->get_flush_all_task());
+    ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->wait_task(optstat_monitor_mgr->get_check_task());
   }
 }
 
@@ -1478,3 +1480,36 @@ int ObOptStatMonitorManager::get_async_stale_max_table_size(const uint64_t table
 
 }
 }
+
+namespace oceanbase
+{
+namespace query
+{
+
+int ObOptimizerStatService::report_dml_stat(
+    uint64_t table_id,
+    int64_t tablet_id,
+    int64_t inserted_rows,
+    int64_t updated_rows,
+    int64_t deleted_rows)
+{
+  int ret = OB_SUCCESS;
+  common::ObOptDmlStat stat;
+  stat.table_id_ = table_id;
+  stat.tablet_id_ = tablet_id;
+  stat.insert_row_count_ = inserted_rows;
+  stat.update_row_count_ = updated_rows;
+  stat.delete_row_count_ = deleted_rows;
+  common::ObOptStatMonitorManager *monitor =
+      ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+  if (OB_ISNULL(monitor)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("optimizer stat monitor manager is null", K(ret));
+  } else if (OB_FAIL(monitor->update_local_cache(stat))) {
+    LOG_WARN("failed to report dml stat", K(ret), K(stat));
+  }
+  return ret;
+}
+
+} // namespace query
+} // namespace oceanbase

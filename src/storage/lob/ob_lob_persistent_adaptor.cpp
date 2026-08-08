@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_persistent_adaptor.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "ob_lob_persistent_reader.h"
 #include "storage/ob_table_dml_param.h"
@@ -157,7 +157,7 @@ int ObPersistentLobApator::get_lob_data(
 int ObPersistentLobApator::revert_scan_iter(ObLobMetaIterator *iter)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed.", K(ret));
@@ -221,7 +221,7 @@ int ObPersistentLobApator::prepare_lob_meta_dml(ObLobAccessParam& param)
 
   if (OB_SUCC(ret)) {
     param.dml_base_param_->store_ctx_guard_->reset();
-    ObAccessService *oas = share::g_mp->access_service();
+    ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     if (OB_FAIL(oas->get_write_store_ctx_guard(param.timeout_,
                                                *param.tx_desc_,
                                                param.snapshot_,
@@ -369,7 +369,7 @@ int ObPersistentLobApator::inner_get_tablet(
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret));
   } else if (OB_FAIL(inner_get_tablet(param, tablet_id, tenant_ls, handle))) {
     LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
@@ -511,7 +511,7 @@ int ObPersistentLobApator::prepare_lob_tablet_id(ObLobAccessParam& param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet_id of main table is invalid", K(ret), K(param));
   } else if (param.lob_meta_tablet_id_.is_valid() && param.lob_piece_tablet_id_.is_valid()) {
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret));
   } else if (OB_FAIL(inner_get_tablet(param, param.tablet_id_, tenant_ls, data_tablet))) {
     LOG_WARN("failed to get tablet", K(ret), K(param.tablet_id_));
@@ -555,7 +555,7 @@ int ObPersistentLobApator::erase_lob_meta(ObLobAccessParam &param, ObDatumRowIte
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));
@@ -590,7 +590,7 @@ int ObPersistentLobApator::write_lob_meta(ObLobAccessParam& param, ObDatumRowIte
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));
@@ -625,7 +625,7 @@ int ObPersistentLobApator::update_lob_meta(ObLobAccessParam& param, ObDatumRowIt
 {
   int ret = OB_SUCCESS;
   int64_t affected_rows = 0;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_WARN("get access service failed", K(ret), KP(oas));

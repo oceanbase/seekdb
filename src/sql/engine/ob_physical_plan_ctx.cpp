@@ -219,6 +219,21 @@ bool ObPhysicalPlanCtx::is_plain_select_stmt() const
   return phy_plan_ != NULL && phy_plan_->get_stmt_type() == stmt::T_SELECT && false == phy_plan_->has_for_update();
 }
 
+bool ObPhysicalPlanCtx::can_partition_retry() const
+{
+  return phy_plan_ != NULL && !phy_plan_->is_dml_write_stmt() && !phy_plan_->has_for_update();
+}
+
+bool ObPhysicalPlanCtx::has_for_update() const
+{
+  return phy_plan_ != NULL && phy_plan_->has_for_update();
+}
+
+int64_t ObPhysicalPlanCtx::get_ddl_task_id() const
+{
+  return phy_plan_ != NULL ? phy_plan_->get_ddl_task_id() : 0;
+}
+
 void ObPhysicalPlanCtx::set_phy_plan(const ObPhysicalPlan *phy_plan)
 {
   phy_plan_ = phy_plan;

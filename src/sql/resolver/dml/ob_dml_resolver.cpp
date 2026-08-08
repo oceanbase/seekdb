@@ -20,7 +20,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_default_value_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 #include "sql/optimizer/ob_opt_est_utils.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/parser/ob_item_type_str.h"
@@ -35,7 +35,7 @@
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 #include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
@@ -4387,7 +4387,7 @@ int ObDMLResolver::resolve_function_table_item(const ParseNode &parse_tree,
         OZ (session_info_->get_cur_exec_ctx()->get_package_guard(package_guard));
         CK (OB_NOT_NULL(package_guard));
         OZ (ObResolverUtils::get_user_type(
-          params_.allocator_, params_.session_info_, params_.sql_proxy_,
+          params_.allocator_, params_.session_info_, params_.plan_cache_, params_.sql_proxy_,
           params_.schema_checker_->get_schema_guard(),
           *package_guard,
           function_table_expr->get_udt_id(),
@@ -4759,7 +4759,12 @@ int ObDMLResolver::do_expand_view(TableItem &view_item, ObChildStmtResolver &vie
         LOG_WARN("failed to resolve view", K(ret));
       } else if (OB_UNLIKELY(OB_ERR_VIEW_INVALID == ret)) {
         // do nothing
-      } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(*view_schema, view_stmt,reset_column_infos, *allocator_, *session_info_))) {
+      } else if (OB_ISNULL(params_.dependency_info_queue_)) {
+        tmp_ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("dependency-info queue is NULL", K(tmp_ret));
+      } else if (OB_SUCCESS != (tmp_ret = ObSQLUtils::async_recompile_view(
+          *view_schema, view_stmt, reset_column_infos, *allocator_, *session_info_,
+          *params_.dependency_info_queue_))) {
         LOG_WARN("failed to add recompile view task", K(tmp_ret));
         if (OB_ERR_TOO_LONG_COLUMN_LENGTH == tmp_ret) {
           tmp_ret = OB_SUCCESS; //ignore
@@ -8368,7 +8373,7 @@ int ObDMLResolver::resolve_function_table_column_item_udf(const TableItem &table
   CK (OB_NOT_NULL(schema_checker_))
   ObPLPackageGuard package_guard{};
   OZ (ObResolverUtils::get_user_type(
-    params_.allocator_, params_.session_info_, params_.sql_proxy_,
+    params_.allocator_, params_.session_info_, params_.plan_cache_, params_.sql_proxy_,
     schema_checker_->get_schema_guard(),
     package_guard,
     table_expr->get_udt_id(), user_type));
@@ -8414,7 +8419,7 @@ int ObDMLResolver::resolve_function_table_column_item_udf(const TableItem &table
     const ObUserDefinedType *user_type = NULL;
     CK (OB_NOT_NULL(schema_checker_))
     OZ (ObResolverUtils::get_user_type(
-      params_.allocator_, params_.session_info_, params_.sql_proxy_,
+      params_.allocator_, params_.session_info_, params_.plan_cache_, params_.sql_proxy_,
       schema_checker_->get_schema_guard(),
       package_guard,
       coll_type->get_element_type().get_user_type_id(),
@@ -14183,7 +14188,7 @@ int ObDMLResolver::add_udt_dependency(const pl::ObUserDefinedType &udt_type)
       } else { // composite type
         ObPLPackageGuard package_guard{};
         if (OB_FAIL(ObResolverUtils::get_user_type(
-              params_.allocator_, params_.session_info_, params_.sql_proxy_,
+              params_.allocator_, params_.session_info_, params_.plan_cache_, params_.sql_proxy_,
               params_.schema_checker_->get_schema_guard(),
               package_guard,
               element_type->get_user_type_id(),

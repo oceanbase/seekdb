@@ -1,101 +1,225 @@
-define_property(GLOBAL PROPERTY ANDROID_TEST_SOURCES
-  BRIEF_DOCS "Sources for combined Android all_tests binary"
-  FULL_DOCS "Accumulated by ob_unittest and friends")
+# Copyright (c) 2025 OceanBase.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-# Register a test source for the combined Android binary
-function(_android_register_test_source src)
-  if(ANDROID)
-    set_property(GLOBAL APPEND PROPERTY ANDROID_TEST_SOURCES "${src}")
-  endif()
-endfunction()
+find_package(Threads REQUIRED)
 
-function(ob_unittest case)
-  if(ARGC EQUAL 1)
-    add_executable(${case} ${case}.cpp)
-    _android_register_test_source("${CMAKE_CURRENT_SOURCE_DIR}/${case}.cpp")
-  else()
-    add_executable(${ARGV})
-    # First arg is target name, rest are sources
-    list(GET ARGV 0 _target)
-    list(REMOVE_AT ARGV 0)
-    foreach(_src ${ARGV})
-      get_filename_component(_abs "${_src}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-      _android_register_test_source("${_abs}")
-    endforeach()
-  endif()
-  if (case MATCHES "^test_.*")
-    add_test(${case} ${case})
-    set_tests_properties(${case} PROPERTIES TIMEOUT 300)
-  endif()
-  if(ANDROID)
-    target_link_libraries(${case} PRIVATE -Wl,--whole-archive mock_di -Wl,--no-whole-archive oceanbase_static gtest gmock)
-  elseif(NOT APPLE)
-    target_link_libraries(${case} PRIVATE -Wl,--whole-archive mock_di -Wl,--no-whole-archive oceanbase gtest gmock)
-  else()
-    target_link_libraries(${case} PRIVATE mock_di oceanbase gtest gmock)
-  endif()
-  target_include_directories(${case}
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/unittest ${CMAKE_SOURCE_DIR}/mittest ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
-endfunction()
-
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.test")
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.sql")
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.result")
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.schema")
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.cfg")
-file(COPY . DESTINATION . FILES_MATCHING PATTERN "*.sh")
-file(COPY run_tests.sh DESTINATION .)
-
-if(APPLE)
-  find_package(GTest REQUIRED)
-  set(GTEST_INCLUDE_DIRS "/opt/homebrew/include")
-  include_directories(${DEP_DIR}/include)
-  include_directories(${GTEST_INCLUDE_DIRS})
-  # Homebrew's lib dir is not on clang's default search path; the bare
-  # gtest/gmock link names below need it.
-  link_directories(/opt/homebrew/lib)
-endif()
-
-add_subdirectory(sql)
-add_subdirectory(logservice)
-add_subdirectory(storage)
-add_subdirectory(observer)
-add_subdirectory(share)
-add_subdirectory(lib)
-add_subdirectory(rootserver)
-add_subdirectory(tools)
-
-# Android: single combined test binary (all TEST() macros in one executable)
-# Uses sources registered by ob_unittest() and friends via ANDROID_TEST_SOURCES property.
-if(ANDROID)
-  get_property(ANDROID_ALL_TEST_SOURCES GLOBAL PROPERTY ANDROID_TEST_SOURCES)
-  # Exclude tests that need libraries not in oceanbase_static
-  list(FILTER ANDROID_ALL_TEST_SOURCES EXCLUDE REGEX "/tools/")
-  list(FILTER ANDROID_ALL_TEST_SOURCES EXCLUDE REGEX "/tx/it/")
-  list(LENGTH ANDROID_ALL_TEST_SOURCES _n)
-  message(STATUS "all_tests: ${_n} test sources collected")
-
-  add_executable(all_tests EXCLUDE_FROM_ALL
-    ${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp
-    ${ANDROID_ALL_TEST_SOURCES})
-  # Extra sources required by specific test macros (rs_unittest, aggr_unittest2)
-  target_sources(all_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/storage/ob_truncate_info_helper.cpp)
-  # Rename each file's main() so only all_tests_main.cpp provides the real one
-  target_compile_definitions(all_tests PRIVATE main=disabled_main)
-  target_link_options(all_tests PRIVATE -Wl,--allow-multiple-definition)
-  target_link_libraries(all_tests PRIVATE
-    -Wl,--whole-archive mock_di -Wl,--no-whole-archive
-    oceanbase_static gtest gmock
-    mockcontainer sql_ut_base mock_tx_log_adapter
-    mock_ls_tablet_service mock_access_service)
-  target_include_directories(all_tests PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/unittest
-    ${CMAKE_SOURCE_DIR}/deps/oblib/unittest)
-  # Add test subdirectories so relative includes (e.g. ../share/...) resolve
-  set(_android_test_inc_dirs backup lib logservice observer rootserver share sql storage)
-  foreach(_dir ${_android_test_inc_dirs})
-    target_include_directories(all_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${_dir})
+function(seekdb_emit_pretest_unity_source
+    OUTPUT_VARIABLE OUTPUT_DIRECTORY INDEX)
+  set(SEEKDB_PRETEST_EMITTED_SOURCE
+    "${OUTPUT_DIRECTORY}/${INDEX}.unity.cpp")
+  set(SEEKDB_PRETEST_EMITTED_CONTENT
+    "/* generated by seekdb CMake pretest */\n")
+  foreach(SEEKDB_PRETEST_EMITTED_MEMBER IN LISTS ARGN)
+    string(APPEND SEEKDB_PRETEST_EMITTED_CONTENT
+      "\n#include \"${SEEKDB_PRETEST_EMITTED_MEMBER}\"\n${unity_after}\n")
   endforeach()
+  set(SEEKDB_PRETEST_EXISTING_CONTENT "")
+  if(EXISTS "${SEEKDB_PRETEST_EMITTED_SOURCE}")
+    file(READ "${SEEKDB_PRETEST_EMITTED_SOURCE}"
+      SEEKDB_PRETEST_EXISTING_CONTENT)
+  endif()
+  if(NOT SEEKDB_PRETEST_EXISTING_CONTENT STREQUAL
+      SEEKDB_PRETEST_EMITTED_CONTENT)
+    file(WRITE "${SEEKDB_PRETEST_EMITTED_SOURCE}"
+      "${SEEKDB_PRETEST_EMITTED_CONTENT}")
+  endif()
+  set(${OUTPUT_VARIABLE} "${SEEKDB_PRETEST_EMITTED_SOURCE}" PARENT_SCOPE)
+endfunction()
+
+set(SEEKDB_PRETEST_GTEST "${DEP_DIR}/lib/libgtest.a")
+set(SEEKDB_PRETEST_GMOCK "${DEP_DIR}/lib/libgmock.a")
+foreach(SEEKDB_PRETEST_LIBRARY
+    "${SEEKDB_PRETEST_GTEST}" "${SEEKDB_PRETEST_GMOCK}")
+  if(NOT EXISTS "${SEEKDB_PRETEST_LIBRARY}")
+    message(FATAL_ERROR "Missing pretest dependency: ${SEEKDB_PRETEST_LIBRARY}")
+  endif()
+endforeach()
+
+# Preserve the farm's historical pretest_filter_cases contract.  Current
+# module binaries exclude those source-owned cases at compile time because
+# CTest registers module shards rather than one executable per source file.
+set(SEEKDB_PRETEST_FILTER_CASES "")
+set(SEEKDB_PRETEST_CONFIG "${CMAKE_SOURCE_DIR}/test/pretest/pretest.conf")
+if(EXISTS "${SEEKDB_PRETEST_CONFIG}")
+  file(STRINGS "${SEEKDB_PRETEST_CONFIG}" SEEKDB_PRETEST_FILTER_LINE
+    REGEX "^pretest_filter_cases=")
+  if(SEEKDB_PRETEST_FILTER_LINE)
+    list(GET SEEKDB_PRETEST_FILTER_LINE 0 SEEKDB_PRETEST_FILTER_LINE)
+    string(REGEX REPLACE "^[^=]*=" "" SEEKDB_PRETEST_FILTER_LINE
+      "${SEEKDB_PRETEST_FILTER_LINE}")
+    string(REPLACE "," ";" SEEKDB_PRETEST_FILTER_CASES
+      "${SEEKDB_PRETEST_FILTER_LINE}")
+  endif()
 endif()
+
+# Runtime data keeps the source-relative layout expected by the existing
+# tests.  Source and BUILD files stay in the source tree.
+file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/"
+  DESTINATION "${CMAKE_CURRENT_BINARY_DIR}"
+  PATTERN "*.c" EXCLUDE
+  PATTERN "*.cc" EXCLUDE
+  PATTERN "*.cpp" EXCLUDE
+  PATTERN "*.cxx" EXCLUDE
+  PATTERN "*.h" EXCLUDE
+  PATTERN "*.hh" EXCLUDE
+  PATTERN "*.hpp" EXCLUDE
+  PATTERN "*.hxx" EXCLUDE
+  PATTERN "*.ipp" EXCLUDE
+  PATTERN "BUILD" EXCLUDE
+  PATTERN "BUILD.bazel" EXCLUDE
+  PATTERN "CMakeLists.txt" EXCLUDE
+  PATTERN "run_tests.sh" EXCLUDE
+  PATTERN "run_tests_cmake.sh.in" EXCLUDE)
+file(REMOVE "${CMAKE_CURRENT_BINARY_DIR}/run_tests_cmake.sh.in")
+configure_file(run_tests_cmake.sh.in run_tests.sh @ONLY)
+
+get_filename_component(SEEKDB_PRETEST_TEST_SRCDIR
+  "${CMAKE_BINARY_DIR}" DIRECTORY)
+get_filename_component(SEEKDB_PRETEST_TEST_WORKSPACE
+  "${CMAKE_BINARY_DIR}" NAME)
+
+set(SEEKDB_PRETEST_TARGETS "")
+foreach(SEEKDB_PRETEST_MODULE IN LISTS SEEKDB_PRETEST_MODULES)
+  string(TOUPPER "${SEEKDB_PRETEST_MODULE}" SEEKDB_PRETEST_MODULE_UPPER)
+  set(SEEKDB_PRETEST_PREFIX
+    "SEEKDB_PRETEST_${SEEKDB_PRETEST_MODULE_UPPER}")
+  set(SEEKDB_PRETEST_TARGET "${${SEEKDB_PRETEST_PREFIX}_TARGET}")
+  set(SEEKDB_PRETEST_MODULE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/${SEEKDB_PRETEST_MODULE}")
+  set(SEEKDB_PRETEST_OUTPUT_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/${SEEKDB_PRETEST_MODULE}")
+
+  file(GLOB_RECURSE SEEKDB_PRETEST_SOURCES CONFIGURE_DEPENDS
+    "${SEEKDB_PRETEST_MODULE_DIR}/*.cpp")
+  set(SEEKDB_PRETEST_FILTERED_SOURCES "")
+  foreach(SEEKDB_PRETEST_SOURCE IN LISTS SEEKDB_PRETEST_SOURCES)
+    get_filename_component(SEEKDB_PRETEST_CASE
+      "${SEEKDB_PRETEST_SOURCE}" NAME_WE)
+    if(NOT SEEKDB_PRETEST_CASE IN_LIST SEEKDB_PRETEST_FILTER_CASES)
+      list(APPEND SEEKDB_PRETEST_FILTERED_SOURCES "${SEEKDB_PRETEST_SOURCE}")
+    endif()
+  endforeach()
+  if(NOT SEEKDB_PRETEST_FILTERED_SOURCES)
+    message(FATAL_ERROR "Pretest module ${SEEKDB_PRETEST_MODULE} has no sources")
+  endif()
+
+  # Bazel validates that every isolated source has a non-empty reason.  CMake
+  # consumes that same list and generates the same ordered lexical batches.
+  set(SEEKDB_PRETEST_ISOLATED_SOURCES "")
+  foreach(SEEKDB_PRETEST_EXCEPTION
+      IN LISTS ${SEEKDB_PRETEST_PREFIX}_UNITY_EXCEPTIONS)
+    if(SEEKDB_PRETEST_EXCEPTION IN_LIST SEEKDB_PRETEST_FILTERED_SOURCES)
+      list(APPEND SEEKDB_PRETEST_ISOLATED_SOURCES
+        "${SEEKDB_PRETEST_EXCEPTION}")
+    endif()
+  endforeach()
+
+  set(SEEKDB_PRETEST_UNITY_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/unity/${SEEKDB_PRETEST_TARGET}")
+  file(MAKE_DIRECTORY "${SEEKDB_PRETEST_UNITY_DIR}")
+  set(SEEKDB_PRETEST_UNITY_SOURCES "")
+  set(SEEKDB_PRETEST_UNITY_MEMBERS "")
+  set(SEEKDB_PRETEST_UNITY_INDEX 0)
+  foreach(SEEKDB_PRETEST_SOURCE IN LISTS SEEKDB_PRETEST_FILTERED_SOURCES)
+    if(NOT SEEKDB_PRETEST_SOURCE IN_LIST SEEKDB_PRETEST_ISOLATED_SOURCES)
+      list(APPEND SEEKDB_PRETEST_UNITY_MEMBERS "${SEEKDB_PRETEST_SOURCE}")
+      list(LENGTH SEEKDB_PRETEST_UNITY_MEMBERS
+        SEEKDB_PRETEST_UNITY_MEMBER_COUNT)
+      if(SEEKDB_PRETEST_UNITY_MEMBER_COUNT EQUAL
+          ${${SEEKDB_PRETEST_PREFIX}_UNITY_SIZE})
+        seekdb_emit_pretest_unity_source(
+          SEEKDB_PRETEST_UNITY_SOURCE
+          "${SEEKDB_PRETEST_UNITY_DIR}"
+          "${SEEKDB_PRETEST_UNITY_INDEX}"
+          ${SEEKDB_PRETEST_UNITY_MEMBERS})
+        list(APPEND SEEKDB_PRETEST_UNITY_SOURCES
+          "${SEEKDB_PRETEST_UNITY_SOURCE}")
+        set(SEEKDB_PRETEST_UNITY_MEMBERS "")
+        math(EXPR SEEKDB_PRETEST_UNITY_INDEX
+          "${SEEKDB_PRETEST_UNITY_INDEX} + 1")
+      endif()
+    endif()
+  endforeach()
+  if(SEEKDB_PRETEST_UNITY_MEMBERS)
+    seekdb_emit_pretest_unity_source(
+      SEEKDB_PRETEST_UNITY_SOURCE
+      "${SEEKDB_PRETEST_UNITY_DIR}"
+      "${SEEKDB_PRETEST_UNITY_INDEX}"
+      ${SEEKDB_PRETEST_UNITY_MEMBERS})
+    list(APPEND SEEKDB_PRETEST_UNITY_SOURCES
+      "${SEEKDB_PRETEST_UNITY_SOURCE}")
+  endif()
+  file(GLOB SEEKDB_PRETEST_STALE_UNITY_SOURCES
+    "${SEEKDB_PRETEST_UNITY_DIR}/*.unity.cpp")
+  list(REMOVE_ITEM SEEKDB_PRETEST_STALE_UNITY_SOURCES
+    ${SEEKDB_PRETEST_UNITY_SOURCES})
+  if(SEEKDB_PRETEST_STALE_UNITY_SOURCES)
+    file(REMOVE ${SEEKDB_PRETEST_STALE_UNITY_SOURCES})
+  endif()
+  set_source_files_properties(${SEEKDB_PRETEST_UNITY_SOURCES}
+    PROPERTIES GENERATED TRUE)
+
+  add_executable(${SEEKDB_PRETEST_TARGET}
+    "${CMAKE_CURRENT_SOURCE_DIR}/all_tests_main.cpp"
+    ${SEEKDB_PRETEST_UNITY_SOURCES}
+    ${SEEKDB_PRETEST_ISOLATED_SOURCES})
+  set_target_properties(${SEEKDB_PRETEST_TARGET} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${SEEKDB_PRETEST_OUTPUT_DIR}"
+    BUILD_RPATH "${CMAKE_BINARY_DIR}/src/observer")
+  target_include_directories(${SEEKDB_PRETEST_TARGET} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${SEEKDB_PRETEST_MODULE_DIR}")
+  target_link_libraries(${SEEKDB_PRETEST_TARGET} PRIVATE
+    oceanbase
+    "${SEEKDB_PRETEST_GMOCK}"
+    "${SEEKDB_PRETEST_GTEST}"
+    Threads::Threads
+    ${CMAKE_DL_LIBS})
+
+  math(EXPR SEEKDB_PRETEST_LAST_SHARD
+    "${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT} - 1")
+  foreach(SEEKDB_PRETEST_SHARD RANGE 0 ${SEEKDB_PRETEST_LAST_SHARD})
+    set(SEEKDB_PRETEST_CTEST_NAME
+      "${SEEKDB_PRETEST_TARGET}_shard_${SEEKDB_PRETEST_SHARD}")
+    set(SEEKDB_PRETEST_TMPDIR
+      "${CMAKE_CURRENT_BINARY_DIR}/tmp/${SEEKDB_PRETEST_CTEST_NAME}")
+    file(MAKE_DIRECTORY "${SEEKDB_PRETEST_TMPDIR}")
+    # CTest may run shards concurrently.  Give each shard a private working
+    # directory so legacy tests that create relative paths cannot delete or
+    # overwrite another shard's files.  Keep the historical unittest/... data
+    # paths available without copying the data once per shard.
+    set(SEEKDB_PRETEST_DATA_LINK "${SEEKDB_PRETEST_TMPDIR}/unittest")
+    file(REMOVE_RECURSE "${SEEKDB_PRETEST_DATA_LINK}")
+    file(CREATE_LINK "${CMAKE_CURRENT_BINARY_DIR}"
+      "${SEEKDB_PRETEST_DATA_LINK}" SYMBOLIC)
+    set(SEEKDB_PRETEST_ENVIRONMENT
+      "GTEST_TOTAL_SHARDS=${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT}"
+      "GTEST_SHARD_INDEX=${SEEKDB_PRETEST_SHARD}"
+      "TEST_TOTAL_SHARDS=${${SEEKDB_PRETEST_PREFIX}_SHARD_COUNT}"
+      "TEST_SHARD_INDEX=${SEEKDB_PRETEST_SHARD}"
+      "TEST_SRCDIR=${SEEKDB_PRETEST_TEST_SRCDIR}"
+      "TEST_WORKSPACE=${SEEKDB_PRETEST_TEST_WORKSPACE}"
+      "TEST_TMPDIR=${SEEKDB_PRETEST_TMPDIR}")
+    add_test(NAME "${SEEKDB_PRETEST_CTEST_NAME}"
+      COMMAND "$<TARGET_FILE:${SEEKDB_PRETEST_TARGET}>")
+    set_tests_properties("${SEEKDB_PRETEST_CTEST_NAME}" PROPERTIES
+      WORKING_DIRECTORY "${SEEKDB_PRETEST_TMPDIR}"
+      TIMEOUT 1200
+      ENVIRONMENT "${SEEKDB_PRETEST_ENVIRONMENT}")
+  endforeach()
+
+  list(APPEND SEEKDB_PRETEST_TARGETS "${SEEKDB_PRETEST_TARGET}")
+endforeach()
+
+add_custom_target(pretest DEPENDS ${SEEKDB_PRETEST_TARGETS})

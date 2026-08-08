@@ -60,7 +60,7 @@ public:
   int schedule_tablet_meta_check_task();
 private:
   static const int64_t TABLET_META_ROW_MAP_BUCKET_NUM = 64 * 1024;
-  typedef common::hash::ObHashMap<ObTabletID, share::ObTabletInfo> ObTabletMetaRowMap;
+  typedef common::hash::ObHashMap<ObTabletID, share::ObTabletRuntimeInfo> ObTabletMetaRowMap;
 
   int build_tablet_meta_row_map_(ObTabletMetaRowMap &tablet_meta_row_map);
   int check_stale_tablet_meta_rows_(ObTabletMetaRowMap &tablet_meta_row_map, int64_t &stale_row_count);

@@ -28,7 +28,7 @@
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "sql/dtl/ob_dtl_processor.h"
 #include "sql/dtl/ob_op_metric.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase {
 

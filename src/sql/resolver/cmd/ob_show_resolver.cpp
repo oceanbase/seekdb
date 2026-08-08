@@ -18,7 +18,7 @@
 #include "sql/resolver/cmd/ob_show_resolver.h"
 #include "sql/resolver/dcl/ob_grant_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
-#include "observer/virtual_table/ob_show_table_status.h"
+#include "sql/resolver/cmd/ob_show_table_status_sql.h"
 #include "sql/printer/ob_schema_printer.h"
 
 using namespace oceanbase::common;
@@ -2779,7 +2779,6 @@ DEFINE_SHOW_CLAUSE_SET(SHOW_ENGINE,
                        "SELECT 1 as `Type`, 1 as `Name`, 1 as `Status` FROM dual where 0 = 1 ",
                        NULL,
                        NULL);
-
 DEFINE_SHOW_CLAUSE_SET(SHOW_OPEN_TABLES,
                        NULL,
                        "SELECT 1 as `Database`, 1 as `Table`, 1 as In_use, 1 as Name_locked FROM dual where 0 = 1 ",

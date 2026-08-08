@@ -19,19 +19,21 @@
 
 #include <cstdint>
 #include "lib/time/ob_clock_generator.h"
-#include "storage/tx/ob_trans_id.h"
+#include "share/transaction/ob_tx_id.h"
 #include "common/ob_range.h"
 #include "common/storage/ob_sequence.h"
 #include "common/ob_tablet_id.h"
 #include "lib/core_local/ob_core_local_storage.h"
 #include "lib/list/ob_list.h"
 #include "lib/trace/ob_trace_event.h"
-#include "logservice/palf/lsn.h"
-#include "logservice/ob_log_base_header.h"
+#include "share/log/palf/lsn.h"
+#include "share/log/ob_log_base_header.h"
 #include "share/scn.h"
 #include "share/allocator/ob_reserve_arena.h"
-#include "sql/ob_sql_define.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "query/ob_sql_define.h"
+#include "share/statement/ob_stmt_type.h"
+#include "data_plane/transaction/ob_transaction_isolation.h"
+#include "data_plane/transaction/ob_transaction_version.h"
 #include "storage/tx/ob_committer_define.h"
 #include "storage/tx/ob_trans_result.h"
 #include "storage/tx/ob_multi_data_source_tx_buffer_node.h"
@@ -523,16 +525,6 @@ private:
   int64_t end_stmt_cnt_;
 };
 
-class ObTransVersion
-{
-public:
-  static const int64_t INVALID_TRANS_VERSION = -1;
-  static const int64_t MAX_TRANS_VERSION = INT64_MAX;
-public:
-  static bool is_valid(const int64_t trans_version) { return trans_version >= 0; }
-};
-
-
 class ObTransNeedWaitWrap
 {
 public:
@@ -663,38 +655,6 @@ public:
 };
 
 struct ObTransExecResult {};
-
-class ObTransIsolation
-{
-public:
-  enum {
-    /*
-     * after the discussion with yanran and zehuan, we decide to adjust the value of
-     * the following definition by exchanging READ_UNCOMMITTED and REPEATABLE_READ,
-     * then the order is much better.
-     */
-    UNKNOWN = -1,
-    READ_UNCOMMITTED = 0,
-    READ_COMMITED = 1,
-    REPEATABLE_READ = 2,
-    SERIALIZABLE = 3,
-    MAX_LEVEL
-  };
-  static const common::ObString LEVEL_NAME[MAX_LEVEL];
-public:
-  static bool is_valid(const int32_t level)
-  {
-    return level == READ_UNCOMMITTED
-        || level == READ_COMMITED
-        || level == REPEATABLE_READ
-        || level == SERIALIZABLE;
-  }
-  static int32_t get_level(const common::ObString &level_name);
-  static const common::ObString &get_name(int32_t level);
-private:
-  ObTransIsolation() {}
-  ~ObTransIsolation() {}
-};
 
 class ObPartTransAction
 {

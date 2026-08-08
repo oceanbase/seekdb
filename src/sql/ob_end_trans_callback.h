@@ -23,9 +23,7 @@
 #include "lib/objectpool/ob_tc_factory.h"
 #include "lib/utility/ob_mod_define.h"
 #include "sql/ob_i_end_trans_callback.h"
-#include "storage/tx/ob_trans_result.h"
-#include "storage/tx/ob_trans_define.h"
-#include "observer/mysql/ob_mysql_end_trans_cb.h"
+#include "sql/ob_mysql_end_trans_cb.h"
 
 namespace oceanbase
 {

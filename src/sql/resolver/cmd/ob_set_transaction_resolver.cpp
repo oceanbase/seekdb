@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "data_plane/transaction/ob_transaction_isolation.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "src/sql/resolver/ob_resolver_utils.h"

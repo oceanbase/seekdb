@@ -1,0 +1,72 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+use test;
+create table test01(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+create table test02(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+insert into test01 values(1,1);
+insert into test01 values(2,2);
+insert into test01 values(3,3);
+insert into test01 values(4,4);
+insert into test02 values(1,1);
+insert into test02 values(2,2);
+insert into test02 values(3,3);
+insert into test02 values(4,4);
+ob1.mysql alter system set syslog_level="DEBUG";
+insert into test01 values(2,2);
+ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
+insert into test01 values(1,2);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test02 where pk=1;
+pk	c1
+1	1
+insert into test01 values(1,1);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+insert into test02 values(2,2);
+ERROR 23000: Duplicate entry '2' for key 'PRIMARY'
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test02 where pk=1;
+pk	c1
+1	1
+select * from test01 where pk=1;
+pk	c1
+1	1
+insert into test01 values(1,1), (2,2), (3,3),(4,4);
+ERROR 23000: Duplicate entry '1' for key 'PRIMARY'
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+alter system switch replica leader ls=1001 server='11.124.5.40:29425';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test01' and svr_ip='$svr_ip0_p1' and svr_port='$svr_port0_p1' and partition_name='p0', 1, 100;
+alter system switch replica leader ls=1002 server='11.124.5.40:29424';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test01' and svr_ip='$svr_ip0_p0' and svr_port='$svr_port0_p0' and partition_name='p1', 1, 100;
+alter system switch replica leader ls=1002 server='11.124.5.40:29424';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test02' and svr_ip='$svr_ip1_p1' and svr_port='$svr_port1_p1' and partition_name='p0', 1, 100;
+alter system switch replica leader ls=1002 server='11.124.5.40:29425';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test02' and svr_ip='$svr_ip1_p0' and svr_port='$svr_port1_p0' and partition_name='p1', 1, 100;
+begin;
+select * from test01 where pk=1;
+pk	c1
+1	1
+select * from test02 where pk=1;
+pk	c1
+1	1
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+begin;
+select * from test01 where pk=1 union select * from test02 where pk=1;
+pk	c1
+1	1
+alter system switch replica leader ls=1001 server='11.124.5.40:29424';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test01' and svr_ip='$svr_ip0_p0' and svr_port='$svr_port0_p0' and partition_name='p0', 1, 100;
+alter system switch replica leader ls=1002 server='11.124.5.40:29425';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test01' and svr_ip='$svr_ip0_p1' and svr_port='$svr_port0_p1' and partition_name='p1', 1, 100;
+select * from test01 where pk=1 union select * from test02 where pk=1;
+pk	c1
+1	1
+commit;
+ob1.mysql alter system set syslog_level="INFO";
+drop table test01;
+drop table test02;

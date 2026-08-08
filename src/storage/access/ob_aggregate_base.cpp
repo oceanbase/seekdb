@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_aggregate_base.h"
+#include "lib/container/ob_bitmap.h"
+#include "storage/access/ob_table_access_param.h"
+#include "storage/blocksstable/index_block/ob_agg_row_struct.h"
 
 namespace oceanbase
 {

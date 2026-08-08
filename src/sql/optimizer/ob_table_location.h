@@ -18,6 +18,7 @@
 #define _OCEANBASE_SQL_OPTIMIZER_OB_TABLE_LOCATION_H
 
 #include "lib/hash/ob_pointer_hashmap.h"
+#include "query/optimizer/ob_optimizer_location_defs.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_tablet_mapper.h"
@@ -42,37 +43,6 @@ class ObExprEqualCheckContext;
 class ObDASTabletMapper;
 class ObDASCtx;
 typedef common::ObSEArray<int64_t, 1> RowkeyArray;
-class ObPartIdRowMapManager
-{
-public:
-  ObPartIdRowMapManager()
-    : manager_(), part_idx_(common::OB_INVALID_INDEX) {}
-  typedef common::ObSEArray<int64_t, 12> ObRowIdList;
-  struct MapEntry
-  {
-  public:
-    MapEntry(): list_() { }
-    TO_STRING_KV(K_(list));
-    int assign(const MapEntry &entry);
-  public:
-    ObRowIdList list_;
-  };
-  typedef common::ObSEArray<MapEntry, 1> ObPartRowManager;
-  const ObRowIdList* get_row_id_list(int64_t part_index);
-  void reset() { manager_.reset(); part_idx_ = common::OB_INVALID_INDEX; }
-  int64_t get_part_count() const { return manager_.count(); }
-  int64_t get_part_idx() const { return part_idx_; }
-  void set_part_idx(int64_t part_idx) { part_idx_ = part_idx; }
-  const MapEntry &at(int64_t i) const { return manager_.at(i); }
-  common::ObNewRow &get_part_row() { return part_row_; }
-  TO_STRING_KV(K_(manager), K_(part_idx));
-private:
-  ObPartRowManager manager_;
-  int64_t part_idx_;//used for parameter pass only.
-  common::ObNewRow part_row_;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObPartIdRowMapManager);
-};
 
 enum ValueExprType {
   INVILID_TYPE,
@@ -378,23 +348,6 @@ struct ObGetHashPartMapKey<ObHashPartMapKey, ObHashPartMapValue *>
   {
     return value->key_;
   }
-};
-
-struct TableLocationKey
-{
-  uint64_t table_id_;
-  uint64_t ref_table_id_;
-
-  bool operator==(const TableLocationKey &other) const;
-
-  inline uint64_t hash() const {
-    uint64_t hash_ret = 0;
-    hash_ret = common::murmurhash(&table_id_, sizeof(uint64_t), hash_ret);
-    hash_ret = common::murmurhash(&ref_table_id_, sizeof(uint64_t), hash_ret);
-    return hash_ret;
-  }
-
-  TO_STRING_KV(K_(table_id), K_(ref_table_id));
 };
 
 class ObOptimizerContext;

@@ -389,7 +389,7 @@ int ObIntegerBaseDiffDecoder::comparison_operator(
     const sql::ObWhiteFilterOperatorType op_type = filter.get_op_type();
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(op_type);
     int cmp_res = 0;
-    if (FAILEDx(cmp_func(base_datum, ref_datum, cmp_res))) {
+    if (FAILEDx(cmp_func(base_datum, ref_datum, cmp_res, nullptr))) {
       LOG_WARN("Failed to compare datum", K(ret), K(ref_datum), K(base_datum));
     } else if (FALSE_IT(filter_obj_smaller_than_base = cmp_res > 0)){
     } else if (filter_obj_smaller_than_base) {
@@ -509,9 +509,9 @@ int ObIntegerBaseDiffDecoder::bt_operator(
                   int left_cmp_res = 0;
                   int right_cmp_res = 0;
                   ObDatumCmpFuncType cmp_func = filter.cmp_func_;
-                  if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(0), left_cmp_res))) {
+                  if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(0), left_cmp_res, nullptr))) {
                     LOG_WARN("fail to compare datums", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
-                  } else if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(1), right_cmp_res))) {
+                  } else if (OB_FAIL(cmp_func(cur_datum, filter.get_datums().at(1), right_cmp_res, nullptr))) {
                     LOG_WARN("fail to compare datums", K(ret), K(cur_datum), K(filter.get_datums().at(1)));
                   } else {
                     result = (left_cmp_res >= 0) && (right_cmp_res <= 0);

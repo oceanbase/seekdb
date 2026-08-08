@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/utility/serialization.h"
@@ -428,7 +428,7 @@ int ObCSDispatcher::do_dispatch_()
     return OB_SUCCESS;
   }
 
-  ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
+  ObChangeStreamMgr *mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
   int64_t executor_count = mgr->get_worker().get_executor_count();
   ObCSExecCtx *exec_ctx = nullptr;
   bool batch_in_flight = false;  // true once any subtask is pushed to worker
@@ -481,7 +481,7 @@ int ObCSDispatcher::do_dispatch_()
         struct AlwaysTrue { bool operator()(int64_t, ObCSTxInfo *) const { return true; } } cond;
         (void)tx_ring_.pop(cond, pop_tx, popped, false);
         if (popped && OB_NOT_NULL(pop_tx)) {
-          share::g_mp->change_stream_mgr()->get_fetcher().release_committed_tx(pop_tx->tx_id_);
+          ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_fetcher().release_committed_tx(pop_tx->tx_id_);
         }
         dispatch_sn_++;
         if (exec_ctx->tx_list_.count() == 0) {
@@ -531,7 +531,7 @@ int ObCSDispatcher::do_dispatch_()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
     LOG_WARN("init plugins failed", KR(ret));
-  } else if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
@@ -685,7 +685,7 @@ void ObCSDispatcher::release_batch(ObCSExecCtx *ctx)
     LOG_ERROR("ObCSDispatcher: release_batch ctx is null", KR(ret), KP(ctx));
     return;
   }
-  ObCSFetcher &fetcher = share::g_mp->change_stream_mgr()->get_fetcher();
+  ObCSFetcher &fetcher = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>()->get_fetcher();
 
   struct AlwaysTrue {
     bool operator()(int64_t /*sn*/, ObCSTxInfo *) const { return true; }

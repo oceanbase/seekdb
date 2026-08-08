@@ -32,13 +32,10 @@ namespace share
 {
 class ObServerSnapshotID;
 }
-namespace observer
-{
-class ObStartupAccelTaskHandler;
-}
 namespace storage
 {
 class ObLocalStorageCheckpointWriter;
+class ObStartupAccelTaskHandler;
 class ObServerSnapshotHandler
 {
 public:
@@ -48,11 +45,11 @@ public:
   ~ObServerSnapshotHandler() = default;
   DISALLOW_COPY_AND_ASSIGN(ObServerSnapshotHandler);
 
-  // create snapshot
+  // Create a server snapshot.
   static int create_server_snapshot(const ObServerSnapshotID &snapshot_id);
   // delete snapshot
   static int delete_server_snapshot(const ObServerSnapshotID &snapshot_id);
-  static int create_all_tablet(observer::ObStartupAccelTaskHandler* startup_accel_handler,
+  static int create_all_tablet(ObStartupAccelTaskHandler* startup_accel_handler,
                                const blocksstable::MacroBlockId &tablet_meta_entry);
   static int get_ls_meta_entry(const ObServerSnapshotID &snapshot_id, blocksstable::MacroBlockId &ls_meta_entry);
 

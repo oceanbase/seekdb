@@ -1,0 +1,9 @@
+ob1=OBI(cluster=1:1, proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql set GLOBAL ob_query_timeout = 100000000000;
+ob1.mysql set GLOBAL ob_trx_timeout = 100000000000;
+ob1.mysql create resource pool qc unit = 'sys_unit_config', unit_num =1;
+ob1.mysql create tenant mysql replica_num = 1, resource_pool_list=('qc') set ob_tcp_invited_nodes='%';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SYNC_LOG_SUCCESS wait_for continue_signal';
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';

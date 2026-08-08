@@ -16,7 +16,7 @@
 
 #include "ob_multi_data_source_tx_buffer_node.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -118,7 +118,7 @@ ObTxBufferNodeWrapper::ObTxBufferNodeWrapper()
 
 ObTxBufferNodeWrapper::~ObTxBufferNodeWrapper()
 {
-  ObIAllocator &allocator = share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
+  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
   if (OB_NOT_NULL(node_.get_ptr())) {
     allocator.free(node_.get_ptr());
   }
@@ -155,7 +155,7 @@ OB_DEF_SERIALIZE(ObTxBufferNodeWrapper)
 OB_DEF_DESERIALIZE(ObTxBufferNodeWrapper)
 {
   int ret = OB_SUCCESS;
-  ObIAllocator &allocator = share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
+  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
   char *node_buf = NULL;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &tx_id_))) {
     TRANS_LOG(WARN, "deserialize node wrapper fail", KR(ret), K(data_len), K(pos));

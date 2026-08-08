@@ -77,7 +77,8 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_JSON, 1, "json_pretty");
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
     LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(*allocator, data, meta, has_lob_header, j_str))) {
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                 ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
     LOG_WARN("fail to get real data.", K(ret), K(j_str));
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                       j_in_type, j_base, 0,

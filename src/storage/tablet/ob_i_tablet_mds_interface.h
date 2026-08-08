@@ -94,7 +94,7 @@ public:
                    const int64_t timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US) const;
   int get_autoinc_seq(ObIAllocator &allocator,
                       const share::SCN &snapshot,
-                      share::ObTabletAutoincSeq &data,
+                      ObTabletAutoincSeq &data,
                       const int64_t timeout = ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US) const;
 
   // if trans_stat < BEFORE_PREPARE, trans_version is explained as prepare_version(which is MAX).
@@ -261,21 +261,21 @@ struct ReadBindingInfoOp
 
 struct ReadAutoIncSeqOp
 {
-  ReadAutoIncSeqOp(common::ObIAllocator &allocator, share::ObTabletAutoincSeq &auto_inc_seq)
+  ReadAutoIncSeqOp(common::ObIAllocator &allocator, ObTabletAutoincSeq &auto_inc_seq)
     : allocator_(allocator), auto_inc_seq_(auto_inc_seq) {}
-  int operator()(const share::ObTabletAutoincSeq &data)
+  int operator()(const ObTabletAutoincSeq &data)
   {
     return auto_inc_seq_.assign(allocator_, data);
   }
   common::ObIAllocator &allocator_;
-  share::ObTabletAutoincSeq &auto_inc_seq_;
+  ObTabletAutoincSeq &auto_inc_seq_;
 };
 
 struct ReadAutoIncSeqValueOp
 {
   ReadAutoIncSeqValueOp(uint64_t &auto_inc_seq_value)
     : auto_inc_seq_value_(auto_inc_seq_value) {}
-  int operator()(const share::ObTabletAutoincSeq &data)
+  int operator()(const ObTabletAutoincSeq &data)
   {
     return data.get_autoinc_seq_value(auto_inc_seq_value_);
   }

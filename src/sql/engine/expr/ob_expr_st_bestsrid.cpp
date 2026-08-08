@@ -70,7 +70,7 @@ int ObExprPrivSTBestsrid::get_geog_box(ObEvalCtx &ctx, lib::MemoryContext &mem_c
 {
   int ret = OB_SUCCESS;
   ObGeometry *geo = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs))) {
     LOG_WARN("get srs failed", K(ret), K(wkb));
@@ -115,7 +115,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   bool is_null_res = false;
   bool is_geo_empty = false;
   ObDatum *geo_datum[2] = { nullptr };
@@ -137,7 +137,7 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
       res.set_null();
       is_null_res = true;
     } else if (FALSE_IT(geo_str = geo_datum[i]->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *(geo_datum[i]),
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *(geo_datum[i]),
               geo_arg->datum_meta_, geo_arg->obj_meta_.has_lob_header(), geo_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(geo_str));
     } else if (OB_FAIL(guard.init())) {

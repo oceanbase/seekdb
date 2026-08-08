@@ -30,11 +30,6 @@ namespace blocksstable
 class ObSSTable;
 }
 
-namespace share
-{
-class ObTabletAutoincSeq;
-}
-
 namespace storage
 {
 

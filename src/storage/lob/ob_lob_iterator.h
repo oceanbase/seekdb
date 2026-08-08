@@ -19,24 +19,30 @@
 
 #include "lib/string/ob_string.h"
 #include "lib/charset/ob_charset.h"
+#include "share/ob_i_lob_read_service.h"
 #include "storage/lob/ob_lob_access_param.h"
 #include "storage/lob/ob_lob_meta.h"
 #include "storage/lob/ob_lob_meta_manager.h"
 
 namespace oceanbase
 {
+namespace common
+{
+struct ObLobDiffHeader;
+}
+
 namespace storage
 {
 
-class ObLobQueryIter
+class ObLobQueryIter : public common::ObILobReadCursor
 {
 public:
   ObLobQueryIter() : cs_type_(CS_TYPE_BINARY), is_reverse_(false), is_end_(false), is_inited_(false) {}
 
   virtual ~ObLobQueryIter() {}
 
-  virtual int get_next_row(ObString& data) = 0;
-  virtual void reset() = 0;
+  virtual int get_next_row(ObString& data) override = 0;
+  virtual void reset() override = 0;
   bool is_end() const { return is_end_; }
 
 protected:
@@ -108,7 +114,9 @@ public:
 
   ~ObLobPartialUpdateRowIter();
 
-  int open(ObLobAccessParam &param, ObLobLocatorV2 &delta_lob, ObLobDiffHeader *diff_header);
+  int open(ObLobAccessParam &param,
+           ObLobLocatorV2 &delta_lob,
+           common::ObLobDiffHeader *diff_header);
 
   int get_next_row(int64_t &offset, ObLobMetaInfo *&old_info, ObLobMetaInfo *&new_info);
 

@@ -23,7 +23,7 @@
 #include "lib/file/ob_file.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
-#include "observer/mysql/obmp_packet_sender.h"
+#include "query/protocol/ob_client_protocol.h"
 
 namespace oceanbase
 {
@@ -42,7 +42,7 @@ public:
   ObLoadFileLocation file_location_;
   ObString filename_;
   ObCSVGeneralFormat::ObCSVCompression compression_format_;
-  observer::ObIMPPacketSender *packet_handle_;
+  ObIClientPacketChannel *packet_handle_;
   ObSQLSessionInfo *session_;
   int64_t timeout_ts_;  // A job always has a deadline and file reading may cost a long time
 
@@ -160,7 +160,7 @@ public:
   virtual ~ObPacketStreamFileReader();
   
   int open(const ObString &filename,
-           observer::ObIMPPacketSender &packet_handle,
+           ObIClientPacketChannel &packet_handle,
            ObSQLSessionInfo *session,
            int64_t timeout_ts);
 
@@ -179,7 +179,7 @@ private:
   bool is_killed() const;
   
 private:
-  observer::ObIMPPacketSender *packet_handle_; // We use this handle to read packet from client
+  ObIClientPacketChannel *packet_handle_; // We use this handle to read packet from client
   ObSQLSessionInfo *session_;
   int64_t timeout_ts_; // The deadline of job
   

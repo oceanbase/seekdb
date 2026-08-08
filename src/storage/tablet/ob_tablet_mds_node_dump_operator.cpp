@@ -148,14 +148,14 @@ int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletBindingMdsUserData>
 }
 
 template <>
-int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, share::ObTabletAutoincSeq>(const mds::MdsDumpKV &kv, bool &dumped)
+int ObTabletDumpMdsNodeOperator::dump<mds::DummyKey, ObTabletAutoincSeq>(const mds::MdsDumpKV &kv, bool &dumped)
 {
   int ret = OB_SUCCESS;
   constexpr uint8_t table_id = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
-  constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, share::ObTabletAutoincSeq>>::value;
+  constexpr uint8_t unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletAutoincSeq>>::value;
   const mds::MdsDumpKey &key = kv.k_;
   const mds::MdsDumpNode &node = kv.v_;
-  ObTabletComplexAddr<share::ObTabletAutoincSeq> &auto_inc_seq = mds_data_.auto_inc_seq_;
+  ObTabletComplexAddr<ObTabletAutoincSeq> &auto_inc_seq = mds_data_.auto_inc_seq_;
 
   if (table_id == key.mds_table_id_ && unit_id == key.mds_unit_id_) {
     const mds::TwoPhaseCommitState &state = node.status_.get_state();
@@ -233,7 +233,7 @@ int ObTabletDumpMdsNodeOperator::operator()(const mds::MdsDumpKV &kv)
   }
 
   if (OB_SUCC(ret) && !dumped) {
-    if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<mds::DummyKey, share::ObTabletAutoincSeq>(kv, dumped)))) {
+    if (OB_UNLIKELY(OB_SUCCESS != (ret = dump<mds::DummyKey, ObTabletAutoincSeq>(kv, dumped)))) {
       LOG_WARN("failed to dump auto inc seq", K(ret), K(kv));
     }
   }

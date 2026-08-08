@@ -116,7 +116,7 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     ObTime ot;
     ObDateSqlMode date_sql_mode;
     date_sql_mode.init(sql_mode);
-    if (OB_FAIL(ob_datum_to_ob_time_with_date(*param_datum, expr.args_[0]->datum_meta_.type_,
+    if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *param_datum, expr.args_[0]->datum_meta_.type_,
                                               expr.args_[0]->datum_meta_.scale_,
                                               tz_info, ot,
                                               get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
@@ -551,7 +551,7 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
     ObTime ot2(DT_TYPE_TIME);
     if (ObTimeType == expr.args_[1]->datum_meta_.type_) {
       time_val = time_arg->get_time();
-    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(
+    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
                  *time_arg, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2,
                  expr.args_[1]->obj_meta_.has_lob_header()))) {
@@ -643,7 +643,7 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
     LOG_WARN("calc subaddtime failed", K(ret));
   } else if (!null_res) {
     ObTime ot1(DT_TYPE_TIME);
-    if (OB_FAIL(ob_datum_to_ob_time_without_date(*date_arg, expr.args_[0]->datum_meta_.type_,
+    if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, *date_arg, expr.args_[0]->datum_meta_.type_,
                                                  expr.args_[0]->datum_meta_.scale_, tz_info, ot1,
                                                  expr.args_[0]->obj_meta_.has_lob_header()))) {
       LOG_WARN("cast the first param failed", K(ret));

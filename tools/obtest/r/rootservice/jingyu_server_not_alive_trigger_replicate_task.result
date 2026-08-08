@@ -1,0 +1,26 @@
+ob1=OBI(cluster=1:1:2,proxy_num=0,init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_rereplication = true;
+ob1.mysql alter system set server_permanent_offline_time = '3600s';
+set @@session.ob_query_timeout = 200000000;
+alter system set __min_full_resource_pool_memory=1073741824;
+use oceanbase;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tenant_for_replicate RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+ob1.mysql alter tenant tenant_for_replicate set primary_zone = "z1;z2;z3";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id in ($tenant_id, $meta_tenant_id) and zone = 'z3', 0, 60;
+ob1.check_until_timeout select count(*) = 1 from oceanbase.DBA_OB_SERVERS where svr_ip = '$z3_cur_ip_1' and svr_port = $z3_cur_port_1 and status != 'ACTIVE', 1, 30;
+select count(*) = 0 as no_task_generated from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+no_task_generated
+1
+ob1.mysql set ob_global_debug_sync = 'BEFORE_DELETE_DRTASK_FROM_INNER_TABLE wait_for signal_for_delete_drtask';
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_REPLICA_TASKS, 1, 30;
+select tenant_id, ls_id, task_type, target_paxos_replica_number, source_paxos_replica_number, comment from oceanbase.CDB_OB_LS_REPLICA_TASKS;
+tenant_id	ls_id	task_type	target_paxos_replica_number	source_paxos_replica_number	comment
+1001	1	MIGRATE REPLICA	3	3	replicate to unit task
+1002	1	MIGRATE REPLICA	3	3	replicate to unit task
+1002	1001	MIGRATE REPLICA	3	3	replicate to unit task
+ob1.mysql set ob_global_debug_sync = 'now signal signal_for_delete_drtask';
+ob1.check_until_timeout select count(*) = $ls_cnt from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id = $tenant_id or tenant_id = $meta_tenant_id) and role = "LEADER" and member_list like '%$z3_obs0%' and member_list not like '%$z3_obs1%', 1, 60;

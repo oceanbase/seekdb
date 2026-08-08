@@ -1,0 +1,79 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description: 验证locality变更过程中能发起modify_quorum操作
+#              
+ob1=OBI(cluster=1:1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz);
+
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+ob1.mysql alter system set replica_safe_remove_time = '1m';
+sleep 5;
+
+connection conn_sys;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3','z4','z5');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4;z5', locality='F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5' set ob_tcp_invited_nodes='%';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+create table t1(c1 int primary key, c2 int);
+let $user_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where tenant_id = "$tenant1_id" and table_name = "t1", table_id, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+
+# z4永久下线
+let $stop_addr = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) as addr from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z4", addr, 1);
+let $stop_obs = deploy_get_value(ob1.get_obs_by_addr $stop_addr);
+$stop_obs.force_stop;
+
+# member_list为4，quorum为5
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and role = 1 and quorum = 5 and member_list like "%,%,%,%" and member_list not like "%,%,%,%,%", 1, 5;
+
+connection conn_sys;
+alter system set enable_rereplication = 'false';
+alter system set enable_rebalance = 'false';
+alter system set __balance_controller = '{"ENABLE_MODIFY_QUORUM":"false"}';
+sleep 5;
+
+# 预期再发起一次remover_member和modify_quorum操作
+ob1.mysql alter tenant tenant_1 set locality  = "F@z1, F@z2, F@z3";
+sleep 10;
+
+connection conn_sys;
+alter system set enable_rereplication = 'true';
+alter system set enable_rebalance = 'true';
+alter system set __balance_controller = '';
+sleep 5;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id", 3, 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and role = 1 and quorum = 3 and member_list like "%,%,%" and member_list not like "%,%,%,%", 1, 60;

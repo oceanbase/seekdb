@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_sort_op_impl.h"
+#include "query/engine/basic/ob_encoded_sort_row.h"
+#include "data_plane/encoding/ob_cpu_features.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
 
 namespace oceanbase
@@ -277,7 +279,7 @@ int fast_compare_normal(const unsigned char *s, const unsigned char *t,
 
 CompareByteFunc get_fast_compare_func()
 {
-  return blocksstable::is_avx512_valid()
+  return data_plane::is_avx512_supported()
       ? fast_compare_simd
       : fast_compare_normal;
 }
@@ -355,7 +357,7 @@ int ObSortOpImpl::ObAdaptiveQS::compare_vals(int64_t l, int64_t r,
 
 ObSortOpImpl::Compare::Compare()
   : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr),
-    exec_ctx_(nullptr), cmp_count_(0), cmp_start_(0), cmp_end_(0)
+    exec_ctx_(nullptr), access_ctx_(nullptr), cmp_count_(0), cmp_start_(0), cmp_end_(0)
 {
 }
 
@@ -373,6 +375,8 @@ int ObSortOpImpl::Compare::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("column count miss match", K(ret),
       K(sort_cmp_funs->count()), K(sort_cmp_funs->count()));
+  } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
@@ -423,7 +427,8 @@ bool ObSortOpImpl::Compare::operator()(
     for (int64_t i = cmp_start_; 0 == cmp && i < cmp_end_ && OB_SUCC(ret); i++) {
       const ObSortFieldCollation& sort_collation = sort_collations_->at(i);
       const int64_t idx = sort_collation.field_idx_;
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+      if (OB_FAIL(
+              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         less = sort_collation.is_ascending_;
@@ -458,7 +463,8 @@ bool ObSortOpImpl::Compare::operator()(
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
         LOG_WARN("failed to eval expr", K(ret));
-      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp))) {
+      } else if (OB_FAIL(
+                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         if (cmp < 0) {
@@ -492,7 +498,8 @@ int ObSortOpImpl::Compare::with_ties_cmp(const common::ObIArray<ObExpr*> *l,
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
         LOG_WARN("failed to eval expr", K(ret));
-      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp))) {
+      } else if (OB_FAIL(
+                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
@@ -518,7 +525,8 @@ int ObSortOpImpl::Compare::with_ties_cmp(const ObChunkDatumStore::StoredRow *l,
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+      if (OB_FAIL(
+              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
@@ -572,7 +580,8 @@ ObSortOpImpl::ObSortOpImpl() :
   sorted_(false), enable_encode_sortkey_(false),
   page_allocator_("PartSortBucket", ObCtxIds::WORK_AREA), mem_context_(NULL),
   mem_entify_guard_(mem_context_), sort_collations_(nullptr),
-  sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_store_(ObModIds::OB_SQL_SORT_ROW),
+  sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_access_ctx_(nullptr),
+  datum_store_(ObModIds::OB_SQL_SORT_ROW),
   inmem_row_size_(0), mem_check_interval_mask_(1), row_idx_(0), heap_iter_begin_(false),
   imms_heap_(NULL), ems_heap_(NULL), next_stored_row_func_(&ObSortOpImpl::array_next_stored_row),
   input_rows_(OB_INVALID_ID), input_width_(OB_INVALID_ID),
@@ -591,7 +600,8 @@ ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
     got_first_row_(false), sorted_(false), enable_encode_sortkey_(false),
     page_allocator_("PartSortBucket", ObCtxIds::WORK_AREA), mem_context_(NULL),
     mem_entify_guard_(mem_context_), sort_collations_(nullptr),
-    sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_store_(ObModIds::OB_SQL_SORT_ROW), inmem_row_size_(0), mem_check_interval_mask_(1),
+    sort_cmp_funs_(nullptr), eval_ctx_(nullptr), datum_access_ctx_(nullptr),
+    datum_store_(ObModIds::OB_SQL_SORT_ROW), inmem_row_size_(0), mem_check_interval_mask_(1),
     row_idx_(0), heap_iter_begin_(false), imms_heap_(NULL), ems_heap_(NULL),
     next_stored_row_func_(&ObSortOpImpl::array_next_stored_row),
     input_rows_(OB_INVALID_ID), input_width_(OB_INVALID_ID),
@@ -730,6 +740,8 @@ int ObSortOpImpl::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument: argument is null", K(ret),
               K(sort_collations), K(sort_cmp_funs), K(eval_ctx));
+  } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else if (OB_FAIL(comp_.init(sort_collations, sort_cmp_funs,
                       exec_ctx, enable_encode_sortkey && !(part_cnt > 0)))) {
     LOG_WARN("failed to init compare functions", K(ret));
@@ -885,6 +897,7 @@ void ObSortOpImpl::reset()
   sorted_ = false;
   got_first_row_ = false;
   comp_.reset();
+  datum_access_ctx_ = nullptr;
   max_bucket_cnt_ = 0;
   max_node_cnt_ = 0;
   part_cnt_ = 0;
@@ -1397,7 +1410,8 @@ int ObSortOpImpl::is_equal_part(const ObChunkDatumStore::StoredRow *l,
       const ObDatum &rd = r->cells()[idx];
       if (ld.pack_ == rd.pack_ && 0 == memcmp(ld.ptr_, rd.ptr_, ld.len_)) {
         // do nothing
-      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(ld, rd, cmp_ret))) {
+      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+                     ld, rd, cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         is_equal = (0 == cmp_ret);
@@ -2230,7 +2244,8 @@ int ObSortOpImpl::locate_current_heap_in_bucket(PartHeapNode *first_node,
           find_same_heap = top_row->cells()[idx].is_null();
         } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(*part_datums.at(i),
                                                             top_row->cells()[idx],
-                                                            cmp_ret))) {
+                                                            cmp_ret,
+                                                            datum_access_ctx_))) {
           LOG_WARN("failed to compare", K(ret));
         } else {
           find_same_heap = (0 == cmp_ret);
@@ -3039,7 +3054,8 @@ int ObPrefixSortImpl::fetch_rows(const common::ObIArray<ObExpr *> &all_exprs)
             const int64_t idx = full_sort_collations_->at(i).field_idx_;
             if (OB_FAIL(all_exprs.at(idx)->eval(*eval_ctx_, l_datum))) {
               LOG_WARN("failed to eval expr", K(ret));
-            } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(*l_datum, rcells[idx], cmp_ret))) {
+            } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
+                           *l_datum, rcells[idx], cmp_ret, datum_access_ctx_))) {
               LOG_WARN("failed to compare", K(ret));
             } else {
               same_prefix = (0 == cmp_ret);
@@ -3114,7 +3130,8 @@ int ObPrefixSortImpl::is_same_prefix(const ObChunkDatumStore::StoredRow *store_r
     if (e->is_batch_result()) {
       if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(store_row->cells()[idx],
                                                        e->locate_batch_datums(*eval_ctx_)[datum_idx],
-                                                       cmp_ret))) {
+                                                       cmp_ret,
+                                                       datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         same = (0 == cmp_ret);
@@ -3139,7 +3156,8 @@ int ObPrefixSortImpl::is_same_prefix(const common::ObIArray<ObExpr *> &all_exprs
       if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
               e->locate_batch_datums(*eval_ctx_)[datum_idx1],
               e->locate_batch_datums(*eval_ctx_)[datum_idx2],
-              cmp_ret))) {
+              cmp_ret,
+              datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else {
         same = (0 == cmp_ret);
@@ -3401,7 +3419,8 @@ int ObUniqueSortImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
           int cmp = 0;
           for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
             const int64_t idx = sort_collations_->at(i).field_idx_;
-            if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+            if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+                    lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
               LOG_WARN("compare failed", K(ret));
             }
           }
@@ -3459,7 +3478,8 @@ int ObUniqueSortImpl::get_next_row(const common::ObIArray<ObExpr*> &exprs)
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
-          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+                  lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
             LOG_WARN("compare failed", K(ret));
           }
         }
@@ -3495,7 +3515,8 @@ int ObUniqueSortImpl::get_next_stored_row(const ObChunkDatumStore::StoredRow *&s
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
-          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
+          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+                  lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
             LOG_WARN("compare failed", K(ret));
           }
         }
@@ -3565,3 +3586,39 @@ int ObUniqueSortImpl::save_prev_row(const ObChunkDatumStore::StoredRow &sr)
 /*********************************** end ObUniqueSortImpl *****************************/
 } // end namespace sql
 } // end namespace oceanbase
+
+namespace oceanbase
+{
+namespace query
+{
+
+int sort_encoded_rows(common::ObIArray<ObEncodedSortRow *> &rows,
+                      common::ObIAllocator &allocator,
+                      bool &can_encode)
+{
+  static_assert(sizeof(ObEncodedSortRow) == sizeof(sql::ObChunkDatumStore::StoredRow),
+                "encoded sort row layout must match query StoredRow");
+  int ret = OB_SUCCESS;
+  common::ObFixedArray<sql::ObChunkDatumStore::StoredRow *, common::ObIAllocator>
+      query_rows(allocator);
+  if (OB_FAIL(query_rows.prepare_allocate(rows.count()))) {
+    SQL_ENG_LOG(WARN, "allocate encoded sort row adapter failed", K(ret), K(rows.count()));
+  } else {
+    for (int64_t i = 0; i < rows.count(); ++i) {
+      query_rows.at(i) = reinterpret_cast<sql::ObChunkDatumStore::StoredRow *>(rows.at(i));
+    }
+    sql::ObSortOpImpl::ObAdaptiveQS sorter(query_rows, allocator);
+    if (OB_FAIL(sorter.init(query_rows, allocator, 0, query_rows.count(), can_encode))) {
+      SQL_ENG_LOG(WARN, "initialize encoded row sorter failed", K(ret));
+    } else if (can_encode) {
+      sorter.sort(0, query_rows.count());
+      for (int64_t i = 0; i < query_rows.count(); ++i) {
+        rows.at(i) = reinterpret_cast<ObEncodedSortRow *>(query_rows.at(i));
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace query
+} // namespace oceanbase

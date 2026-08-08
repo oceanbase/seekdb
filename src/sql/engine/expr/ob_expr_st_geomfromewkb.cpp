@@ -75,7 +75,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   bool is_null_result = false;
   ObGeoAxisOrder axis_order = ObGeoAxisOrder::INVALID;
   ObString ewkb;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   const ObSrsItem *srs = NULL;
   ObGeometry *geo = NULL;
@@ -91,7 +91,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
   } else {
     ewkb = datum->get_string();
     ObGeoWkbHeader header;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), ewkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(ewkb));
     } else if (OB_FAIL(get_header_info_from_ewkb(ewkb, header))) {
@@ -102,7 +102,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
       ret = OB_ERR_GIS_DATA_WRONG_ENDIANESS;
       LOG_USER_ERROR(OB_ERR_GIS_DATA_WRONG_ENDIANESS);
       LOG_WARN("invalid byte order", K(ret), K(header.bo_));
-    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(srs_guard, header.srid_, srs))) {
+    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, header.srid_, srs))) {
       LOG_WARN("fail to get srs item", K(ret), K(header.srid_));
     } else if (OB_FAIL(create_geo_by_ewkb(tmp_allocator, ewkb, header, srs, geo))) {
       LOG_WARN("fail to create geometry object with raw ewkb", K(ret));
@@ -126,7 +126,7 @@ int ObExprPrivSTGeomFromEWKB::eval_st_geomfromewkb(const ObExpr &expr, ObEvalCtx
     } else if (datum->is_null()){
       // do nothing
     } else if (FALSE_IT(axis_str = datum->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
               expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), axis_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(axis_str));
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(axis_str, N_PRIV_ST_GEOMFROMEWKB, axis_order))) {

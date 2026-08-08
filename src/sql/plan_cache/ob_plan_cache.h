@@ -228,10 +228,21 @@ public:
 
   ObPlanCache();
   virtual ~ObPlanCache();
-  static int server_module_init(ObPlanCache* &plan_cache);
+  static int server_module_init(
+      ObPlanCache *&plan_cache,
+      query::ObIPlanCacheAccessService &access_service);
   static void server_module_stop(ObPlanCache * &plan_cache);
-  int init(int64_t hash_bucket);
+  int init(
+      int64_t hash_bucket,
+      query::ObIPlanCacheAccessService &access_service);
   bool is_inited() { return inited_; }
+  query::ObIPlanCacheAccessService &access_service() const
+  {
+    OB_ASSERT_MSG(
+        nullptr != access_service_,
+        "plan-cache access service is not initialized");
+    return *access_service_;
+  }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
                                      ObPlanCacheCtx &pc_ctx,
@@ -448,6 +459,7 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
+  query::ObIPlanCacheAccessService *access_service_;
   
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage

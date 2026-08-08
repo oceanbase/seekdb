@@ -1,0 +1,133 @@
+ob1=OBI(cluster=1:1:1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1:1:1:1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob2);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_4 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4');
+ob1.mysql CREATE TENANT tenant_4 RESOURCE_POOL_LIST = ('pool_4'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+insert into t1 values(1,1,'a');
+create table test_binding_tg1(c1 int primary key);
+create table test_logic_tg(c1 int primary key);
+create table test_binding_tg2(c1 int primary key);
+create table test_logic_tg2(c1 int primary key);
+commit;
+drop table test_binding_tg2;
+drop table test_logic_tg2;
+commit;
+ob2.mysql alter tenant tenant_4 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,F{1}@z4,F{1}@z5,F{1}@z6";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 2000;
+ob2.mysql alter tenant tenant_4 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,L{1}@z4,F{1}@z5,F{1}@z6";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 360;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob1.force_stop;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.z5.force_stop;
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Failover is not allowed when cluster have inactive servers
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+ob2.z6.force_stop;
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Failover is not allowed when cluster have inactive servers
+ob2.z6.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+ob2.mysql alter system stop server '$svr_z6';
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where stop_time > 0, 1, 10;
+ob2.mysql set ob_global_debug_sync = 'AFTER_WRITE_INNER_TABLE_CUTDATA_CLOG wait_for inner_cutdata_clog';
+set ob_query_timeout=60000000;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+7
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'INNER_TABLE_IN_CUTDATA_STATUS wait_for inner_cutdata_status';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_cutdata_clog';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+7
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'INNER_TABLE_CUTDATA_FINISH wait_for inner_table_cutdata_finish';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_cutdata_status';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+5
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'AFTER_WRITE_USER_TABLE_CUTDATA_CLOG wait_for user_cutdata_clog';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_table_cutdata_finish';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+9
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'USER_TABLE_IN_CUTDATA_STATUS wait_for user_table_in_cutdata_status';
+ob2.mysql set ob_global_debug_sync = 'now signal user_cutdata_clog';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+9
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'USER_TABLE_CUTDATA_FINISH wait_for user_table_cutdata_finish';
+ob2.mysql set ob_global_debug_sync = 'now signal user_table_in_cutdata_status';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ERROR HY000: Timeout
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+column_value
+6
+ob2.z5.force_stop;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+set ob_query_timeout=40000000;
+ob2.mysql set ob_global_debug_sync = 'now signal user_table_cutdata_finish';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	cluster_role	protection_mode	protection_level
+NOT ALLOWED	PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.check_until_timeout  select value from oceanbase.__all_zone where name='last_merged_version' and zone = '', 2, 600;
+ob3.reboot;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	cluster_role	protection_mode	protection_level
+TO STANDBY	PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.force_stop;
+set ob_query_timeout=120000000;
+ob3.mysql alter system set _mini_merge_concurrency = 16;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob3.mysql alter system set _mini_merge_concurrency = 3;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob3.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+switchover_status	cluster_role	protection_mode	protection_level
+NOT ALLOWED	PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE

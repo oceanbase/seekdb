@@ -24,7 +24,6 @@
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/compaction/ob_medium_checker.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
-#include "storage/compaction/ob_ckm_error_tablet_info.h"
 
 namespace oceanbase
 {

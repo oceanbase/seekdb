@@ -299,7 +299,8 @@ int ObExprSubstrb::calc_substrb_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       // read as binary
       const bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
       ObTextStringIter input_iter(expr.args_[0]->datum_meta_.type_, CS_TYPE_BINARY, src->get_string(), has_lob_header);
-      if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              input_iter, ctx.exec_ctx_, &calc_alloc))) {
         LOG_WARN("Lob: init input_iter failed ", K(ret), K(input_iter));
       } else if (OB_FAIL(input_iter.get_byte_len(total_byte_len))) {
         LOG_WARN("Lob: get input byte len failed", K(ret));

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_column_conv.h"
+#include "data_plane/encoding/ob_ascii_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
@@ -191,7 +192,8 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
     const int64_t max_accuracy_len = static_cast<int64_t>(res_type.
                                                           get_accuracy().get_length());
     const int64_t str_len_byte = static_cast<int64_t>(result.get_string_len());
-    if (OB_FAIL(obj_collation_check(is_strict, collation_type, *const_cast<ObObj*>(res_obj)))) {
+    if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                    *const_cast<ObObj*>(res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), KPC(res_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *res_obj, result, res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(res_obj));
@@ -512,7 +514,11 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
           ObDatum datum_for_check = *val;
           ObString str;
           ObTextStringIter striter(in_type, in_cs_type, val->get_string(), has_lob_header);
-          if (OB_FAIL(striter.init(0, ctx.exec_ctx_.get_my_session(), &temp_allocator))) {
+          if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                  striter,
+                  ctx.exec_ctx_,
+                  &temp_allocator,
+                  nullptr))) {
             LOG_WARN("fail to init string iter", K(ret), K(is_strict), K(expr));
           } else if (OB_FAIL(striter.get_full_data(str))) {
             LOG_WARN("fail to get full data from string iter", K(ret), K(is_strict), K(expr));
@@ -672,7 +678,11 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
               }
             }
             if (!can_use_raw_str) {
-              if (OB_FAIL(striter.init(0, ctx.exec_ctx_.get_my_session(), &temp_allocator))) {
+              if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                      striter,
+                      ctx.exec_ctx_,
+                      &temp_allocator,
+                      nullptr))) {
                 LOG_WARN("fail to init string iter", K(ret), K(is_strict), K(expr));
               } else if (OB_FAIL(striter.get_full_data(str))) {
                 LOG_WARN("fail to get full data from string iter", K(ret), K(is_strict), K(expr));

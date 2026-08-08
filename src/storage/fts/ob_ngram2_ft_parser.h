@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_FTS_OB_NGRAM2_FT_PARSER_H_
 #define _OCEANBASE_STORAGE_FTS_OB_NGRAM2_FT_PARSER_H_
 
-#include "storage/fts/ob_fts_parser.h"
+#include "data_plane/fts/ob_fts_parser.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
 namespace oceanbase

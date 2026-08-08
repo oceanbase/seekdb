@@ -15,7 +15,8 @@
  */
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_PARALLEL_HANDLER_H_
-#include "observer/ob_srv_task.h"
+#include "rpc/frame/ob_req_processor.h"
+#include "share/rpc/ob_server_task.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
 namespace oceanbase
 {
@@ -28,7 +29,7 @@ public:
     : task_(nullptr)
   {  }
   ~ObDASParallelHandler() {}
-  int init(observer::ObSrvTask *task);
+  int init(rpc::ObSrvTask *task);
   void reset()
   {
     task_ = nullptr;
@@ -48,9 +49,9 @@ protected:
   int record_status_and_op_result(ObIDASTaskOp *src_op, ObIDASTaskOp *dst_op);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDASParallelHandler);
-  observer::ObSrvTask *task_;
+  rpc::ObSrvTask *task_;
 }; // end of class ObDASParallelHandler
-class ObDASParallelTask : public observer::ObSrvTask
+class ObDASParallelTask : public rpc::ObSrvTask
 {
 public:
   ObDASParallelTask(DASRefCountContext &das_ref_count_ctx)

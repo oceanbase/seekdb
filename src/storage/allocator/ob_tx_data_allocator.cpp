@@ -18,7 +18,7 @@
 
 
 #include "ob_tx_data_allocator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -30,9 +30,8 @@ thread_local int64_t ObTxDataOpAllocator::local_alloc_size_ = 0;
 
 int64_t ObTxDataAllocator::hold() const
 {
-  ObSharedMemAllocMgr *manager = nullptr != share::g_mp
-      ? share::g_mp->shared_mem_alloc_mgr()
-      : nullptr;
+  ObSharedMemAllocMgr *manager =
+      ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   return nullptr != manager ? manager->tx_data_quota_used() : slice_backing();
 }
 
@@ -72,7 +71,7 @@ ObTxDataThrottleGuard::ObTxDataThrottleGuard(const bool for_replay,
                                              const int64_t abs_expire_time)
     : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
+  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObTxDataAllocator>::DEFAULT_MAX_THROTTLE_TIME;
@@ -86,7 +85,7 @@ int ObTxDataOpAllocator::init()
   ObMemAttr mem_attr;
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   mem_attr.label_ = "TX_OP";
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   if (IS_INIT){
     ret = OB_INIT_TWICE;

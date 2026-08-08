@@ -1,0 +1,34 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id_standby2 set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.check_until_timeout select protection_mode from oceanbase.v\$ob_cluster, MAXIMUM PROTECTION, 30;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id_primary set redo_transport_options='SYNC';
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BLOCK_FREEZE_INFO_UPDATE wait_for continue_signal';
+create table t(c1 int primary key, c2 int);
+insert into t VALUES (1,1);
+ob1.force_stop;
+ob2.force_stop;
+ob2.z1.obs0.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version>0, 2, 100;
+set ob_query_timeout=200000000;
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.check_until_timeout select cluster_role from oceanbase.__all_virtual_cluster, PRIMARY, 100;
+ob2.check_until_timeout select cluster_status from oceanbase.__all_virtual_cluster, VALID, 100;
+select * from t;
+c1	c2
+1	1

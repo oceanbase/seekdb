@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_ai_rerank.h"
-#include "share/rc/ob_module_provider.h"
+#include "query/ai/ob_ai_endpoint_resolver.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/utility/utility.h"
 #include "common/json_type/ob_json_common.h"
-#include "observer/omt/ob_ai_service.h"
  
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -118,9 +118,10 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
     lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(N_AI_RERANK));
     ObAIFuncExprInfo *info = nullptr;
-    omt::ObAiServiceGuard ai_service_guard;
-    omt::ObAiService *ai_service = share::g_mp->ai_service();
-    const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
+    share::ObAiModelEndpointInfo resolved_endpoint;
+    const share::ObAiModelEndpointInfo *endpoint_info = &resolved_endpoint;
+    query::ObIAiEndpointResolver *endpoint_resolver =
+        ::oceanbase::share::server_service<::oceanbase::query::ObIAiEndpointResolver>();
     ObString model_id = arg_model_id->get_string();
     ObString query = arg_query->get_string();
     ObArray<ObString> header_array;
@@ -167,16 +168,12 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
       LOG_WARN("fail to get ai func info", K(ret));
-    } else if (OB_ISNULL(ai_service)) {
+    } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ai service is null", K(ret));
-    } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-      LOG_WARN("failed to get ai service guard", K(ret));
-    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
+      LOG_WARN("AI endpoint resolver is unavailable", K(ret));
+    } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
+                   model_id, temp_allocator, resolved_endpoint))) {
       LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
-    } else if (OB_ISNULL(endpoint_info)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("endpoint info is null", K(ret));
     } 
 
     if (OB_FAIL(ret)) {
@@ -238,7 +235,7 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
 int ObExprAIRerank::eval_ai_rerank_with_doc_key(const ObExpr &expr, ObEvalCtx &ctx, ObIAllocator &allocator, 
                                                 ObString& model_id, ObString& query, ObJsonArray *document_array,
                                                 ObString& doc_key, const ObAIFuncExprInfo &info,
-                                                const ObAiModelEndpointInfo &endpoint_info, ObDatum &res) 
+                                                const share::ObAiModelEndpointInfo &endpoint_info, ObDatum &res)
 {
   INIT_SUCC(ret);
   ObJsonArray *doc_array = nullptr;
@@ -382,7 +379,7 @@ int ObExprAIRerank::construct_batch_document_array(ObIAllocator &allocator, ObJs
 
 int ObExprAIRerank::inner_eval_ai_rerank(ObIAllocator &allocator, 
                                           const ObAIFuncExprInfo &info, 
-                                          const ObAiModelEndpointInfo &endpoint_info,
+                                          const share::ObAiModelEndpointInfo &endpoint_info,
                                           ObArray<ObString> &header_array, 
                                           ObString &query, 
                                           ObJsonArray *document_array, 

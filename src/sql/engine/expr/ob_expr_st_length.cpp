@@ -87,11 +87,12 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     ObGeoType gtype = ObGeoType::GEOTYPEMAX;
     ObGeometry *geo = nullptr;
     const ObSrsItem *srs = NULL;
-    omt::ObSrsCacheGuard srs_guard;
+    common::ObSrsCacheGuard srs_guard;
     ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
+            arg1->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_LENGTH))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb));

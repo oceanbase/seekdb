@@ -18,6 +18,7 @@
 
 #include "sql/engine/basic/ob_values_table_access_op.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -265,7 +266,8 @@ int ObValuesTableAccessOp::calc_datum_from_param(const ObObj &src_obj, ObExpr *d
       dst_accuracy.set_precision(dst_expr->datum_meta_.precision_);
     }
     ObCastCtx cast_ctx(&eval_ctx_.exec_ctx_.get_allocator(), &dtc_params, cm_, dst_expr->obj_meta_.get_collation_type(), &dst_accuracy);
-    cast_ctx.exec_ctx_ = &eval_ctx_.exec_ctx_;
+    ObSqlObjCastRuntime cast_runtime(&eval_ctx_.exec_ctx_);
+    cast_ctx.runtime_ = &cast_runtime;
     if (OB_FAIL(ObObjCaster::to_type(dst_type, dst_expr->obj_meta_.get_collation_type(), cast_ctx,
                                      src_obj, dst_obj))) {
       LOG_WARN("failed to cast obj", K(ret), K(src_type), K(dst_type), K(src_obj), K(dst_obj));

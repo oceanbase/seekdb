@@ -156,7 +156,7 @@ int ObExprMapComponents::get_map_components_arr(ObIAllocator &tmp_allocator,
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *map_type, map_obj, true))) {
     LOG_WARN("construct map obj failed", K(ret), K(subschema_id), K(coll_info));
   } else {
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,

@@ -17,11 +17,10 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ls_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "share/ls/ob_restore_status.h"
 #include "logservice/ob_log_service.h"
-#include "observer/ob_srv_network_frame.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
@@ -706,20 +705,8 @@ void ObLSService::del_ls_after_create_ls_failed_(ObLSCreateState& in_ls_create_s
 } // oceanbase
 
 
-// ===== definition moved from share/ob_share_util.cpp =====
-
-namespace oceanbase
-{
-namespace share
-{
-
-// get_ls_readable_scn is a storage helper backed by the tenant LS service.
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from src/storage/allocator/ob_mds_allocator.cpp / src/storage/allocator/ob_tx_data_allocator.cpp =====
+// Storage allocator throttling needs the LS runtime and therefore lives with
+// the storage composition that supplies those services.
 namespace oceanbase
 {
 namespace share
@@ -736,13 +723,13 @@ ObMdsThrottleGuard::~ObMdsThrottleGuard()
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObMdsAllocator>(share_ti_guard, module_ti_guard)) {
 
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
       STORAGE_LOG(WARN, "get ls failed", KR(ret));
     } else {
       (void)TxShareMemThrottleUtil::do_throttle<ObMdsAllocator>(for_replay_,
                                                                       abs_expire_time_,
                                                                       share::mds_throttled_alloc(),
-                                                                      share::g_mp->memstore_freezer()->exist_ls_throttle_is_skipping(),
+                                                                      ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->exist_ls_throttle_is_skipping(),
                                                                       ls->is_offline(),
                                                                       *throttle_tool_,
                                                                       share_ti_guard,
@@ -775,13 +762,13 @@ ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
   if (OB_ISNULL(throttle_tool_)) {
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObTxDataAllocator>(share_ti_guard, module_ti_guard)) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
       STORAGE_LOG(WARN, "get ls failed", KR(ret));
     } else {
       (void)TxShareMemThrottleUtil::do_throttle<ObTxDataAllocator>(for_replay_,
                                                                          abs_expire_time_,
                                                                          share::tx_data_throttled_alloc(),
-                                                                         share::g_mp->memstore_freezer()->exist_ls_throttle_is_skipping(),
+                                                                         ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->exist_ls_throttle_is_skipping(),
                                                                       ls->is_offline(),
                                                                          *throttle_tool_,
                                                                          share_ti_guard,
@@ -807,99 +794,7 @@ ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
 }  // namespace share
 }  // namespace oceanbase
 
-// ===== definition moved from share resource_limit_calculator(X-macro inventory 2fn) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObResourceLimitCalculator::init()
-{
-  int ret = OB_SUCCESS;
-  if (IS_INIT) {
-    ret = OB_INIT_TWICE;
-    LOG_WARN("resource limit calculator already initialized", K(ret));
-  } else {
-    WLockGuard guard(lock_);
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)      \
-    if (OB_SUCC(ret)) {                                               \
-        handlers_[n] = subhandler;                                    \
-    }
-#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
-#undef DEF_RESOURCE_LIMIT_CALCULATOR
-    is_inited_ = true;
-  }
-  return ret;
-}
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share resource_limit_calculator(second overload) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObResourceLimitCalculator::get_min_phy_resource_value(
-    const ObUserResourceCalculateArg &arg,
-    ObMinPhyResourceResult &res)
-{
-  int ret = OB_SUCCESS;
-  ObIResourceLimitCalculatorHandler *handler = NULL;
-  ObMinPhyResourceResult min_res;
-  ObMinPhyResourceResult tmp;
-  int64_t res_type = 0;
-  int64_t need_num = 0;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
-  } else {
-    RLockGuard guard(lock_);
-#define DEF_RESOURCE_LIMIT_CALCULATOR(n, type, name, subhandler)              \
-    if (OB_SUCC(ret)) {                                                       \
-      if (OB_ISNULL(handler = handlers_[n])) {                                \
-        ret = OB_NOT_RUNNING;                                                 \
-        LOG_WARN("resource handler is unavailable", K(ret), K(n), KP(handler)); \
-      } else if (OB_FAIL(arg.get_type_value(n, need_num))) {                  \
-        LOG_WARN("get needed num failed", K(ret), K(n));                      \
-      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(need_num,       \
-                                                              tmp))) {        \
-        LOG_WARN("get resource stat failed", K(ret), K(n), K(need_num));      \
-      } else if (OB_FAIL(min_res.inc_update(tmp))) {                          \
-        LOG_WARN("inc_update failed", K(ret), K(min_res), K(tmp));            \
-      } else {                                                                \
-        tmp.reset();                                                          \
-      }                                                                       \
-    }
-#include "share/resource_limit_calculator/ob_resource_limit_calculator_def.h"
-#include "storage/tx/ob_tx_data_define.h"  // needed by relocated functions
-#undef DEF_RESOURCE_LIMIT_CALCULATOR
-
-    if (OB_SUCC(ret)) {
-      res = min_res;
-      ret = res.get_copy_assign_ret();
-    }
-  }
-  return ret;
-}
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== tx_data_allocator(TX_DATA_SLICE_SIZE fns) =====
-namespace oceanbase
-{
-namespace share
-{
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== tx_data init/alloc =====
+// Transaction-data allocator implementation.
 namespace oceanbase
 {
 namespace share
@@ -911,7 +806,7 @@ OB_WEAK_SYMBOL int ObTxDataAllocator::init(const char *label)
   ObMemAttr mem_attr;
   mem_attr.label_ = label;
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
   if (IS_INIT){
     ret = OB_INIT_TWICE;
@@ -962,7 +857,7 @@ int get_sys_ls_readable_scn(SCN &readable_scn)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
       LOG_WARN("get log stream failed", KR(ret));
   } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
     LOG_WARN("failed to get_max_decided_scn", KR(ret), KPC(ls));

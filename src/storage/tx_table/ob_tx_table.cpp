@@ -1102,7 +1102,9 @@ int ObTxTable::supplement_tx_op_if_exist(ObTxData *tx_data)
 
 int ObTxTable::self_freeze_task() { return tx_data_table_.self_freeze_task(); }
 
-int ObTxTable::generate_virtual_tx_data_row(const transaction::ObTransID tx_id, observer::VirtualTxDataRow &row_data)
+int ObTxTable::generate_virtual_tx_data_row(
+    const transaction::ObTransID tx_id,
+    data_plane::ObVirtualTxDataRow &row_data)
 {
   GenerateVirtualTxDataRowFunctor fn(row_data);
   ObTxDataMiniCache mini_cache;

@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_resource_limit_calculator.h"
-#include "share/rc/ob_server_runtime.h"  // Server runtime API used from the share layer.
-#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -28,9 +26,10 @@ void ObLogicResourceStatIterator::reset()
 {
   is_ready_ = false;
   curr_type_ = 0;
+  calculator_ = nullptr;
 }
 
-int ObLogicResourceStatIterator::set_ready()
+int ObLogicResourceStatIterator::set_ready(ObResourceLimitCalculator &calculator)
 {
   int ret = OB_SUCCESS;
 
@@ -38,6 +37,7 @@ int ObLogicResourceStatIterator::set_ready()
     LOG_WARN("ObLogicResourceStatIterator is already ready");
     ret = OB_ERR_UNEXPECTED;
   } else {
+    calculator_ = &calculator;
     is_ready_ = true;
   }
   return ret;
@@ -58,8 +58,7 @@ int ObLogicResourceStatIterator::get_next(ObResourceInfo &info)
         ret = OB_ITER_END;
       } else if (!is_valid_logic_res_type(curr_type_)) {
         need_retry = true;
-      } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_stat(curr_type_,
-                                                                                   info))) {
+      } else if (OB_FAIL(calculator_->get_logic_resource_stat(curr_type_, info))) {
         LOG_WARN("get_next failed", K(ret), K(curr_type_));
       }
     } while (need_retry);
@@ -96,7 +95,9 @@ void ObResourceConstraintIterator::reset()
   res_.reset();
 }
 
-int ObResourceConstraintIterator::set_ready(const int64_t res_type)
+int ObResourceConstraintIterator::set_ready(
+    ObResourceLimitCalculator &calculator,
+    const int64_t res_type)
 {
   int ret = OB_SUCCESS;
 
@@ -106,8 +107,7 @@ int ObResourceConstraintIterator::set_ready(const int64_t res_type)
   } else if (!is_valid_logic_res_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(res_type));
-  } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_logic_resource_constraint_value(res_type,
-                                                                                           res_))) {
+  } else if (OB_FAIL(calculator.get_logic_resource_constraint_value(res_type, res_))) {
     LOG_WARN("get resource constraint value failed", K(ret), K(res_type));
   } else {
     res_type_ = res_type;
@@ -202,12 +202,23 @@ DEF_TO_STRING(ObUserResourceCalculateArg)
   return pos;
 }
 
-int ObResourceLimitCalculator::server_module_init(ObResourceLimitCalculator *&calculator)
+int ObResourceLimitCalculator::init(
+    ObIResourceLimitCalculatorHandler *tablet_handler)
 {
-  return calculator->init();
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("resource limit calculator already initialized", K(ret));
+  } else if (OB_ISNULL(tablet_handler)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid resource limit handler", K(ret), KP(tablet_handler));
+  } else {
+    WLockGuard guard(lock_);
+    handlers_[LOGIC_RESOURCE_TABLET] = tablet_handler;
+    is_inited_ = true;
+  }
+  return ret;
 }
-
-
 
 int ObResourceLimitCalculator::get_logic_resource_stat(
     const int64_t type,
@@ -253,7 +264,43 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
   return ret;
 }
 
-
+int ObResourceLimitCalculator::get_min_phy_resource_value(
+    const ObUserResourceCalculateArg &arg,
+    ObMinPhyResourceResult &res)
+{
+  int ret = OB_SUCCESS;
+  ObMinPhyResourceResult min_res;
+  ObMinPhyResourceResult tmp;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_RUNNING;
+    LOG_WARN("resource limit calculator not running", K(ret));
+  } else {
+    RLockGuard guard(lock_);
+    for (int64_t type = INVALID_LOGIC_RESOURCE + 1; OB_SUCC(ret) && type < MAX_LOGIC_RESOURCE; ++type) {
+      ObIResourceLimitCalculatorHandler *handler = handlers_[type];
+      int64_t needed_num = 0;
+      if (!is_valid_logic_res_type(type)) {
+        // skip unregistered enum values
+      } else if (OB_ISNULL(handler)) {
+        ret = OB_NOT_RUNNING;
+        LOG_WARN("the tenant may be destroyed", K(ret), K(type));
+      } else if (OB_FAIL(arg.get_type_value(type, needed_num))) {
+        LOG_WARN("get needed resource count failed", K(ret), K(type));
+      } else if (OB_FAIL(handler->cal_min_phy_resource_needed(needed_num, tmp))) {
+        LOG_WARN("get minimum physical resource failed", K(ret), K(type), K(needed_num));
+      } else if (OB_FAIL(min_res.inc_update(tmp))) {
+        LOG_WARN("increment minimum physical resource failed", K(ret), K(min_res), K(tmp));
+      } else {
+        tmp.reset();
+      }
+    }
+    if (OB_SUCC(ret)) {
+      res = min_res;
+      ret = res.get_copy_assign_ret();
+    }
+  }
+  return ret;
+}
 
 
 
@@ -265,7 +312,7 @@ int ObResourceLimitCalculator::get_runtime_logical_resource(ObUserResourceCalcul
   if (IS_NOT_INIT) {
     ret = OB_NOT_RUNNING;
     LOG_WARN("resource limit calculator not running", KR(ret));
-  } else if (OB_FAIL(iter.set_ready())) {
+  } else if (OB_FAIL(iter.set_ready(*this))) {
     LOG_WARN("failed to set ready", KR(ret));
   } else {
     ObResourceInfo info;

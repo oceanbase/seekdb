@@ -1,0 +1,37 @@
+# owner: haijing.zhj
+# description: 
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+use test;
+echo case start;
+create table test_micro_block (pk int primary key, int_column int, char_column varchar(128)) compression 'none';
+
+let $i = 0;
+let $row_count = 10000;
+let $string_literal = abcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefg;
+--disable_query_log
+while ($i < $row_count)
+{
+  eval insert into test_micro_block (pk, int_column, char_column) values ($i, $i, '$string_literal');
+  inc $i;
+}
+--enable_query_log
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+alter table test_micro_block add column new_column int default 0;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+
+eval update test_micro_block set int_column = 1 where pk = 0;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_ddl_sim_point.h"
@@ -91,7 +92,7 @@ int ObVecIVFIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -160,7 +161,7 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -976,7 +977,7 @@ int ObVecIVFIndexBuildTask::prepare_centroid_table()
   return ret;
 }
 
-int ObVecIVFIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry) 
+int ObVecIVFIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry)
 {
   int ret = OB_SUCCESS;
   if (child_task_failed_ || state_finished_) {
@@ -1100,7 +1101,7 @@ int ObVecIVFIndexBuildTask::on_child_task_finish(
   } else {
     TCWLockGuard guard(lock_);
     int64_t org_ret = INT64_MAX;
-    share::ObDomainDependTaskStatus status;
+    rootserver::ObDomainDependTaskStatus status;
     if (OB_FAIL(dependent_task_result_map_.get_refactored(child_task_key,
                                                           status))) {
       if (OB_HASH_NOT_EXIST == ret) {
@@ -1359,7 +1360,7 @@ int ObVecIVFIndexBuildTask::build_ivfflat_dependent_task_result_map()
     LOG_WARN("create dependent task map failed", K(ret));
   } else {    
     if (centroid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus centroid_table_task_status;
+      rootserver::ObDomainDependTaskStatus centroid_table_task_status;
       centroid_table_task_status.task_id_ = centroid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(centroid_table_id_,
                                                             centroid_table_task_status))) {
@@ -1368,7 +1369,7 @@ int ObVecIVFIndexBuildTask::build_ivfflat_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && cid_vector_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus cid_vector_table_task_status;
+      rootserver::ObDomainDependTaskStatus cid_vector_table_task_status;
       cid_vector_table_task_status.task_id_ = cid_vector_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(cid_vector_table_id_,
                                                             cid_vector_table_task_status))) {
@@ -1377,7 +1378,7 @@ int ObVecIVFIndexBuildTask::build_ivfflat_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && rowkey_cid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus rowkey_cid_table_task_status;
+      rootserver::ObDomainDependTaskStatus rowkey_cid_table_task_status;
       rowkey_cid_table_task_status.task_id_ = rowkey_cid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(rowkey_cid_table_id_,
                                                             rowkey_cid_table_task_status))) {
@@ -1398,7 +1399,7 @@ int ObVecIVFIndexBuildTask::build_ivfsq8_dependent_task_result_map()
     LOG_WARN("create dependent task map failed", K(ret));
   } else {    
     if (sq_meta_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus sq_meta_table_task_status;
+      rootserver::ObDomainDependTaskStatus sq_meta_table_task_status;
       sq_meta_table_task_status.task_id_ = sq_meta_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(sq_meta_table_id_,
                                                             sq_meta_table_task_status))) {
@@ -1407,7 +1408,7 @@ int ObVecIVFIndexBuildTask::build_ivfsq8_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && centroid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus centroid_table_task_status;
+      rootserver::ObDomainDependTaskStatus centroid_table_task_status;
       centroid_table_task_status.task_id_ = centroid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(centroid_table_id_,
                                                             centroid_table_task_status))) {
@@ -1416,7 +1417,7 @@ int ObVecIVFIndexBuildTask::build_ivfsq8_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && cid_vector_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus cid_vector_table_task_status;
+      rootserver::ObDomainDependTaskStatus cid_vector_table_task_status;
       cid_vector_table_task_status.task_id_ = cid_vector_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(cid_vector_table_id_,
                                                             cid_vector_table_task_status))) {
@@ -1425,7 +1426,7 @@ int ObVecIVFIndexBuildTask::build_ivfsq8_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && rowkey_cid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus rowkey_cid_table_task_status;
+      rootserver::ObDomainDependTaskStatus rowkey_cid_table_task_status;
       rowkey_cid_table_task_status.task_id_ = rowkey_cid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(rowkey_cid_table_id_,
                                                             rowkey_cid_table_task_status))) {
@@ -1446,7 +1447,7 @@ int ObVecIVFIndexBuildTask::build_ivfpq_dependent_task_result_map()
     LOG_WARN("create dependent task map failed", K(ret));
   } else {
     if (centroid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus centroid_table_task_status;
+      rootserver::ObDomainDependTaskStatus centroid_table_task_status;
       centroid_table_task_status.task_id_ = centroid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(centroid_table_id_,
                                                             centroid_table_task_status))) {
@@ -1455,7 +1456,7 @@ int ObVecIVFIndexBuildTask::build_ivfpq_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && pq_centroid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus pq_centroid_table_task_status;
+      rootserver::ObDomainDependTaskStatus pq_centroid_table_task_status;
       pq_centroid_table_task_status.task_id_ = pq_centroid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(pq_centroid_table_id_,
                                                             pq_centroid_table_task_status))) {
@@ -1464,7 +1465,7 @@ int ObVecIVFIndexBuildTask::build_ivfpq_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && pq_code_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus pq_code_table_task_status;
+      rootserver::ObDomainDependTaskStatus pq_code_table_task_status;
       pq_code_table_task_status.task_id_ = pq_code_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(pq_code_table_id_,
                                                             pq_code_table_task_status))) {
@@ -1473,7 +1474,7 @@ int ObVecIVFIndexBuildTask::build_ivfpq_dependent_task_result_map()
       }
     }
     if (OB_SUCC(ret) && pq_rowkey_cid_table_task_id_ > 0) {
-      share::ObDomainDependTaskStatus pq_rowkey_cid_table_task_status;
+      rootserver::ObDomainDependTaskStatus pq_rowkey_cid_table_task_status;
       pq_rowkey_cid_table_task_status.task_id_ = pq_rowkey_cid_table_task_id_;
       if (OB_FAIL(dependent_task_result_map_.set_refactored(pq_rowkey_cid_table_id_,
                                                             pq_rowkey_cid_table_task_status))) {
@@ -1655,7 +1656,7 @@ int ObVecIVFIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   return ret;
 }
 
-int ObVecIVFIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry) 
+int ObVecIVFIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry)
 {
   int ret = OB_SUCCESS;
   const uint64_t task_key = entry.first;
@@ -1824,7 +1825,7 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", KR(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       drop_index_task_submitted_ = true;

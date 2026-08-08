@@ -369,9 +369,10 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 # リポジトリをクローン
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
-bash build.sh debug --init --make
+source ~/.bashrc
+./build.sh release --init --make
 mkdir -p ~/seekdb/bin
-cp build_debug/src/observer/seekdb ~/seekdb/bin
+cp build_release/src/observer/seekdb ~/seekdb/bin
 cd ~/seekdb
 ./bin/seekdb
 ```

@@ -17,11 +17,13 @@
 #define USING_LOG_PREFIX SERVER_OMT
 
 #include "ob_th_worker.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "sql/executor/ob_memory_tracker.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/statistic_event/ob_stat_event.h"
 #include "lib/thread/threads.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
 
@@ -154,12 +156,12 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
   int ret = OB_SUCCESS;
   set_req_flag(&req);
 
-  share::g_mp->lock_wait_mgr()->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
+  ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
   memtable::advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::EXECUTE);
   if (OB_FAIL(procor_.process(req))) {
     LOG_WARN("process request fail", K(ret));
   }
-  bool wait_succ = share::g_mp->lock_wait_mgr()->post_process(need_retry_, need_wait_lock);
+  bool wait_succ = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->post_process(need_retry_, need_wait_lock);
   if (OB_LIKELY(wait_succ)) {
     need_retry_ = false;
   }

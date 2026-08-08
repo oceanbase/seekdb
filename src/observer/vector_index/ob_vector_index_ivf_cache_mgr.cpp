@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "ob_vector_index_ivf_cache_mgr.h"
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "query/vector/ob_vector_index_cache.h"
+#include "query/vector/ob_vector_query_result.h"
+#include "storage/allocator/ob_vector_allocator.h"
 
 namespace oceanbase
 {
@@ -25,6 +26,17 @@ using namespace sql;
 using namespace common;
 namespace share
 {
+
+int64_t ObIvfICache::get_actual_memory_used()
+{
+  return sub_mem_ctx_->used();
+}
+
+int64_t ObIvfICache::get_memory_hold()
+{
+  return nullptr == sub_mem_ctx_ ? 0 : sub_mem_ctx_->hold();
+}
+
 /////////////////////////////////////
 // implement of ObIvfCacheMgrGuard //
 /////////////////////////////////////

@@ -25,6 +25,9 @@
 #include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase {
+namespace storage {
+class ObTabletHandle;
+}
 namespace rootserver {
 
 int check_fork_table_supported(const share::schema::ObTableSchema &src_table_schema,

@@ -18,7 +18,7 @@
 
 #include "ob_dbms_vector_mysql.h"
 #include "src/pl/ob_pl.h"
-#include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
+#include "sql/engine/cmd/ob_vector_refresh_index_executor.h"
 
 namespace oceanbase
 {
@@ -26,7 +26,6 @@ namespace pl
 {
 using namespace common;
 using namespace sql;
-using namespace storage;
 
 /*
 PROCEDURE refresh_index(
@@ -58,7 +57,7 @@ int ObDBMSVectorMySql::refresh_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       params.at(2).is_varchar() ? refresh_arg.idx_vector_col_ = params.at(2).get_varchar() : NULL;
       refresh_arg.refresh_threshold_ = params.at(3).get_int();
       params.at(4).is_varchar() ? refresh_arg.refresh_type_ = params.at(4).get_varchar() : NULL;
-      if (OB_FAIL(refresh_executor.execute_refresh(ctx, refresh_arg))) {
+      if (OB_FAIL(refresh_executor.execute_refresh(ctx.exec_ctx_, ctx.allocator_, refresh_arg))) {
           LOG_WARN("fail to execute refresh index", KR(ret), K(refresh_arg));
       }
   }
@@ -107,7 +106,7 @@ int ObDBMSVectorMySql::rebuild_index(ObPLExecCtx &ctx, ParamStore &params, ObObj
       rebuild_arg.idx_parameters_ = NULL;
       if (params.at(6).is_text() && OB_FAIL(params.at(6).get_string(rebuild_arg.idx_parameters_))) {
           LOG_WARN("fail to get string", K(ret));
-      } else if (OB_FAIL(rebuild_executor.execute_rebuild(ctx, rebuild_arg))) {
+      } else if (OB_FAIL(rebuild_executor.execute_rebuild(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
           LOG_WARN("fail to execute refresh index", KR(ret), K(rebuild_arg));
       }
   }
@@ -128,7 +127,7 @@ int ObDBMSVectorMySql::refresh_index_inner(ObPLExecCtx &ctx, ParamStore &params,
     refresh_arg.idx_table_id_ = params.at(0).get_int();
     refresh_arg.refresh_threshold_ = params.at(1).get_int();
     params.at(2).is_varchar() ? refresh_arg.refresh_type_ = params.at(2).get_varchar() : NULL;
-    if (OB_FAIL(refresh_executor.execute_refresh_inner(ctx, refresh_arg))) {
+    if (OB_FAIL(refresh_executor.execute_refresh_inner(ctx.exec_ctx_, ctx.allocator_, refresh_arg))) {
         LOG_WARN("fail to execute refresh index", KR(ret), K(refresh_arg));
     }
   }
@@ -158,7 +157,7 @@ int ObDBMSVectorMySql::rebuild_index_inner(ObPLExecCtx &ctx, ParamStore &params,
     rebuild_arg.idx_parameters_ = NULL;
     if (params.at(4).is_text() && OB_FAIL(params.at(4).get_string(rebuild_arg.idx_parameters_))) {
         LOG_WARN("fail to get string", K(ret));
-    } else if (OB_FAIL(rebuild_executor.execute_rebuild_inner(ctx, rebuild_arg))) {
+    } else if (OB_FAIL(rebuild_executor.execute_rebuild_inner(ctx.exec_ctx_, ctx.allocator_, rebuild_arg))) {
         LOG_WARN("fail to execute refresh index", KR(ret), K(rebuild_arg));
     }
   }
@@ -199,7 +198,7 @@ int ObDBMSVectorMySql::index_vector_memory_advisor(ObPLExecCtx &ctx, ParamStore 
     uint32_t dim_count = params.at(2).get_uint32();
     ObString dim_type_str = params.at(3).get_varchar();
     ObString idx_param_str;
-    ObVectorIndexParam index_param;
+    share::ObVectorIndexParam index_param;
 
     if (max_tablet_vectors > num_vectors) {
       ret = OB_NOT_SUPPORTED;
@@ -267,7 +266,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     int64_t dim_count = 0;
     uint64_t num_vectors = 0;
     uint64_t tablet_max_num_vectors = 0;
-    ObVectorIndexParam index_param;
+    share::ObVectorIndexParam index_param;
 
     // resolve table name and column name, 
     if (OB_ISNULL(allocator)) {
@@ -377,7 +376,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
 int ObDBMSVectorMySql::parse_idx_param(const ObString &idx_type_str,
                                        const ObString &idx_param_str,
                                        uint32_t dim_count,
-                                       ObVectorIndexParam &index_param)
+                                       share::ObVectorIndexParam &index_param)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_alloc;
@@ -429,7 +428,7 @@ int ObDBMSVectorMySql::parse_idx_param(const ObString &idx_type_str,
   return ret;
 }
 
-int ObDBMSVectorMySql::get_estimate_memory_str(ObVectorIndexParam index_param,
+int ObDBMSVectorMySql::get_estimate_memory_str(share::ObVectorIndexParam index_param,
                                                uint64_t num_vectors,
                                                uint64_t tablet_max_num_vectors,
                                                ObStringBuffer &res_buf)

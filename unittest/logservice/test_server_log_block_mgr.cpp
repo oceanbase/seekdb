@@ -21,8 +21,6 @@
 #include "logservice/ob_server_log_block_mgr.h"
 #undef private
 
-#include <gtest/gtest.h>
-
 namespace oceanbase
 {
 using namespace logservice;
@@ -35,9 +33,6 @@ static const char *LOG_META_DIR = "meta";
 class TestServerLogBlockMgr : public ::testing::Test
 {
 public:
-  static void SetUpTestCase();
-
-  static void TearDownTestCase();
   TestServerLogBlockMgr()
   {}
   virtual ~TestServerLogBlockMgr()
@@ -45,7 +40,17 @@ public:
 
   static int create_log_stream_dir(const char *tenant_dir);
 
-  static int remove_log_stream_dir(const char *tenant_dir);
+  static int get_log_disk_info(
+      int64_t &log_disk_size,
+      int64_t &log_disk_percentage,
+      int64_t &total_log_disk_size)
+  {
+    static const int64_t TEST_LOG_DISK_SIZE = 1L << 40;
+    log_disk_size = TEST_LOG_DISK_SIZE;
+    log_disk_percentage = 0;
+    total_log_disk_size = TEST_LOG_DISK_SIZE;
+    return OB_SUCCESS;
+  }
 
   int create_new_blocks_at(const palf::FileDesc &fd,
                            const palf::block_id_t start_block_id, const int64_t block_cnt)
@@ -121,26 +126,6 @@ const char *TestServerLogBlockMgr::log_disk_base_path_ = "clog_disk/clog";
 const char *TestServerLogBlockMgr::tenant_string_ = "clog_disk/clog/sys";
 int TestServerLogBlockMgr::log_stream_fd_ = -1;
 
-void TestServerLogBlockMgr::SetUpTestCase()
-{
-  bool result = false;
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(FileDirectoryUtils::create_directory(tenant_string_))) {
-    CLOG_LOG(ERROR, "FileDirectoryUtils create_directory failed", K(ret),
-             K(tenant_string_));
-  } else if (OB_FAIL(create_log_stream_dir(tenant_string_))) {
-    CLOG_LOG(ERROR, "create log stream directory failed", K(ret));
-  } else {
-    CLOG_LOG(INFO, "SetUpTestSuite success", K(log_disk_base_path_));
-  }
-}
-
-void TestServerLogBlockMgr::TearDownTestCase()
-{
-  remove_log_stream_dir(tenant_string_);
-  system("rm -rf clog_disk");
-}
-
 int TestServerLogBlockMgr::create_log_stream_dir(const char *tenant_dir)
 {
   int ret = OB_SUCCESS;
@@ -164,39 +149,32 @@ int TestServerLogBlockMgr::create_log_stream_dir(const char *tenant_dir)
   return ret;
 }
 
-int TestServerLogBlockMgr::remove_log_stream_dir(const char *tenant_dir)
-{
-  int ret = OB_SUCCESS;
-  char stream_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
-  snprintf(stream_path, OB_MAX_FILE_NAME_LENGTH, "%s/%s", tenant_dir, LOG_STREAM_DIR);
-  if (-1 == FileDirectoryUtils::delete_directory_rec(stream_path)) {
-    ret = palf::convert_sys_errno();
-    CLOG_LOG(ERROR, "::rmdir failed", K(ret), K(stream_path));
-  } else if (-1 == ::close(log_stream_fd_)) {
-    ret = palf::convert_sys_errno();
-    CLOG_LOG(ERROR, "::close failed", K(ret), K(stream_path));
-  }
-  return ret;
-}
-
 void TestServerLogBlockMgr::SetUp()
 {
-  ASSERT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_));
+  ASSERT_EQ(0, system("rm -rf clog_disk"));
+  ASSERT_EQ(OB_SUCCESS, FileDirectoryUtils::create_full_path(tenant_string_));
+  ASSERT_EQ(OB_SUCCESS, create_log_stream_dir(tenant_string_));
+  ASSERT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_, get_log_disk_info));
 }
 
 void TestServerLogBlockMgr::TearDown()
 {
   log_block_mgr_.destroy();
+  if (log_stream_fd_ >= 0) {
+    ::close(log_stream_fd_);
+    log_stream_fd_ = -1;
+  }
+  ASSERT_EQ(0, system("rm -rf clog_disk"));
 }
 
 using namespace palf;
 TEST_F(TestServerLogBlockMgr, basic_func)
 {
-  EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(log_stream_fd_, 0, 10));
+  EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(log_stream_fd_, 0, 1));
   int64_t in_use_size_byte;
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
-  EXPECT_EQ(10*ObServerLogBlockMgr::BLOCK_SIZE, in_use_size_byte);
-  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(log_stream_fd_, 0, 10));
+  EXPECT_EQ(static_cast<int64_t>(ObServerLogBlockMgr::BLOCK_SIZE), in_use_size_byte);
+  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(log_stream_fd_, 0, 1));
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
   EXPECT_EQ(0, in_use_size_byte);
 }
@@ -205,22 +183,20 @@ TEST_F(TestServerLogBlockMgr, restart_for_empty_log_disk)
 {
   log_block_mgr_.destroy();
   int64_t in_use_size_byte;
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_));
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_, get_log_disk_info));
   EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
   EXPECT_EQ(0, in_use_size_byte);
 }
 
-TEST_F(TestServerLogBlockMgr, allocate_blocks_in_log_stream)
-{
-  EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(log_stream_fd_, 0, 10));
-  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(log_stream_fd_, 0, 3));
-}
-
 TEST_F(TestServerLogBlockMgr, restart_for_non_empty_log_disk)
 {
+  EXPECT_EQ(OB_SUCCESS, create_new_blocks_at(log_stream_fd_, 0, 1));
   log_block_mgr_.destroy();
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_));
-  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(log_stream_fd_, 3, 7));
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_, get_log_disk_info));
+  int64_t in_use_size_byte = 0;
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.get_disk_usage(in_use_size_byte));
+  EXPECT_EQ(static_cast<int64_t>(ObServerLogBlockMgr::BLOCK_SIZE), in_use_size_byte);
+  EXPECT_EQ(OB_SUCCESS, delete_blocks_at(log_stream_fd_, 0, 1));
 }
 
 TEST_F(TestServerLogBlockMgr, unexpected_root_directory_and_tmp_file)
@@ -230,19 +206,16 @@ TEST_F(TestServerLogBlockMgr, unexpected_root_directory_and_tmp_file)
   system("touch clog_disk/clog/tenant_0111/log/0");
   system("touch clog_disk/clog/tenant_0111/log/1");
   system("touch clog_disk/clog/sys/log_stream/meta/10000.tmp");
-#ifdef __APPLE__
-  // macOS doesn't have fallocate, use dd instead
-  system("dd if=/dev/zero of=clog_disk/clog/sys/log_stream/meta/10000.tmp bs=67108863 count=1 2>/dev/null");
-#else
-  system("fallocate -l 67108863 clog_disk/clog/sys/log_stream/meta/10000.tmp ");
-#endif
+  ASSERT_EQ(0, ::truncate(
+      "clog_disk/clog/sys/log_stream/meta/10000.tmp",
+      ObServerLogBlockMgr::BLOCK_SIZE - 1));
   log_block_mgr_.destroy();
   bool result = false;
-  EXPECT_EQ(OB_ERR_UNEXPECTED, log_block_mgr_.init(log_disk_base_path_));
+  EXPECT_EQ(OB_ERR_UNEXPECTED, log_block_mgr_.init(log_disk_base_path_, get_log_disk_info));
   EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_exists("clog_disk/clog/sys/log_stream/meta/10000.tmp",result));
   EXPECT_EQ(false, result);
   system("rm -rf clog_disk/clog/tenant_0111");
-  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_));
+  EXPECT_EQ(OB_SUCCESS, log_block_mgr_.init(log_disk_base_path_, get_log_disk_info));
 }
 
 TEST_F(TestServerLogBlockMgr, check_dir_is_empty)
@@ -279,9 +252,9 @@ public:
 
 TEST_F(TestServerLogBlockMgr, basic_func_test)
 {
-  const char *test_path = "clog_disk/basic_func_test";
+  const char *test_path = "block_utils_test";
   const char *file_path_obs= "1.tmp";
-  const char *file_path = "clog_disk/basic_func_test/1.tmp";
+  const char *file_path = "block_utils_test/1.tmp";
   char cmd_mkdir[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   char cmd_touch[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   char cmd_alloc_file[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
@@ -306,24 +279,10 @@ TEST_F(TestServerLogBlockMgr, basic_func_test)
   EXPECT_EQ(OB_SUCCESS, remove_tmp_file_or_directory_at(test_path, &block_pool));
   EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_empty_directory(test_path, result));
   EXPECT_EQ(true, result);
-  EXPECT_EQ(OB_SUCCESS, remove_directory_rec("clog_disk", &block_pool));
-  EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_exists("clog_disk", result));
+  EXPECT_EQ(OB_SUCCESS, remove_directory_rec(test_path, &block_pool));
+  EXPECT_EQ(OB_SUCCESS, FileDirectoryUtils::is_exists(test_path, result));
   EXPECT_EQ(false, result);
 }
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_server_log_block_mgr.log");
-  system("rm -rf clog_disk");
-  system("rm -rf clog_disk/clog");
-  system("mkdir clog_disk");
-  system("mkdir clog_disk/clog");
-  OB_LOGGER.set_file_name("test_server_log_block_mgr.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_server_log_block_mgr");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -77,7 +77,7 @@ int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
     LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,
@@ -160,7 +160,7 @@ int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
     LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,
@@ -337,7 +337,7 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
     LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                      *param_datum, expr.args_[0]->datum_meta_.type_,
                      expr.args_[0]->datum_meta_.scale_,
                      tz_info,
@@ -464,7 +464,7 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
     LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_,
                  expr.args_[0]->datum_meta_.scale_,
                  tz_info,

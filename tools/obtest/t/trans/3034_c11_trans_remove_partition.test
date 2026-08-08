@@ -1,0 +1,108 @@
+# owner: shanyan.g
+# owner group: transaction
+# description:测试partition删除的相关逻辑
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1);
+ob1.reboot;
+
+#alter system set server_temporary_offline_time = '15s';
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'true';
+#ob1.mysql alter resource pool obtestpool unit_num 1;
+
+#let $ip1=deploy_get_value(ob1.z1.obs0.ip);
+#let $port1=deploy_get_value(ob1.z1.obs0.mysql_port);
+#connect (conn1,$ip1,root@obtest,,test,$port1);
+#connect (conn2,$ip1,root@obtest,,test,$port1);
+#connect (conn3,$ip1,root@obtest,,test,$port1);
+#connect (conn4,$ip1,root@obtest,,test,$port1);
+#
+##准备数据
+#connection conn1;
+#set recyclebin=off;
+#show variables like 'recyclebin';
+#set ob_query_timeout=5000000;
+#set ob_trx_timeout=5000000;
+#
+#create table test01 (pk1 int, pk2 int);
+#sleep 10; 
+#insert into test01 values(1,1);
+#select * from test01;
+#
+###############################case1 : 没有事务，partition正常删除###########################
+#connection conn2;
+#set recyclebin=off;
+#show variables like 'recyclebin';
+#drop table test01;
+#purge recyclebin;
+##保证partition已经被gc删除
+#sleep 20;
+#
+###########################case2 : 存在尚未结束的事务，partition也要保证能够正常删除#########
+#connection conn3;
+#set recyclebin=off;
+#show variables like 'recyclebin';
+#create table test02 (pk1 int primary key, pk2 int);
+#sleep 10; 
+#set ob_query_timeout=5000000;
+#set ob_trx_timeout=5000000;
+#begin;
+#select count(1) from test02;
+##保证事务已经超时，被内部回滚
+#sleep 5;
+#
+##切换session，保证上一个事务一直没有提交
+#connection conn4;
+#select count(1) from test02;
+#drop table test02;
+#purge recyclebin;
+##保证test02已经被物理删除
+#sleep 20;
+#
+########################case3 : partition被删除之后，再加回来###########################################
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys1,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2', locality='F@z1,F@z2,R@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+
+#用普通租户tenant_1登陆，建表，开启一个不结束的事务
+let $ip2=deploy_get_value(ob1.z3.obs0.ip);
+let $port2=deploy_get_value(ob1.z3.obs0.mysql_port);
+connect (conn_sys2,$ip2,root@tenant_1,,test,$port2);
+connection conn_sys2;
+set ob_query_timeout=50000000000;
+set ob_trx_timeout=50000000000;
+
+create table test03 (id1 int, id2 int);
+create table test04 (id1 int, id2 int);
+insert into test03 values(1,1);
+insert into test04 values(1,1);
+sleep 10;
+begin;
+#事务超时时间非常长
+select /*+read_consistency(weak)+*/ * from test03;
+select /*+read_consistency(weak)+*/ * from test04;
+sleep 5;
+
+#做locality变更，删除R副本，要保证能成功
+ob1.mysql alter tenant tenant_1 set locality = 'F@z1,F@z2";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 3000;
+
+#重新加回来R副本，保证能够加成功
+ob1.mysql alter tenant tenant_1 set locality = 'F@z1,F@z2,R@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 3000;

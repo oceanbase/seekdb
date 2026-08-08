@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_retry_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "share/ob_ddl_sim_point.h"
@@ -147,7 +148,7 @@ int ObDDLRetryTask::init(const int64_t task_id,
       ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id),
       K(schema_version), K(ddl_type), KP(ddl_arg), K(task_status));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
     LOG_WARN("fail to init task table operator", K(ret));
@@ -180,7 +181,7 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("invalid argument", K(ret), K(task_record));
   } else if (OB_FAIL(DDL_SIM(task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
     LOG_WARN("ddl sim failure", K(task_record.task_id_));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else {
@@ -336,8 +337,9 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObDropDatabaseArg *arg = static_cast<obcall::ObDropDatabaseArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        ObDDLUtil::get_ddl_rpc_timeout_for_database(object_id_, timeout_us);
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_database(*arg, drop_database_res); }))) {
+        ObDDLUtil::get_ddl_rpc_timeout_for_database(
+            *GCTX.schema_service_, object_id_, timeout_us);
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_database(*arg, drop_database_res); }))) {
           LOG_WARN("fail to drop database", K(ret));
         } else {
           affected_rows_ = drop_database_res.affected_row_;
@@ -349,7 +351,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObDropTableArg *arg = static_cast<obcall::ObDropTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_table(*arg, res); }))) {
           LOG_WARN("fail to drop table", K(ret));
         }
         break;
@@ -359,7 +361,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObTruncateTableArg *arg = static_cast<obcall::ObTruncateTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->truncate_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->truncate_table(*arg, res); }))) {
           LOG_WARN("fail to truncate table", K(ret));
         }
         break;
@@ -373,7 +375,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_table(*arg, alter_table_res_); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(*arg, alter_table_res_); }))) {
           LOG_WARN("fail to alter table", K(ret));
         }
         break;
@@ -568,7 +570,7 @@ int ObDDLRetryTask::process()
     }
     if (OB_FAIL(ret)) {
       add_event_info("ddl retry task process fail");
-      LOG_INFO("ddl retry task process fail", K(ret), K(snapshot_version_), K(object_id_), K(target_object_id_), K(schema_version_), "ddl_event_info", ObDDLEventInfo());
+      LOG_INFO("ddl retry task process fail", K(ret), K(snapshot_version_), K(object_id_), K(target_object_id_), K(schema_version_), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     }
   }
   return ret;

@@ -1,0 +1,57 @@
+# owner: shanyan.g
+# owner group: transaction
+# description:主要为了测试请求发到partition不存在的server上，事务如何处理
+#
+--disable_query_log
+ob1=OBI(cluster=2:2:2,proxy_num=1,init_unit_cpu=4);
+ob1.reboot;
+
+#alter system set server_temporary_offline_time = '15s';
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter resource pool obtestpool unit_num 2;
+
+let $ip1=deploy_get_value(ob1.z1.obs0.ip);
+let $port1=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip1,root@obtest,,test,$port1);
+connection conn1;
+
+#准备数据
+create table test01 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+sleep 10; 
+
+let $cnt =1;
+while ($cnt < 10)
+{
+	eval insert into test01 values($cnt, $cnt, $cnt, 'abc', 'def');
+	inc $cnt;
+}
+
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+#在zone2上进行备机读查询，预热location cache
+select /*+read_consistency(weak)+*/* from test01;
+
+#将leader切到zone2上
+ob1.z2.obs0.switch_partition obtest:test:test01;
+sleep 10;
+
+#zone2内发生迁移
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name='obtest', tenant_id, 1);
+let $src = deploy_get_value(ob1.get_follower obtest:test:test01:0,1);
+let $src_ip = deploy_get_value($src.ip);
+let $src_zone = deploy_get_value(ob1.select select zone from oceanbase.__all_server where svr_ip='$src_ip', zone, 1);
+let $dst_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from oceanbase.__all_server where zone='$src_zone' and svr_ip!='$src_ip', host, 1);
+let $dst = deploy_get_value(ob1.get_obs_by_addr $dst_host);
+let $dst_ip = deploy_get_value($dst.ip);
+let $table_id=deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='test01', table_id, 1);
+
+$src.migrate_to $dst,obtest:test:test01;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where tenant_id=$tenant_id and table_id=$table_id and role=1 and member_list like '%$dst_ip%', 1, 20;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table a ,oceanbase.__all_virtual_meta_table b where a.tenant_id=$tenant_id and a.table_id=$table_id and b.table_id=$table_id  and a.member_list=b.member_list and a.role=1 and b.role=2 and b.svr_ip='$dst_ip', 1, 20;
+
+#在zone2上进行备机读查询，由于partition发生迁移，语句内部重试，检查是否会有transaction need rollback
+select * from test01;

@@ -26,12 +26,12 @@
 #include "log_engine.h"                      // LogEngine
 #include "log_meta.h"
 #include "log_cache.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "log_mode_mgr.h"
 #include "log_sliding_window.h"
 #include "log_state_mgr.h"
 #include "log_io_task_cb_utils.h"
-#include "palf_options.h"
+#include "share/log/palf/palf_options.h"
 #include "palf_iterator.h"
 
 namespace oceanbase

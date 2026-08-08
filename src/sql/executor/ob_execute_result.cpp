@@ -18,6 +18,7 @@
 
 #include "ob_execute_result.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan.h"
 
 using namespace oceanbase::common;
 namespace oceanbase

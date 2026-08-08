@@ -18,7 +18,7 @@
 #define PRINT_TS_WRAPPER(x) (ObPrintTableStore(*(x.get_member())))
 
 #include "ob_partition_merge_policy.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_compaction_progress.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -274,12 +274,12 @@ int ObPartitionMergePolicy::get_mini_merge_tables(
     ObPartitionMergePolicy::diagnose_table_count_unsafe(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE, tablet);
   } else if (OB_FAIL(tablet.get_all_memtables_from_memtable_mgr(memtable_handles))) {
     LOG_WARN("failed to get all memtable", K(ret), K(tablet));
-  } else if (OB_FAIL(share::g_mp->freeze_info_mgr()->get_freeze_info_behind_major_snapshot(merge_inc_base_version, false/*include_equal*/, freeze_infos))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_freeze_info_behind_major_snapshot(merge_inc_base_version, false/*include_equal*/, freeze_infos))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("failed to get freeze info behind snapshot version", K(ret), K(merge_inc_base_version));
     } else {
       ret = OB_SUCCESS;
-      next_freeze_info.frozen_scn_ = share::g_mp->freeze_info_mgr()->get_snapshot_gc_scn();
+      next_freeze_info.frozen_scn_ = ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_snapshot_gc_scn();
     }
   } else {
     next_freeze_info = freeze_infos.at(0);
@@ -502,7 +502,7 @@ int ObPartitionMergePolicy::get_boundary_snapshot_version(
     const int64_t merge_inc_base_version = tablet.get_snapshot_version();
 
     ObFreezeInfoMgr::NeighbourFreezeInfo freeze_info;
-    if (OB_SUCC(share::g_mp->freeze_info_mgr()->get_neighbour_major_freeze(merge_inc_base_version, freeze_info))) {
+    if (OB_SUCC(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_neighbour_major_freeze(merge_inc_base_version, freeze_info))) {
       // do nothing
     } else if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("failed to get neighbour major freeze info", K(ret), K(merge_inc_base_version));
@@ -515,7 +515,7 @@ int ObPartitionMergePolicy::get_boundary_snapshot_version(
     if (OB_SUCC(ret)) {
       min_snapshot = max(last_major_snapshot_version, freeze_info.prev.frozen_scn_.get_val_for_tx());
       max_snapshot = (freeze_info.next.frozen_scn_.is_max() && is_multi_version_merge)
-                   ? share::g_mp->freeze_info_mgr()->get_snapshot_gc_ts()
+                   ? ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_snapshot_gc_ts()
                    : freeze_info.next.frozen_scn_.get_val_for_tx();
     }
 
@@ -750,11 +750,11 @@ int ObPartitionMergePolicy::deal_hist_minor_merge(
     ret = OB_NO_NEED_MERGE;
   } else if (OB_ISNULL(first_major = wrapper.get_member()->get_major_sstables().get_boundary_table(false))) {
     // index table during building, need compat with continuous multi version
-    if (0 == (max_snapshot_version = share::g_mp->freeze_info_mgr()->get_latest_frozen_version())) {
+    if (0 == (max_snapshot_version = ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_latest_frozen_version())) {
       ret = OB_NO_NEED_MERGE; // no freeze info, need to do normal minor merge
       LOG_WARN("No freeze range to do hist minor merge for buiding index", K(ret), K(PRINT_TS_WRAPPER(wrapper)));
     }
-  } else if (OB_FAIL(share::g_mp->freeze_info_mgr()->get_freeze_info_behind_major_snapshot(first_major->get_snapshot_version(), true/*include_equal*/, freeze_infos))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_freeze_info_behind_major_snapshot(first_major->get_snapshot_version(), true/*include_equal*/, freeze_infos))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_NO_NEED_MERGE;
     } else {
@@ -1251,7 +1251,7 @@ int ObMinorExecuteRangeMgr::get_merge_ranges(
   param.tablet_id_ = tablet_id;
   param.skip_get_tablet_ = true;
 
-  if (OB_FAIL(share::g_mp->dag_scheduler()->get_minor_exe_dag_info(param, exe_range_array_))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_minor_exe_dag_info(param, exe_range_array_))) {
     LOG_WARN("failed to get minor exe dag info", K(ret));
   } else if (OB_FAIL(sort_ranges())) {
     LOG_WARN("failed to sort ranges", K(ret), K(param));
@@ -1532,7 +1532,7 @@ int ObAdaptiveMergePolicy::find_adaptive_merge_tables(
     } else if (scanty_tx_determ_table || scanty_inc_row_cnt) {
       int tmp_ret = OB_SUCCESS;
       ObTableQueuingModeCfg cfg;
-      if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->get_queuing_cfg(tablet.get_tablet_id(), cfg))) {
+      if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_queuing_cfg(tablet.get_tablet_id(), cfg))) {
         LOG_WARN_RET(tmp_ret, "failed to get table queuing mode, treat it as normal table");
       }
       if (cfg.is_queuing_mode() && scanty_inc_row_cnt && !scanty_tx_determ_table) {
@@ -1620,7 +1620,7 @@ int ObAdaptiveMergePolicy::get_adaptive_merge_reason(
 
   if (tablet_id.is_special_merge_tablet()) {
     // do nothing
-  } else if (OB_FAIL(share::g_mp->tablet_stat_mgr()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(tablet_id));
     } else if (OB_TMP_FAIL(check_inc_sstable_row_cnt_percentage(tablet, reason))) {
@@ -1671,7 +1671,7 @@ int ObAdaptiveMergePolicy::check_tombstone_reason(
   ObTabletStatAnalyzer tablet_analyzer;
   if (tablet_id.is_special_merge_tablet()) {
     // do nothing
-  } else if (OB_FAIL(share::g_mp->tablet_stat_mgr()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(tablet_id));
     } else {
@@ -1817,7 +1817,7 @@ int ObAdaptiveMergePolicy::check_adaptive_merge_reason_for_event(
     LOG_WARN("invalid compaction event", K(ret), K(event));
   } else if (tablet_id.is_special_merge_tablet()) {
     // do nothing
-  } else if (OB_FAIL(share::g_mp->tablet_stat_mgr()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get tablet analyzer stat", K(ret), K(tablet_id));
     } else {

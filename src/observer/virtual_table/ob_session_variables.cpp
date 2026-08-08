@@ -15,6 +15,8 @@
  */
 
 #include "observer/virtual_table/ob_session_variables.h"
+#include "observer/ob_server_runtime_access.h"
+#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -148,7 +150,8 @@ int ObSessionVariables::set_pc_conf(const ObBasicSysVar *sys_var, ObObj &cell)
   } else {
     char *buff = NULL;
     int64_t pos = 0;
-    ObPlanCache *pc = session_->get_plan_cache();
+    ObPlanCache *pc = OB_ISNULL(get_observer_sql_engine())
+        ? nullptr : &get_observer_sql_engine()->get_plan_cache();
     if (OB_ISNULL(pc)) {
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid argument", K(pc), K(ret));

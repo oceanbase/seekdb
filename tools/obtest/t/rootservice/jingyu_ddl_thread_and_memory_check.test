@@ -1,0 +1,143 @@
+####################################################################
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    this case aimed to test ddl related thread use
+#    sys tenant resource instead of 500 tenant
+####################################################################
+
+--echo =========================================
+--echo               bootstrap
+--echo =========================================
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z2_dst_ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port0 = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst0 = $z2_dst_ip0:$z2_dst_port0;
+let $z3_dst_ip0 = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_dst_port0 = deploy_get_value(ob1.z3.obs0.port);
+let $z3_dst0 = $z3_dst_ip0:$z3_dst_port0;
+
+--echo ==========================================
+--echo           create tenant mysql
+--echo ==========================================
+# create new tenant mysql
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL tenant_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('tenant_pool'), LOCALITY = "F@z1, F@z2", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+
+let $sys_tenant_id = deploy_get_value(ob1.select SELECT tenant_id as sys_tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "sys", sys_tenant_id, 1);
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "mysql", tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql", meta_tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $tenant_id, resource_pool_id, 1);
+
+--echo ==========================================
+--echo     check ddl builder under sys tenant
+--echo ==========================================
+--echo check inner table
+--echo expect one line with tenant_id = 1
+select distinct(tenant_id) as tenant_id from GV$OB_THREAD where tname like "%T1_DdlBuild%";
+
+--echo check log file
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[observer\]\[T1\].* create tg succeed.*DdlBuild.*";
+
+ob1.z1.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+ob1.z2.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+ob1.z3.obs0.check_log_until_success -c ".*T1_DdlBuild.*";
+
+let $rs_ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.__all_virtual_core_meta_table WHERE tenant_id = 1 and role = 1, svr_ip, 1);
+let $rs_port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.__all_virtual_core_meta_table WHERE tenant_id = 1 and role = 1, svr_port, 1);
+let $rs_cur = $rs_ip:$rs_port;
+
+if ($rs_cur == $z1_dst0)
+{
+  --disable_all_result_log
+  ob1.z1.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+  ob1.z1.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+  --enable_all_result_log
+}
+
+if ($rs_cur == $z2_dst0)
+{
+  --disable_all_result_log
+  ob1.z2.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+  ob1.z2.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+  --enable_all_result_log
+}
+
+if ($rs_cur == $z3_dst0)
+{
+  --disable_all_result_log
+  ob1.z3.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+  ob1.z3.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+  --enable_all_result_log
+}
+
+--echo ==========================================
+--echo   check ddl scan task under sys tenant
+--echo ==========================================
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*DDLScanTask.*";
+
+
+if ($rs_cur == $z1_dst0)
+{
+  --disable_all_result_log
+  ob1.z1.obs0.check_log_until_success -c ".*T1_TimerWK.*_DDLScanTask.*";
+  --enable_all_result_log
+}
+
+if ($rs_cur == $z2_dst0)
+{
+  --disable_all_result_log
+  ob1.z2.obs0.check_log_until_success -c ".*T1_TimerWK.*_DDLScanTask.*";
+  --enable_all_result_log
+}
+
+if ($rs_cur == $z3_dst0)
+{
+  --disable_all_result_log
+  ob1.z3.obs0.check_log_until_success -c ".*T1_TimerWK.*_DDLScanTask.*";
+  --enable_all_result_log
+}
+
+--echo ==========================================
+--echo   check heartbeat check task under sys
+--echo ==========================================
+ob1.z1.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+ob1.z2.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+ob1.z3.obs0.check_log_until_success -c ".*create_tg_tenant.*\[T1\].*create tg succeed.*HeartBeatCheckTask.*";
+
+--echo ==========================================
+--echo             switch RS to z2
+--echo ==========================================
+alter tenant sys primary_zone = "z2;z3;z1";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = "z2", 1, 120;
+ob1.z2.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+ob1.z2.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+
+--echo ==========================================
+--echo            switch RS back to z1
+--echo ==========================================
+alter tenant sys primary_zone = "z1;z2;z3";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = "z1", 1, 120;
+ob1.z1.obs0.check_rs_log_until_success -c ".*\[DDLScanTask\] scan task scheduled successfully.*";
+ob1.z1.obs0.check_rs_log_until_success -c ".*\[HeartBeatCheckTask\] heart beat check task scheduled successfully.*";
+

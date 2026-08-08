@@ -1,0 +1,344 @@
+load(
+    "//bazel:defs.bzl",
+    "seekdb_test_interface",
+    cc_library = "seekdb_cc_library",
+)
+load(
+    ":query_build_defs.bzl",
+    "QUERY_API_INTERFACE_HEADERS",
+    "QUERY_MYSQL_PROTOCOL_UTIL_SOURCES",
+    "QUERY_SCHEDULER_SOURCES",
+    "QUERY_SQL_EXPRESSION_INTERFACE_HEADERS",
+    "QUERY_SQL_PARSER_TYPE_HEADERS",
+    "QUERY_VECTOR_EMBEDDING_SOURCES",
+)
+
+cc_library(
+    name = "sql_expression_interface",
+    hdrs = QUERY_SQL_EXPRESSION_INTERFACE_HEADERS,
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:object_cast",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# Coarse native seam for Query API ownership.  Generated clusters are private
+# migration mechanics; callers see a semantic module interface that can be
+# split by capability in the later interface-narrowing stage.
+cc_library(
+    name = "query_api_interface",
+    hdrs = QUERY_API_INTERFACE_HEADERS,
+    deps = [
+        ":sql_expression_interface",
+        "//src/oblib:oblib_db_meta_domain",
+        "//src/oblib:oblib_encoding_advanced",
+        "//src/objit:objit_api_interface",
+        "//src/share:diagnostics",
+        "//src/share:semistruct",
+    ],
+    includes = ["api"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "client_protocol_interface",
+    hdrs = ["api/query/protocol/ob_client_protocol.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "mysql_protocol_util",
+    srcs = QUERY_MYSQL_PROTOCOL_UTIL_SOURCES,
+    hdrs = ["api/query/protocol/ob_mysql_protocol_util.h"],
+    deps = [
+        "//src/oblib:oblib_data_formats_model",
+        "//src/oblib:oblib_db_values_model",
+        "//src/oblib:oblib_db_values_runtime",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_memory_base",
+        "//src/oblib:oblib_memory_utilities",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "mysql_rust_row_interface",
+    hdrs = ["api/query/protocol/ob_mysql_rust_row.h"],
+    deps = [
+        "//rust:sql_nio_headers",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_mysql_protocol_model",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "mysql_packet_sender_interface",
+    hdrs = ["api/query/protocol/ob_mysql_packet_sender.h"],
+    deps = [
+        ":client_protocol_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/share:runtime_context",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "ai_endpoint_resolver",
+    hdrs = ["api/query/ai/ob_ai_endpoint_resolver.h"],
+    deps = ["//src/share:ai_endpoint_interface"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "ai_endpoint_admin",
+    hdrs = ["api/query/ai/ob_ai_endpoint_admin.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "change_stream_service",
+    hdrs = ["api/query/change_stream/ob_change_stream_service.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "sql_name_service",
+    hdrs = ["api/query/ob_sql_name_service.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "split_range_sampler_interface",
+    hdrs = ["api/query/split/ob_split_range_sampler.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "vector_index_interface",
+    hdrs = [
+        "api/query/vector/ob_vector_index_adaptor.h",
+        "api/query/vector/ob_vector_index_cache.h",
+        "api/query/vector/ob_vector_index_param.h",
+        "api/query/vector/ob_vector_index_serialize.h",
+        "api/query/vector/ob_vector_index_service.h",
+        "api/query/vector/ob_vector_index_util.h",
+        "api/query/vector/ob_vector_query_result.h",
+    ],
+    deps = [
+        ":query_api_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_vector",
+        "//src/share:core_types",
+        "//src/share:scn_interface",
+        "//src/share:collection_types",
+        "//src/share:lob_runtime",
+        "//src/share:schema_registry",
+        "@seekdb_3rd_headers//:roaring_headers",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+seekdb_test_interface(
+    name = "query_unit_test_interface",
+    deps = [":vector_index_interface"],
+    visibility = ["//unittest/query:__pkg__"],
+)
+
+cc_library(
+    name = "vector_embedding_runtime",
+    srcs = QUERY_VECTOR_EMBEDDING_SOURCES,
+    hdrs = ["api/query/vector/ob_vector_embedding_handler.h"],
+    deps = [
+        ":vector_index_interface",
+        "//src/oblib:oblib_foundation",
+        "//src/share:io",
+        "//src/share:json_access",
+        "//src/share:runtime_context",
+        "//src/share:tenant_runtime",
+        "@seekdb_3rd_headers//:curl_headers",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "root_service_serialization",
+    hdrs = ["api/query/command/ob_root_service_serialization.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "local_command_service",
+    hdrs = ["api/query/command/ob_local_command_service.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:core_types",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "root_command_service",
+    hdrs = ["api/query/command/ob_root_command_service.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:rpc_message_types",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "ddl_schema_service",
+    hdrs = ["api/query/ddl/ob_ddl_schema_service.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "ddl_execution_limiter",
+    hdrs = ["api/query/ddl/ob_ddl_execution_guard.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "dynamic_partition_policy",
+    hdrs = ["api/query/ddl/ob_dynamic_partition_policy.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "virtual_table_factory_provider",
+    hdrs = ["api/query/virtual_table/ob_virtual_table_factory_provider.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "query_runtime_environment",
+    hdrs = ["api/query/runtime/ob_query_runtime_environment.h"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "request_time_guard_interface",
+    hdrs = ["api/query/runtime/ob_request_time_guard.h"],
+    deps = ["//src/oblib:oblib_foundation"],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "scheduler_interface",
+    srcs = QUERY_SCHEDULER_SOURCES,
+    hdrs = [
+        "api/query/scheduler/ob_scheduler_job.h",
+        "api/query/scheduler/ob_scheduler_service.h",
+    ],
+    textual_hdrs = ["api/query/scheduler/ob_scheduler_func_type.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+cc_library(
+    name = "plan_cache_access_service",
+    hdrs = ["api/query/plan_cache/ob_plan_cache_access_service.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/share:tenant_runtime",
+    ],
+    includes = ["api"],
+    features = ["layering_check"],
+    tags = ["manual"],
+    visibility = ["//src:__subpackages__"],
+)
+
+# Server-parser view of the shared parse tree types.  SQL_PARSER_COMPILATION is
+# intentionally absent: the former CMake build defined it only for the proxy
+# parser, while seekdb links the observer/server parser.
+filegroup(
+    name = "_sql_item_type_definition",
+    srcs = ["api/query/parser/ob_item_type.h"],
+    visibility = ["//src/sql/parser:__pkg__"],
+)
+
+cc_library(
+    name = "_sql_parser_types",
+    hdrs = QUERY_SQL_PARSER_TYPE_HEADERS,
+    deps = ["//src/oblib:common_sql_mode"],
+    includes = ["api"],
+    visibility = ["//src/sql/parser:__pkg__"],
+)

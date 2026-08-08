@@ -20,14 +20,14 @@
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "common/mysqlclient/ob_isql_client.h"
-#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace observer;
 namespace sql
 {
 
@@ -35,7 +35,7 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   
   bool need_tx = false;
@@ -48,11 +48,14 @@ int ObMergeTableExecutor::execute(ObExecContext &ctx, ObMergeTableStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(
-                 ObInnerSQLConnection::create_spi_connection_with_external_session(
-                     session, conn_guard))) {
+                 query::ObInnerSQLConnectionAccess::
+                     create_spi_connection_with_external_session(
+                         session, conn_guard))) {
     LOG_WARN("failed to acquire inner sql connection", K(ret));
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner sql connection is null", K(ret));
   } else {
-    conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr());
   }
 
   if (OB_SUCC(ret) && !session->is_in_transaction()) {

@@ -15,11 +15,13 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_adaptive_auto_dop.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
+#include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;
 
@@ -374,7 +376,8 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
-                    SYS_VAR_PARALLEL_SERVERS_TARGET, parallel_servers_target))) {
+                    *GCTX.schema_service_, SYS_VAR_PARALLEL_SERVERS_TARGET,
+                    parallel_servers_target))) {
       LOG_WARN("fail to read runtime variable", K(ret));
     } else {
       min_cpu = std::max(runtime->min_cpu(), 0.0);

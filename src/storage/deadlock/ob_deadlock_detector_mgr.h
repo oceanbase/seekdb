@@ -21,7 +21,7 @@
 #include "ob_deadlock_parameters.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/thread/ob_simple_thread_pool.h"
-#include "storage/tx/ob_time_wheel.h"
+#include "share/ob_time_wheel.h"
 #include "lib/utility/utility.h"
 #include "lib/allocator/ob_malloc.h"
 #include "ob_deadlock_arg_checker.h"

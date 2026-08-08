@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_gc_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "logservice/ob_log_service.h"
@@ -116,7 +116,7 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
   times = (times + 1) % GLOBAL_GC_CHECK_INTERVAL_TIMES;
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_svr = share::g_mp->ls_service();
+  ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   bool skip_gc_task = false;
 
   skip_gc_task = (OB_SUCCESS != (OB_E(EventTable::EN_TABLET_GC_TASK_FAILED) OB_SUCCESS));

@@ -16,17 +16,16 @@
 
 #include "lib/container/ob_se_array.h"
 #include "common/json_type/ob_json_bin.h"
-#include "share/rc/ob_module_provider.h"
 #include "share/ob_errno.h"
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "ob_das_domain_utils.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "data_plane/access/ob_datum_reshape.h"
 #include "share/geo/ob_geo_utils.h"
-#include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "observer/omt/ob_srs_service.h"
-#include "storage/tx/ob_trans_service.h"
+#include "share/geo/ob_srs_provider.h"
 
 using namespace oceanbase::common;
 
@@ -34,6 +33,7 @@ namespace oceanbase
 {
 namespace sql
 {
+using storage::ObFTWordMap;
 
 
 ObObjDatumMapType ObFTIndexRowCache::FTS_INDEX_TYPES[] = {OBJ_DATUM_STRING, OBJ_DATUM_STRING, OBJ_DATUM_8BYTE_DATA, OBJ_DATUM_8BYTE_DATA};
@@ -146,6 +146,7 @@ void ObFTIndexRowCache::reuse()
 
 int ObDASDomainUtils::generate_spatial_index_rows(
     ObIAllocator &allocator,
+    common::ObISrsProvider &srs_provider,
     const ObDASDMLBaseCtDef &das_ctdef,
     const ObString &wkb_str,
     const IntFixedArray &row_projector,
@@ -153,7 +154,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
     ObDomainIndexRow &spat_rows)
 {
   int ret = OB_SUCCESS;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs_item = NULL;
   const ObSrsBoundsItem *srs_bound = NULL;
   uint32_t srid = UINT32_MAX;
@@ -163,13 +164,13 @@ int ObDASDomainUtils::generate_spatial_index_rows(
   if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, srid))) {
     LOG_WARN("failed to get srid", K(ret), K(wkb_str));
   } else if (srid != 0 &&
-      OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+      OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
     LOG_WARN("failed to get srs guard", K(ret), K(srid));
   } else if (srid != 0 &&
       OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
     LOG_WARN("failed to get srs item", K(ret), K(srid));
   } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
-              OB_FAIL(SRS_SERVICE->get_srs_bounds(srid, srs_item, srs_bound))) {
+              OB_FAIL(srs_provider.get_srs_bounds(srid, srs_item, srs_bound))) {
     LOG_WARN("failed to get srs bound", K(ret), K(srid));
   } else {
     ObS2Adapter s2object(&allocator, srid != 0 ? srs_item->is_geographical_srs() : false);
@@ -215,7 +216,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
             int64_t projector_idx = row_projector.at(j);
             if (FALSE_IT(rows[i].storage_datums_[j].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
             } else if (rows[i].storage_datums_[j].is_null()) {
-            } else if (OB_FAIL(ObDASUtils::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
+            } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
               LOG_WARN("reshape storage value failed", K(ret), K(col_type), K(projector_idx), K(j));
             }
           }
@@ -294,7 +295,8 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
       LOG_WARN("fail to assign snapshot", K(ret), K(i), KPC(related_ctdef), K(doc_word_info));
     } else if (OB_FAIL(doc_word_infos.push_back(doc_word_info))) {
       LOG_WARN("fail to push back doc word info", K(ret), K(i), KPC(related_ctdef), K(doc_word_info));
-    } else if (OB_FAIL(doc_word_infos.at(doc_word_infos.count()-1).snapshot_.refresh_seq_no(trans_desc->get_seq_base()))) {
+    } else if (OB_FAIL(doc_word_infos.at(doc_word_infos.count()-1).snapshot_.refresh_seq_no(
+                           data_plane::tx_desc_seq_base(trans_desc)))) {
       LOG_WARN("fail to refresh seq no", K(ret), K(i), KPC(related_ctdef), K(doc_word_info));
     }
   }
@@ -562,7 +564,7 @@ int ObDASDomainUtils::generate_multivalue_index_rows(ObIAllocator &allocator,
             }
 
             if (rows[i].storage_datums_[j].is_null()) {  // do nothing
-            } else if (OB_SUCC(ret) && OB_FAIL(ObDASUtils::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
+            } else if (OB_SUCC(ret) && OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(col_type, col_accuracy, allocator, rows[i].storage_datums_[j]))) {
               LOG_WARN("reshape storage value failed", K(ret), K(col_type), K(projector_idx), K(j));
             }
           }
@@ -585,9 +587,11 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     ObDomainDMLIterator *&domain_iter)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(param.row_projector_) || OB_ISNULL(param.das_ctdef_)) {
+  if (OB_ISNULL(param.row_projector_) || OB_ISNULL(param.das_ctdef_)
+      || OB_ISNULL(param.lob_read_options_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(param.row_projector_), KP(param.das_ctdef_));
+    LOG_WARN("invalid arguments", K(ret), KP(param.row_projector_),
+             KP(param.das_ctdef_), KP(param.lob_read_options_));
   } else if (param.das_ctdef_->table_param_.get_data_table().is_spatial_index()) {
     void *buf = nullptr;
     if (OB_ISNULL(buf = param.allocator_.alloc(sizeof(ObSpatialDMLIterator)))) {
@@ -595,7 +599,8 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       LOG_WARN("fail to allocate spatial dml iterator memory", K(ret), KP(buf));
     } else {
       domain_iter = new (buf) ObSpatialDMLIterator(param.allocator_, param.row_projector_, param.write_iter_,
-                                                   param.das_ctdef_, param.main_ctdef_);
+                                                   param.das_ctdef_, param.main_ctdef_, param.srs_provider_,
+                                                   param.lob_read_options_);
     }
   } else if (param.das_ctdef_->table_param_.get_data_table().is_fts_index()) {
     void *buf = nullptr;
@@ -605,7 +610,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     } else {
       ObFTDMLIterator *iter = new (buf) ObFTDMLIterator(param.mode_, param.ft_doc_word_info_, param.allocator_,
                                                         param.row_projector_, param.write_iter_, param.das_ctdef_,
-                                                        param.main_ctdef_);
+                                                        param.main_ctdef_, param.lob_read_options_);
       if (OB_FAIL(iter->init(param.das_ctdef_->table_param_.get_data_table().get_fts_parser_name(),
                              param.das_ctdef_->table_param_.get_data_table().get_fts_parser_property()))) {
         LOG_WARN("fail to init fulltext dml iterator", K(ret), KPC(iter));
@@ -621,7 +626,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
     } else {
       ObMultivalueDMLIterator *iter = new (buf) ObMultivalueDMLIterator(param.allocator_, param.row_projector_,
                                                                         param.write_iter_, param.das_ctdef_,
-                                                                        param.main_ctdef_);
+                                                                        param.main_ctdef_, param.lob_read_options_);
       domain_iter = static_cast<ObDomainDMLIterator *>(iter);
     }
   } else if (param.das_ctdef_->table_param_.get_data_table().is_vector_index()) {
@@ -633,7 +638,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       } else {
         ObSparseVecIndexDMLIterator *iter = new (buf) ObSparseVecIndexDMLIterator(param.allocator_, param.row_projector_,
                                                                                   param.write_iter_, param.das_ctdef_,
-                                                                                  param.main_ctdef_);
+                                                                                  param.main_ctdef_, param.lob_read_options_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
     } else if (share::schema::is_hybrid_vec_index_log_type(param.das_ctdef_->table_param_.get_data_table().get_index_type())) {
@@ -644,7 +649,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       } else {
         ObHybridVecLogDMLIterator *iter = new (buf) ObHybridVecLogDMLIterator(param.allocator_, param.row_projector_,
                                                                               param.write_iter_, param.das_ctdef_,
-                                                                              param.main_ctdef_);
+                                                                              param.main_ctdef_, param.lob_read_options_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
     } else if (share::schema::is_hybrid_vec_index_embedded_type(param.das_ctdef_->table_param_.get_data_table().get_index_type())) {
@@ -655,7 +660,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       } else {
         ObEmbeddedVecDMLIterator *iter = new (buf) ObEmbeddedVecDMLIterator(param.allocator_, param.row_projector_,
                                                                             param.write_iter_, param.das_ctdef_,
-                                                                            param.main_ctdef_);
+                                                                            param.main_ctdef_, param.lob_read_options_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
     } else {
@@ -666,7 +671,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
       } else {
         ObVecIndexDMLIterator *iter = new (buf) ObVecIndexDMLIterator(param.allocator_, param.row_projector_,
                                                                       param.write_iter_, param.das_ctdef_,
-                                                                      param.main_ctdef_);
+                                                                      param.main_ctdef_, param.lob_read_options_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
     }
@@ -682,7 +687,8 @@ ObDomainDMLIterator::ObDomainDMLIterator(
     const IntFixedArray *row_projector,
     ObDASWriteBuffer::Iterator &write_iter,
     const ObDASDMLBaseCtDef *das_ctdef,
-    const ObDASDMLBaseCtDef *main_ctdef)
+    const ObDASDMLBaseCtDef *main_ctdef,
+    const common::ObLobReadOptions *lob_read_options)
   : mode_(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT),
     row_idx_(0),
     rows_(),
@@ -691,7 +697,8 @@ ObDomainDMLIterator::ObDomainDMLIterator(
     das_ctdef_(das_ctdef),
     main_ctdef_(main_ctdef),
     allocator_(allocator),
-    is_update_(nullptr == main_ctdef)
+    is_update_(nullptr == main_ctdef),
+    lob_read_options_(lob_read_options)
 {
 }
 
@@ -726,8 +733,8 @@ bool ObDomainDMLIterator::is_same_domain_type(const ObDASDMLBaseCtDef *das_ctdef
 {
   bool is_same_domain_type = false;
   if (OB_NOT_NULL(das_ctdef) && OB_NOT_NULL(das_ctdef_)) {
-    const ObTableSchemaParam &table_param = das_ctdef->table_param_.get_data_table();
-    const ObTableSchemaParam &my_table_param = das_ctdef_->table_param_.get_data_table();
+    const data_plane::ObDmlTableView table_param = das_ctdef->table_param_.get_data_table();
+    const data_plane::ObDmlTableView my_table_param = das_ctdef_->table_param_.get_data_table();
     if ((table_param.is_fts_index() && my_table_param.is_fts_index())
         || (table_param.is_multivalue_index() && my_table_param.is_multivalue_index())) {
       is_same_domain_type = true;
@@ -854,10 +861,15 @@ int ObSpatialDMLIterator::generate_domain_rows(const ObChunkDatumStore::StoredRo
     } else if (OB_UNLIKELY(geo_idx == -1)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("can't get geo col idx", K(ret), K(is_update_), K(geo_idx), K(geo_col_id));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_, geo_meta.get_type(),
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                       *lob_read_options_, &allocator_, geo_meta.get_type(),
                        geo_meta.get_collation_type(), is_update_ ? true : geo_meta.has_lob_header(), geo_wkb))) {
       LOG_WARN("fail to get real geo data", K(ret));
-    } else if (OB_FAIL(ObDASDomainUtils::generate_spatial_index_rows(allocator_, *das_ctdef_, geo_wkb,
+    } else if (OB_ISNULL(srs_provider_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("SRS provider is not configured", K(ret));
+    } else if (OB_FAIL(ObDASDomainUtils::generate_spatial_index_rows(
+                  allocator_, *srs_provider_, *das_ctdef_, geo_wkb,
                                                               *row_projector_, *store_row, rows_))) {
       LOG_WARN("generate spatial_index_rows failed", K(ret), K(geo_col_id), K(geo_wkb), K(geo_idx),
           KPC(store_row), K(geo_meta));
@@ -920,9 +932,14 @@ int ObSpatialDMLIterator::get_geo_wkb_for_update(
 void ObFTDMLIterator::reset()
 {
   is_inited_ = false;
-  ft_doc_word_iter_.reset();
+  data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_);
   ft_parse_helper_.reset();
   ObDomainDMLIterator::reset();
+}
+
+ObFTDMLIterator::~ObFTDMLIterator()
+{
+  data_plane::destroy_ft_doc_word_iterator(ft_doc_word_iter_);
 }
 
 int ObFTDMLIterator::rewind()
@@ -949,14 +966,20 @@ int ObFTDMLIterator::rewind()
         LOG_WARN("fail to init fulltext parse helper", K(ret), K(parser_str), K(parser_property_str));
       }
     } else if (ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN == mode_) {
-      if (OB_ISNULL(doc_word_info_)) {
+      if (OB_ISNULL(ft_doc_word_iter_)
+          && OB_FAIL(data_plane::create_ft_doc_word_iterator(
+                 ft_doc_word_allocator_, ft_doc_word_iter_))) {
+        LOG_WARN("fail to create doc word iterator", K(ret));
+      } else if (OB_ISNULL(doc_word_info_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
-      } else if (FALSE_IT(ft_doc_word_iter_.reset())) {
-      } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                doc_word_info_->doc_word_tablet_id_,
-                                                &doc_word_info_->snapshot_,
-                                                doc_word_info_->doc_word_schema_version_))) {
+      } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
+      } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
+                             ft_doc_word_iter_,
+                             doc_word_info_->doc_word_table_id_,
+                             doc_word_info_->doc_word_tablet_id_,
+                             &doc_word_info_->snapshot_,
+                             doc_word_info_->doc_word_schema_version_))) {
         LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
       }
     } else {
@@ -975,6 +998,10 @@ int ObFTDMLIterator::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext dml iterator twice", K(ret), K(is_inited_));
+  } else if (OB_ISNULL(ft_doc_word_iter_)
+             && OB_FAIL(data_plane::create_ft_doc_word_iterator(
+                    ft_doc_word_allocator_, ft_doc_word_iter_))) {
+    LOG_WARN("fail to create doc word iterator", K(ret));
   } else {
     switch (mode_) {
       case ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT: {
@@ -984,13 +1011,19 @@ int ObFTDMLIterator::init(
         break;
       }
       case ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN: {
-        if (OB_ISNULL(doc_word_info_)) {
+        if (OB_ISNULL(ft_doc_word_iter_)
+            && OB_FAIL(data_plane::create_ft_doc_word_iterator(
+                   ft_doc_word_allocator_, ft_doc_word_iter_))) {
+          LOG_WARN("fail to create doc word iterator", K(ret));
+        } else if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
-        } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                  doc_word_info_->doc_word_tablet_id_,
-                                                  &doc_word_info_->snapshot_,
-                                                  doc_word_info_->doc_word_schema_version_))) {
+        } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
+                               ft_doc_word_iter_,
+                               doc_word_info_->doc_word_table_id_,
+                               doc_word_info_->doc_word_tablet_id_,
+                               &doc_word_info_->snapshot_,
+                               doc_word_info_->doc_word_schema_version_))) {
           LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
         }
         break;
@@ -1048,11 +1081,13 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
         if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
-        } else if (FALSE_IT(ft_doc_word_iter_.reset())) {
-        } else if (OB_FAIL(ft_doc_word_iter_.init(doc_word_info_->doc_word_table_id_,
-                                                  doc_word_info_->doc_word_tablet_id_,
-                                                  &doc_word_info_->snapshot_,
-                                                  doc_word_info_->doc_word_schema_version_))) {
+        } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
+        } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
+                               ft_doc_word_iter_,
+                               doc_word_info_->doc_word_table_id_,
+                               doc_word_info_->doc_word_tablet_id_,
+                               &doc_word_info_->snapshot_,
+                               doc_word_info_->doc_word_schema_version_))) {
           LOG_WARN("fail to init doc word iter", K(ret), KPC(doc_word_info_));
         }
         break;
@@ -1155,7 +1190,8 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
     ObDatum doc_id_datum = store_row->cells()[row_projector_->at(doc_id_idx)];
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ft_doc_word_iter_.do_scan(doc_word_info_->doc_word_table_id_, doc_id_datum))) {
+    } else if (OB_FAIL(data_plane::scan_ft_doc_words(
+                   ft_doc_word_iter_, doc_word_info_->doc_word_table_id_, doc_id_datum))) {
       LOG_WARN("fail to do scan", K(ret), KPC(doc_word_info_), K(doc_id_datum));
     } else {
       // gather ft word rows
@@ -1163,7 +1199,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
       do {
         blocksstable::ObDatumRow *row = nullptr;
         blocksstable::ObDatumRow *ft_word_row = nullptr;
-        if (OB_FAIL(ft_doc_word_iter_.get_next_row(row))) {
+        if (OB_FAIL(data_plane::next_ft_doc_word(ft_doc_word_iter_, row))) {
           if (OB_ITER_END != ret) {
             LOG_WARN("fail to get next row", K(ret));
           }
@@ -1247,7 +1283,7 @@ int ObFTDMLIterator::scan_ft_word_rows(const ObChunkDatumStore::StoredRow *store
         bool need_check_tx_active = true;
         if (OB_NOT_NULL(doc_word_info_) && doc_word_info_->snapshot_.tx_id().is_valid()) {
           const transaction::ObTransID &tx_id = doc_word_info_->snapshot_.tx_id();
-          //transaction::ObTransService *txs = share::g_mp->trans_service();
+          //data_plane::ObITransactionService *txs = data_plane::query_transaction_service();
           //bool is_tx_active = true;
           //if (OB_NOT_NULL(txs)) {
           //  if (OB_FAIL(txs->is_tx_active(tx_id, is_tx_active))) {
@@ -1330,7 +1366,9 @@ int ObFTDMLIterator::get_ft_and_doc_id(const ObChunkDatumStore::StoredRow *store
     ft_meta = das_ctdef_->column_types_.at(ft_idx);
     doc_id_datum = store_row->cells()[row_projector_->at(doc_id_idx)];
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                          *lob_read_options_,
+                                                          &allocator_,
                                                           ft_meta.get_type(),
                                                           ft_meta.get_collation_type(),
                                                           ft_meta.has_lob_header(),
@@ -1365,7 +1403,9 @@ int ObFTDMLIterator::get_ft_and_doc_id_for_update(const ObChunkDatumStore::Store
     ft = store_row->cells()[row_projector_->at(ft_idx)].get_string();
     ft_meta = das_ctdef_->column_types_.at(ft_idx);
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                 *lob_read_options_,
+                                                                 &allocator_,
                                                                  ft_meta.get_type(),
                                                                  ft_meta.get_collation_type(),
                                                                  true /* has lob header */,
@@ -1440,7 +1480,9 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data(
         multivalue_arr_idx = multivalue_idx + 1;
         multivalue_data = store_row->cells()[multivalue_arr_idx].get_string();
 
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                            *lob_read_options_,
+                                                            &allocator_,
                                                             ObJsonType,
                                                             CS_TYPE_UTF8MB4_BIN,
                                                             true, multivalue_data))) {
@@ -1489,7 +1531,9 @@ int ObMultivalueDMLIterator::get_multivlaue_json_data_for_update(
           multivalue_arr_idx = projector_idx + 1;
           multivalue_data = store_row->cells()[multivalue_arr_idx].get_string();
 
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator_,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                              *lob_read_options_,
+                                                              &allocator_,
                                                               ObJsonType,
                                                               CS_TYPE_UTF8MB4_BIN,
                                                               true, multivalue_data))) {

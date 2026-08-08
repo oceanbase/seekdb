@@ -18,7 +18,8 @@
 #define OCEANBASE_STORAGE_OB_PUSHDOWN_AGGREGATE_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "sql/engine/expr/ob_expr.h"
+#include "query/engine/expr/ob_expr.h"
+#include "query/engine/expr/ob_arithmetic_overflow.h"
 #include "lib/utility/ob_hyperloglog.h"
 #include "storage/ob_i_store.h"
 #include "storage/blocksstable/ob_datum_row.h"
@@ -238,6 +239,7 @@ private:
            (basic_info_.col_param_->get_meta_type().is_numeric_type() || basic_info_.col_param_->get_meta_type().is_temporal_type());
   }
   ObDatumCmpFuncType cmp_fun_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   uint32_t *group_by_ref_array_;
   common::ObArenaAllocator datum_allocator_;
 };
@@ -271,6 +273,7 @@ private:
            (basic_info_.col_param_->get_meta_type().is_numeric_type() || basic_info_.col_param_->get_meta_type().is_temporal_type());
   }
   ObDatumCmpFuncType cmp_fun_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   uint32_t *group_by_ref_array_;
   common::ObArenaAllocator datum_allocator_;
 };
@@ -310,6 +313,7 @@ public:
 private:
   virtual bool can_use_index_info() const override { return false; } // can not use now.
   sql::ObExprHashFuncType hash_func_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   ObHyperLogLogCalculator *ndv_calculator_;
   uint64_t def_hash_value_;
 };
@@ -488,6 +492,7 @@ private:
   ObSumEvalBatchAggFuncType eval_batch_func_;
   ObSumCopyDatumFuncType copy_datum_func_;
   ObSumEvalAggFuncType eval_skip_index_func_;
+  sql::ObExecContext *exec_ctx_;
   blocksstable::ObStorageDatum cast_datum_;
   char *sum_temp_buffer_;
   char *cast_temp_buffer_;
@@ -687,7 +692,7 @@ OB_INLINE int ObSumAggCell::eval_int_inner(const common::ObDatum &datum, ObDataB
 
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
-    if (sql::ObExprAdd::is_int_int_out_of_range(datum_int, new_int, sum_int)) {
+    if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
       LOG_DEBUG("int64_t add overflow, will use decimal int", K(datum_int), K(new_int), K(sum_int));
       if (OB_UNLIKELY(result_datum.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum, RES_T) = datum_int;
@@ -721,7 +726,7 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
 
     int64_t new_int = datum.get_int();
     int64_t sum_int = datum_int + new_int;
-    if (sql::ObExprAdd::is_int_int_out_of_range(datum_int, new_int, sum_int)) {
+    if (query::ObArithmeticOverflow::is_int_add_out_of_range(datum_int, new_int, sum_int)) {
       LOG_DEBUG("int64_t add overflow, will use number", K(datum_int), K(new_int), K(sum_int));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {
@@ -757,7 +762,7 @@ OB_INLINE int ObSumAggCell::eval_uint_inner(const common::ObDatum &datum, ObData
 
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
-    if (sql::ObExprAdd::is_uint_uint_out_of_range(datum_uint, new_uint, sum_uint)) {
+    if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
       LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       if (OB_UNLIKELY(result_datum_.is_null())) {
         DATUM_TO_DECIMAL_INT(result_datum_, RES_T) = datum_uint;
@@ -791,7 +796,7 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
 
     uint64_t new_uint = datum.get_uint();
     uint64_t sum_uint = datum_uint + new_uint;
-    if (sql::ObExprAdd::is_uint_uint_out_of_range(datum_uint, new_uint, sum_uint)) {
+    if (query::ObArithmeticOverflow::is_uint_add_out_of_range(datum_uint, new_uint, sum_uint)) {
       LOG_DEBUG("uint64_t add overflow, will use number", K(datum_uint), K(new_uint), K(sum_uint));
       common::number::ObNumber result_nmb;
       if (!result_datum.is_null()) {

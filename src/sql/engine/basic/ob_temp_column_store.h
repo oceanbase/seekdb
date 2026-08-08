@@ -18,6 +18,8 @@
 #define OCEANBASE_BASIC_OB_TEMP_COLUMN_STORE_H_
 
 #include "share/ob_define.h"
+#include "query/engine/ob_batch_rows.h"
+#include "query/engine/basic/ob_spill_batch_spool.h"
 #include "sql/engine/basic/ob_temp_block_store.h"
 #include "sql/engine/vector/ob_bitmap_null_vector_base.h"
 #include "sql/engine/vector/ob_continuous_base.h"
@@ -169,13 +171,13 @@ public:
            const int64_t mem_limit,
            const bool enable_dump,
            const common::ObCompressorType compressor_type);
-  int init(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+  int init(const common::ObIArray<query::ObSpillColumnDesc> &col_array,
            const int64_t max_batch_size,
            const lib::ObMemAttr &mem_attr,
            const int64_t mem_limit,
            const bool enable_dump,
            const common::ObCompressorType compressor_type);
-  static int init_vectors(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+  static int init_vectors(const common::ObIArray<query::ObSpillColumnDesc> &col_array,
                           common::ObIAllocator &allocator,
                           IVectorPtrs &vectors);
 

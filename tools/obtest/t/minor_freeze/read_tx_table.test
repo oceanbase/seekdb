@@ -1,0 +1,75 @@
+# owner: gengli.wzy
+# owner group: transaction
+# description: 
+
+--disable_query_log
+ob1=OBI(cluster=1, proxy_num=0);
+
+let $extra_conf = "cpu_count=16,memory_budget='20G',cache_wash_threshold='1G'";
+ob1.z1.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+# ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='info';
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+set global ob_trx_idle_timeout = 1000000000;
+sleep 2;
+
+#mysql tenant
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+source include/check_schema_sync.inc;
+
+# 测试用连接
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+# case 1 start : ********************* basic function test ************************
+
+# 插入数据
+connection conn_mysql;
+create table t1(a int, b int);
+begin;
+insert into t1 (a, b) values (1, 2), (3, 4), (5, 6);
+
+# flush uncommitted row
+connection conn_sys;
+alter system minor freeze;
+sleep 2;
+ob1.z1.obs0.check_log_until_success -c "tx data memtable mgr release head memtable";
+
+# read tx ctx table
+connection conn_mysql;
+select * from t1;
+
+insert into t1 (a, b) values (1, 2);
+
+# commit tx
+commit;
+
+# read tx data memtable
+select * from t1;
+
+# flush tx data memtable
+connection conn_sys;
+alter system minor freeze;
+sleep 2;
+ob1.z1.obs0.check_log_until_success -c "tx data memtable mgr release head memtable";
+
+# read tx data sstable
+connection conn_mysql;
+select * from t1;
+
+# case 1 end: ********************* basic function test ************************

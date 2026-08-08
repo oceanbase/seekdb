@@ -1,5 +1,5 @@
 #include "rootserver/ob_local_management_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -204,7 +204,7 @@ int ObMajorMergeInfoDetector::try_minor_freeze()
 {
   int ret = OB_SUCCESS;
   obcall::ObMinorFreezeArg arg;
-  if (OB_FAIL(GCTX.local_management_service_->root_minor_freeze(arg))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->root_minor_freeze(arg))) {
     LOG_WARN("fail to execute root_minor_freeze rpc", KR(ret), K(arg));
   } else {
     LOG_INFO("succ to execute root_minor_freeze rpc", KR(ret), K(arg));

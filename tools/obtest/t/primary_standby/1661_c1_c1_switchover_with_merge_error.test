@@ -1,0 +1,101 @@
+# owner: msy164651
+# description: 验证备库上partition checksum 不对的时候，切换失败
+# case 1: 主备库同步完成之后，修改系统租户一张表的checksum，检测到merge-error，切换失败
+# case 2：创建普通租户，修改普通租户上的用户表的checksum，检测到merge-error，切换失败
+# case 3：修改主库上普通租户的checksum，检测到merge-error，不能切换成备库
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout = 30000000;
+#case 1
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+#修改备库的check_sum为错误
+let $table_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_root_table, table_id, 1);
+let $checksum = deploy_get_value(ob2.select select data_checksum from oceanbase.__all_root_table where table_id = $table_id and partition_id = 0, data_checksum, 1);
+ob2.mysql update oceanbase.__all_root_table set data_checksum = 99999 where table_id = $table_id and zone = 'z1' and partition_id = 0;
+ob2.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn1;
+--error 4179
+alter system commit to switchover to physical standby;
+#修改回来
+ob2.mysql update oceanbase.__all_root_table set data_checksum = $checksum where table_id = $table_id and zone = 'z1' and partition_id = 0;
+ob2.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+#case 2
+#创建租户，并确定备库同步上
+alter system set debug_sync_timeout = '100000s';
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', unit_num = 1,ZONE_LIST = ('z1', 'z2');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'),primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(tt_conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt_conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+insert into t1 values(1,1),(2,2),(3,3);
+#判断备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and replica_type = 0 and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql set @@global.ob_query_timeout = 30000000;
+#修改备库的check_sum为错误
+let $table_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_virtual_meta_table, table_id, 1);
+let $checksum = deploy_get_value(ob2.select select data_checksum from oceanbase.__all_virtual_meta_table where table_id = $table_id and partition_id = 0, data_checksum, 1);
+connection conn2;
+alter system change tenant tt;
+--disable_query_log
+eval update __all_tenant_meta_table set data_checksum = 99999 where table_id = $table_id and zone = 'z2' and partition_id = 0;
+--enable_query_log
+ob2.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+connection conn1;
+--error 4179
+alter system commit to switchover to physical standby;
+connection conn2;
+alter system change tenant tt;
+--disable_query_log
+eval update __all_tenant_meta_table set data_checksum = $checksum where table_id = $table_id and zone = 'z2' and partition_id = 0;
+--enable_query_log
+ob2.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+#case 3
+#
+#修改主库的check_sum为错误
+connection conn1;
+alter system change tenant tt;
+--disable_query_log
+eval update __all_tenant_meta_table set data_checksum = 99999 where table_id = $table_id and zone = 'z1' and partition_id = 0;
+--enable_query_log
+ob1.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+connection conn1;
+alter system change tenant sys;
+--error 4179
+alter system commit to switchover to physical standby;
+alter system change tenant tt;
+--disable_query_log
+eval update __all_tenant_meta_table set data_checksum = $checksum where table_id = $table_id and zone = 'z1' and partition_id = 0;
+--enable_query_log
+ob1.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+

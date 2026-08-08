@@ -34,6 +34,7 @@ struct ObTableAccessContext;
 struct ObRowSampleFilter;
 class ObBlockRowStore;
 class ObTableScanStoreStat;
+class ObTruncateFilterEvaluator;
 }
 namespace blocksstable
 {
@@ -74,6 +75,12 @@ public:
       sql::PushdownFilterInfo &filter_info,
       const bool can_use_vectorize,
       common::ObBitmap &bitmap);
+  int filter_truncate_evaluator(
+      storage::ObTruncateFilterEvaluator &evaluator,
+      const int64_t start,
+      const int64_t count,
+      const common::ObBitmap *candidate_rows,
+      common::ObBitmap &result);
   int advance_to_border(
       const ObDatumRowkey &rowkey,
       int64_t &start_offset,

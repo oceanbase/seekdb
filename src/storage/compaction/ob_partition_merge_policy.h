@@ -17,10 +17,11 @@
 #ifndef OB_PARTITION_MERGE_POLICY_H_
 #define OB_PARTITION_MERGE_POLICY_H_
 
+#include "lib/literals/ob_literals.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "share/ob_table_range.h"
-#include "observer/scheduler/ob_diagnose_config.h"
+#include "data_plane/scheduler/ob_diagnose_config.h"
 namespace oceanbase
 {
 namespace storage

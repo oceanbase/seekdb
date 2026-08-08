@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
-#include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
-#include "sql/das/ob_das_utils.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 
@@ -87,7 +86,7 @@ int ObTabletSliceRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(row_iter_->get_next_row(current_row))) {
       LOG_WARN("eval current row failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::convert_to_storage_row(tablet_id_, slice_idx_, *param_, lob_writer_, arena_, const_cast<blocksstable::ObDatumRow &>(*current_row)))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_row(tablet_id_, slice_idx_, *param_, lob_writer_, arena_, const_cast<blocksstable::ObDatumRow &>(*current_row)))) {
       LOG_WARN("convert sql row to storage row failed", K(ret));
     }
   }
@@ -112,4 +111,3 @@ int ObTabletSliceRowIterator::get_next_batch(const ObBatchDatumRows *&datum_rows
   int ret = OB_NOT_SUPPORTED;
   return ret;
 }
-

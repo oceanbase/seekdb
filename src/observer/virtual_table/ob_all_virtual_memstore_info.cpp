@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -55,7 +55,7 @@ int ObAllVirtualMemstoreInfo::get_next_tablet(ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
   if (!tablet_iter_.is_valid()) {
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));

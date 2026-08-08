@@ -1,0 +1,33 @@
+##
+# owner:yuchen.wyc
+# owner group:global index
+# description:
+# 测试点：当全局索引的分区分布在多台机器上，执行任务的调度会并发的去读取或者写入多台机器，并发是通过异步RPC来完成，这里测试异步RPC接口是否正确
+# 测试场景：创建全局索引，然后将全局索引的分区打散到不同的机器上，然后写入数据，发起一个查询需要扫描多个分区的数据，观察结果是否正确
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.create_client;
+
+use test;
+create table t1(pk int primary key, c1 int, c2 int);
+create table t2(pk int primary key, c1 int, c2 int);
+create table t3(pk int primary key, c1 int, c2 int);
+sleep 5;
+insert into t1 values(1, 1, 1);
+insert into t2 values(1, 1, 1);
+insert into t3 values(1, 1, 1);
+
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.switch_partition obtest:test:t2;
+ob1.z3.obs0.switch_partition obtest:test:t3;
+sleep 15;
+ob1.z2.obs0.check_leader obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t2;
+ob1.z3.obs0.check_leader obtest:test:t3;
+
+select t1.c1, t2.c1, t3.c1 from t1, t2, t3 where t1.pk=1 and t1.pk=t2.pk and t1.pk=t3.pk;
+explain select t1.c1, t2.c1, t3.c1 from t1, t2, t3 where t1.pk=1 and t1.pk=t2.pk and t1.pk=t3.pk;

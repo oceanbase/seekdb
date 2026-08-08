@@ -1,0 +1,73 @@
+# owner:xiekaige.xkg
+# owner group:storage
+# test parallel major merge
+
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+let $svr_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $svr_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect (obsys, $svr_ip, root@sys, , oceanbase, $svr_port);
+connection obsys;
+
+alter system set major_freeze_duty_time = 'Disable';
+alter system set ob_compaction_schedule_interval = '10s';
+alter system set _enable_adaptive_compaction = 'False';
+ob1.mysql alter system set merger_check_interval='10s';
+# tablet_size = 2M
+
+drop table if exists t1;
+create table t1 (c1 bigint, c2 varchar(100)) COMPRESSION = 'None' TABLET_SIZE = 2097152;
+
+let $sys_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'sys', tenant_id, 1);
+let $t1_id = query_get_value(select tablet_id from __all_table where table_name like "%t1%", tablet_id, 1);
+
+#########################################
+### check first parallel major merge ####
+#########################################
+let $repeat_cnt1 = 3;
+while ($repeat_cnt1 > 0)
+{
+  insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+  dec $repeat_cnt1;
+}
+
+alter system major freeze;
+sleep 15;
+# wait major merge finish
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+ob1.check_until_timeout select parallel_degree from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE', 1, 100;
+
+#########################################
+### check second parallel major merge ###
+#########################################
+let $repeat_cnt2 = 3;
+while ($repeat_cnt2 > 0)
+{
+  insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+  dec $repeat_cnt2;
+}
+
+alter system major freeze;
+sleep 15;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+
+ob1.check_until_timeout select count(1) > 0 from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE' and parallel_degree > 1, 1, 100;
+let $last_parallel_degree = query_get_value(select parallel_degree from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE', parallel_degree, 2);
+
+#########################################
+### check third parallel major merge ###
+#########################################
+let $repeat_cnt3 = 4;
+while ($repeat_cnt3 > 0)
+{
+  insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+  dec $repeat_cnt3;
+}
+
+alter system major freeze;
+sleep 15;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+
+ob1.check_until_timeout select count(1) > 0 from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE' and parallel_degree > $last_parallel_degree, 1, 200;

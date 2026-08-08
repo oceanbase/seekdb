@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_log_allocator_mgr.h"
 #include "ob_log_allocator.h"
 
@@ -96,7 +94,13 @@ int ObLogAllocatorMgr::get_memstore_limit_percent_(int64_t &limit_percent) const
     ret = OB_NOT_INIT;
   } else {
     SERVER_MODULE_SCOPE {
-      limit_percent = share::g_mp->memstore_freezer()->get_memstore_limit_percentage();
+      share::ObIMemstoreRuntime *runtime =
+          share::server_service<share::ObIMemstoreRuntime>();
+      if (OB_ISNULL(runtime)) {
+        ret = OB_NOT_INIT;
+      } else {
+        ret = runtime->get_memstore_limit_percentage(limit_percent);
+      }
     }
   }
   return ret;
@@ -214,8 +218,12 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
       }
 
       SERVER_MODULE_SCOPE {
-        ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
-        if (OB_FAIL(memstore_allocator.set_memstore_threshold())) {
+        share::ObIMemstoreRuntime *runtime =
+            share::server_service<share::ObIMemstoreRuntime>();
+        if (OB_ISNULL(runtime)) {
+          ret = OB_NOT_INIT;
+          OB_LOG(WARN, "memstore runtime is unavailable", K(ret));
+        } else if (OB_FAIL(runtime->set_memstore_threshold())) {
           OB_LOG(WARN, "failed to set_memstore_threshold of memstore allocator", K(ret));
         } else {
           OB_LOG(INFO, "succ to set_memstore_threshold of memstore allocator", K(ret));

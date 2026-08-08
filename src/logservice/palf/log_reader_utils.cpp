@@ -15,7 +15,7 @@
  */
 
 #include "share/rc/ob_server_runtime.h"
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "log_reader_utils.h"
 
 namespace oceanbase

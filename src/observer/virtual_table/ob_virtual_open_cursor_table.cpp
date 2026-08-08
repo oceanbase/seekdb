@@ -18,6 +18,8 @@
 
 #include "ob_virtual_open_cursor_table.h"
 #include "observer/ob_server.h"
+#include "observer/ob_server_runtime_access.h"
+#include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 using namespace oceanbase::common;
@@ -178,7 +180,9 @@ int ObVirtualOpenCursorTable::FillScanner::get_session_cursor_sql_text(ObSQLSess
   int64_t cursor_id = cursor->get_id();
   ObPsStmtId inner_stmt_id = OB_INVALID_ID;
   if (0 == (cursor_id & (1LL << 31))) {
-    if (OB_ISNULL(sess_info.get_ps_cache())) {
+    ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
+        ? nullptr : &get_observer_sql_engine()->get_ps_cache();
+    if (OB_ISNULL(ps_cache)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN,"ps : ps cache is null.", K(ret), K(cursor_id));
     } else if (OB_FAIL(sess_info.get_inner_ps_stmt_id(cursor_id, inner_stmt_id))) {
@@ -187,7 +191,7 @@ int ObVirtualOpenCursorTable::FillScanner::get_session_cursor_sql_text(ObSQLSess
     } else {
       ObPsStmtInfoGuard guard;
       ObPsStmtInfo *ps_info = NULL;
-      if (OB_FAIL(sess_info.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+      if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
         SERVER_LOG(WARN,"get stmt info guard failed", K(ret), K(cursor_id), K(inner_stmt_id));
       } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
         ret = OB_ERR_UNEXPECTED;

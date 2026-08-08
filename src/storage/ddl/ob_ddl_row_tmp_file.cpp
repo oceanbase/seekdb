@@ -17,14 +17,12 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_ddl_row_tmp_file.h"
-#include "sql/engine/ob_bit_vector.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 
 namespace oceanbase
 {
-using namespace sql;
 namespace storage
 {
 /**
@@ -34,6 +32,7 @@ int ObDDLRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its
                       const ObTabletID &tablet_id,
                       const int64_t slice_idx,
                       const int64_t max_batch_size,
+                      query::ObISpillBatchSpoolFactory &spool_factory,
                       const int64_t memory_limit,
                       const int64_t dir_id)
 {
@@ -52,33 +51,43 @@ int ObDDLRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its
         K(slice_idx), K(max_batch_size), K(memory_limit), K(dir_id));
   }
   if (OB_SUCC(ret)) {
-    ObCompressorType compressor_type = NONE_COMPRESSOR;
-    const int64_t skip_size = ObBitVector::memory_size(max_batch_size);
-    void *skip_mem = nullptr;
-    if (OB_FAIL(ObTempColumnStore::init_vectors(all_column_schema_its, allocator_, bdrs_.vectors_))) {
-      LOG_WARN("fail to initialize vectors", K(ret), K(all_column_schema_its));
-    } else if (OB_FAIL(store_.init(bdrs_.vectors_,
-                                   max_batch_size,
-                                   ObMemAttr("DDLRowFileStore"),
-                                   memory_limit,
-                                   true/*enable_dump*/,
-                                   compressor_type))) {
-      LOG_WARN("fail to initialize temp column store", K(ret));
-    } else if (OB_ISNULL(skip_mem = allocator_.alloc(skip_size))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc skip buffer", K(ret), K(skip_size));
+    ObArray<query::ObSpillColumnDesc> columns;
+    query::ObSpillBatchSpoolOptions options;
+    if (OB_FAIL(columns.prepare_allocate(all_column_schema_its.count()))) {
+      LOG_WARN("fail to prepare spill column descriptions", K(ret),
+          K(all_column_schema_its.count()));
+    } else if (OB_FAIL(bdrs_.vectors_.prepare_allocate(all_column_schema_its.count()))) {
+      LOG_WARN("fail to prepare output vector slots", K(ret),
+          K(all_column_schema_its.count()));
     } else {
+      for (int64_t i = 0; i < all_column_schema_its.count(); ++i) {
+        const ObColumnSchemaItem &column = all_column_schema_its.at(i);
+        query::ObSpillColumnDesc &desc = columns.at(i);
+        desc.type_ = column.col_type_.get_type();
+        desc.scale_ = column.col_type_.get_scale();
+        desc.precision_ = column.col_accuracy_.get_precision();
+        bdrs_.vectors_.at(i) = nullptr;
+      }
+      options.max_batch_size_ = max_batch_size;
+      options.resident_memory_limit_ = memory_limit;
+      options.rotation_threshold_ = memory_limit;
+      options.dir_id_ = dir_id;
+      options.compressor_type_ = NONE_COMPRESSOR;
+      options.async_read_ = true;
+      if (OB_FAIL(spool_factory.create(columns, options, spool_))) {
+        LOG_WARN("fail to create spill batch spool", K(ret), K(options.max_batch_size_),
+            K(options.resident_memory_limit_), K(options.dir_id_));
+      }
+    }
+    if (OB_SUCC(ret)) {
       tablet_id_ = tablet_id;
       slice_idx_ = slice_idx;
       column_count_ = all_column_schema_its.count();
-      store_.set_dir_id(dir_id);
-
-      brs_.skip_ = to_bit_vector(skip_mem);
-      brs_.skip_->reset(max_batch_size);
-      brs_.size_ = 0;
-      brs_.set_all_rows_active(true);
+      spool_factory_ = &spool_factory;
       bdrs_.row_flag_.set_flag(blocksstable::ObDmlFlag::DF_INSERT);
       is_opened_ = true;
+    } else if (OB_NOT_NULL(spool_)) {
+      spool_factory.destroy(spool_);
     }
   }
   return ret;
@@ -91,18 +100,15 @@ int ObDDLRowFile::close()
     ret = OB_NOT_INIT;
     LOG_WARN("the ObDDLRowFile is not opened", K(ret));
   } else {
+    if (OB_NOT_NULL(spool_factory_)) {
+      spool_factory_->destroy(spool_);
+    }
     is_opened_ = false;
     column_count_ = 0;
-    is_start_iterate_ = false;
-    iter_.reset();
-    store_.reset();
+    spool_factory_ = nullptr;
+    spool_ = nullptr;
+    rotation_recommended_ = false;
     bdrs_.reset();
-    if (nullptr != brs_.skip_) {
-      brs_.skip_->~ObBitVector();
-      allocator_.free(brs_.skip_);
-      brs_.skip_ = nullptr;
-    }
-    allocator_.reset();
   }
   return ret;
 }
@@ -118,17 +124,27 @@ int ObDDLRowFile::append_batch(const blocksstable::ObBatchDatumRows &bdrs)
     LOG_WARN("the column count is not equal to the batch datum rows's vector count",
         K(ret), K(bdrs.vectors_.count()), K(column_count_));
   } else {
-    int64_t stored_row_count = 0;
-    brs_.size_ = bdrs.row_count_;
-    if (OB_FAIL(store_.add_batch(bdrs.vectors_, brs_, stored_row_count))) {
-      LOG_WARN("fail to add batch", K(ret));
-    } else if (OB_UNLIKELY(stored_row_count != bdrs.row_count_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the stored row count is not equal to the brs's row count",
-          K(ret), K(stored_row_count), K(bdrs.row_count_));
+    query::ObSpillBatchAppendResult result;
+    const query::ObSpillBatchView batch(bdrs.vectors_, bdrs.row_count_);
+    if (OB_FAIL(spool_->append_batch(batch, result))) {
+      LOG_WARN("fail to append spill batch", K(ret), K(bdrs.row_count_));
     } else {
-      is_start_iterate_ = false;
+      rotation_recommended_ = result.rotation_recommended_;
     }
+  }
+  return ret;
+}
+
+int ObDDLRowFile::seal()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!is_opened_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
+  } else if (OB_FAIL(spool_->seal())) {
+    LOG_WARN("fail to seal spill batch spool", K(ret));
+  } else {
+    rotation_recommended_ = false;
   }
   return ret;
 }
@@ -136,58 +152,34 @@ int ObDDLRowFile::append_batch(const blocksstable::ObBatchDatumRows &bdrs)
 int ObDDLRowFile::get_next_batch(blocksstable::ObBatchDatumRows *&bdrs)
 {
   int ret = OB_SUCCESS;
-  int64_t read_row_count = 0;
+  query::ObSpillBatchView batch;
   bdrs = nullptr;
   if (OB_UNLIKELY(!is_opened_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("the ObDDLRowFile is not opened", K(ret));
-  } else if (!is_start_iterate_ && begin(iter_)) {
-    LOG_WARN("fail to begin iterating", K(ret));
-  } else if (OB_FAIL(iter_.get_next_batch(bdrs_.vectors_, read_row_count))) {
+  } else if (OB_FAIL(spool_->next_batch(batch))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("fail to get next batch", KR(ret));
     }
+  } else if (OB_ISNULL(batch.vectors_) || batch.row_count_ <= 0 ||
+             batch.vectors_->count() != column_count_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("spill spool returned an invalid batch", K(ret), KP(batch.vectors_),
+        K(batch.row_count_), K(column_count_));
   } else {
-    bdrs_.row_count_ = read_row_count;
+    for (int64_t i = 0; i < column_count_; ++i) {
+      bdrs_.vectors_.at(i) = batch.vectors_->at(i);
+    }
+    bdrs_.row_count_ = batch.row_count_;
     bdrs = &bdrs_;
   }
   return ret;
 }
 
-int ObDDLRowFile::dump(const bool all_dump, const int64_t target_dump_size)
+query::ObSpillBatchSpoolStats ObDDLRowFile::get_stats() const
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_opened_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
-  } else if (OB_FAIL(store_.dump(all_dump, target_dump_size))) {
-    LOG_WARN("fail to dump", K(ret), K(all_dump), K(target_dump_size));
-  }
-  return ret;
-}
-
-int ObDDLRowFile::finish_append_batch(bool need_dump)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_opened_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("the ObDDLRowFile is not opened", K(ret));
-  } else if (OB_FAIL(store_.finish_add_row(need_dump))) {
-    LOG_WARN("fail to finish add row", K(ret));
-  }
-  return ret;
-}
-
-// private function
-int ObDDLRowFile::begin(sql::ObTempColumnStore::Iterator &iter, const bool async)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(store_.begin(iter, async))) {
-    LOG_WARN("fail to begin iterating", K(ret));
-  } else {
-    is_start_iterate_ = true;
-  }
-  return ret;
+  return OB_NOT_NULL(spool_) ? spool_->get_stats() :
+      query::ObSpillBatchSpoolStats();
 }
 
 /**
@@ -200,6 +192,7 @@ void ObDDLRowFileGenerator::reset()
   slice_idx_ = -1;
   max_batch_size_ = 0;
   row_file_memory_limit_ = 0;
+  spool_factory_ = nullptr;
   all_column_schema_its_.reset();
   for (int64_t i = 0; i < row_file_arr_.count(); ++i) {
     ObDDLRowFile *&row_file = row_file_arr_.at(i);
@@ -237,7 +230,8 @@ int ObDDLRowFileGenerator::init(
     const int64_t max_batch_size,
     const int64_t row_file_memory_limit,
     const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
-    const bool is_generation_sync_output)
+    const bool is_generation_sync_output,
+    query::ObISpillBatchSpoolFactory &spool_factory)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -258,6 +252,7 @@ int ObDDLRowFileGenerator::init(
     max_batch_size_ = max_batch_size;
     is_generation_sync_output_ = is_generation_sync_output;
     row_file_memory_limit_ = row_file_memory_limit;
+    spool_factory_ = &spool_factory;
     if (OB_FAIL(row_file_arr_.prepare_allocate(1))) {
       LOG_WARN("fail to prepare row file slot", K(ret));
     } else if (OB_FAIL(all_column_schema_its_.assign(all_column_schema_its))) {
@@ -311,6 +306,7 @@ int ObDDLRowFileGenerator::append_batch(
                                         tablet_id_,
                                         slice_idx_,
                                         max_batch_size_,
+                                        *spool_factory_,
                                         row_file_memory_limit_))) {
         LOG_WARN("fail to open row file", K(ret), K(tablet_id_), K(slice_idx_));
       }
@@ -348,11 +344,9 @@ int ObDDLRowFileGenerator::try_generate_output_chunk(
     for (int64_t i = 0; OB_SUCC(ret) && i < row_file_arr_.count(); ++i) {
       ObDDLRowFile *&row_file = row_file_arr_.at(i);
       if (nullptr != row_file &&
-          (row_file->get_mem_hold() > row_file_memory_limit_ || is_slice_end)) {
-        if (OB_FAIL(row_file->dump(true))) {
-          LOG_WARN("fail to dump row file", K(ret), KPC(row_file));
-        } else if (OB_FAIL(row_file->finish_append_batch(true/*need_dump*/))) {
-          LOG_WARN("fail to finish add row", K(ret), KPC(row_file));
+          (row_file->should_rotate() || is_slice_end)) {
+        if (OB_FAIL(row_file->seal())) {
+          LOG_WARN("fail to seal row file", K(ret), KPC(row_file));
         } else if (is_generation_sync_output_) {
           if (OB_UNLIKELY(nullptr == row_file_arr_for_output_ ||
                           nullptr == sync_chunk_data_)) {

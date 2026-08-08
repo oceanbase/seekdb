@@ -1,4 +1,4 @@
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -68,7 +68,7 @@ int ObDDLCtrlSpeedItem::refresh()
   int64_t total_used_space = 0; // for current tenant, used bytes.
   int64_t total_disk_space = 0; // for current tenant, limit used bytes.
   palf::PalfOptions palf_opt;
-  logservice::ObLogService *log_service = share::g_mp->log_service();
+  logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, nullptr found", K(ret), KP(log_service));
@@ -153,8 +153,12 @@ int ObDDLCtrlSpeedItem::do_sleep(
         uint64_t unused_data_format_version = 0;
         int64_t unused_snapshot_version = 0;
         share::ObDDLTaskStatus task_status = share::ObDDLTaskStatus::PREPARE;
-        if (OB_TMP_FAIL(ObDDLUtil::get_data_information(task_id, unused_data_format_version,
-            unused_snapshot_version, task_status))) {
+        if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>())) {
+          tmp_ret = OB_NOT_INIT;
+          LOG_WARN("sql proxy is not initialized", K(tmp_ret), K(task_id));
+        } else if (OB_TMP_FAIL(ObDDLUtil::get_data_information(
+                       *::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>(), task_id, unused_data_format_version,
+                       unused_snapshot_version, task_status))) {
           if (OB_ITER_END == tmp_ret) {
             is_need_stop_write = false;
             LOG_INFO("exit due to ddl task exit", K(task_id));
@@ -419,7 +423,7 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
   } else if (FALSE_IT(buffer_size = base_header.get_serialize_size()
                                     + ddl_header.get_serialize_size()
                                     + log.get_serialize_size())) {
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   } else if (OB_FAIL(ls->get_tablet(log.get_redo_info().table_key_.tablet_id_, tablet_handle, ObTabletCommon::DEFAULT_GET_TABLET_NO_WAIT, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get tablet handle failed", K(ret), K(log.get_redo_info()));
@@ -671,7 +675,7 @@ int ObDDLRedoLogWriter::write_auto_fork_log(
   } else if (OB_ISNULL(buffer = static_cast<char *>(tmp_arena.alloc(buffer_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret), K(buffer_size));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret), K(log));
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -906,7 +910,7 @@ int ObDDLRedoLogWriter::write_start_log(
   } else if (OB_FAIL(log.init(table_key, data_format_version, execution_id, direct_load_type,
           lob_kv_mgr_handle.is_valid() ? lob_kv_mgr_handle.get_obj()->get_tablet_id() : ObTabletID()))) {
     LOG_WARN("fail to init DDLStartLog", K(ret), K(table_key), K(execution_id), K(data_format_version));
-  }  else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  }  else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   /*} else if (OB_FAIL(DDL_SIM(ddl_task_id, DDL_REDO_WRITER_WRITE_START_LOG_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(ddl_task_id));*/
@@ -939,7 +943,7 @@ int ObDDLRedoLogWriter::write_macro_block_log(
   } else if (OB_UNLIKELY(!redo_info.is_valid() || 0 == task_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(redo_info), K(task_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   } else if (nullptr == buffer_ && OB_ISNULL(buffer_ = static_cast<char *>(ob_malloc(BUF_SIZE, ObMemAttr("DDL_REDO_LOG"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1011,7 +1015,7 @@ int ObDDLRedoLogWriter::write_commit_log(
     LOG_WARN("failed to get ddl data from tablet", K(ret), K(tablet_handle));
   } else if (OB_FAIL(log.init(table_key, start_scn, ddl_data.lob_meta_tablet_id_))) {
     LOG_WARN("fail to init DDLCommitLog", K(ret), K(table_key), K(start_scn), K(ddl_data.lob_meta_tablet_id_));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   } else if (start_scn != direct_load_mgr_handle.get_obj()->get_start_scn()) {
     ret = OB_TASK_EXPIRED;
@@ -1027,7 +1031,7 @@ int ObDDLRedoLogWriter::write_commit_log(
       LOG_WARN("failed to get ddl data from tablet", K(ret), K(tablet_handle));
     } else if (ddl_data.lob_meta_tablet_id_.is_valid()) {
       bool is_lob_major_sstable_exist = false;
-      if (OB_FAIL(share::g_mp->direct_load_mgr()->get_tablet_mgr_and_check_major(ddl_data.lob_meta_tablet_id_,
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_tablet_mgr_and_check_major(ddl_data.lob_meta_tablet_id_,
               true/* is_full_direct_load */, lob_direct_load_mgr_handle, is_lob_major_sstable_exist))) {
         if (OB_ENTRY_NOT_EXIST == ret && is_lob_major_sstable_exist) {
           ret = OB_SUCCESS;
@@ -1054,7 +1058,7 @@ int ObDDLRedoLogWriter::write_commit_log(
     "start_scn", direct_load_mgr_handle.get_obj()->get_start_scn(),
     "tablet_id", tablet_id_,
     "commit_scn", commit_scn);
-  LOG_INFO("ddl write commit log", K(ret), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("ddl write commit log", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1138,12 +1142,12 @@ int ObDDLRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &init_p
     LOG_WARN("fail to init ddl_writer_", K(ret), K(init_param.tablet_id_));
   } else {
     // init kv mgr handle for idempotence check
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     ObLS *ls = nullptr;
     ObTabletHandle tablet_handle;
     if (OB_FAIL(ls_service->get_ls(ls))) {
       LOG_WARN("get ls failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, init_param.tablet_id_, tablet_handle))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, init_param.tablet_id_, tablet_handle))) {
       LOG_WARN("get tablet failed", K(ret), K(init_param.tablet_id_));
     } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(kv_mgr_handle_, true /*try_create*/))) {
       LOG_WARN("get ddl kv mgr handle failed", K(ret));

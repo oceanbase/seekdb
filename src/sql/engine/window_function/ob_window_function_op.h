@@ -251,24 +251,29 @@ public:
                   const STORE_ROW_R *r,
                   const int64_t begin,
                   const int64_t end,
-                  int &cmp_ret) const;
+                  int &cmp_ret,
+                  const common::ObDatumAccessContext *access_ctx) const;
 
   template <typename STORE_ROW_L, typename STORE_ROW_R>
-  int rd_pby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret) const
+  int rd_pby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret,
+                  const common::ObDatumAccessContext *access_ctx) const
   {
-    return rd_sort_cmp(l, r, 0, rd_pby_sort_cnt_, cmp_ret);
+    return rd_sort_cmp(l, r, 0, rd_pby_sort_cnt_, cmp_ret, access_ctx);
   }
 
   template <typename STORE_ROW_L, typename STORE_ROW_R>
-  int rd_oby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret) const
+  int rd_oby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret,
+                 const common::ObDatumAccessContext *access_ctx) const
   {
-    return rd_sort_cmp(l, r, rd_pby_sort_cnt_, rd_sort_collations_.count(), cmp_ret);
+    return rd_sort_cmp(
+        l, r, rd_pby_sort_cnt_, rd_sort_collations_.count(), cmp_ret, access_ctx);
   }
 
   template <typename STORE_ROW_L, typename STORE_ROW_R>
-  int rd_pby_oby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret) const
+  int rd_pby_oby_cmp(const STORE_ROW_L *l, const STORE_ROW_R *r, int &cmp_ret,
+                     const common::ObDatumAccessContext *access_ctx) const
   {
-    return rd_sort_cmp(l, r, 0, rd_sort_collations_.count(), cmp_ret);
+    return rd_sort_cmp(l, r, 0, rd_sort_collations_.count(), cmp_ret, access_ctx);
   }
 
   int64_t get_role_type() const { return role_type_; }
@@ -824,7 +829,8 @@ public:
                                      const WinFuncInfo &wf_info,
                                      common::ObIAllocator &alloc,
                                      const ObDatum &src0,
-                                     const ObDatum &src1);
+                                     const ObDatum &src1,
+                                     const common::ObDatumAccessContext *access_ctx);
 
   static int rank_add(ObDatum &res,
                       const WinFuncInfo &info,
@@ -1080,7 +1086,8 @@ int ObWindowFunctionSpec::rd_sort_cmp(const STORE_ROW_L *l,
                                       const STORE_ROW_R *r,
                                       const int64_t begin,
                                       const int64_t end,
-                                      int &cmp_ret) const
+                                      int &cmp_ret,
+                                      const common::ObDatumAccessContext *access_ctx) const
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -1093,7 +1100,8 @@ int ObWindowFunctionSpec::rd_sort_cmp(const STORE_ROW_L *l,
     cmp_ret = -1;
   } else {
     for (int64_t i = begin; 0 == cmp_ret && i < end && OB_SUCC(ret); i++) {
-      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(l->cells()[i], r->cells()[i], cmp_ret))) {
+      if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(
+              l->cells()[i], r->cells()[i], cmp_ret, access_ctx))) {
         SQL_ENG_LOG(WARN, "compare failed", K(ret));
       } else if (!rd_sort_collations_.at(i).is_ascending_) {
         cmp_ret = cmp_ret * (-1);

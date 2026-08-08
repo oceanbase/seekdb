@@ -16,8 +16,9 @@
 #ifndef OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #define OB_ROOTSERVER_TRUNCATE_INFO_TRUNCATE_INFO_SERVICE_H_
 #include <stdint.h>
-#include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
+#include "storage/truncate_info/ob_truncate_tablet_arg.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
+#include "query/session/ob_free_session_ctx.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 namespace oceanbase
 {
@@ -35,10 +36,10 @@ class ObTableSchema;
 namespace common
 {
 class ObMySQLTransaction;
-}
-namespace observer
+namespace sqlclient
 {
-class ObInnerSQLConnection;
+class ObISQLConnection;
+}
 }
 namespace rootserver
 {
@@ -128,20 +129,20 @@ private:
     ObDDLOperator &ddl_operator,
     share::schema::ObTableSchema &index_table_schema);
   int loop_part_to_register_mds_(
-    observer::ObInnerSQLConnection &conn,
+    common::sqlclient::ObISQLConnection &conn,
     const share::schema::ObTableSchema &index_table_schema);
   int loop_subpart_to_register_mds_(
-    observer::ObInnerSQLConnection &conn,
+    common::sqlclient::ObISQLConnection &conn,
     const share::schema::ObTableSchema &index_table_schema);
   int loop_index_tablet_id_to_register_(
-    observer::ObInnerSQLConnection &conn,
-    ObTruncateTabletArg &truncate_arg);
+    common::sqlclient::ObISQLConnection &conn,
+    storage::ObTruncateTabletArg &truncate_arg);
   int register_mds_(
-    observer::ObInnerSQLConnection &conn,
-    const ObTruncateTabletArg &arg);
+    common::sqlclient::ObISQLConnection &conn,
+    const storage::ObTruncateTabletArg &arg);
   int register_mds_(
-      observer::ObInnerSQLConnection &conn,
-      const ObTruncateTabletArg &arg,
+      common::sqlclient::ObISQLConnection &conn,
+      const storage::ObTruncateTabletArg &arg,
       const char *buf,
       const int64_t buf_len);
 private:

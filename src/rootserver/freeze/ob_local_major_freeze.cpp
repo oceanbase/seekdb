@@ -289,7 +289,8 @@ int ObLocalMajorFreeze::clear_merge_error()
   } else if (OB_FAIL(major_merge_info_mgr_.get_global_merge_mgr().try_reload())) {
     LOG_WARN("fail to try reload global_merge_mgr", KR(ret));
   } else {
-    if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status())) {
+    if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_status(
+        GCTX.meta_db_pool_))) {
       LOG_WARN("fail to batch update status", KR(ret));
     }
 

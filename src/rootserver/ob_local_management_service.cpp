@@ -18,19 +18,17 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
-#include "observer/ob_server.h"
-
-
+#include "data_plane/ddl/ob_ddl_coordinator.h"
+#include "data_plane/ddl/ob_ddl_schedule.h"
+#include "query/command/ob_local_command_service.h"
+#include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
+#include "share/ob_timezone_mgr.h"
 #include "share/ob_version_parser.h"
-#include "sql/resolver/ddl/ob_index_builder_util.h"
-#include "storage/deadlock/ob_deadlock_inner_table_service.h"
-
-#include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "src/sql/engine/px/ob_dfo.h"
-#include "observer/dbms_job/ob_dbms_job_master.h"
-
+#include "share/system_variable/ob_system_variable_alias.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_partition_exchange.h"
 #include "rootserver/ob_schema2ddl_sql.h"
@@ -41,15 +39,12 @@
 #include "rootserver/ob_admin_job_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ob_control_event.h"
-#include "share/ob_timezone_mgr.h"
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_ddl_common.h" // for ObDDLUtil
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "observer/ob_system_package_load_task.h"
-#include "observer/ob_service.h"
-
+#include "rootserver/ob_local_ddl_serial_call.h"
 #include "parallel_ddl/ob_create_table_helper.h" // ObCreateTableHelper
 #include "parallel_ddl/ob_create_table_like_helper.h" // ObCreateTableLikeHelper
 #include "rootserver/parallel_ddl/ob_create_view_helper.h"  // ObCreateViewHelper
@@ -61,8 +56,6 @@
 #include "rootserver/ob_ai_model_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_ex_rpc.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 
 namespace oceanbase
 {
@@ -72,10 +65,19 @@ using namespace obcall;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
-using namespace dbms_job;
-
 namespace rootserver
 {
+
+int ObLocalManagementService::check_partition_exchange_schema_for_user(
+    const share::schema::ObTableSchema &base_table_schema,
+    const share::schema::ObTableSchema &inc_table_schema,
+    const common::ObString &partition_name,
+    const share::schema::ObPartitionLevel exchange_part_level)
+{
+  return ObPartitionExchange::check_partition_exchange_schema_for_user(
+      base_table_schema, inc_table_schema, partition_name,
+      exchange_part_level);
+}
 
 #define PUSH_BACK_TO_ARRAY_AND_SET_RET(array, msg)                              \
   do {                                                                          \
@@ -85,11 +87,13 @@ namespace rootserver
   } while(0)
 
 ObLocalManagementService::ObLocalManagementService()
-: inited_(false), need_bootstrap_(false), local_services_ready_(false),
+: inited_(false), need_bootstrap_(false), service_started_(false),
+    local_services_ready_(false),
     debug_(false),
     self_addr_(), config_(NULL), config_mgr_(NULL),
     sql_proxy_(),
     schema_service_(NULL),
+    local_command_service_(NULL),
     root_minor_freeze_(),
     ddl_service_(),
     bootstrap_lock_(),
@@ -97,7 +101,7 @@ ObLocalManagementService::ObLocalManagementService()
     deadlock_event_clear_task_timer_(),
     purge_recyclebin_task_timer_(),
     load_ddl_task_(*this),
-    deadlock_event_clear_task_(),
+    deadlock_event_clear_task_(*this),
     purge_recyclebin_task_(*this),
     snapshot_manager_(),
     core_meta_table_version_(0),
@@ -131,6 +135,9 @@ int ObLocalManagementService::init(ObServerConfig &config,
   } else if (NULL == schema_service) {
     ret = OB_INVALID_ARGUMENT;
     FLOG_WARN("schema_service must not null", KP(schema_service), KR(ret));
+  } else if (NULL == local_command_service_) {
+    ret = OB_INVALID_ARGUMENT;
+    FLOG_WARN("local command service must not null", KR(ret));
   } else {
     config_ = &config;
     config_mgr_ = &config_mgr;
@@ -138,6 +145,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
     self_addr_ = self;
 
     sql_proxy_.assign(sql_proxy);
+    service_started_ = false;
 
     schema_service_ = schema_service;
     need_bootstrap_ = need_bootstrap;
@@ -165,9 +173,6 @@ int ObLocalManagementService::init(ObServerConfig &config,
     FLOG_WARN("init snapshot manager failed", KR(ret));
   } else if (OB_FAIL(THE_ADMIN_JOB_TABLE.init())) {
     FLOG_WARN("init THE_ADMIN_JOB_TABLE failed", KR(ret));
-  } else if (OB_FAIL(dbms_job::ObDBMSJobMaster::get_instance().init(&sql_proxy_,
-                                                                    schema_service_))) {
-    FLOG_WARN("init ObDBMSJobMaster failed", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -183,15 +188,19 @@ int ObLocalManagementService::init(ObServerConfig &config,
 void ObLocalManagementService::destroy()
 {
   int ret = OB_SUCCESS;
+  int fail_ret = OB_SUCCESS;
   FLOG_INFO("start to destroy local management services");
+  if (service_started_) {
+    if (OB_FAIL(stop_service())) {
+      FLOG_WARN("stop service failed", KR(ret));
+      fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
+    }
+  }
 
   load_ddl_task_timer_.destroy();
   deadlock_event_clear_task_timer_.destroy();
   purge_recyclebin_task_timer_.destroy();
   FLOG_INFO("task timer destroy");
-
-  dbms_job::ObDBMSJobMaster::get_instance().destroy();
-  FLOG_INFO("ObDBMSJobMaster destroy");
 
   if (OB_SUCC(ret)) {
     if (inited_) {
@@ -200,6 +209,9 @@ void ObLocalManagementService::destroy()
   }
 
   FLOG_INFO("destroy local management services finished", KR(ret));
+  if (OB_SUCCESS != fail_ret) {
+    LOG_WARN("destroy local management services had failures", KR(fail_ret));
+  }
 }
 
 int ObLocalManagementService::start_service()
@@ -209,7 +221,11 @@ int ObLocalManagementService::start_service()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("local management services not initialized", KR(ret));
+  } else if (service_started_) {
+    ret = OB_INIT_TWICE;
+    FLOG_WARN("local management services already started", KR(ret));
   } else {
+    service_started_ = true;
     runtime_ddl_service_.restart();
     if (OB_FAIL(load_ddl_task_timer_.start())) {
       FLOG_WARN("load ddl task timer start failed", KR(ret));
@@ -223,7 +239,7 @@ int ObLocalManagementService::start_service()
   if (OB_FAIL(ret)) {
     FLOG_WARN("start local management services failed", KR(ret));
     int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = stop_service())) {
+    if (service_started_ && OB_SUCCESS != (tmp_ret = stop_service())) {
       FLOG_WARN("stop service failed", KR(tmp_ret));
     }
   }
@@ -238,6 +254,9 @@ int ObLocalManagementService::start_runtime_dependent_services()
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("local management services not initialized", KR(ret));
+  } else if (!service_started_) {
+    ret = OB_NOT_INIT;
+    FLOG_WARN("local management sql proxy is not active", KR(ret));
   } else {
     if (local_services_ready_) {
       FLOG_INFO("runtime dependent local services already started");
@@ -276,6 +295,8 @@ int ObLocalManagementService::stop()
     fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
   } else {
     local_services_ready_ = false;
+    service_started_ = false;
+    FLOG_INFO("local management service marked stopped");
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(stop_timer_tasks())) {
@@ -298,8 +319,6 @@ int ObLocalManagementService::stop()
       deadlock_event_clear_task_timer_.stop();
       purge_recyclebin_task_timer_.stop();
       FLOG_INFO("task timer stop");
-      dbms_job::ObDBMSJobMaster::get_instance().stop();
-      FLOG_INFO("dbms job master stop");
       max_id_cache_mgr_.reset();
       FLOG_INFO("max id cache mgr reset");
     }
@@ -396,9 +415,11 @@ int ObLocalManagementService::execute_bootstrap()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("local_management_service not inited", K(ret));
-  } else if (!sql_proxy_.is_inited()) {
+  } else if (!sql_proxy_.is_inited() || !service_started_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_proxy not inited", K(ret));
+    LOG_WARN("sql proxy or local management service is not ready",
+             "sql_proxy_inited", sql_proxy_.is_inited(),
+             K(service_started_), K(ret));
   } else {
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
@@ -422,7 +443,7 @@ int ObLocalManagementService::execute_bootstrap()
       LOG_WARN("init debug database failed", K(ret));
     } else if (OB_FAIL(check_ddl_allowed())) {
       LOG_WARN("fail to check ddl allowed", K(ret));
-    } else if (OB_FAIL(pl::ObPLPackageManager::load_all_special_sys_package(sql_proxy_))) {
+    } else if (OB_FAIL(local_command_service_->load_all_special_system_packages())) {
       LOG_WARN("failed to load all special sys package", KR(ret));
     } else if (OB_FAIL(finish_bootstrap())) {
       LOG_WARN("failed to finish bootstrap", K(ret));
@@ -441,7 +462,7 @@ int ObLocalManagementService::execute_bootstrap()
       if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
         LOG_WARN("failed to set default timeout", KR(ret));
       } else if (!GCONF._enable_async_load_sys_package &&
-          OB_FAIL(ObSystemPackageLoadTask::wait_system_package_ready(ctx))) {
+          OB_FAIL(local_command_service_->wait_system_package_ready(ctx))) {
         LOG_WARN("failed to wait mysql sys package ready", KR(ret), K(ctx));
       } else {
         LOG_DBA_INFO_V2(OB_BOOTSTRAP_WAIT_SYS_PACKAGE_SUCCESS,
@@ -453,17 +474,18 @@ int ObLocalManagementService::execute_bootstrap()
     if (OB_SUCC(ret)) {
       char data_format_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
       const uint64_t current_data_version = DATA_CURRENT_VERSION;
-      share::ObBuildVersion build_version;
+      char build_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
       if (OB_INVALID_INDEX == ObVersionParser::print_version_str(
           data_format_version, OB_SERVER_VERSION_LENGTH, current_data_version)) {
          ret = OB_INVALID_ARGUMENT;
          LOG_WARN("fail to print data format version", KR(ret), K(current_data_version));
-      } else if (OB_FAIL(observer::ObService::get_build_version(build_version))) {
+      } else if (OB_FAIL(local_command_service_->get_build_version(
+                     build_version, sizeof(build_version)))) {
         LOG_WARN("fail to get build version", KR(ret));
       } else {
         MANAGEMENT_EVENT_ADD("BOOTSTRAP", "BOOTSTRAP_SUCCESS",
                                "data_format_version", data_format_version,
-                               "build_version", build_version.ptr());
+                               "build_version", build_version);
       }
     }
 
@@ -776,7 +798,7 @@ int ObLocalManagementService::fork_database(const obcall::ObForkDatabaseArg &arg
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", res.task_id_,
                         "databases", database_names_buffer);
-  LOG_INFO("finish fork database ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish fork database ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -972,7 +994,7 @@ int ObLocalManagementService::abort_redef_table(const obcall::ObAbortRedefTableA
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", arg.task_id_);
-  LOG_INFO("finish abort redef table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish abort redef table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -998,7 +1020,7 @@ int ObLocalManagementService::finish_redef_table(const obcall::ObFinishRedefTabl
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", arg.task_id_);
-  LOG_INFO("finish abort redef table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish abort redef table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1034,7 +1056,7 @@ int ObLocalManagementService::copy_table_dependents(const obcall::ObCopyTableDep
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", task_id);
-  LOG_INFO("finish copy table dependents ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish copy table dependents ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1060,7 +1082,7 @@ int ObLocalManagementService::start_redef_table(const obcall::ObStartRedefTableA
                         "task_id", res.task_id_,
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish redef table ddl", K(arg), K(ret), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish redef table ddl", K(arg), K(ret), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1194,7 +1216,7 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
                         "task_id", res.task_id_,
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish alter table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish alter table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1228,7 +1250,7 @@ int ObLocalManagementService::exchange_partition(const obcall::ObExchangePartiti
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish alter table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish alter table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1243,7 +1265,7 @@ int ObLocalManagementService::create_aux_index(
   } else if (OB_FAIL(ddl_service_.create_aux_index(arg, result))) {
     LOG_WARN("failed to generate aux index schema", K(ret), K(arg), K(result));
   }
-  LOG_INFO("finish generate aux index schema", K(ret), K(arg), K(result), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish generate aux index schema", K(ret), K(arg), K(result), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1277,7 +1299,7 @@ int ObLocalManagementService::create_index(const ObCreateIndexArg &arg, obcall::
                         "task_id", res.task_id_,
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish create index ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish create index ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1316,7 +1338,7 @@ int ObLocalManagementService::parallel_create_index(const ObCreateIndexArg &arg,
                         "task_id", res.task_id_,
                         "table_id", table_id_buffer,
                         "schema_version", res.schema_version_);
-  LOG_TRACE("finish parallel create index", KR(ret), K(arg), K(cost), "ddl_event_info", ObDDLEventInfo());
+  LOG_TRACE("finish parallel create index", KR(ret), K(arg), K(cost), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1341,7 +1363,7 @@ int ObLocalManagementService::fork_table(const obcall::ObForkTableArg &arg, obca
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", res.task_id_,
                         "tables", table_names_buffer);
-  LOG_INFO("finish fork table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish fork table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1425,7 +1447,7 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
                         "task_id", res.task_id_,
                         "session_id", arg.session_id_,
                         "schema_version", res.schema_id_);
-  LOG_INFO("finish drop table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish drop table ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1458,7 +1480,7 @@ int ObLocalManagementService::parallel_drop_table(const ObDropTableArg &arg, ObD
                         "task_id", res.task_id_,
                         "session_id", arg.session_id_,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish parallel drop table ddl", KR(ret), K(arg), K(cost), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish parallel drop table ddl", KR(ret), K(arg), K(cost), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1536,7 +1558,7 @@ int ObLocalManagementService::drop_index_on_failed(const obcall::ObDropIndexArg 
                         "task_id", res.task_id_,
                         "table_id", arg.index_table_id_,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish drop index on fail ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish drop index on fail ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1561,7 +1583,7 @@ int ObLocalManagementService::drop_index(const obcall::ObDropIndexArg &arg, obca
                         "task_id", res.task_id_,
                         "table_id", arg.index_table_id_,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish drop index ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish drop index ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1583,7 +1605,7 @@ int ObLocalManagementService::rebuild_vec_index(const obcall::ObRebuildIndexArg 
                         "task_id", res.task_id_,
                         "table_id", arg.index_table_id_,
                         "schema_version", res.schema_version_);
-  LOG_INFO("finish rebuild index ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish rebuild index ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1695,7 +1717,7 @@ int ObLocalManagementService::truncate_table(const obcall::ObTruncateTableArg &a
                         "task_id", res.task_id_,
                         "table_id", arg.table_name_,
                         "schema_version", res.schema_id_);
-  LOG_INFO("finish truncate table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish truncate table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -1734,7 +1756,7 @@ int ObLocalManagementService::truncate_table_v2(const obcall::ObTruncateTableArg
                           "table_name", arg.table_name_,
                           "schema_version", res.schema_id_,
                           frozen_scn);
-    LOG_INFO("finish new truncate table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("finish new truncate table ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   }
   return ret;
 }
@@ -1902,6 +1924,36 @@ int ObLocalManagementService::root_minor_freeze(const ObMinorFreezeArg &arg)
   }
   MANAGEMENT_EVENT_ADD("management_service", "root_minor_freeze", K(ret), K(arg));
   return ret;
+}
+
+int ObLocalManagementService::tablet_major_freeze(
+    const common::ObTabletID &tablet_id)
+{
+  ObTabletMajorFreezeParam param;
+  param.tablet_id_ = tablet_id;
+  return ObMajorFreezeHelper::tablet_major_freeze(param);
+}
+
+int ObLocalManagementService::major_freeze()
+{
+  ObMajorFreezeParam param;
+  param.freeze_reason_ = MF_USER_REQUEST;
+  return ObMajorFreezeHelper::major_freeze(param);
+}
+
+int ObLocalManagementService::suspend_merge()
+{
+  return ObMajorFreezeHelper::suspend_merge();
+}
+
+int ObLocalManagementService::resume_merge()
+{
+  return ObMajorFreezeHelper::resume_merge();
+}
+
+int ObLocalManagementService::clear_merge_error()
+{
+  return ObMajorFreezeHelper::clear_merge_error();
 }
 
 int ObLocalManagementService::update_index_status(const obcall::ObUpdateIndexStatusArg &arg)
@@ -2074,12 +2126,6 @@ int ObLocalManagementService::start_local_services_()
     FLOG_INFO("success to start timer tasks");
   }
 
-  if (FAILEDx(dbms_job::ObDBMSJobMaster::get_instance().start())) {
-    FLOG_WARN("failed to start dbms job master", KR(ret));
-  } else {
-    FLOG_INFO("success to start dbms job master");
-  }
-
   // Schema refresh trigger is now managed by the server module lifecycle.
   // It starts with the server runtime and follows the database role when refreshing schema.
 
@@ -2124,12 +2170,14 @@ int ObLocalManagementService::check_parallel_ddl_conflict(
 ERRSIM_POINT_DEF(ERROR_DEADLOCK_EVENT_CLEAR_INTERVAL);
 void ObLocalManagementService::ObDeadlockEventClearTask::runTimerTask()
 {
-  int ret = OB_SUCCESS;
-  if (!DEALOCK_EVENT_INSTANCE.is_inited()) {
-    ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("deadlock event history operator not initialized", K(ret));
-  } else if (OB_FAIL(DEALOCK_EVENT_INSTANCE.async_delete())) {
-    LOG_WARN("failed to clear expired deadlock events", K(ret));
+  if (OB_ISNULL(local_management_service_.local_command_service_)) {
+    LOG_WARN_RET(OB_NOT_INIT, "local command service is null");
+  } else {
+    const int ret =
+        local_management_service_.local_command_service_->clear_expired_deadlock_events();
+    if (OB_SUCCESS != ret) {
+      LOG_WARN("failed to clear expired deadlock events", KR(ret));
+    }
   }
 }
 
@@ -2230,6 +2278,19 @@ int ObLocalManagementService::rename_user(const obcall::ObRenameUserArg &arg,
     LOG_WARN("invalid arg", K(arg), K(ret));
   } else if (OB_FAIL(ddl_service_.rename_user(arg, failed_index))){
     LOG_WARN("rename user failed", K(arg), K(ret));
+  }
+  return ret;
+}
+
+int ObLocalManagementService::alter_user_default_role(
+    const obcall::ObAlterUserRoleArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (OB_FAIL(ddl_service_.alter_user_default_role(arg))) {
+    LOG_WARN("alter user default role failed", K(arg), K(ret));
   }
   return ret;
 }
@@ -2610,7 +2671,8 @@ int ObLocalManagementService::apply_ds_action(const obcall::ObDebugSyncActionArg
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (OB_FAIL(ex_rpc::sync_call([&]{ return GCTX.ob_service_->set_ds_action(arg); }))) {
+  } else if (OB_FAIL(ex_rpc::sync_call(
+                 [&]{ return local_command_service_->set_ds_action(arg); }))) {
     LOG_WARN("set server's global sync action failed", K(ret), K(arg));
   }
   return ret;
@@ -2742,7 +2804,8 @@ int ObLocalManagementService::update_stat_cache(const obcall::ObUpdateStatCacheA
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]{ return ObOptStatManager::get_instance().refresh_stat_cache(arg); }))) {
+    if (OB_FAIL(ex_rpc::sync_call(
+            [&]{ return local_command_service_->refresh_stat_cache(arg); }))) {
       LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {
@@ -2989,7 +3052,7 @@ int ObLocalManagementService::handle_ddl_local_build_response(const obcall::ObDD
                         "tablet_id", arg.tablet_id_,
                         "dag_result", arg.ret_code_,
                         arg.snapshot_version_);
-  LOG_INFO("finish build ddl local build response ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish build ddl local build response ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -3012,7 +3075,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
     const int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
     int64_t purge_sum = purge_each_time;
     const ObSimpleServerRuntimeSchema *simple_runtime = NULL;
-    if (purge_interval <= 0 || !local_services_ready_ || purge_sum <= 0) {
+    if (purge_interval <= 0 || !service_started_ || purge_sum <= 0) {
       // Purging is disabled or there is no work to do.
     } else if (OB_FAIL(guard.get_server_runtime_info(simple_runtime))) {
       LOG_WARN("fail to get simple runtime schema", KR(ret));
@@ -3028,7 +3091,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
       arg.expire_time_ = expire_time;
       arg.auto_purge_ = true;
       LOG_INFO("start purging runtime recycle-bin objects", K(arg), K(purge_sum));
-      while (OB_SUCC(ret) && local_services_ready_ && purge_sum > 0) {
+      while (OB_SUCC(ret) && service_started_ && purge_sum > 0) {
         int64_t cal_timeout = 0;
         int64_t start_time = ObTimeUtility::current_time();
         arg.purge_num_ = purge_sum > PURGE_EACH_BATCH ? PURGE_EACH_BATCH : purge_sum;
@@ -3046,7 +3109,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
             int64_t cost_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("purge recycle objects", KR(ret), K(cost_time), K(purge_sum),
                                               K(cal_timeout), K(expire_time), K(current_time), K(affected_rows));
-            if (OB_SUCC(ret) && local_services_ready_) {
+            if (OB_SUCC(ret) && service_started_) {
               ob_usleep(SLEEP_INTERVAL_US);
             }
             break;
@@ -3055,7 +3118,7 @@ int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
         int64_t cost_time = ObTimeUtility::current_time() - start_time;
         LOG_INFO("purge recycle objects", KR(ret), K(cost_time), K(purge_sum),
                                           K(cal_timeout), K(expire_time), K(current_time), K(affected_rows));
-        if (OB_SUCC(ret) && local_services_ready_) {
+        if (OB_SUCC(ret) && service_started_) {
           ob_usleep(SLEEP_INTERVAL_US);
         }
       }
@@ -3071,7 +3134,9 @@ int ObLocalManagementService::flush_opt_stat_monitoring_info(const obcall::ObFlu
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    if (OB_FAIL(ex_rpc::sync_call([&]() -> int { int ret = OB_SUCCESS; SERVER_MODULE_SCOPE { ObOptStatMonitorManager *m = share::g_mp->opt_stat_monitor_manager(); if (OB_ISNULL(m)) { ret = OB_ERR_UNEXPECTED; } else if (OB_FAIL(m->update_opt_stat_monitoring_info(arg))) {} } return ret; }))) {
+    if (OB_FAIL(ex_rpc::sync_call([&]{
+          return local_command_service_->update_opt_stat_monitoring_info(arg);
+        }))) {
       LOG_WARN("fail to update table statistic", K(ret));
     } else { /*do nothing*/}
   }
@@ -3086,7 +3151,7 @@ int ObLocalManagementService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(SYS_TASK_STATUS_MGR.cancel_task(arg.get_task_id()))) {
+  } else if (OB_FAIL(local_command_service_->cancel_sys_task(arg.get_task_id()))) {
     LOG_WARN("cancel task failed", K(ret));
   } else {
     LOG_INFO("succeed to cancel ddl task", K(arg));
@@ -3095,7 +3160,7 @@ int ObLocalManagementService::cancel_ddl_task(const ObCancelDDLTaskArg &arg)
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", arg.get_task_id());
-  LOG_INFO("finish cancel ddl task ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish cancel ddl task ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -3173,7 +3238,7 @@ int ObLocalManagementService::start_ddl_service_()
       LOG_WARN("standby cluster should with ObDDLServiceLauncher disabled at begining", KR(ret));
     } else {
       SERVER_MODULE_SCOPE {
-        rootserver::ObDDLServiceLauncher* ddl_service_launcher = share::g_mp->ddl_service_launcher();
+        rootserver::ObDDLServiceLauncher* ddl_service_launcher = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLServiceLauncher>();
         if (OB_ISNULL(ddl_service_launcher)) {
           ret = OB_ERR_UNEXPECTED;
           FLOG_WARN("ddl service is null", KR(ret), KP(ddl_service_launcher));
@@ -3246,3 +3311,115 @@ int ObLocalManagementService::revoke_object(const ObRevokeObjMysqlArg &arg)
 
 } // end namespace rootserver
 } // end namespace oceanbase
+
+namespace oceanbase
+{
+namespace data_plane
+{
+
+int report_column_checksum_response(
+    const obcall::ObCalcColumnChecksumResponseArg &arg)
+{
+  int ret = common::OB_SUCCESS;
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("local management service is null", K(ret));
+  } else if (OB_FAIL(
+                 ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->calc_column_checksum_repsonse(arg))) {
+    LOG_WARN("failed to report column checksum response", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int report_ddl_single_replica_response(
+    const obcall::ObDDLLocalBuildResponse &arg)
+{
+  int ret = common::OB_SUCCESS;
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("local management service is null", K(ret));
+  } else if (OB_FAIL(
+                 ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->handle_ddl_local_build_response(arg))) {
+    LOG_WARN("failed to report DDL local build response", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int renew_ddl_task_lease(const int64_t task_id)
+{
+  int ret = common::OB_SUCCESS;
+  if (task_id <= 0) {
+    ret = common::OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid DDL task id", K(ret), K(task_id));
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("local management service is null", K(ret), K(task_id));
+  } else {
+    obcall::ObUpdateDDLTaskActiveTimeArg arg;
+    arg.task_id_ = task_id;
+    if (OB_FAIL(
+            ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_ddl_task_active_time(arg))) {
+      LOG_WARN("failed to renew DDL task lease", K(ret), K(task_id));
+    }
+  }
+  return ret;
+}
+
+int rebuild_vector_index(
+    const obcall::ObRebuildIndexArg &arg,
+    obcall::ObAlterTableRes &res)
+{
+  int ret = common::OB_SUCCESS;
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("local management service is null", K(ret));
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call(
+                 [&] {
+                   return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->rebuild_vec_index(
+                       arg, res);
+                 }))) {
+    LOG_WARN("failed to rebuild vector index", K(ret), K(arg));
+  }
+  return ret;
+}
+
+int load_idempotent_ddl_tablet_slice_counts(
+    const int64_t task_id,
+    common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
+{
+  int ret = common::OB_SUCCESS;
+  slice_counts.reset();
+  common::ObArenaAllocator allocator(common::ObMemAttr("DdlSliceCount"));
+  rootserver::ObDDLSliceInfo slice_info;
+  bool use_idempotent_mode = false;
+  if (task_id <= 0) {
+    ret = common::OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid DDL task id", K(ret), K(task_id));
+  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is null", K(ret), K(task_id));
+  } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
+                 *GCTX.sql_proxy_, task_id, allocator, false /*is_for_update*/,
+                 slice_info, use_idempotent_mode))) {
+    LOG_WARN("failed to load DDL schedule", K(ret), K(task_id));
+  } else if (!use_idempotent_mode) {
+    ret = common::OB_ERR_UNEXPECTED;
+    LOG_WARN("DDL schedule is not idempotent", K(ret), K(task_id));
+  } else {
+    for (int64_t i = 0;
+         OB_SUCC(ret) && i < slice_info.part_ranges_.count();
+         ++i) {
+      const sql::ObPxTabletRange &range = slice_info.part_ranges_.at(i);
+      if (OB_FAIL(slice_counts.push_back(
+              ObDDLTabletSliceCount(
+                  range.tablet_id_, range.range_cut_.count() + 1)))) {
+        LOG_WARN("failed to append DDL tablet slice count",
+            K(ret), K(task_id), K(i));
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace data_plane
+} // namespace oceanbase

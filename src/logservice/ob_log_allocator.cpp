@@ -15,10 +15,9 @@
  */
 
 #include "ob_log_allocator.h"
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "share/ob_server_struct.h"
 #include "logservice/palf/log_shared_task.h"
 #include "logservice/replayservice/ob_replay_status.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -45,15 +44,7 @@ ObLogAllocator::ObLogAllocator()
     replay_log_task_alloc_(ObMemAttr(ObModIds::OB_LOG_REPLAY_TASK), common::OB_MALLOC_BIG_BLOCK_SIZE, replay_log_task_blk_alloc_),
     log_io_purge_throttling_task_alloc_(LOG_IO_PURGE_THROTTLING_TASK_SIZE, ObMemAttr("PurgeThrottle"), choose_blk_size(LOG_IO_PURGE_THROTTLING_TASK_SIZE), clog_blk_alloc_, this)
 {
-  double min_cpu = 0;
-  double max_cpu = 0;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
-  if (NULL == omt) {
-  } else if (OB_SUCCESS != omt->get_server_cpu(min_cpu, max_cpu)) {
-  } else {
-    const int32_t nway = (int32_t)max_cpu;
-    set_nway(nway);
-  }
+  set_nway(static_cast<int32_t>(share::server_cpu_count()));
 }
 
 ObLogAllocator::~ObLogAllocator()

@@ -82,9 +82,10 @@ int ObExprAscii::calc(common::ObObj &obj,
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(expr_ctx.calc_buf_)) {
+  if (OB_ISNULL(expr_ctx.calc_buf_) || OB_ISNULL(expr_ctx.exec_ctx_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("varchar buffer not init", K(ret));
+    LOG_WARN("expression context not initialized", K(ret),
+             KP(expr_ctx.calc_buf_), KP(expr_ctx.exec_ctx_));
   } else if (obj1.is_null()) {
     obj.set_null();
   } else if (!ob_is_text_tc(obj1.get_type())) {
@@ -92,7 +93,8 @@ int ObExprAscii::calc(common::ObObj &obj,
     calc_ascii_inner(obj, expr_ctx, str_val);
   } else {
     ObString str_val = obj1.get_string();
-    if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(expr_ctx.calc_buf_, obj1, str_val))) {
+    if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
+            *expr_ctx.exec_ctx_, expr_ctx.calc_buf_, obj1, str_val))) {
       LOG_WARN("failed to get string data", K(ret), K(obj1.get_meta()));                                                     
     } else {
       calc_ascii_inner(obj, expr_ctx, str_val);

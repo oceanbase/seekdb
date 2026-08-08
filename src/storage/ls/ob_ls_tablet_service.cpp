@@ -18,11 +18,12 @@
 
 #include "ob_ls_tablet_service.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/blocksstable/ob_datum_row_store.h"
 #include "storage/blocksstable/ob_datum_row_utils.h"
 #include "storage/ob_dml_running_ctx.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "storage/ob_query_iterator_factory.h"
 #include "storage/ob_value_row_iterator.h"
@@ -40,9 +41,10 @@
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
-#include "observer/ob_tablet_runtime_meta_updater.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "data_plane/report/ob_tablet_report.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "share/vector/ob_vector_index_mode.h"
+#include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
@@ -51,7 +53,6 @@ using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::transaction;
 using namespace oceanbase::blocksstable;
-using namespace oceanbase::observer;
 
 namespace oceanbase
 {
@@ -414,8 +415,8 @@ int ObLSTabletService::inner_remove_tablet(const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(tablet_id);
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
 
   if (OB_FAIL(tablet_id_set_.erase(tablet_id))) {
     if (OB_HASH_NOT_EXIST == ret) {
@@ -484,7 +485,7 @@ int ObLSTabletService::get_tablet(
 int ObLSTabletService::get_tablet_addr(const ObTabletMapKey &key, ObMetaDiskAddr &addr)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -502,7 +503,7 @@ void ObLSTabletService::report_tablet_to_rs(const common::ObTabletID &tablet_id)
 
   if (tablet_id.is_ls_inner_tablet()) {
     // no need to report for ls inner tablet
-  } else if (OB_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id))) {
+  } else if (OB_FAIL(data_plane::submit_tablet_update(tablet_id))) {
     LOG_WARN("failed to report tablet info", KR(ret), K(tablet_id));
   }
 }
@@ -518,7 +519,7 @@ void ObLSTabletService::report_tablet_to_rs(
     if (tablet_id.is_ls_inner_tablet()) {
       // no need to report for ls inner tablet
       continue;
-    } else if (OB_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id))) {
+    } else if (OB_FAIL(data_plane::submit_tablet_update(tablet_id))) {
       LOG_WARN("failed to report tablet info", KR(ret), K(tablet_id));
     }
   }
@@ -532,7 +533,7 @@ int ObLSTabletService::table_scan(ObTabletHandle &tablet_handle, ObTableScanIter
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
-  } else if (OB_FAIL(prepare_scan_table_param(param, *(share::g_mp->schema_runtime_service()->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param, *(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())))) {
     LOG_WARN("failed to prepare scan table param", K(ret), K(param));
   } else if (OB_FAIL(inner_table_scan(tablet_handle, iter, param))) {
     LOG_WARN("failed to do table scan", K(ret), KP(&iter), K(param));
@@ -553,7 +554,7 @@ int ObLSTabletService::table_rescan(ObTabletHandle &tablet_handle, ObTableScanPa
   } else if (OB_ISNULL(result)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_FAIL(prepare_scan_table_param(param, *(share::g_mp->schema_runtime_service()->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param, *(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())))) {
     LOG_WARN("failed to prepare scan table param", K(ret), K(result), K(param));
   } else {
     ObTableScanIterator *iter = static_cast<ObTableScanIterator*>(result);
@@ -572,7 +573,7 @@ int ObLSTabletService::refresh_tablet_addr(
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(tablet_id);
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
 
   while (OB_SUCC(ret)) {
     ret = tablet_id_set_.set(tablet_id);
@@ -636,7 +637,7 @@ int ObLSTabletService::update_tablet_checkpoint(
     LOG_WARN("invalid argument", K(ret), K(key), K(new_addr), K(new_handle));
   } else {
     common::ObArenaAllocator allocator(common::ObMemAttr("CKPTUpdate"));
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObTabletHandle tablet_handle;
     ObMetaDiskAddr addr;
     ObBucketHashWLockGuard lock_guard(bucket_lock_, key.tablet_id_.hash());
@@ -822,7 +823,7 @@ int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &ta
     LOG_WARN("fail to acquire temporary tablet", K(ret), K(key));
   } else {
     time_guard.click("Acquire");
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObTablet *old_tablet = old_tablet_handle.get_obj();
     ObTablet *tmp_tablet = tmp_tablet_handle.get_obj();
     ObTablet *new_tablet = nullptr;
@@ -1021,7 +1022,7 @@ int ObLSTabletService::update_tablet_release_memtable_for_offline(
     ObTableStoreIterator iter;
     const bool is_from_buf_pool = nullptr == tablet_handle.get_obj()->get_allocator();
     if (is_from_buf_pool) {
-      ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+      ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
       ObTabletHandle new_tablet_handle;
       ObUpdateTabletPointerParam param;
       const ObTabletPersisterParam persist_param(ls_->get_ls_epoch(), tablet_id);
@@ -1098,7 +1099,7 @@ int ObLSTabletService::update_tablet_ddl_commit_scn(
     LOG_WARN("fail to direct get tablet", K(ret), K(key));
   } else {
     time_guard.click("get_tablet");
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObMetaDiskAddr disk_addr;
     ObUpdateDDLCommitSCN modifier(ddl_commit_scn);
     ObUpdateTabletPointerParam param;
@@ -1302,7 +1303,7 @@ int ObLSTabletService::replay_create_inner_tablet(
   int64_t pos = 0;
   ObTablet *tablet = tablet_handle.get_obj();
   tablet->tablet_addr_ = disk_addr;
-  if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(disk_addr, allocator, buf, buf_len))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(disk_addr, allocator, buf, buf_len))) {
     LOG_WARN("fail to read tablet buf from disk", K(ret), K(disk_addr));
   } else if (OB_FAIL(tablet->deserialize_for_replay(allocator, buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize tablet", K(ret), KP(buf), K(buf_len));
@@ -1321,7 +1322,7 @@ int ObLSTabletService::replay_create_tablet(
 {
   int ret = OB_SUCCESS;
   bool b_exist = false;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObFreezer *freezer = ls_->get_freezer();
   common::ObArenaAllocator allocator(common::ObMemAttr("ReplayCreate"));
   ObTabletHandle tablet_hdl;
@@ -1505,7 +1506,7 @@ int ObLSTabletService::has_tablet(
   int ret = OB_SUCCESS;
   b_exist = false;
   const ObTabletMapKey key(tablet_id);
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
 
   if (OB_FAIL(t3m->has_tablet(key, b_exist))) {
     LOG_WARN("failed to check tablet exist", K(ret), K(key));
@@ -1533,7 +1534,7 @@ int ObLSTabletService::create_tablet(
   UNUSED(data_format_version);
   common::ObArenaAllocator tmp_allocator(common::ObMemAttr("CreateTab"));
   common::ObArenaAllocator *allocator = nullptr;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   const ObTabletMapKey key(tablet_id);
   ObTablet *tablet = nullptr;
   ObFreezer *freezer = ls_->get_freezer();
@@ -1591,7 +1592,7 @@ int ObLSTabletService::create_inner_tablet(
   
   bool need_create_empty_major_old_version = true;
   common::ObArenaAllocator allocator(common::ObMemAttr("LSCreateTab"));
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   const ObTabletMapKey key(tablet_id);
   ObTablet *tmp_tablet = nullptr;
   ObFreezer *freezer = ls_->get_freezer();
@@ -1655,7 +1656,7 @@ int ObLSTabletService::rollback_remove_tablet(const common::ObTabletID &tablet_i
 int ObLSTabletService::rollback_remove_tablet_without_lock(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   const ObTabletMapKey key(tablet_id);
 
   if (OB_FAIL(tablet_id_set_.erase(tablet_id))) {
@@ -1683,7 +1684,7 @@ int ObLSTabletService::rollback_remove_tablet_without_lock(const common::ObTable
 int ObLSTabletService::create_memtable(const common::ObTabletID &tablet_id, CreateMemtableArg &arg)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletHandle old_tablet_handle;
   const ObTabletMapKey key(tablet_id);
   ObTabletHandle new_tablet_handle;
@@ -2999,7 +3000,7 @@ int ObLSTabletService::safe_update_cas_tablet(
   int ret = OB_SUCCESS;
   ObUpdateTabletPointerParam param;
   ObLocalStorageCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(
-      share::g_mp->local_storage_meta_service()->get_ckpt_slog_hdl());
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(new_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
@@ -3007,7 +3008,7 @@ int ObLSTabletService::safe_update_cas_tablet(
   } else if (OB_FAIL(LOCAL_STORAGE_META_PERSISTER.update_tablet(key.tablet_id_, addr))) {
     LOG_WARN("fail to write update tablet slog", K(ret), K(key), K(addr));
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
-  } else if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
     LOG_ERROR("failed to compare and swap tablet", K(ret), K(key), K(addr), K(param));
     ob_usleep(1_s);
     ob_abort();
@@ -3027,7 +3028,7 @@ int ObLSTabletService::safe_update_cas_empty_shell(
   ObMetaDiskAddr addr;
   ObUpdateTabletPointerParam param;
   ObTablet *tablet = new_handle.get_obj();
-  ObLocalStorageCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(share::g_mp->local_storage_meta_service()->get_ckpt_slog_hdl());
+  ObLocalStorageCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(new_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
@@ -3037,7 +3038,7 @@ int ObLSTabletService::safe_update_cas_empty_shell(
   } else if (FALSE_IT(tablet->tablet_addr_ = addr)) {
   } else if (FALSE_IT(param.tablet_addr_ = addr)) {
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
-  } else if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->compare_and_swap_tablet(key, old_handle, new_handle, param))) {
     LOG_ERROR("failed to compare and swap tablet", K(ret), K(key), K(old_handle), K(new_handle), K(param));
     ob_usleep(1_s);
     ob_abort();
@@ -3056,7 +3057,7 @@ int ObLSTabletService::safe_create_cas_tablet(
   int ret = OB_SUCCESS;
   ObUpdateTabletPointerParam param;
   ObLocalStorageCheckpointSlogHandler::ObCkptSlogROptLockGuard guard(
-      share::g_mp->local_storage_meta_service()->get_ckpt_slog_hdl());
+      ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_ckpt_slog_hdl());
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("fail to get ckpt_slog_lock", K(ret));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_updating_tablet_pointer_param(param))) {
@@ -3207,7 +3208,7 @@ int ObLSTabletService::check_is_gencol_check_failed(const ObRelativeTable &data_
     uint64_t index_table_id = data_table.get_table_id();
     const ObTableSchema *index_table_schema = NULL;
     const ObTableSchema *data_table_schema = NULL;
-    ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+    ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
     ObSchemaGetterGuard schema_guard;
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
@@ -3463,7 +3464,7 @@ int ObLSTabletService::process_lob_before_insert(
 {
   int ret = OB_SUCCESS;
   int64_t col_cnt = run_ctx.col_descs_->count();
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   const ObTableSchemaParam &table_param = run_ctx.dml_param_.table_param_->get_data_table();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -3535,7 +3536,7 @@ int ObLSTabletService::process_lob_before_insert(
 {
   int ret = OB_SUCCESS;
   // DEBUG_SYNC(DELAY_INDEX_WRITE);
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[STORAGE_LOB]failed to get lob manager handle.", K(ret));
@@ -3575,7 +3576,7 @@ int ObLSTabletService::insert_vector_index_rows(
     int64_t extra_info_actual_size = 0;
     // get extra info col idx
     // delta_buffer table columns def is: <vid, type, vector, extra_infos>
-    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+    ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.relative_table_.get_tablet_id(),
                                                         ObIndexType::INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL,
@@ -3628,7 +3629,7 @@ int ObLSTabletService::insert_vector_index_rows(
     ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
     int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
-    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+    ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.relative_table_.get_tablet_id(),
                                                         ObIndexType::INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL,
                                                         adaptor_guard,
@@ -3686,7 +3687,7 @@ int ObLSTabletService::insert_vector_index_rows(
     } else {
       // get extra info col idx
       // hybrid vec embedded table columns def is: <vid, embedded_vector>
-      ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+      ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
       ObPluginVectorIndexAdapterGuard adaptor_guard;
       if (OB_FAIL(vec_index_service->acquire_adapter_guard(run_ctx.relative_table_.get_tablet_id(),
                                                           ObIndexType::INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL,
@@ -3722,7 +3723,7 @@ int ObLSTabletService::insert_vector_index_rows(
       }
     }
   } else if (table_param.is_ivf_vector_index()) { // check outrow
-    ObLobManager *lob_mngr = share::g_mp->lob_manager();
+    ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
     for (int64_t k = 0; OB_SUCC(ret) && k < row_count; k++) {
       blocksstable::ObDatumRow &datum_row = rows[k];
       int64_t col_cnt = run_ctx.col_descs_->count();
@@ -3747,7 +3748,7 @@ int ObLSTabletService::insert_vector_index_rows(
       }
     }
   } else if (OB_UNLIKELY(run_ctx.dml_param_.table_param_->get_data_table().is_vector_index_id())) {
-    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+    ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     ObString vec_idx_param = run_ctx.dml_param_.table_param_->get_data_table().get_vec_index_param();
     const int64_t vec_dim = run_ctx.dml_param_.table_param_->get_data_table().get_vec_dim();
@@ -3757,7 +3758,8 @@ int ObLSTabletService::insert_vector_index_rows(
                                                            &vec_idx_param,
                                                            vec_dim);
     if (OB_SUCCESS == tmp_ret) {
-      const bool is_async_index = share::ObVectorIndexUtil::is_sync_mode_async(vec_idx_param);
+      const bool is_async_index =
+          share::is_vector_index_sync_mode_async(vec_idx_param);
       if (!is_async_index) {
         adaptor_guard.get_adatper()->update_index_id_dml_scn(run_ctx.store_ctx_.mvcc_acc_ctx_.snapshot_.version_);
         adaptor_guard.get_adatper()->update_can_skip(NOT_SKIP);
@@ -5087,7 +5089,7 @@ void ObLSTabletService::dump_diag_info_for_old_row_loss(
 #ifdef ENABLE_DEBUG_LOG
     // print single row check info
     if (store_ctx.mvcc_acc_ctx_.tx_id_.is_valid()) {
-      transaction::ObTransService *trx = share::g_mp->trans_service();
+      transaction::ObTransService *trx = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
       if (OB_NOT_NULL(trx)
           && NULL != trx->get_defensive_check_mgr()) {
         (void)trx->get_defensive_check_mgr()->dump(store_ctx.mvcc_acc_ctx_.tx_id_);
@@ -5108,7 +5110,7 @@ int ObLSTabletService::prepare_dml_running_ctx(
   if (OB_FAIL(run_ctx.init(
       column_ids,
       upd_col_ids,
-      share::g_mp->schema_runtime_service()->get_schema_service(),
+      ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service(),
       tablet_handle))) {
     LOG_WARN("failed to init run ctx", K(ret));
   }
@@ -5120,7 +5122,7 @@ int ObLSTabletService::get_ls_min_end_scn(
     SCN &min_end_scn_from_latest_tablets, SCN &min_end_scn_from_old_tablets)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObSArray<ObTabletID> tablet_ids;
   GetAllTabletIDOperator op(tablet_ids, true/*except_ls_inner_tablet*/);
   min_end_scn_from_latest_tablets.set_max();
@@ -5561,7 +5563,7 @@ int ObLSTabletService::GetAllTabletIDOperator::operator()(const common::ObTablet
 int ObLSTabletService::DestroyMemtableAndMemberAndMdsTableOperator::operator()(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   cur_tablet_id_ = tablet_id;
   if (OB_UNLIKELY(!tablet_id.is_valid()) || OB_ISNULL(tablet_svr_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -5651,7 +5653,7 @@ int ObLSTabletService::get_tablet_without_memtables(
   TIMEGUARD_INIT(GetStaticTablet, 1_s);
   int ret = OB_SUCCESS;
   ObTablet *tablet = nullptr;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   const bool force_alloc_new = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -6175,7 +6177,7 @@ int ObLSTabletService::scan_block_stat(
   } else if (OB_UNLIKELY(!tablet_handle.is_valid() || !scan_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_handle), K(scan_param));
-  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param(), *(share::g_mp->schema_runtime_service()->get_schema_service())))) {
+  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param(), *(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())))) {
     LOG_WARN("fail to prepare scan table param", K(ret), K(scan_param), K(tablet_handle));
   } else if (OB_UNLIKELY(scan_param.get_scan_param()->fb_snapshot_.is_min())) {
     ret = OB_SNAPSHOT_DISCARDED;

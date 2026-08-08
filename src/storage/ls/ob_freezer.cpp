@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_freezer.h"
 #include "share/ob_ex_rpc.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -1038,7 +1038,7 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     bool is_exist = false;
     if (OB_FAIL(tmp_mini_dag.init_by_param(&param))) {
       LOG_WARN("failed to init mini dag", K(ret), K(param));
-    } else if (OB_FAIL(share::g_mp->dag_scheduler()->check_dag_exist(&tmp_mini_dag, is_exist))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->check_dag_exist(&tmp_mini_dag, is_exist))) {
       LOG_WARN("failed to check dag exists", K(ret), K(tablet_id));
     } else if (is_exist) {
       // we need to wait the current mini compaction dag to complete

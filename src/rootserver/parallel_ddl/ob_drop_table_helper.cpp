@@ -16,12 +16,14 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/parallel_ddl/ob_drop_table_helper.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
 
 #include "rootserver/ob_snapshot_info_manager.h"
 #include "rootserver/ob_tablet_drop.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
@@ -29,6 +31,24 @@ using namespace oceanbase::rootserver;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::transaction::tablelock;
 using namespace oceanbase::common;
+
+namespace
+{
+int get_tablet_autoincrement_admin(
+    oceanbase::share::ObITabletAutoincrementAdmin *&autoincrement_admin)
+{
+  int ret = OB_SUCCESS;
+  autoincrement_admin = nullptr;
+  if (OB_ISNULL(
+          autoincrement_admin =
+              ::oceanbase::share::server_service<
+                  ::oceanbase::share::ObITabletAutoincrementAdmin>())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tablet autoincrement admin is null", K(ret));
+  }
+  return ret;
+}
+} // namespace
 
 ObDropTableHelper::ObDropTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
@@ -47,7 +67,7 @@ ObDropTableHelper::ObDropTableHelper(
       dep_objs_(),
       ddl_stmt_str_(),
       err_table_list_(),
-      tablet_autoinc_cleaner_{} {}
+      tablet_autoinc_cache_tablet_ids_() {}
 
 ObDropTableHelper::~ObDropTableHelper() {}
 
@@ -97,11 +117,11 @@ int ObDropTableHelper::lock_objects_()
 int ObDropTableHelper::lock_tables_()
 {
   int ret = OB_SUCCESS;
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   const int64_t timeout = 0;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(get_trans_().get_connection()))) {
+  } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", KR(ret));
   } else {
@@ -501,8 +521,12 @@ int ObDropTableHelper::construct_and_adjust_result_(int &return_ret)
   } else {
     tsi_generator->get_current_version(res_.schema_version_);
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(tablet_autoinc_cleaner_.commit())) {
-      LOG_WARN("fail to commit tablet audoinc cleaner", K(tmp_ret));
+    oceanbase::share::ObITabletAutoincrementAdmin *autoincrement_admin = nullptr;
+    if (OB_TMP_FAIL(get_tablet_autoincrement_admin(autoincrement_admin))) {
+      LOG_WARN("failed to get tablet autoincrement admin", K(tmp_ret));
+    } else if (OB_TMP_FAIL(autoincrement_admin->invalidate_caches(
+                   tablet_autoinc_cache_tablet_ids_))) {
+      LOG_WARN("failed to invalidate tablet autoincrement caches", K(tmp_ret));
     }
   }
 
@@ -1233,20 +1257,16 @@ int ObDropTableHelper::add_table_to_tablet_autoinc_cleaner_(const ObTableSchema 
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(!table_schema.has_tablet())) {
     // do nothing
-  } else if (OB_FAIL(tablet_autoinc_cleaner_.add_single_table(table_schema))) {
-    LOG_WARN("fail to add single table", KR(ret), K(table_schema));
   } else {
-    const uint64_t lob_meta_tid = table_schema.get_aux_lob_meta_tid();
-    if (OB_INVALID_ID != lob_meta_tid) {
-      const ObTableSchema *lob_meta_table_schema = nullptr;
-      if (OB_FAIL(schema_guard_wrapper_.get_table_schema(lob_meta_tid, lob_meta_table_schema))) {
-        LOG_WARN("failed to get aux table schema", KR(ret), K(lob_meta_tid));
-      } else if (OB_ISNULL(lob_meta_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid table schema", KR(ret), K(lob_meta_tid));
-      } else if (OB_FAIL(tablet_autoinc_cleaner_.add_single_table(*lob_meta_table_schema))) {
-        LOG_WARN("failed to add single table", KR(ret));
-      }
+    oceanbase::share::ObITabletAutoincrementAdmin *autoincrement_admin = nullptr;
+    if (OB_FAIL(get_tablet_autoincrement_admin(autoincrement_admin))) {
+      LOG_WARN("failed to get tablet autoincrement admin", KR(ret));
+    } else if (OB_FAIL(autoincrement_admin->collect_table_cache_invalidation(
+                   schema_guard_wrapper_,
+                   table_schema,
+                   tablet_autoinc_cache_tablet_ids_))) {
+      LOG_WARN("failed to collect tablet autoincrement cache invalidation",
+          KR(ret), K(table_schema));
     }
   }
 

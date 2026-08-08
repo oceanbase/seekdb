@@ -19,6 +19,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -962,6 +963,8 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
     const ObObj *dest_val = NULL;
     ObCollationType collation_type = pos.column_type_.get_collation_type();
     ObCastCtx cast_ctx(&alloc, &dtc_params, cur_datetime, CM_WARN_ON_FAIL, collation_type);
+    ObSqlObjCastRuntime cast_runtime(exec_ctx);
+    cast_ctx.runtime_ = &cast_runtime;
     ObAccuracy acc(pos.column_type_.get_accuracy());
     if (pos.column_type_.is_decimal_int()) {
       cast_ctx.res_accuracy_ = &acc;
@@ -991,7 +994,6 @@ int ObKeyPart::try_cast_value(const ObDataTypeCastParams &dtc_params, const int6
       } else {
         expect_type.set_type_infos(enum_set_meta->get_str_values());
       }
-      cast_ctx.exec_ctx_ = exec_ctx;
     }
     EXPR_CAST_OBJ_V2(expect_type, tmp_start, dest_val);
     // to check if EXPR CAST losses number precise

@@ -15,7 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -30,6 +30,7 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::transaction;
 using namespace oceanbase::palf;
 using namespace oceanbase::memtable;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -67,7 +68,7 @@ int ObTabletCreateDeleteHelper::get_tablet(
 #endif
   int ret = OB_SUCCESS;
   static const int64_t SLEEP_TIME_US = 10;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   const int64_t begin_time = ObClockGenerator::getClock();
   int64_t current_time = 0;
 
@@ -382,7 +383,7 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -401,7 +402,7 @@ int ObTabletCreateDeleteHelper::create_tmp_tablet(
 int ObTabletCreateDeleteHelper::prepare_create_msd_tablet()
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_FAIL(t3m->get_mstx_tablet_creator().throttle_tablet_creation())) {
     LOG_WARN("fail to prepare full tablet", K(ret));
   }
@@ -414,8 +415,8 @@ int ObTabletCreateDeleteHelper::create_msd_tablet(
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -437,7 +438,7 @@ int ObTabletCreateDeleteHelper::acquire_tmp_tablet(
 {
   TIMEGUARD_INIT(STORAGE, 10_ms);
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));
@@ -456,7 +457,7 @@ int ObTabletCreateDeleteHelper::acquire_tablet_from_pool(
     ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key));

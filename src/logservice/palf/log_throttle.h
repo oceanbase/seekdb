@@ -22,8 +22,8 @@
 #include "lib/lock/ob_spin_lock.h"                  // SpinLock
 #include "lib/time/ob_clock_generator.h"              // ObClockGenerator
 #include "lib/function/ob_function.h"               // ObFunction
-#include "log_define.h"                             // MAX_LOG_BUFFER_SIZE
-#include "palf_options.h"                           // PalfThrottleOptions
+#include "share/log/palf/log_define.h"                             // MAX_LOG_BUFFER_SIZE
+#include "share/log/palf/palf_options.h"                           // PalfThrottleOptions
 
 namespace oceanbase
 {

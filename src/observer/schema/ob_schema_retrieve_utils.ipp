@@ -307,19 +307,22 @@ int64_t ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::get_schema_id(con
 }
 
 template<typename TABLE_SCHEMA>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObColumnSchemaV2>::add_schema(TABLE_SCHEMA &table_schema, ObColumnSchemaV2 &p)
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObColumnSchemaV2>::add_schema(
+    TABLE_SCHEMA &table_schema, ObColumnSchemaV2 &p)
 {
   return ObSchemaRetrieveUtils::add_column_to_table_schema(p, table_schema);
 }
 
 template<typename TABLE_SCHEMA>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObConstraint>::add_schema(TABLE_SCHEMA &table_schema, ObConstraint &p)
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObConstraint>::add_schema(
+    TABLE_SCHEMA &table_schema, ObConstraint &p)
 {
   return table_schema.add_constraint(p);
 }
 
 template<typename TABLE_SCHEMA>
-int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::add_schema(TABLE_SCHEMA &table_schema, ObPartition &p)
+int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::add_schema(
+    TABLE_SCHEMA &table_schema, ObPartition &p)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(table_schema.add_partition(p))) {

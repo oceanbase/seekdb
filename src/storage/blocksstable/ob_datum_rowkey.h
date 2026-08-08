@@ -18,6 +18,7 @@
 #define OB_STORAGE_BLOCKSSTABLE_DATUM_ROWKEY_H
 
 #include "ob_storage_datum.h"
+#include "storage/ob_obj_buf_array.h"
 #include "lib/utility/ob_print_kv.h"
 //to be removed
 #include "common/rowkey/ob_store_rowkey.h"

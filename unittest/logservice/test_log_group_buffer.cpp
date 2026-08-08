@@ -21,7 +21,6 @@
 #include "logservice/palf/log_writer_utils.h"
 #include "logservice/palf/log_entry_header.h"
 #undef private
-#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -39,7 +38,7 @@ public:
   virtual ~TestLogGroupBuffer();
   virtual void SetUp();
   virtual void TearDown();
-protected:
+public:
   LogGroupBuffer log_group_buffer_;
 };
 
@@ -376,13 +375,3 @@ TEST_F(TestLogGroupBuffer, test_read_data)
 
 } // END of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf ./test_log_group_buffer.log*");
-  OB_LOGGER.set_file_name("test_log_group_buffer.log", true);
-  OB_LOGGER.set_log_level("TRACE");
-  PALF_LOG(INFO, "begin unittest::test_log_group_buffer");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

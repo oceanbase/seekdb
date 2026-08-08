@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_new_column_decoder.h"
+#include "data_plane/lob/ob_lob_value.h"
 #include "storage/access/ob_aggregate_base.h"
 #include "storage/lob/ob_lob_manager.h"
 
@@ -41,7 +42,7 @@ int ObNewColumnCommonDecoder::decode(
     // When do lob decode, should add lob header for default value
     ObString data = datum.get_string();
     ObString out;
-    if (OB_FAIL(ObLobManager::fill_lob_header(*allocator, data, out))) {
+    if (OB_FAIL(data_plane::fill_lob_header(*allocator, data, out))) {
       LOG_WARN("failed to fill lob header for column", K(ret), K(def_cell), K(data));
     } else {
       datum.set_string(out);
@@ -74,7 +75,7 @@ int ObNewColumnCommonDecoder::pushdown_operator(
   int ret = OB_SUCCESS;
   bool filtered = false;
   ObStorageDatum *default_datum = const_cast<ObStorageDatum *>(&filter.get_default_datums().at(0));
-  if (OB_FAIL(blocksstable::ObIMicroBlockReader::filter_white_filter(filter, *default_datum, filtered))) {
+  if (OB_FAIL(filter.filter_datum(*default_datum, filtered))) {
     LOG_WARN("Failed to filter row with white filter", K(ret), K(filter), K(default_datum));
   } else if (!filtered) {
     result_bitmap.bit_not();

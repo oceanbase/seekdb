@@ -110,14 +110,17 @@ int ObStatMaxValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatMaxValue::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatMaxValue::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   // print cstring and hex string here
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(obj, allocator))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 obj, allocator, datum_access_ctx))) {
     LOG_WARN("fail to truncate string", K(ret));
   } else {
     col_stat_->set_max_value(obj);
@@ -140,14 +143,17 @@ int ObStatMinValue::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatMinValue::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatMinValue::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   // print cstring and hex string here
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(obj, allocator))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 obj, allocator, datum_access_ctx))) {
     LOG_WARN("fail to truncate string", K(ret));
   } else {
     col_stat_->set_min_value(obj);
@@ -297,9 +303,12 @@ public:
   ObBucketCompare &compare_;
 };
 
-int ObStatTopKHist::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatTopKHist::decode(ObObj &obj,
+                           ObIAllocator &allocator,
+                           const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(datum_access_ctx);
   ObTopKFrequencyHistograms topk_hist;
   int64_t bucket_num = -1;
   if (OB_ISNULL(col_param_) || OB_ISNULL(tab_stat_) || OB_ISNULL(col_stat_) ||
@@ -703,9 +712,12 @@ int ObStatHybridHist::gen_expr(char *buf, const int64_t buf_len, int64_t &pos)
   return ret;
 }
 
-int ObStatHybridHist::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatHybridHist::decode(ObObj &obj,
+                             ObIAllocator &allocator,
+                             const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(datum_access_ctx);
   ObHybridHistograms hybrid_hist;
   ObArray<ObHistBucket> tmp;
   int64_t bucket_num = -1;

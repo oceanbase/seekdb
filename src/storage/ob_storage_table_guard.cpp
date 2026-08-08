@@ -19,7 +19,7 @@
 #include "ob_storage_table_guard.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind a transitive include
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -61,7 +61,7 @@ void ObStorageTableGuard::throttle_if_needed_()
   if (!need_control_mem_) {
     // skip throttle
   } else {
-    ObSharedMemAllocMgr *shared_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+    ObSharedMemAllocMgr *shared_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
     if (OB_ISNULL(shared_mem_alloc_mgr)) {
       // During bootstrap the server runtime may not be initialized yet; skip throttling.
     } else {
@@ -75,14 +75,14 @@ void ObStorageTableGuard::throttle_if_needed_()
           reset();
           ObLS *tenant_ls = nullptr;
           ObLS *ls = nullptr;
-          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
             STORAGE_LOG(WARN, "get ls failed", KR(ret));
           } else {
             ls = tenant_ls;
             (void)TxShareMemThrottleUtil::do_throttle<ObMemstoreAllocator>(for_replay_,
                                                                            store_ctx_.timeout_,
                                                                            share::memstore_throttled_alloc(),
-                                                                           share::g_mp->memstore_freezer()->exist_ls_throttle_is_skipping(),
+                                                                           ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->exist_ls_throttle_is_skipping(),
                                                                            ls->is_offline(),
                                                                            throttle_tool,
                                                                            share_ti_guard,
@@ -200,7 +200,7 @@ int ObStorageTableGuard::create_data_memtable_for_replay_(const common::ObTablet
   ObLS *tenant_ls = nullptr;
   ObTabletHandle tmp_handle;
   SCN clog_checkpoint_scn;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(tablet_id));
   } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tablet(
           tablet_id, tmp_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
@@ -356,7 +356,7 @@ int ObStorageTableGuard::check_freeze_to_inc_write_ref(ObMemtable *memtable, boo
       bool need_create_memtable = true;
       ObTabletHandle tmp_handle;
       ObLS *tenant_ls = nullptr;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
         LOG_WARN("failed to get log stream", K(ret), K(need_retry), K(tablet_id));
       } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_tablet(tablet_id,
                                                                           tmp_handle,

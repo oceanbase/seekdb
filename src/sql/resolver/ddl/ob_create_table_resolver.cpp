@@ -21,9 +21,9 @@
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
 namespace oceanbase
@@ -761,6 +761,8 @@ int ObCreateTableResolver::resolve_table_elements(const ParseNode *node,
                                           session_info_->get_sql_mode(),
                                           session_info_,
                                           schema_checker_,
+                                          params_.srs_provider_,
+                                          params_.lob_read_service_,
                                           NULL == element->children_[1]))) {
             SQL_RESV_LOG(WARN, "failed to cast default value!", K(ret));
           } else if (column.is_string_type() || is_lob_storage(column.get_data_type())) {

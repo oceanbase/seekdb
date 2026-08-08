@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
@@ -903,7 +903,8 @@ void ObPluginVectorIndexService::destroy()
 }
 
 int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema_service,
-                                     ObLSService *ls_service)
+                                     storage::ObLSService *ls_service,
+                                     common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
   lib::ObMemAttr mem_attr("VecIdxSrv");
@@ -911,13 +912,14 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_ISNULL(schema_service)
-      || OB_ISNULL(ls_service)) {
+      || OB_ISNULL(ls_service)
+      || OB_ISNULL(lob_read_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument to init ObPluginVectorIndexService", KR(ret));
   } else if (OB_FAIL(allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
     LOG_WARN("ObSrsService allocator init failed.", K(ret));
   } else {
-    ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
+    ObSharedMemAllocMgr *shared_mem_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
     memory_context_ = shared_mem_mgr->vector_allocator().get_mem_context();
     all_vsag_use_mem_ = shared_mem_mgr->vector_allocator().get_used_mem_ptr();
 
@@ -931,6 +933,7 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
     } else {
       schema_service_ = schema_service;
       ls_service_ = ls_service;
+      lob_read_service_ = lob_read_service;
       sql_proxy_ = GCTX.sql_proxy_;
       is_inited_ = true;
       LOG_INFO("plugin vector index service: init", KR(ret));
@@ -1022,13 +1025,15 @@ int ObPluginVectorIndexService::alloc_vec_async_task_sched()
   return ret;
 }
 
-int ObPluginVectorIndexService::server_module_init(ObPluginVectorIndexService *&service)
+int ObPluginVectorIndexService::server_module_init(
+    ObPluginVectorIndexService *&service,
+    common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
   schema::ObMultiVersionSchemaService *schema_service = &GSCHEMASERVICE;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  storage::ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
 
-  if (OB_FAIL(service->init(schema_service, ls_service))) {
+  if (OB_FAIL(service->init(schema_service, ls_service, lob_read_service))) {
     LOG_WARN("fail to init plugin vector index service service", KR(ret));
   }
   return ret;
@@ -1088,10 +1093,11 @@ void ObPluginVectorIndexMgr::dump_all_inst()
   }
 }
 
-int ObPluginVectorIndexMgr::get_cache_tablet_ids(ObIArray<ObTabletPair> &cache_tablet_ids)
+int ObPluginVectorIndexMgr::get_cache_tablet_ids(
+    ObIArray<obcall::ObTabletPair> &cache_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ObTabletPair pair;
+  obcall::ObTabletPair pair;
   FOREACH_X(iter, ivf_cache_mgr_map_, OB_SUCC(ret))
   {
     pair.tablet_id_ = iter->first;
@@ -1103,11 +1109,11 @@ int ObPluginVectorIndexMgr::get_cache_tablet_ids(ObIArray<ObTabletPair> &cache_t
 }
 
 int ObPluginVectorIndexMgr::get_snapshot_tablet_ids(
-    ObIArray<ObTabletPair> &complete_tablet_ids,
-    ObIArray<ObTabletPair> &partial_tablet_ids)
+    ObIArray<obcall::ObTabletPair> &complete_tablet_ids,
+    ObIArray<obcall::ObTabletPair> &partial_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ObTabletPair pair;
+  obcall::ObTabletPair pair;
   RLockGuard lock_guard(adapter_map_rwlock_);
   FOREACH_X(iter, partial_index_adpt_map_, OB_SUCC(ret)) {
     const ObTabletID &tablet_id = iter->first;
@@ -1127,8 +1133,8 @@ int ObPluginVectorIndexMgr::get_snapshot_tablet_ids(
 }
 
 int ObPluginVectorIndexService::get_snapshot_ids(
-    ObIArray<ObTabletPair> &complete_tablet_ids,
-    ObIArray<ObTabletPair> &partial_tablet_ids)
+    ObIArray<obcall::ObTabletPair> &complete_tablet_ids,
+    ObIArray<obcall::ObTabletPair> &partial_tablet_ids)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(single_index_mgr_->get_snapshot_tablet_ids(complete_tablet_ids, partial_tablet_ids))) {
@@ -1137,7 +1143,8 @@ int ObPluginVectorIndexService::get_snapshot_ids(
   return ret;
 }
 
-int ObPluginVectorIndexService::get_cache_ids(ObIArray<ObTabletPair> &cache_tablet_ids)
+int ObPluginVectorIndexService::get_cache_ids(
+    ObIArray<obcall::ObTabletPair> &cache_tablet_ids)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(single_index_mgr_->get_cache_tablet_ids(cache_tablet_ids))) {
@@ -1549,9 +1556,13 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObPluginVectorIndexService is not inited", KR(ret));
+  } else if (OB_ISNULL(lob_read_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed", KR(ret));
   } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
     LOG_WARN("failed to generate sql", K(ret), K(table_id));
   } else {
+    const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;
     session_param.sql_mode_ = nullptr;
     session_param.tz_info_wrap_ = nullptr;
@@ -1578,7 +1589,8 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
           } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
             LOG_WARN("failed to get vid", K(ret));
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
-          } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator,
+          } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(lob_read_options,
+                                                                        &allocator,
                                                                         ObLongTextType,
                                                                         CS_TYPE_BINARY,
                                                                         true,
@@ -1767,6 +1779,18 @@ int ObPluginVectorIndexService::get_embedding_task_handler(ObEmbeddingTaskHandle
     handler = &embedding_task_handler_;
   }
   return ret;
+}
+
+int ObPluginVectorIndexService::get_leader_flag(bool &is_leader)
+{
+  return ObPluginVectorIndexUtils::get_leader_flag(is_leader);
+}
+
+int ObPluginVectorIndexService::query_need_refresh_memdata(
+    ObPluginVectorIndexAdaptor *adapter,
+    const common::ObLobReadOptions &lob_read_options)
+{
+  return ObPluginVectorIndexUtils::query_need_refresh_memdata(adapter, lob_read_options);
 }
 
 }

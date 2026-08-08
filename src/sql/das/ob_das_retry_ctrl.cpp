@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_retry_ctrl.h"
 #include "sql/engine/ob_exec_context.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
 
 namespace oceanbase {
 using namespace common;

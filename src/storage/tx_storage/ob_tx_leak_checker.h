@@ -16,7 +16,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #define OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #include "share/leak_checker/ob_leak_checker.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"
 #include "lib/profile/ob_trace_id.h"
 #include "storage/ob_common_id_utils.h"
@@ -225,7 +225,7 @@ typedef share::ObBaseLeakChecker<ObReadOnlyTxCheckerKey, ObReadOnlyTxCheckerValu
     } else {                                                                             \
       ObReadOnlyTxCheckerKey key;                                                        \
       ObReadOnlyTxCheckerValue value;                                                    \
-      key.seq_ = share::g_mp->trans_service()->get_unique_seq();                                \
+      key.seq_ = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_unique_seq();                                \
       value.timestamp_ = ObClockGenerator::getClock();                                   \
       value.tablet_id_ = ctx.tablet_id_;                                                 \
       ctx.check_seq_ = key.seq_;                                                         \
@@ -252,17 +252,17 @@ typedef share::ObBaseLeakChecker<ObReadOnlyTxCheckerKey, ObReadOnlyTxCheckerValu
         }                                                                                         \
       } else if (OB_LIKELY(tx_debug_level >= 1)) {                                                \
       }                                                                                           \
-      share::g_mp->trans_service()->get_read_tx_checker().record(key, value, MAX_RECORD_CNT);            \
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().record(key, value, MAX_RECORD_CNT);            \
     }                                                                                             \
   } while(0)
 
 #define READ_CHECKER_RELEASE(ctx)                                                                \
   do {                                                                                           \
-    if (OB_UNLIKELY(!share::g_mp->trans_service()->get_read_tx_checker().is_empty())) {                 \
+    if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().is_empty())) {                 \
       ObReadOnlyTxCheckerKey key;                                                                \
       ObReadOnlyTxCheckerValue value;                                                            \
       key.seq_ = ctx.check_seq_;                                                                 \
-      share::g_mp->trans_service()->get_read_tx_checker().release(key, value);                          \
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().release(key, value);                          \
       if (OB_NOT_NULL(value.extra_)) {                                                           \
         ob_free(value.extra_);                                                                   \
       }                                                                                          \
@@ -272,12 +272,12 @@ typedef share::ObBaseLeakChecker<ObReadOnlyTxCheckerKey, ObReadOnlyTxCheckerValu
 #define READ_CHECKER_PRINT() \
   do {                            \
     ObReadOnlyTxPrinter fn;       \
-    share::g_mp->trans_service()->get_read_tx_checker().for_each(fn); \
+    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().for_each(fn); \
   } while(0)
 
 #define READ_CHECKER_FOR_EACH(fn)                              \
   do {                                                         \
-    share::g_mp->trans_service()->get_read_tx_checker().for_each(fn); \
+    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->get_read_tx_checker().for_each(fn); \
   } while(0)
 
 }  // storage

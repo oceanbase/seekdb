@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_freeze_info_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
@@ -345,13 +345,13 @@ int64_t ObFreezeInfoMgr::get_min_reserved_snapshot_for_tx()
   // Local disk pressure (or failure to determine disk status) disables the
   // local active-transaction watermark optimization. Sampling failures keep
   // using the last complete local watermark instead.
-  bool is_gc_disabled = share::g_mp->multi_version_garbage_collector()->
+  bool is_gc_disabled = ::oceanbase::share::server_service<::oceanbase::concurrency_control::ObMultiVersionGarbageCollector>()->
     is_gc_disabled();
 
   if (GCONF._mvcc_gc_using_min_txn_snapshot
       && !is_gc_disabled) {
     share::SCN snapshot_for_active_tx =
-      share::g_mp->multi_version_garbage_collector()->
+      ::oceanbase::share::server_service<::oceanbase::concurrency_control::ObMultiVersionGarbageCollector>()->
       get_reserved_snapshot_for_active_txn();
     snapshot_version = snapshot_for_active_tx.get_val_for_tx();
   }
@@ -495,7 +495,7 @@ int ObFreezeInfoMgr::ReloadTask::refresh_merge_info()
           FLOG_INFO("try to schedule merge", K(global_broadcast_version), K(cur_broadcast_version));
           if (OB_FAIL(MERGE_SCHEDULER_PTR->schedule_merge(global_broadcast_version))) {
             LOG_WARN("fail to schedule merge", K(ret), K(global_broadcast_version));
-          } else if (OB_FAIL(share::g_mp->memstore_freezer()->update_frozen_scn(global_broadcast_version))) {
+          } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->update_frozen_scn(global_broadcast_version))) {
             LOG_WARN("update frozen scn failed", K(ret), K(global_broadcast_version));
           }
         }
@@ -610,10 +610,10 @@ int ObFreezeInfoMgr::try_update_reserved_snapshot()
   // Try to update the reserved snapshot on the log stream.
   ObLS *ls = nullptr;
   if (OB_FAIL(ret) || reserved_snapshot <= 0) {
-  } else if (OB_ISNULL(share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get single log stream", K(ret));
   } else {
     int tmp_ret = OB_SUCCESS;

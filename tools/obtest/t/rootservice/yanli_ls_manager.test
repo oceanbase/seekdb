@@ -1,0 +1,242 @@
+# CASE_OWNER:
+#    @msy164651
+# CASE_DESC:
+#
+
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+set @@session.ob_query_timeout = 1000000000;
+
+#mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE '2G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1', locality = 'F@z1, F@z2' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+# case 1: wrong value for alter tenant primary_zone
+echo '[case 1] wrong value for alter tenant primary_zone';
+--error 4179
+ALTER TENANT mysql set primary_zone = DEFAULT;
+--error 4179
+ALTER TENANT mysql set primary_zone = "";
+# primary_zone not exist
+--error 1210
+ALTER TENANT mysql set primary_zone = "z4";
+# primary_zone not match with locality
+--error 1210
+ALTER TENANT mysql set primary_zone = "z3";
+
+ALTER TENANT mysql set locality = 'F@z1,F@z2,F@z3';
+ob1.check_until_timeout select count(*) from oceanbase.DBA_OB_TENANTS where previous_locality is not null, 0, 100;
+
+# case 2: creats ls group
+echo '[case 2] create ls group';
+
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 3, 30;
+# meta/sys tenant won't caculate sync_scn
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 2, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z1' and zone_priority = 'z1;z2;z3', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z1' and zone_priority = 'z1;z2;z3', 2, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+
+# 2 ls group
+ALTER RESOURCE TENANT mysql UNIT_NUM = 2;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 1, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 0, 100;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 4, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 3, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z1' and zone_priority = 'z1;z2;z3', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z1' and zone_priority = 'z1;z2;z3', 3, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+ob1.mysql_p select tenant_id, ls_id, status from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+
+# case 3: create ls in ls group
+echo '[case 3] create ls in ls group';
+
+# 3.1. create ls (add primary zone in first priority)
+
+ob1.mysql alter system set enable_transfer = 'false';
+alter tenant mysql set primary_zone = 'z3,z2';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and primary_zone = 'z1', 0, 30;
+ob1.mysql alter system set enable_transfer = 'true';
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 1, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 0, 100;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 6, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 5, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z2' and zone_priority = 'z2;z3;z1', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z3;z1', 3, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z3' and zone_priority = 'z3;z2;z1', 2, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+# wait switch leader result
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and role = 'LEADER' and zone = 'z1', 0, 60;
+ob1.mysql_p select tenant_id, ls_id, status from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+
+# 3.2. won't create ls & only change ls primary zone
+alter tenant mysql set primary_zone = 'z1,z3';
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and primary_zone = 'z2', 0, 30;
+
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z1' and zone_priority = 'z1;z3;z2', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z1' and zone_priority = 'z1;z3;z2', 3, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z3' and zone_priority = 'z3;z1;z2', 2, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+# wait switch leader result
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and role = 'LEADER' and zone = 'z2', 0, 60;
+
+# 3.3. create ls (add primary zone in first priority)
+alter tenant mysql set primary_zone = RANDOM;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 1, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 0, 100;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 8, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 7, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z1' and zone_priority = 'z1;z2,z3', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z1' and zone_priority = 'z1;z2,z3', 3, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z1,z3', 2, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z3' and zone_priority = 'z3;z1,z2', 2, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+ob1.mysql_p select tenant_id, ls_id, status from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+
+# 3.4. change primary zone in first priority
+alter tenant mysql set primary_zone = 'z2';
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 1, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 0, 100;
+
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 4, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 3, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z2' and zone_priority = 'z2;z1,z3', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z1,z3', 3, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+# wait switch leader result
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS_LOCATIONS where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and role = 'LEADER' and zone != 'z2', 0, 60;
+ob1.mysql_p select tenant_id, ls_id, status from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+
+# 3.5. change primary zone in second priority
+alter tenant mysql set primary_zone = 'z2;z3;z1';
+
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 4, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 3, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z2' and zone_priority = 'z2;z3;z1', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z3;z1', 3, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+
+alter tenant mysql set primary_zone = 'z2;z3,z1';
+
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 4, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 3, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z2' and zone_priority = 'z2;z1,z3', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z1,z3', 3, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+
+# case 4. modify primary zone in second priority & switch leader & switch leader back
+# priority: switch leader > alter tenant primary zone
+echo '[case 4] alter tenant primary zone & switch leader';
+connection conn_sys;
+let $leader_svr_ip = deploy_get_value(ob1.select select svr_ip from oceanbase.__all_virtual_ls_meta_table where tenant_id = $tenant_id and ls_id = 1 and role = 1, svr_ip, 1);
+let $leader_svr_port = deploy_get_value(ob1.select select svr_port from oceanbase.__all_virtual_ls_meta_table where tenant_id = $tenant_id and ls_id = 1 and role = 1, svr_port, 1);
+let $follower1_svr_ip = deploy_get_value(ob1.select select svr_ip from oceanbase.__all_virtual_ls_meta_table where tenant_id = $tenant_id and ls_id = 1 and role = 2 order by svr_ip, svr_port limit 1, svr_ip, 1);
+let $follower1_svr_port = deploy_get_value(ob1.select select svr_port from oceanbase.__all_virtual_ls_meta_table where tenant_id = $tenant_id and ls_id = 1 and role = 2 order by svr_ip, svr_port limit 1, svr_port, 1);
+
+select tenant_id, ls_id, manual_leader_server from oceanbase.__all_virtual_ls_election_reference_info where manual_leader_server != "";
+
+# case 4.1
+alter tenant mysql set primary_zone = 'z2;z1;z3';
+
+--disable_query_log
+eval select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1;
+eval select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port";
+
+eval alter system switch replica leader ls=1 server='$follower1_svr_ip:$follower1_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port", 1, 3;
+
+eval alter system switch replica leader ls=1 server='$leader_svr_ip:$leader_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$leader_svr_ip' and svr_port='$leader_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$leader_svr_ip:$leader_svr_port", 1, 3;
+--enable_query_log
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z1;z3' and (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id), 4, 30;
+
+# case 4.2
+alter tenant mysql set primary_zone = 'z2;z3;z1';
+
+--disable_query_log
+eval select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1;
+eval select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port";
+
+eval alter system switch replica leader ls=1 server='$follower1_svr_ip:$follower1_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port", 1, 3;
+
+eval alter system switch replica leader ls=1 server='$leader_svr_ip:$leader_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$leader_svr_ip' and svr_port='$leader_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$leader_svr_ip:$leader_svr_port", 1, 3;
+--enable_query_log
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z3;z1' and (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id), 4, 30;
+
+# case 4.3
+alter tenant mysql set primary_zone = 'z2;z1,z3';
+
+--disable_query_log
+eval select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1;
+eval select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port";
+
+eval alter system switch replica leader ls=1 server='$follower1_svr_ip:$follower1_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port", 1, 3;
+
+eval alter system switch replica leader ls=1 server='$leader_svr_ip:$leader_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$leader_svr_ip' and svr_port='$leader_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$leader_svr_ip:$leader_svr_port", 1, 3;
+--enable_query_log
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z1,z3' and (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id), 4, 30;
+
+# case 4.4
+alter tenant mysql set primary_zone = 'z2;z3,z1';
+
+--disable_query_log
+eval select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1;
+eval select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port";
+
+eval alter system switch replica leader ls=1 server='$follower1_svr_ip:$follower1_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$follower1_svr_ip' and svr_port='$follower1_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$follower1_svr_ip:$follower1_svr_port", 1, 3;
+
+eval alter system switch replica leader ls=1 server='$leader_svr_ip:$leader_svr_port';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_meta_table where tenant_id = '$tenant_id' and svr_ip = '$leader_svr_ip' and svr_port='$leader_svr_port' and ls_id = 1 and role = 1, 1, 3;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_ls_election_reference_info where tenant_id = '$tenant_id' and ls_id = 1 and manual_leader_server = "$leader_svr_ip:$leader_svr_port", 1, 3;
+--enable_query_log
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_election_reference_info where zone_priority='z2;z1,z3' and (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id), 4, 30;
+
+# case 5: check primary_zone match with locality
+echo '[case 5] check primary_zone with locality';
+alter tenant mysql set primary_zone = 'z3;z2,z1';
+
+eval select tenant_id, primary_zone, locality from oceanbase.DBA_OB_TENANTS where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id);
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 4, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 3, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z3' and zone_priority = 'z3;z1,z2', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z3' and zone_priority = 'z3;z1,z2', 3, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+
+# remove z3 from locality, primary_zone should be "z1,z2"
+alter tenant mysql set locality = "F@z1,F@z2";
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 1, 30;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_balance_job where tenant_id = $tenant_id, 0, 100;
+eval select tenant_id, primary_zone, locality from oceanbase.DBA_OB_TENANTS where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id);
+ob1.check_until_timeout select count(*) from oceanbase.DBA_OB_TENANTS where previous_locality is not null, 0, 100;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status where (tenant_id >= $tenant_id - 1 and tenant_id <= $tenant_id) and status = 'NORMAL', 6, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_recovery_stat where tenant_id = $tenant_id and sync_scn > 1, 5, 30;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id - 1 and primary_zone = 'z1' and zone_priority = 'z1;z2', 1, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z1' and zone_priority = 'z1;z2', 3, 20;
+ob1.check_until_timeout SELECT COUNT(*) c FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id = $tenant_id and primary_zone = 'z2' and zone_priority = 'z2;z1', 2, 20;
+eval SELECT l.tenant_id, l.ls_id, l.ls_group_id, l.unit_group_id, l.primary_zone, l.status, e.zone_priority FROM oceanbase.__all_virtual_ls_status as l join oceanbase.__all_virtual_ls_election_reference_info as e on l.tenant_id = e.tenant_id and l.ls_id = e.ls_id where l.tenant_id in ($tenant_id - 1, $tenant_id) order by l.tenant_id, l.ls_group_id, l.ls_id;
+ob1.mysql_p select tenant_id, ls_id, status from oceanbase.CDB_OB_LS_HISTORY order by tenant_id, ls_id;
+
+#TODO: check sys tenant:
+# 1. modify resource pool unit
+# 2. alter primary zone
+#
+

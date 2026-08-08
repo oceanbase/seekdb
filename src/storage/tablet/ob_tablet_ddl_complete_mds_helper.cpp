@@ -15,10 +15,11 @@
  */
 
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/ob_rpc_struct.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/multi_data_source/buffer_ctx.h"
 #include "storage/multi_data_source/mds_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -30,11 +31,10 @@
 #include "storage/tx/ob_multi_data_source.h"
 #include "storage/tablet/ob_tablet_ddl_complete_replay_executor.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/ob_structured_event_logger.h"
-#include "observer/ob_inner_sql_connection.h"
 #define USING_LOG_PREFIX MDS
 
-using namespace oceanbase::observer;
 using namespace oceanbase::transaction;
 
 namespace oceanbase
@@ -218,7 +218,7 @@ int ObTabletDDLCompleteMdsHelper::process(const char* buf, const int64_t len, co
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
     ObLS *tenant_ls = nullptr;
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     common::ObArenaAllocator allocator(ObMemAttr("Ddl_Com_MdsH"));
     ObTabletDDLCompleteMdsUserData data;
     /* set flag */
@@ -255,7 +255,7 @@ int ObTabletDDLCompleteMdsHelper::process_ddl(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected invalid argument", KR(ret), K(tablet_id), K(data));
   } else if (!for_replay) {
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(tenant_ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+    if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(tenant_ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::freeze_ddl_kv(*tablet_handle.get_obj(), data))) {
       LOG_WARN("failed to freeze ddl kv", K(ret));
     } else if (OB_FAIL(ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(*tablet_handle.get_obj(), data))) {
@@ -318,13 +318,14 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
     LOG_WARN("unexpected null sql proxy", KR(ret), KP(sql_proxy));
   } else {
     ObMySQLTransaction trans;
-    ObInnerSQLConnection *conn = nullptr;
+    common::sqlclient::ObISQLConnection *conn = nullptr;
     if (OB_FAIL(trans.start(sql_proxy))) {
       LOG_WARN("failed to start transaction", KR(ret));
-    } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+    } else if (OB_ISNULL(conn = trans.get_connection())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null connection", KR(ret), KP(conn));
-    } else if (OB_FAIL(conn->register_multi_data_source(ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                   conn, ObTxDataSourceType::DDL_COMPLETE_MDS, buf, buf_len))) {
       LOG_WARN("failed to register multi data source", KR(ret));
     } else if (OB_FAIL(trans.end(OB_SUCC(ret)))) {
       LOG_WARN("failed to end trans", KR(ret));

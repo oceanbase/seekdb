@@ -1,0 +1,39 @@
+# owner: baichangmin.bcm
+# owner group: storage
+# Test the case: multi scan query
+
+ob1=OBI(cluster=1:1, proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+
+
+connect(conn0,$ip0,root@obtest,,test,$sql_port0);
+connect(conn1,$ip0,root@sys,,oceanbase,$sql_port0);
+
+connection conn0;
+SET GLOBAL recyclebin = OFF;
+
+
+
+
+
+let $count = 600;
+while ($count > 0)
+{
+  eval create table test_$count(c1 int primary key, c2 int) partition by hash(c1) partitions 50;
+	dec $count;
+}
+
+let $count = 600;
+while ($count > 0)
+{
+  eval drop table if exists test_$count;
+	dec $count;
+  dec $count;
+}
+
+sleep 60;
+ob1.z1.obs0.check_log_until_success -c "successfully rebuild one sstable";

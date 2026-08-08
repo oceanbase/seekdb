@@ -17,6 +17,8 @@
 #define private public
 #define protected public
 #include "storage/memtable/ob_memtable_context.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -120,14 +122,3 @@ TEST_F(TestObTxMisc, multiple_checksum_collapse_for_commit_log)
 
 using namespace oceanbase;
 using namespace oceanbase::common;
-
-int main(int argc, char **argv)
-{
-  int ret = 1;
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name("test_ob_tx_misc.log", true);
-  logger.set_log_level(OB_LOG_LEVEL_INFO);
-  testing::InitGoogleTest(&argc, argv);
-  ret = RUN_ALL_TESTS();
-  return ret;
-}

@@ -1,0 +1,91 @@
+#rs
+#zbf
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+
+#等待心跳同步状态，验证正常情况下，没创建租户时，显示2个备库为ok状态。
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+ob1.mysql  CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql  CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql  CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn2_1, ob2.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+connection conn2_1;
+source include/standby_ddl.inc;
+
+ob_connect(conn3_1, ob3.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+connection conn3_1;
+source include/standby_ddl.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+
+#等待心跳同步状态，验证正常情况下，显示2个备库为同步状态。
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 800;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+ob2.z1.obs0.force_stop;
+#当备库全部副本故障时，等待心跳状态失效，对应备库显示状态无效
+sleep 15;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'NOT AVAILABLE', 1, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 400;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+ob2.z1.obs0.start;
+ob3.z1.obs0.force_stop;
+#等待心跳同步状态，当备库单个一副本故障时，如果创建了租户,则显示OK
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+sleep 20;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+ob3.z1.obs0.start;
+
+#等待心跳同步状态，备库副本恢复后，同步状态恢复ok
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+#禁止备库同步
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+create table t(c1 int primary key, c2 int);
+alter system major freeze;
+
+#等待心跳同步状态，当备库2不同步schema时，检查备库同步状态
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'SYS SCHEMA NOT SYNC', 1, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 400;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+#开始备库同步
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+#等待心跳同步状态，备库副本恢复后，同步状态恢复ok
+sleep 20;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;

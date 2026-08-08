@@ -15,10 +15,10 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_schedule_status_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/report/ob_tablet_report.h"
+#include "share/rc/ob_server_runtime.h"
 #include "src/storage/compaction/ob_basic_schedule_tablet_func.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
-#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
 namespace oceanbase
 {
 using namespace storage;
@@ -311,7 +311,7 @@ int ObTabletStatusCache::check_medium_list(
     new_round_state_ = NEED_CHECK_LAST_MEDIUM_CKM;
     if (normal_schedule) {
       int tmp_ret = OB_SUCCESS;
-      if (OB_TMP_FAIL(share::g_mp->medium_checker()->add_tablet(
+      if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObMediumChecker>()->add_tablet(
           tablet_id, medium_list_->get_wait_check_medium_scn()))) {
         LOG_WARN("failed to add tablet", K(tmp_ret), K(tablet_id));
       } else {
@@ -349,7 +349,7 @@ int ObTabletStatusCache::update_tablet_report_status(
     int tmp_ret = OB_SUCCESS;
     const ObTabletID &tablet_id = tablet.get_tablet_id();
     if (tablet.get_tablet_meta().report_status_.need_report()) {
-      if (OB_TMP_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id, true/*need_diagnose*/))) {
+      if (OB_TMP_FAIL(data_plane::submit_tablet_update(tablet_id, true/*need_diagnose*/))) {
         LOG_WARN("failed to submit tablet update task to report", K(tmp_ret), K(tablet_id));
       } else if (OB_TMP_FAIL(ls.get_tablet_svr()->update_tablet_report_status(tablet_id))) {
         LOG_WARN("failed to update tablet report status", K(tmp_ret), K(tablet_id));

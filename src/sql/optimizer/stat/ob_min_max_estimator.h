@@ -44,7 +44,9 @@ public:
   {}
   virtual ~ObStatMinMaxSubquery() {}
   virtual int gen_expr(char *buf, const int64_t buf_len, int64_t &pos) override;
-  virtual int decode(ObObj &obj, ObIAllocator &allocator) override;
+  virtual int decode(ObObj &obj,
+                     ObIAllocator &allocator,
+                     const ObDatumAccessContext *datum_access_ctx) override;
   virtual bool is_needed() const override { return col_param_ != NULL && col_param_->need_refine_min_max(); }
 private:
   ObString db_name_;

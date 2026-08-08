@@ -64,12 +64,15 @@ void ObOptOSGColumnStat::reset()
   inner_max_allocator_.reset();
 }
 
-ObOptOSGColumnStat* ObOptOSGColumnStat::create_new_osg_col_stat(common::ObIAllocator &allocator)
+ObOptOSGColumnStat* ObOptOSGColumnStat::create_new_osg_col_stat(
+    common::ObIAllocator &allocator,
+    const ObDatumAccessContext *datum_access_ctx)
 {
   ObOptOSGColumnStat *new_osg_col_stat = OB_NEWx(ObOptOSGColumnStat, (&allocator), allocator);
   ObOptColumnStat *new_col_stat = ObOptColumnStat::malloc_new_column_stat(allocator);
   if (OB_NOT_NULL(new_osg_col_stat) && OB_NOT_NULL(new_col_stat)) {
     new_osg_col_stat->col_stat_ = new_col_stat;
+    new_osg_col_stat->datum_access_ctx_ = datum_access_ctx;
   } else {
     if (new_osg_col_stat != NULL) {
       new_osg_col_stat->~ObOptOSGColumnStat();
@@ -117,9 +120,11 @@ int ObOptOSGColumnStat::set_min_max_datum_to_obj()
     LOG_WARN("failed to get min obj");
   } else if (OB_FAIL(max_val_.get_obj(*max_obj))) {
     LOG_WARN("failed to get max obj");
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(*min_obj, allocator_))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 *min_obj, allocator_, datum_access_ctx_))) {
     LOG_WARN("fail to truncate string", K(ret));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(*max_obj, allocator_))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 *max_obj, allocator_, datum_access_ctx_))) {
     LOG_WARN("fail to truncate string", K(ret));
   } else {
     const ObObj &min_val = col_stat_->get_min_value();
@@ -249,7 +254,8 @@ int ObOptOSGColumnStat::inner_merge_min(const ObDatum &datum, const ObObjMeta &m
     }
   } else {
     int cmp_ret = 0;
-    if (OB_FAIL(min_val_.cmp_func_(*min_val_.datum_, datum, cmp_ret))) {
+    if (OB_FAIL(min_val_.cmp_func_(
+            *min_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
       LOG_WARN("failed to perform compare");
     } else if (cmp_ret > 0) {
       inner_min_allocator_.reuse();
@@ -284,7 +290,8 @@ int ObOptOSGColumnStat::inner_merge_max(const ObDatum &datum, const ObObjMeta &m
     }
   } else {
     int cmp_ret = 0;
-    if (OB_FAIL(max_val_.cmp_func_(*max_val_.datum_, datum, cmp_ret))) {
+    if (OB_FAIL(max_val_.cmp_func_(
+            *max_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
       LOG_WARN("failed to perform compare");
     } else if (cmp_ret < 0) {
       inner_max_allocator_.reuse();
@@ -350,7 +357,8 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
     }
 
     if (OB_SUCC(ret) && cmp_max) {
-      if (OB_FAIL(max_val_.cmp_func_(*max_val_.datum_, datum, cmp_ret))) {
+      if (OB_FAIL(max_val_.cmp_func_(
+              *max_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to perform compare");
       } else if (cmp_ret < 0) {
         inner_max_allocator_.reuse();
@@ -363,7 +371,8 @@ int ObOptOSGColumnStat::inner_merge_min_max(const ObDatum &datum, const ObObjMet
     }
 
     if (OB_SUCC(ret) && cmp_min) {
-      if (OB_FAIL(min_val_.cmp_func_(*min_val_.datum_, datum, cmp_ret))) {
+      if (OB_FAIL(min_val_.cmp_func_(
+              *min_val_.datum_, datum, cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to perform compare");
       } else if (cmp_ret > 0) {
         inner_min_allocator_.reuse();

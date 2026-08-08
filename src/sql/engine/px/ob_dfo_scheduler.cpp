@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/dtl/ob_dtl_channel_group.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/ob_px_local_sqc_launcher.h"
 #include "ob_px_coord_op.h"
@@ -447,8 +447,11 @@ int ObSerialDfoScheduler::dispatch_sqcs(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf.get(), ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
-            (void)ex_rpc::async_call([ser_buf, ser_pos]() {
-              return launch_sqc_fast_local(ser_buf.get(), ser_pos); });
+            const ObExecContext::RuntimeServices runtime_services =
+                exec_ctx.get_runtime_services();
+            (void)ex_rpc::async_call([ser_buf, ser_pos, runtime_services]() {
+              return launch_sqc_fast_local(
+                  ser_buf.get(), ser_pos, runtime_services); });
           }
         }
       }
@@ -556,7 +559,7 @@ int ObSerialDfoScheduler::erase_dtl_interm_results(ObPxDtlIntermResBatch &batch)
           key.channel_id_ = ch_set.get_ch_info_set().at(ch_idx).chid_;
           for (int64_t batch_id = 0; batch_id < batch_size && OB_SUCC(ret); batch_id++) {
             key.batch_id_= batch_id;
-            if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
+            if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(key))) {
               if (OB_HASH_NOT_EXIST == ret) {
                 ret = OB_SUCCESS;
                 break;
@@ -1094,10 +1097,13 @@ int ObParallelDfoScheduler::dispatch_sqc(ObExecContext &exec_ctx,
           } else if (OB_FAIL(args.serialize(ser_buf, ser_len, ser_pos))) {
             LOG_WARN("fail to serialize sqc init args", K(ret));
           } else {
+            const ObExecContext::RuntimeServices runtime_services =
+                exec_ctx.get_runtime_services();
             ex_rpc::HandleRef<ObPxInitSqcResponse> handle =
                 ex_rpc::async_call<ObPxInitSqcResponse>(
-                    [ser_buf, ser_pos](ObPxInitSqcResponse &resp) -> int {
-                      return launch_sqc_async_local(ser_buf, ser_pos, resp); });
+                    [ser_buf, ser_pos, runtime_services](ObPxInitSqcResponse &resp) -> int {
+                      return launch_sqc_async_local(
+                          ser_buf, ser_pos, runtime_services, resp); });
             if (!handle) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to dispatch in-proc sqc", K(ret), K(sqc));

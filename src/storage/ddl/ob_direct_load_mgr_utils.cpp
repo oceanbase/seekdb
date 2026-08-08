@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -36,12 +36,12 @@ int ObDirectLoadMgrUtil::get_lob_tablet_id(const ObTabletID &tablet_id, ObTablet
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), ddl_data))) {
     LOG_WARN("failed to get ddl data from tablet", K(ret), K(tablet_id));
@@ -91,12 +91,12 @@ int ObDirectLoadMgrUtil::check_tablet_major_exist(const ObTabletID &tablet_id, b
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->fetch_table_store(table_store_wrapper))) {
     LOG_WARN("failed to fetch table store", K(ret), K(tablet_id));
@@ -214,8 +214,8 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_i
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(execution_id), K(build_param));
   } else if (!is_idem_type(build_param.common_param_.direct_load_type_)) {
-    ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     ObLS *ls = nullptr;
     ObTabletHandle tablet_handle;
     if (OB_ISNULL(direct_load_mgr)) {
@@ -226,12 +226,12 @@ int ObDirectLoadMgrUtil::create_tablet_direct_load_mgr(const int64_t execution_i
     } 
 
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+    } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected err", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
       LOG_WARN("failed to get log stream", K(ret), K(build_param));
-    } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, build_param.common_param_.tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, build_param.common_param_.tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
       LOG_WARN("get tablet handle failed", K(ret), K(build_param));
     } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -346,7 +346,7 @@ int ObDirectLoadMgrUtil::prepare_schema_item_for_vec_idx_data(ObSchemaGetterGuar
   } else {
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
-      if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*table_schema, index_prefix))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(*table_schema, index_prefix))) {
         LOG_WARN("failed to get index prefix", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(&schema_guard,
                                                                                    *data_table_schema,
@@ -393,12 +393,12 @@ int ObDirectLoadMgrUtil::get_tablet_handle(const ObTabletID &tablet_id, ObTablet
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected err", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
      LOG_WARN("failed to get log stream", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get tablet handle failed", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;

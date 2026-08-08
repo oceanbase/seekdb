@@ -18,7 +18,7 @@
 #define PRINT_TS(x) (ObPrintTableStore(x))
 
 #include "ob_tablet_table_store.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -739,7 +739,7 @@ int ObTabletTableStore::get_table(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("found null table pointer", K(ret), K(table_key));
   } else if (table->is_memtable()) {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     if (OB_FAIL(handle.set_table(table, t3m, table->get_key().table_type_))) {
       LOG_WARN("Failed to set memtable to handle", K(ret), K(handle), K(table_key), KPC(table));
     }
@@ -1876,7 +1876,7 @@ int ObTabletTableStore::check_ready_for_read(const ObTablet &tablet)
 
   if (OB_SIZE_OVERFLOW == ret) {
     compaction::ObPartitionMergePolicy::diagnose_table_count_unsafe(compaction::MAJOR_MERGE, ObDiagnoseTabletType::TYPE_SPECIAL, tablet);
-    share::g_mp->multi_version_garbage_collector()->report_sstable_overflow();
+    ::oceanbase::share::server_service<::oceanbase::concurrency_control::ObMultiVersionGarbageCollector>()->report_sstable_overflow();
   }
   return ret;
 }

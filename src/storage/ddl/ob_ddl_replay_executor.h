@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_DDL_REPLAY_EXECUTOR_H
 
 #include "common/ob_tablet_id.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -31,7 +31,7 @@ namespace storage
 class ObLS;
 class ObTabletHandle;
 
-class ObDDLReplayExecutor : public logservice::ObTabletReplayExecutor
+class ObDDLReplayExecutor : public ObTabletReplayExecutor
 {
 public:
   ObDDLReplayExecutor();
@@ -200,7 +200,7 @@ private:
   const ObTableForkFinishLog *log_;
 };
 
-class ObSchemaChangeReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObSchemaChangeReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObSchemaChangeReplayExecutor();

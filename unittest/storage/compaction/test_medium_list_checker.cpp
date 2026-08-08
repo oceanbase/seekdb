@@ -20,6 +20,8 @@
 #include "storage/compaction/ob_medium_list_checker.h"
 #include "storage/compaction/ob_medium_compaction_info.h"
 #include "storage/compaction/ob_extra_medium_info.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -189,12 +191,3 @@ TEST_F(TestMediumListChecker, test_filter_finish_medium_info)
 
 }//end namespace unittest
 }//end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_medium_list_checker.log*");
-  OB_LOGGER.set_file_name("test_medium_list_checker.log");
-  OB_LOGGER.set_log_level("DEBUG");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

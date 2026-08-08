@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_ref.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_retry_ctrl.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -305,7 +305,7 @@ int ObDASRef::parallel_submit_agg_task(ObDasAggregatedTask *agg_task)
     LOG_WARN("unexpected null ptr", K(ret));
   } else if (OB_FAIL(get_das_parallel_ctx().refresh_tx_desc_bak(get_das_alloc(), session->get_tx_desc()))) {
     LOG_WARN("fail to check and refresh tx_desc", K(ret));
-  } else if (OB_FAIL(share::g_mp->data_access_service()->parallel_submit_das_task(*this, *agg_task))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_submit_das_task(*this, *agg_task))) {
     LOG_WARN("fail to execute parallel_das_task", K(ret));
   } else {
     LOG_TRACE("succeed submit parallel task", K(ret), K(agg_task));
@@ -348,7 +348,7 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
     if (!GCONF._enable_partition_level_retry || !failed_task->can_part_retry()) {
       ret = failed_task->errcode_;
       LOG_WARN("can't do task level retry", K(ret), KPC(failed_task));
-    } else if (OB_FAIL(share::g_mp->data_access_service()->retry_das_task(*this, *failed_tasks.at(i)))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->retry_das_task(*this, *failed_tasks.at(i)))) {
       LOG_WARN("Failed to retry das task", K(ret));
     }
   }
@@ -366,7 +366,7 @@ int ObDASRef::execute_all_task(DasAggregatedTaskList &agg_task_list)
       ObDasAggregatedTask* agg_task = curr->get_obj();
       if (agg_task->has_unstart_tasks() && !agg_task->has_parallel_submiitted()) {
         if (get_parallel_type() == DAS_SERIALIZATION) {
-          if (OB_FAIL(share::g_mp->data_access_service()->execute_das_task(*this, *agg_task))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->execute_das_task(*this, *agg_task))) {
             LOG_WARN("failed to execute aggregated das task", K(ret), KPC(agg_task));
           } else {
             LOG_DEBUG("successfully executing aggregated task", KPC(agg_task));
@@ -499,7 +499,7 @@ int ObDASRef::close_all_task()
     DASTaskIter task_iter = begin_task_iter();
     while (!task_iter.is_end()) {
       int end_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (end_ret = share::g_mp->data_access_service()->end_das_task(*this, **task_iter))) {
+      if (OB_SUCCESS != (end_ret = ::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->end_das_task(*this, **task_iter))) {
         LOG_WARN("execute das task failed", K(end_ret));
       }
       ++task_iter;
@@ -541,7 +541,7 @@ int ObDASRef::create_das_task(const ObDASTabletLoc *tablet_loc,
   ObDASTaskFactory &das_factory = get_das_factory();
   ObSQLSessionInfo *session = get_exec_ctx().get_my_session();
   int64_t task_id = 0;
-  if (OB_FAIL(share::g_mp->data_access_service()->get_das_task_id(task_id))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->get_das_task_id(task_id))) {
     LOG_WARN("get das task id failed", KR(ret));
   } else if (OB_FAIL(das_factory.create_das_task_op(op_type, task_op))) {
     LOG_WARN("create das task op failed", K(ret), KPC(task_op));
@@ -788,32 +788,9 @@ bool ObDasAggregatedTask::has_unstart_tasks() const
 
 int DASParallelContext::deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTxDesc *src_tx_desc)
 {
-  int ret = OB_SUCCESS;
-  int64_t tx_desc_length = 0;
-  int64_t ser_pos = 0;
-  int64_t des_pos = 0;
-  void *buf = nullptr;
-  transaction::ObTxDesc *dst_tx_desc = nullptr;
-  if (OB_ISNULL(src_tx_desc)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret));
-  } else if (FALSE_IT(tx_desc_length = src_tx_desc->get_serialize_size())) {
-    // do nothing
-  } else if (OB_ISNULL(buf = alloc.alloc(tx_desc_length))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloca memory failed", K(ret));
-  } else if (OB_FAIL(src_tx_desc->serialize(static_cast<char *>(buf), tx_desc_length, ser_pos))) {
-    LOG_WARN("serialized tx_desc failed", K(ser_pos), K(tx_desc_length), K(ret));
-  } else if (OB_FAIL(share::g_mp->trans_service()->acquire_tx(static_cast<const char *>(buf), ser_pos, des_pos, dst_tx_desc))) {
-    LOG_WARN("acquire tx_desc by deserialized failed", K(ser_pos), K(des_pos), K(ret));
-  } else if (OB_ISNULL(dst_tx_desc)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ser_pos), K(des_pos));
-  } else if (ser_pos != des_pos) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("copy trans_desc failed", K(ret), K(ser_pos), K(des_pos));
-  } else {
-    tx_desc_bak_ = dst_tx_desc;
+  int ret = data_plane::clone_tx_desc(alloc, src_tx_desc, tx_desc_bak_);
+  if (OB_FAIL(ret)) {
+    LOG_WARN("failed to clone transaction descriptor", K(ret));
   }
   return ret;
 }
@@ -821,11 +798,7 @@ int DASParallelContext::deep_copy_tx_desc(ObIAllocator &alloc, transaction::ObTx
 int DASParallelContext::release_tx_desc()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(tx_desc_bak_)) {
-    transaction::ObTransService *txs = share::g_mp->trans_service();
-    txs->release_tx(*tx_desc_bak_);
-    tx_desc_bak_ = NULL;
-  }
+  data_plane::release_tx_desc(tx_desc_bak_);
   return ret;
 }
 
@@ -836,18 +809,22 @@ int DASParallelContext::refresh_tx_desc_bak(ObIAllocator &alloc, transaction::Ob
     if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
       LOG_WARN("fail to deep_copy tx_desc", K(ret));
     }
-  } else if (tx_desc_bak_->get_op_sn() != src_tx_desc->get_op_sn()) {
+  } else if (data_plane::tx_desc_operation_sequence(tx_desc_bak_)
+             != data_plane::tx_desc_operation_sequence(src_tx_desc)) {
     if (!has_refreshed_tx_desc_scn_) {
       if (OB_FAIL(release_tx_desc())) {
         LOG_WARN("fail to release tx_desc", K(ret));
       } else if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
-        LOG_WARN("fail to deep copy tx_desc", K(ret), KPC(src_tx_desc));
+        LOG_WARN("fail to deep copy tx_desc", K(ret),
+                 "src_tx_desc", data_plane::ObTxDescLogView(src_tx_desc));
       } else {
         has_refreshed_tx_desc_scn_ = true;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected tx_desc op_scn", K(ret), K(tx_desc_bak_->get_op_sn()), K(src_tx_desc->get_op_sn()));
+      LOG_WARN("unexpected tx_desc op_scn", K(ret),
+               "bak_op_sn", data_plane::tx_desc_operation_sequence(tx_desc_bak_),
+               "src_op_sn", data_plane::tx_desc_operation_sequence(src_tx_desc));
     }
   }
   return ret;

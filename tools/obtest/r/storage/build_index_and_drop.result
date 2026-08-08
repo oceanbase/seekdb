@@ -1,0 +1,25 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_auto_leader_switch=true;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system suspend merge;
+ob1.mysql alter tenant obtest primary_zone='z1';
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_freeze_info where frozen_version=2, 1, 60;
+ob1.mysql alter system resume merge;
+ob1.z1.check_version 2;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=0 and is_active=0, 0, 90;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+pk1	pk2	pk3	f1	f2
+1	1	1	abc	def
+2	2	2	abc	def
+3	3	3	abc	def
+4	4	4	abc	def
+5	5	5	abc	def
+6	6	6	abc	def
+7	7	7	abc	def
+8	8	8	abc	def
+9	9	9	abc	def

@@ -1,0 +1,193 @@
+#rs
+#zbf
+ob1=OBI(cluster=1:1:1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1:1:1:1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob2);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_4 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4');
+ob1.mysql CREATE TENANT tenant_4 RESOURCE_POOL_LIST = ('pool_4'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+
+ob_connect(conn_tenant_4, ob1.z1.obs0, root@tenant_4, , test, , USE_MYSQL_CONNECTOR);
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+insert into t1 values(1,1,'a');
+# 创建空PG
+create table test_binding_tg1(c1 int primary key);
+
+create table test_logic_tg(c1 int primary key);
+
+create table test_binding_tg2(c1 int primary key);
+
+create table test_logic_tg2(c1 int primary key);
+
+commit;
+
+drop table test_binding_tg2;
+drop table test_logic_tg2;
+commit;
+
+ob2.mysql alter tenant tenant_4 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,F{1}@z4,F{1}@z5,F{1}@z6";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 2000;
+ob2.mysql alter tenant tenant_4 set locality = "F{1}@z1,F{1}@z2,R{1}@z3,L{1}@z4,F{1}@z5,F{1}@z6";
+ob2.check_until_timeout select count(*) c from oceanbase.__all_tenant where previous_locality != "", 0, 360;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob1.force_stop;
+sleep 20;
+
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+
+# can not run FO when observer temporary offline
+ob2.z5.force_stop;
+sleep 10;
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+--error 4708
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+
+# can not run FO when observer permanent offline
+ob2.z6.force_stop;
+sleep 40;
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+--error 4708
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.z6.nstart;
+sleep 5;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+
+# stop server on ob2 z6
+let $svr_z6 = deploy_get_value(ob2.select select concat(svr_ip, ":", svr_port) addr from __all_server where zone = 'z6' , addr, 1);
+ob2.mysql alter system stop server '$svr_z6';
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where stop_time > 0, 1, 10;
+
+sleep 60;
+
+# test server down after write inner_table cutdata clog
+ob2.mysql set ob_global_debug_sync = 'AFTER_WRITE_INNER_TABLE_CUTDATA_CLOG wait_for inner_cutdata_clog';
+ob_connect(conn3, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+set ob_query_timeout=60000000;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+# test server down after inner table in cutdata status
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'INNER_TABLE_IN_CUTDATA_STATUS wait_for inner_cutdata_status';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_cutdata_clog';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'INNER_TABLE_CUTDATA_FINISH wait_for inner_table_cutdata_finish';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_cutdata_status';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+# test server down after write user_table cutdata clog
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'AFTER_WRITE_USER_TABLE_CUTDATA_CLOG wait_for user_cutdata_clog';
+ob2.mysql set ob_global_debug_sync = 'now signal inner_table_cutdata_finish';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+# test server down after write user table in cutdata status
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'USER_TABLE_IN_CUTDATA_STATUS wait_for user_table_in_cutdata_status';
+ob2.mysql set ob_global_debug_sync = 'now signal user_cutdata_clog';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+set ob_query_timeout=20000000;
+ob2.mysql set ob_global_debug_sync = 'USER_TABLE_CUTDATA_FINISH wait_for user_table_cutdata_finish';
+ob2.mysql set ob_global_debug_sync = 'now signal user_table_in_cutdata_status';
+--error 4012
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where column_name='switchover_status';
+
+ob2.z5.force_stop;
+sleep 5;
+ob2.z5.nstart;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0 and status = 'ACTIVE', 6, 300;
+sleep 10;
+
+# Failover should success
+set ob_query_timeout=40000000;
+ob2.mysql set ob_global_debug_sync = 'now signal user_table_cutdata_finish';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+ob2.check_until_timeout  select value from oceanbase.__all_zone where name='last_merged_version' and zone = '', 2, 600;
+
+# test add new standby cluster ob3 after possible-dataloss Failover
+ob3.reboot;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob2.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+ob2.force_stop;
+sleep 30;
+
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+set ob_query_timeout=120000000;
+ob3.mysql alter system set _mini_merge_concurrency = 16;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob3.mysql alter system set _mini_merge_concurrency = 3;
+ob3.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob3.mysql_p select switchover_status,cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;

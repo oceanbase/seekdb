@@ -16,10 +16,12 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_column_redefinition_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_management_service.h"
 
 using namespace oceanbase::lib;
@@ -179,7 +181,7 @@ int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::O
 int ObColumnRedefinitionTask::copy_table_indexes()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
@@ -232,7 +234,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
             LOG_WARN("get all tablet count failed", K(ret));
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout failed", K(ret));
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
+          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
             LOG_WARN("rebuild hidden table index failed", K(ret));
           }
         }
@@ -259,7 +261,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
           SMART_VAR(obcall::ObCreateIndexArg, create_index_arg) {
             ObTraceIdGuard trace_id_guard(get_trace_id());
             ATOMIC_INC(&sub_task_trace_id_);
-            ObDDLEventInfo ddl_event_info(sub_task_trace_id_);
+            ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
             if (OB_FAIL(new_schema_guard.get_table_schema( index_ids.at(i), index_schema))) {
               LOG_WARN("get table schema failed", K(ret));
             } else if (OB_ISNULL(index_schema)) {
@@ -278,7 +280,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
               ObDDLType ddl_type = get_create_index_type(data_format_version_, *index_schema);
               create_index_arg.index_type_ = index_schema->get_index_type();
               if ((index_schema->is_vec_index() || index_schema->is_fts_index() || index_schema->is_multivalue_index())
-                  && OB_FAIL(ObDDLUtil::construct_domain_index_arg(new_schema_guard, table_schema, index_schema, *this, create_index_arg, ddl_type))) {
+                  && OB_FAIL(ObDDLTaskUtil::construct_domain_index_arg(new_schema_guard, table_schema, index_schema, *this, create_index_arg, ddl_type))) {
                 LOG_WARN("failed to construct domain index arg", K(ret));
               } else {
                 ObCreateDDLTaskParam param(ddl_type,
@@ -341,7 +343,7 @@ int ObColumnRedefinitionTask::copy_table_constraints()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -374,9 +376,10 @@ int ObColumnRedefinitionTask::copy_table_constraints()
         alter_table_arg_.ddl_task_type_ = share::REBUILD_CONSTRAINT_TASK;
         alter_table_arg_.table_id_ = object_id_;
         alter_table_arg_.hidden_table_id_ = target_object_id_;
-        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, rpc_timeout))) {
+        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
           LOG_WARN("get ddl rpc timeout failed", K(ret));
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
           LOG_WARN("rebuild hidden table constraint failed", K(ret));
         }
       } else {
@@ -395,7 +398,7 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -422,10 +425,11 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
         alter_table_arg_.ddl_task_type_ = share::REBUILD_FOREIGN_KEY_TASK;
         alter_table_arg_.table_id_ = object_id_;
         alter_table_arg_.hidden_table_id_ = target_object_id_;
-        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, rpc_timeout))) {
+        if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
           LOG_WARN("get ddl rpc timeout failed", K(ret));
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
           LOG_WARN("rebuild hidden table constraint failed", K(ret));
         }
         DEBUG_SYNC(COLUMN_REDEFINITION_COPY_TABLE_FOREIGN_KEYS);
@@ -598,9 +602,14 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
     } else {
       LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
     }
-  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(target_object_id_, rpc_timeout))) {
+  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
     LOG_WARN("get ddl rpc timeout failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->      execute_ddl_task(alter_table_arg_, objs); }))) {
+  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
+               return ::oceanbase::share::server_service<
+                   ::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(
+                       alter_table_arg_, objs);
+             }))) {
     LOG_WARN("fail to swap original and hidden table state", K(ret));
     if (OB_TIMEOUT == ret) {
       ret = OB_SUCCESS;
@@ -734,7 +743,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
                                     MAX_LONG_OPS_MESSAGE_LENGTH,
                                     pos,
                                     "STATUS: REPLICA BUILD, PARALLELISM: %ld, INITIALIZING",
-                                    ObDDLUtil::get_real_parallelism(parallelism_)))) {
+                                    ObDDLTaskUtil::get_real_parallelism(parallelism_)))) {
           LOG_WARN("failed to print", K(ret));
         }
       } else if (OB_FAIL(local_builder_.get_progress(row_inserted, physical_row_count_, percent))) {
@@ -743,7 +752,7 @@ int ObColumnRedefinitionTask::collect_longops_stat(ObLongopsValue &value)
                                   MAX_LONG_OPS_MESSAGE_LENGTH,
                                   pos,
                                   "STATUS: REPLICA BUILD, PARALLELISM: %ld, ESTIMATED_TOTAL_ROWS: %ld, ROW_PROCESSED: %ld, PROGRESS: %0.2lf%%",
-                                  ObDDLUtil::get_real_parallelism(parallelism_),
+                                  ObDDLTaskUtil::get_real_parallelism(parallelism_),
                                   physical_row_count_,
                                   row_inserted,
                                   percent))) {

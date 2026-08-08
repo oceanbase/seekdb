@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_clog.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
@@ -256,7 +256,7 @@ int ObDDLMacroBlockClogCb::on_success()
   ObTablet *tablet = nullptr;
 
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   
   /* param for check idempotence */
   ObDDLKvMgrHandle kv_mgr_handle;

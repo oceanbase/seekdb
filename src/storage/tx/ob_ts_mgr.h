@@ -18,6 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TS_MGR_
 
 #include "ob_trans_define.h"
+#include "data_plane/transaction/ob_i_read_timestamp_service.h"
 
 namespace oceanbase
 {
@@ -28,7 +29,7 @@ class SCN;
 namespace transaction
 {
 
-class ObTsMgr
+class ObTsMgr : public data_plane::ObIReadTimestampService
 {
 public:
   ObTsMgr() = default;
@@ -40,6 +41,8 @@ public:
                       MonotonicTs &receive_gts_ts);
   virtual int get_gts_sync(const int64_t timeout_us, share::SCN &scn);
   virtual int wait_gts_elapse(const share::SCN &scn);
+  int latest_read_scn(share::SCN &scn) override { return get_gts(scn); }
+  bool is_external_consistent() override { return true; }
 
   static ObTsMgr &get_instance();
 };

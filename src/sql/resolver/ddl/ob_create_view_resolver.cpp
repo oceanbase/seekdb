@@ -18,7 +18,6 @@
 
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 #include "sql/printer/ob_select_stmt_printer.h"
-#include "observer/virtual_table/ob_table_columns.h"
 
 namespace oceanbase
 {

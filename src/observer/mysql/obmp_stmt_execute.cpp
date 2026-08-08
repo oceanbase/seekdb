@@ -22,7 +22,7 @@
 #include "lib/ob_running_mode.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
-#include "observer/mysql/obsm_utils.h"
+#include "query/protocol/ob_mysql_protocol_util.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "rpc/obmysql/packet/ompk_resheader.h"
 #include "rpc/obmysql/packet/ompk_row.h"
@@ -36,8 +36,8 @@
 #include "observer/mysql/ob_async_cmd_driver.h"
 #include "observer/mysql/ob_async_plan_driver.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_server_cursor.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "sql/pl/ob_pl_server_cursor.h"
+#include "sql/session/ob_piece_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 namespace oceanbase
@@ -109,7 +109,7 @@ void ObPsSessionInfoParamsAssignment::operator()(
   ret_ = ret;
 }
 
-ObMPStmtExecute::ObMPStmtExecute(const ObGlobalContext &gctx)
+ObMPStmtExecute::ObMPStmtExecute(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       retry_ctrl_(/*ctx_.retry_info_*/),
       ctx_(),
@@ -617,45 +617,7 @@ int ObMPStmtExecute::after_process(int error_code)
 
 int ObMPStmtExecute::store_params_value_to_str(ObIAllocator &alloc, sql::ObSQLSessionInfo &session)
 {
-  return store_params_value_to_str(alloc, session, params_, params_value_, params_value_len_);
-}
-
-int ObMPStmtExecute::store_params_value_to_str(ObIAllocator &alloc,
-                                               sql::ObSQLSessionInfo &session,
-                                               ParamStore *params,
-                                               char *&params_value,
-                                               int64_t &params_value_len)
-{
-  int ret = OB_SUCCESS;
-  int64_t pos = 0;
-  int64_t length = OB_MAX_SQL_LENGTH;
-  CK (OB_NOT_NULL(params));
-  CK (OB_ISNULL(params_value));
-  CK (OB_NOT_NULL(params_value = static_cast<char *>(alloc.alloc(OB_MAX_SQL_LENGTH))));
-  for (int i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
-    const common::ObObjParam &param = params->at(i);
-    if (param.is_ext()) {
-      pos = 0;
-      params_value = NULL;
-      params_value_len = 0;
-      break;
-    } else {
-      OZ (param.print_sql_literal(params_value, length, pos, alloc, TZ_INFO(&session)));
-      if (i != params->count() - 1) {
-        OZ (databuff_printf(params_value, length, pos, alloc, ","));
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-    params_value = NULL;
-    params_value_len = 0;
-    // The failure of store_params_value_to_str does not affect the execution of SQL,
-    // so the error code is ignored here
-    ret = OB_SUCCESS;
-  } else {
-    params_value_len = pos;
-  }
-  return ret;
+  return sql::store_params_value_to_str(alloc, session, params_, params_value_, params_value_len_);
 }
 
 int ObMPStmtExecute::parse_request_type(const char *&pos, int64_t num_of_params,
@@ -1553,7 +1515,9 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   inner_stmt_id = OB_INVALID_ID;
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
-  if (OB_ISNULL(session.get_ps_cache())) {
+  ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
+      ? nullptr : &get_observer_sql_engine()->get_ps_cache();
+  if (OB_ISNULL(ps_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ps : ps cache is null.", K(ret), K(stmt_id_));
   } else if (OB_FAIL(session.get_inner_ps_stmt_id(stmt_id_, inner_stmt_id))) {
@@ -1562,7 +1526,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   } else {
     ObPsStmtInfoGuard guard;
     ObPsStmtInfo *ps_info = NULL;
-    if (OB_FAIL(session.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+    if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
       LOG_WARN("get stmt info guard failed", K(ret), K(stmt_id_), K(inner_stmt_id));
     } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
       ret = OB_ERR_UNEXPECTED;
@@ -1597,7 +1561,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
     CK (OB_NOT_NULL(cursor->get_allocator()));
     OZ (cursor->init_params(params_->count()));
     OZ (cursor->get_exec_params().assign(*params_));
-    OZ (gctx_.sql_engine_->init_result_set(ctx_, result));
+    OZ (::oceanbase::observer::get_observer_sql_engine()->init_result_set(ctx_, result));
     {
       exec_start_timestamp_ = ObTimeUtility::current_time();
       session.reset_plsql_exec_time();
@@ -1633,7 +1597,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
       }
       ret = tmp_ret;
     }
-  } else if (OB_FAIL(gctx_.sql_engine_->stmt_execute(stmt_id_,
+  } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_execute(stmt_id_,
                                                       stmt_type_,
                                                       *params_,
                                                       ctx_, result,
@@ -1703,7 +1667,8 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
    * !!!
    */
   ObReqTimeGuard req_timeinfo_guard;
-  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_sql_arena_allocator()) {
+  SMART_VAR(ObMySQLResultSet, result, session, THIS_WORKER.get_sql_arena_allocator(),
+            ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
 
     int64_t execution_id = 0;
     {
@@ -1712,7 +1677,8 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       }
 
       if (enable_sqlstat) {
-        sqlstat_record.record_sqlstat_start_value();
+        sqlstat_record.record_sqlstat_start_value(
+            ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
         sqlstat_record.set_is_in_retry(session.get_is_in_retry());
         session.sql_sess_record_sql_stat_start_value(sqlstat_record);
       }
@@ -1733,10 +1699,10 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
           LOG_WARN("newest schema is NULL", K(ret));
         } else if (OB_FAIL(result.init())) {
           LOG_WARN("result set init failed", K(ret));
-        } else if (OB_ISNULL(gctx_.sql_engine_) || OB_ISNULL(param_store)) {
+        } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine()) || OB_ISNULL(param_store)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("invalid sql engine", K(ret), K(gctx_), K(param_store));
-        } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
+        } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
           // do nothing ...
         } else if (OB_FAIL(set_session_active(session))) {
           LOG_WARN("fail to set session active", K(ret));
@@ -1790,12 +1756,15 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       audit_record.update_event_stage_state();
     }
     if (enable_sqlstat) {
-      sqlstat_record.record_sqlstat_end_value();
+      sqlstat_record.record_sqlstat_end_value(
+          ::oceanbase::observer::get_observer_sql_engine()->get_query_runtime_environment());
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       ObString sql_id = ObString::make_string(ctx_.sql_id_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                                 get_observer_sql_engine()->get_plan_cache(),
+                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());
     }
@@ -2234,42 +2203,6 @@ int ObMPStmtExecute::process()
   }
 
   return (OB_SUCCESS != ret) ? ret : flush_ret;
-}
-
-int ObMPStmtExecute::get_package_type_by_name(ObIAllocator &allocator,
-                                              const TypeInfo *type_info,
-                                              const pl::ObUserDefinedType *&pl_type)
-{
-  int ret = OB_SUCCESS;
-  const share::schema::ObPackageInfo *package_info = NULL;
-  ObSchemaChecker schema_checker;
-  CK (OB_NOT_NULL(type_info));
-  CK (OB_NOT_NULL(ctx_.schema_guard_));
-  CK (OB_NOT_NULL(ctx_.session_info_));
-  CK (OB_NOT_NULL(ctx_.session_info_->get_pl_engine()));
-  if (OB_SUCC(ret) && OB_ISNULL(pl_type ))
-  OZ (schema_checker.init(*ctx_.schema_guard_, ctx_.session_info_->get_server_sid()));
-  OZ (schema_checker.get_package_info(
-                                      type_info->relation_name_,
-                                      type_info->package_name_,
-                                      share::schema::PACKAGE_TYPE,
-                                      package_info));
-  CK (OB_NOT_NULL(package_info));
-  if (OB_SUCC(ret)) {
-    pl::ObPLPackageManager &package_manager
-      = ctx_.session_info_->get_pl_engine()->get_package_manager();
-    pl::ObPLPackageGuard package_guard{};
-    pl::ObPLResolveCtx resolve_ctx(allocator,
-                                   *(ctx_.session_info_),
-                                   *(ctx_.schema_guard_),
-                                   package_guard,
-                                   *(GCTX.sql_proxy_),
-                                   false);
-    OZ (package_manager.get_package_type(
-      resolve_ctx, package_info->get_package_id(), type_info->type_name_, pl_type));
-    CK (OB_NOT_NULL(pl_type));
-  }
-  return ret;
 }
 
 int ObMPStmtExecute::get_pl_type_by_type_info(ObIAllocator &allocator,
@@ -3062,3 +2995,38 @@ int ObMPStmtExecute::response_query_header(ObSQLSessionInfo &session, pl::ObPLSe
 
 } //end of namespace observer
 } //end of namespace oceanbase
+
+namespace oceanbase
+{
+namespace query
+{
+
+int decode_mysql_basic_param_value(
+    common::ObIAllocator &allocator,
+    uint32_t type,
+    common::ObCharsetType charset,
+    common::ObCharsetType ncharset,
+    common::ObCollationType collation,
+    const char *&data,
+    const common::ObTimeZoneInfo *time_zone,
+    common::ObObj &value,
+    bool is_complex_element,
+    bool is_unsigned)
+{
+  UNUSED(ncharset);
+  return observer::ObMPStmtExecute::parse_basic_param_value(
+      allocator,
+      type,
+      nullptr,
+      charset,
+      collation,
+      data,
+      time_zone,
+      value,
+      is_complex_element,
+      nullptr,
+      is_unsigned);
+}
+
+} // namespace query
+} // namespace oceanbase

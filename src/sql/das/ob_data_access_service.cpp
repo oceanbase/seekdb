@@ -15,13 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
-#include "share/rc/ob_module_provider.h"
+#include "query/runtime/ob_query_runtime_environment.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_parallel_handler.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -29,7 +28,6 @@ using namespace share;
 using namespace storage;
 using namespace common;
 using namespace transaction;
-using namespace observer;
 namespace sql
 {
 
@@ -261,12 +259,13 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
 {
   int ret = OB_SUCCESS;
   ObDASParallelTask *task = nullptr;
-  omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
+  query::ObIQueryRuntimeEnvironment *runtime =
+      das_ref.get_exec_ctx().get_query_runtime_environment();
   ObPhysicalPlanCtx *plan_ctx = das_ref.get_exec_ctx().get_physical_plan_ctx();
   int64_t timeout_ts = plan_ctx->get_timeout_timestamp();
-  if (NULL == runtime_controller) {
+  if (OB_ISNULL(runtime)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "runtime controller is null", KR(ret), KP(runtime_controller));
+    TRANS_LOG(ERROR, "query runtime environment is null", KR(ret));
   } else if (OB_ISNULL(task = ObDASParallelTaskFactory::alloc(das_ref.get_das_ref_count_ctx()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret));
@@ -274,13 +273,7 @@ int ObDataAccessService::push_parallel_task(ObDASRef &das_ref, ObDasAggregatedTa
     LOG_WARN("init parallel task failed", K(ret), K(agg_task));
   } else {
     
-    omt::ObServerRuntime *runtime = nullptr;
-    if (OB_FAIL(runtime_controller->get_runtime(runtime))) {
-      LOG_WARN("get server runtime failed", K(ret));
-    } else if (OB_ISNULL(runtime)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("server runtime is null", K(ret));
-    } else if (OB_FAIL(runtime->recv_request(*task))) {
+    if (OB_FAIL(runtime->submit_current_tenant_request(*task))) {
       LOG_WARN("fail to push parallel_das_task", K(ret), KPC(task));
     } else {
       LOG_TRACE("push parallel task succeed", K(agg_task));

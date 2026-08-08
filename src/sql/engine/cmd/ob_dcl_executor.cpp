@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_dcl_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/engine/ob_exec_context.h"
@@ -167,7 +167,8 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->grant(arg); }))) {
+    } else if (OB_FAIL(query::serialize_root_service_call(
+        [&]{ return ctx.root_command_service().grant(arg); }))) {
       LOG_WARN("Grant privileges to user error", K(ret), K(arg));
     }
   }
@@ -187,13 +188,13 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
   } else {
     switch (stmt.get_grant_level()) {
       case OB_PRIV_USER_LEVEL: {
-        if (OB_FAIL(revoke_user(stmt))) {
+        if (OB_FAIL(revoke_user(stmt, ctx))) {
           LOG_WARN("grant_revoke_user error", K(ret));
         }
         break;
       }
       case OB_PRIV_DB_LEVEL: {
-        if (OB_FAIL(revoke_db(stmt))) {
+        if (OB_FAIL(revoke_db(stmt, ctx))) {
           LOG_WARN("grant_revoke_db error", K(ret));
         }
         break;
@@ -221,7 +222,7 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
   return ret;
 }
 
-int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
+int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt, ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeUserArg &arg = static_cast<obcall::ObRevokeUserArg &>(stmt.get_ddl_arg());
@@ -231,7 +232,8 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
   if (is_role) {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_user(arg); }))) {
+      if (OB_FAIL(query::serialize_root_service_call(
+          [&]{ return ctx.root_command_service().revoke_user(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -243,7 +245,8 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
     arg.priv_set_ = stmt.get_priv_set();
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_user(arg); }))) {
+      if (OB_FAIL(query::serialize_root_service_call(
+          [&]{ return ctx.root_command_service().revoke_user(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -251,7 +254,7 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
   return ret;
 }
 
-int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
+int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt, ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   obcall::ObRevokeDBArg &arg = static_cast<obcall::ObRevokeDBArg &>(stmt.get_ddl_arg());
@@ -265,7 +268,8 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
   } else {
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
-      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_database(arg); }))) {
+      if (OB_FAIL(query::serialize_root_service_call(
+          [&]{ return ctx.root_command_service().revoke_database(arg); }))) {
         LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
@@ -341,7 +345,8 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_table(arg); }))) {
+        if (OB_FAIL(query::serialize_root_service_call(
+            [&]{ return ctx.root_command_service().revoke_table(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
@@ -399,7 +404,8 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     } else {
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->revoke_routine(arg); }))) {
+        if (OB_FAIL(query::serialize_root_service_call(
+            [&]{ return ctx.root_command_service().revoke_routine(arg); }))) {
           LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }

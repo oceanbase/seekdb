@@ -28,7 +28,8 @@
 
 #ifndef OCEANBASE_LIB_THREAD_OB_EASY_THREAD_POOL_H
 #define OCEANBASE_LIB_THREAD_OB_EASY_THREAD_POOL_H
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include <assert.h>
 #include <type_traits>                                   // std::invoke_result
@@ -39,7 +40,6 @@
 #include "lib/thread/threads.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/thread/ob_thread_name.h"
-#include "share/rc/ob_server_runtime.h"
 #include "share/ob_thread_pool.h"
 
 
@@ -96,15 +96,13 @@ public:
   }
   template <typename T>
   int init_and_start(T &&func,
-                     bool need_set_runtime_ctx = true,
+                     lib::IRunWrapper *run_wrapper = nullptr,
                      const char *thread_name = "Occam") {
     if (OB_NOT_NULL(thread_name) && '\0' != thread_name[0]) {
       MEMSET(thread_name_, 0, sizeof(thread_name_));
       STRNCPY(thread_name_, thread_name, sizeof(thread_name_) - 1);
     }
-    if (need_set_runtime_ctx) {
-      share::ObThreadPool::set_run_wrapper(share::server_runtime());
-    }
+    share::ObThreadPool::set_run_wrapper(run_wrapper);
     int ret = OB_SUCCESS;
     if (is_inited_) {
       ret = OB_INIT_TWICE;
@@ -221,7 +219,8 @@ public:
   ~ObOccamThreadPool() { destroy(); }
   int init(int64_t thread_num,
            int64_t queue_size_square_of_2 = 10,
-           const char *thread_name = "Occam")
+           const char *thread_name = "Occam",
+           lib::IRunWrapper *run_wrapper = nullptr)
   {
     int ret = OB_SUCCESS;
     if (is_inited_) {
@@ -260,7 +259,7 @@ public:
             uint64_t thread_id = threads_[thread_init_idx].get_id();
             ret = threads_[thread_init_idx].init_and_start(
                 [this, thread_id]() { this->keep_fetching_task_until_stop_(thread_id); },
-                true /* need_set_runtime_ctx */,
+                run_wrapper,
                 thread_name);
           }
           if (OB_SUCC(ret)) {
@@ -532,13 +531,15 @@ public:
     queue_size_square_of_2_(0) {}
   int init_and_start(int thread_num,
                      int queue_size_square_of_2 = 10,
-                     const char *thread_name = "Occam")
+                     const char *thread_name = "Occam",
+                     lib::IRunWrapper *run_wrapper = nullptr)
   {
     int ret = OB_SUCCESS;
     ret = ob_make_shared<occam::ObOccamThreadPool>(thread_pool_);
     if (OB_FAIL(ret)) {
       OCCAM_LOG(WARN, "make shared failed");
-    } else if (OB_FAIL(thread_pool_->init(thread_num, queue_size_square_of_2, thread_name))) {
+    } else if (OB_FAIL(thread_pool_->init(
+        thread_num, queue_size_square_of_2, thread_name, run_wrapper))) {
       thread_pool_.reset();
       OCCAM_LOG(WARN, "thread_pool_ init failed",
                   K(thread_pool_), K(thread_num_), K(queue_size_square_of_2_));

@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+select count(*) from oceanbase.__all_cluster;
+count(*)
+0
+alter system add cluster tt cluster_id = 1;
+ERROR HY000: Incorrect arguments to cluster name
+alter system remove cluster tt cluster_id = 1;
+ERROR HY000: Incorrect arguments to cluster name
+ERROR HY000: Entry not exist
+ERROR HY000: Entry not exist
+ERROR HY000: cluster aleary register
+ERROR 0A000: remove leader cluster not supported
+ob2.reboot;
+select count(*) from oceanbase.__all_cluster;
+count(*)
+0
+count(*)
+2
+select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+NOT ALLOWED
+select count(*) from oceanbase.__all_cluster;
+count(*)
+1
+select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO PRIMARY
+'remove cluster succ '
+ob1.mysql create user msy;
+select switchover_status from oceanbase.v\$ob_cluster;
+switchover_status
+TO PRIMARY

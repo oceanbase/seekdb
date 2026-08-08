@@ -1,0 +1,399 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description : 测试change tenant的行为
+#               1. 仅允许系统租户change tenant，且用户需至少具备：oceanbase的access权限 & super权限；
+#               2. 事务开启过程中，执行change tenant会失败，change tenant失败不影响事务提交；
+#               3. change tenant之后，仅能操作读写该租户下的oceanbase database;
+#               4. change tenant之后，系统变量及用户变量保持不变。
+#               
+
+ob1=OBI(cluster=1:1:1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz:hz);
+
+ob1.z4.obs0.set status=disable;
+ob1.z5.obs0.set status=disable;
+ob1.z6.obs0.set status=disable;
+
+ob1.reboot;
+
+ob1.z4.add;
+ob1.z4.start_zone;
+ob1.z4.obs0.set status=enable;
+ob1.z4.obs0.start;
+
+ob1.z5.add;
+ob1.z5.start_zone;
+ob1.z5.obs0.set status=enable;
+ob1.z5.obs0.start;
+
+ob1.z6.add;
+ob1.z6.start_zone;
+ob1.z6.obs0.set status=enable;
+ob1.z6.obs0.start;
+
+sleep 10;
+ob1.z4.obs0.add;
+ob1.z5.obs0.add;
+ob1.z6.obs0.add;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone in ('z4', 'z5', 'z6') and (status != "active" or start_service_time <= 0), 0, 120;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+let $sys_tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "sys", tenant_id, 1);
+
+let $obs_addr = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) addr from __all_unit where resource_pool_id = $resource_pool_id, addr, 1);
+let $obs = deploy_get_value(ob1.get_obs_by_addr $obs_addr);
+let $obs_ip  = deploy_get_value($obs.ip);
+let $obs_port  = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z4','z5','z6');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone = 'z4,z5,z6', locality='F@z4,F@z5,F@z6' set ob_tcp_invited_nodes='%', read_only='on';
+sleep 10;
+
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_2', resource_pool_id, 1);
+let $tenant2_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_2", tenant_id, 1);
+
+let $obs_addr = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) addr from __all_unit where resource_pool_id = $resource_pool_id, addr, 1);
+let $obs = deploy_get_value(ob1.get_obs_by_addr $obs_addr);
+let $obs_ip  = deploy_get_value($obs.ip);
+let $obs_port  = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn2,$obs_ip,root@tenant_2,,test,$obs_mysql_port);
+
+#connection conn_sys;
+#use test;
+#create table sys_table(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+connection conn1;
+use test;
+create table t1_1(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+create database db1;
+use db1;
+create table t1_2(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+connection conn2;
+use test;
+create table t2_1(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+create database db2;
+use db2;
+create table t2_2(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table, 30, 5;
+
+# case 0: change tenant的用户需具备：1.oceanbase的access权限 2.super权限
+connection conn_sys;
+create user sys_user_1;
+create user sys_user_2;
+create user sys_user_3;
+create user sys_user_4;
+
+grant super on *.* to sys_user_2, sys_user_4;
+grant select on test.* to sys_user_1, sys_user_2;
+grant select on *.* to sys_user_3, sys_user_4;
+
+connect (conn_sys_1,$rs_ip,sys_user_1@sys,,test,$rs_mysql_port);
+connect (conn_sys_2,$rs_ip,sys_user_2@sys,,test,$rs_mysql_port);
+connect (conn_sys_3,$rs_ip,sys_user_3@sys,,oceanbase,$rs_mysql_port);
+connect (conn_sys_4,$rs_ip,sys_user_4@sys,,oceanbase,$rs_mysql_port);
+
+connection conn_sys_1;
+--error 1044
+use oceanbase;
+--error 1044
+alter system change tenant tenant_1;
+
+connection conn_sys_2;
+--error 1044
+use oceanbase;
+--error 1044
+alter system change tenant tenant_1;
+
+connection conn_sys_3;
+use oceanbase;
+alter system change tenant tenant_1;
+eval select count(*) as cnt from __all_tenant_meta_table where tenant_id = "$tenant1_id";
+
+connection conn_sys_4;
+use oceanbase;
+alter system change tenant tenant_1;
+eval select count(*) as cnt from __all_tenant_meta_table where tenant_id = "$tenant1_id";
+
+# 只赋予了SELECT权限
+let $invalid_table_id = `select max(table_id) + 1 as table_id from __all_tenant_gc_partition_info`;
+let $invalid_partition_id = 1000;
+--error 1142
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant1_id, $invalid_table_id, $invalid_partition_id);
+--error 1142
+eval update __all_tenant_gc_partition_info set partition_id = $invalid_id where 1 = 1;
+--error 1142
+eval delete from __all_tenant_gc_partition_info where 1 = 1;
+
+# 普通租户不能change tenant
+connection conn1;
+--error 1227
+alter system change tenant sys;
+
+
+# case 2: 验证change tenant之后一些可用的操作
+let $z4_ip = deploy_get_value(ob1.z4.obs0.ip);
+let $z4_mysql_port = deploy_get_value(ob1.z4.obs0.mysql_port);
+connect (conn_sys_on_z4,$z4_ip,admin@sys,admin,oceanbase,$z4_mysql_port);
+connection conn_sys_on_z4;
+
+# z4无tenant_1资源, 但能change tenant成功
+alter system change tenant tenant_1;
+eval select count(*) as cnt from __all_tenant_meta_table where tenant_id = "$tenant1_id";
+
+alter system change tenant tenant_2;
+
+# 即便赋予了权限，change tenant之后也无操作非oceanbase数据库的权限
+--error 1044
+select * from db2.t2_2;
+--error 1044
+insert into db2.t2_2(c1, c2) values (1,1);
+--error 1044
+replace into db2.t2_2(c1, c2) values (2,2);
+--error 1044
+update db2.t2_2 set c1 = 100 where 1 = 1;
+--error 1044
+delete from db2.t2_2 where 1 = 1;
+
+--error 4179
+use mysql;
+--error 1049
+use db2;
+
+# change tenant之后仅能执行DML语句，及设置系统变量、用户变量
+--error 1235
+alter system report replica;
+--error 1235
+create table t1_3(c1 int primary key, c2 int);
+
+# 执行DML
+let $invalid_table_id = `select max(table_id) + 1 as table_id from __all_tenant_gc_partition_info`;
+let $invalid_partition_id = 1000;
+
+# change tenant之后，缺省使用oceanbase数据
+eval select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = "$tenant2_id";
+
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+eval update __all_tenant_gc_partition_info set partition_id = $invalid_partition_id + 1 where table_id = $invalid_table_id;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+eval replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id + 2);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+eval delete from __all_tenant_gc_partition_info where table_id = $invalid_table_id;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+# show语句
+show databases;
+show tenant;
+show create database oceanbase;
+show warnings;
+show errors;
+show variables like "ob_query_timeout";
+show engines;
+show privileges;
+show recyclebin;
+show charset;
+show collation;
+show status like "Threads_connected";
+show grants;
+show create tenant tenant_2;
+
+# 可用，但结果集不稳定
+# show processlist;
+# show table status from oceanbase;
+
+# FIXME: 原来的实现有问题
+# show parameters;
+
+# 其他
+select 1+1;
+
+# case 3: 设置变量
+connection conn_sys;
+
+eval select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = "$sys_tenant_id";
+
+# 初始化变量
+set @@global.ob_query_timeout = 20000000;
+set @@session.ob_query_timeout = 30000000;
+set @a = 1;
+
+alter system change tenant tenant_1;
+
+eval select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = "$tenant1_id";
+
+# 校验change tenant之后的变量
+# 全局变量显示的是切换后租户的全局变量
+show GLOBAL variables like "ob_query_timeout";
+show SESSION variables like "ob_query_timeout";
+select @a;
+select @b;
+
+# 修改变量
+set @@session.ob_query_timeout = 40000000;
+set @@global.ob_query_timeout = 50000000;
+set @a = 2;
+
+show GLOBAL variables like "ob_query_timeout";
+show SESSION variables like "ob_query_timeout";
+select @a;
+
+# 验证系统变量生效
+set @@session.ob_query_timeout = 10;
+--error 4012
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+set @@session.ob_query_timeout = 10000000;
+set @@global.ob_query_timeout = 10000000;
+
+# case 4: 事务提交
+alter system change tenant sys;
+eval select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = "$sys_tenant_id";
+
+# 事务开启的场景，不允许change tenant
+# change tenant失败不影响事务提交
+begin;
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+--error 4179
+alter system change tenant tenant_1;
+rollback;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+begin;
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+--error 4179
+alter system change tenant tenant_1;
+commit;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+eval delete from __all_tenant_gc_partition_info where table_id = $invalid_table_id;
+
+# case 5: 测试切租户后开启事务
+alter system change tenant tenant_1;
+# 事务正常提交
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+begin;
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+eval update __all_tenant_gc_partition_info set partition_id = $invalid_partition_id + 1 where table_id = $invalid_table_id;
+eval replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id + 2);
+commit;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+eval delete from __all_tenant_gc_partition_info where table_id = $invalid_table_id;
+
+# 事务正常回滚
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+begin;
+eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+eval update __all_tenant_gc_partition_info set partition_id = $invalid_partition_id + 1 where table_id = $invalid_table_id;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+eval replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id + 2);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+rollback;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+# case 6: 测试连续切tenant
+connection conn_sys;
+use oceanbase;
+
+--disable_query_log
+--disable_result_log
+insert into oceanbase.__all_tenant_gc_partition_info (tenant_id, table_id, partition_id) values (1,1,1);
+
+let $cnt = 100;
+let $idx = 1;
+while ($idx < $cnt)
+{
+  # 切租户
+  alter system change tenant sys;
+
+  let $invalid_table_id = 10000;
+  let $invalid_partition_id = 1000;
+
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval update __all_tenant_gc_partition_info set partition_id = $invalid_partition_id + 1 where table_id = $invalid_table_id;
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id + 2);
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval delete from __all_tenant_gc_partition_info where table_id = $invalid_table_id;
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  # 切租户
+  alter system change tenant tenant_1;
+
+  let $invalid_table_id = 10000;
+  let $invalid_partition_id = 1000;
+
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id);
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval update __all_tenant_gc_partition_info set partition_id = $invalid_partition_id + 1 where table_id = $invalid_table_id;
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values ($tenant2_id, $invalid_table_id, $invalid_partition_id + 2);
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  eval delete from __all_tenant_gc_partition_info where table_id = $invalid_table_id;
+  select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+
+  inc $idx;
+}
+
+# bugfix:
+connection conn_sys_3;
+use oceanbase;
+let $i = 0;
+while ($i < 2)
+{
+  alter system change tenant tenant_1;
+  alter system change tenant tenant_2;
+  alter system change tenant sys;
+  inc $i;
+}
+--enable_query_log
+--enable_result_log

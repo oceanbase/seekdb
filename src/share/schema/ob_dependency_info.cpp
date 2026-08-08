@@ -1014,8 +1014,6 @@ void ObReferenceObjTable::reset()
   ref_obj_version_table_.destroy();
 }
 
-// batch_fill_kv_pairs relocated to rootserver::ObDependencyDDLHelper
-
 int ObReferenceObjTable::fill_rowkey_pairs(
     const ObDependencyObjKey &dep_obj_key,
     share::ObDMLSqlSplicer &dml)
@@ -1032,8 +1030,6 @@ int ObReferenceObjTable::fill_rowkey_pairs(
   }
   return ret;
 }
-
-// batch_execute_insert_or_update_obj_dependency relocated to rootserver::ObDependencyDDLHelper
 
 int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
     ObMySQLTransaction &trans)
@@ -1065,8 +1061,6 @@ int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceOb
   }
   return ret;
 }
-
-// update_max_dependency_version relocated to rootserver::ObDependencyDDLHelper
 
 int ObReferenceObjTable::get_or_add_def_obj_item(const uint64_t dep_obj_id,
                                                  const uint64_t dep_db_id,

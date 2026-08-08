@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SQL_PC
 
 #include "ob_cache_object_factory.h"
-#include "share/rc/ob_module_provider.h"
-#include "sql/ob_sql.h"
+#include "sql/plan_cache/ob_plan_cache.h"
 
 namespace oceanbase
 {
@@ -28,15 +27,13 @@ using namespace lib;
 namespace sql
 {
 
-int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
+int ObCacheObjectFactory::alloc(ObPlanCache &plan_cache,
+                                ObCacheObjGuard& guard,
+                                ObLibCacheNameSpace ns)
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
-    if (OB_ISNULL(lib_cache)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid null plan cache", K(ret));
-    } else if (OB_FAIL(lib_cache->alloc_cache_obj(guard, ns))) {
+    if (OB_FAIL(plan_cache.alloc_cache_obj(guard, ns))) {
       LOG_WARN("failed to alloc cache obj", K(ret), K(ns));
     }
   }
@@ -46,9 +43,9 @@ int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
 void ObCacheObjectFactory::inner_free(ObILibCacheObject *&cache_obj)
 {
   int ret = OB_SUCCESS;
-  
+
   SERVER_MODULE_SCOPE {
-    ObPlanCache *lib_cache = share::g_mp->plan_cache();
+    ObPlanCache *lib_cache = OB_ISNULL(cache_obj) ? nullptr : cache_obj->get_plan_cache();
     if (OB_ISNULL(lib_cache)) {
       LOG_WARN_RET(OB_ERR_UNEXPECTED, "invalid null plan cache");
     } else {

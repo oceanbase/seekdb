@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_local_channel.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 
@@ -73,7 +73,7 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     is_eof = buf->is_eof();
     if (buf->is_data_msg() && buf->use_interm_result()) {
       SERVER_MODULE_SCOPE {
-        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buf, peer_id_))) {
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->process_interm_result(buf, peer_id_))) {
           LOG_WARN("fail to process internal result", K(ret));
         }
       }

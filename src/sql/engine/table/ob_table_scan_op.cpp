@@ -15,16 +15,18 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "data_plane/transaction/ob_transaction_version.h"
 
 
 #include "ob_table_scan_op.h"
 #include "common/json_type/ob_json_bin.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "share/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
 #include "sql/engine/px/ob_granule_iterator_op.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -1163,7 +1165,7 @@ OB_INLINE int ObTableScanOp::init_das_scan_rtdef(const ObDASScanCtDef &das_ctdef
   das_rtdef.scan_rows_size_ = MY_SPEC.rows_ * MY_SPEC.width_;
   if(is_foreign_check_nested_session()) {
     das_rtdef.is_for_foreign_check_ = true;
-    if (plan_ctx->get_phy_plan()->has_for_update() && ObSQLUtils::is_iter_uncommitted_row(&ctx_)) {
+    if (plan_ctx->has_for_update() && ObSQLUtils::is_iter_uncommitted_row(&ctx_)) {
       das_rtdef.scan_flag_.set_iter_uncommitted_row();
     }
   }
@@ -2713,7 +2715,8 @@ int ObTableScanOp::construct_partition_range(ObArenaAllocator &allocator,
           if (OB_FAIL(datum.from_obj(start_row_key[i], expr->obj_datum_map_))) {
             LOG_WARN("convert obj to datum failed", K(ret));
           } else if (is_lob_storage(start_row_key[i].get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(start_row_key[i], expr->obj_meta_, expr->obj_datum_map_,
+                     OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), start_row_key[i],
+                                                 expr->obj_meta_, expr->obj_datum_map_,
                                                  get_exec_ctx().get_allocator(), datum))) {
             LOG_WARN("adjust lob datum failed", K(ret), K(i),
                      K(start_row_key[i].get_meta()), K(expr->obj_meta_));
@@ -3151,7 +3154,8 @@ int ObTableScanOp::report_ddl_column_checksum()
     const int64_t scan_task_id_base = scan_task_id_;
     if (OB_FAIL(ensure_ddl_column_checksum_array())) {
       LOG_WARN("ensure ddl column checksum array failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_data_information(MY_SPEC.plan_->get_ddl_task_id(),
+    } else if (OB_FAIL(ObDDLUtil::get_data_information(*GCTX.sql_proxy_,
+                                                       MY_SPEC.plan_->get_ddl_task_id(),
                                                        data_format_version,
                                                        snapshot_version,
                                                        unused_task_status))) {
@@ -3281,7 +3285,7 @@ int ObTableScanOp::init_multivalue_index_rows()
   int ret = OB_SUCCESS;
   const ObTableScanSpec& spec = get_tsc_spec();
   const ObDASScanCtDef &scan_ctdef = MY_CTDEF.scan_ctdef_;
-  const storage::ObTableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
+  const storage::ObITableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
 
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
   uint32_t data_rowkey_cnt = read_info.get_schema_rowkey_count();
@@ -3366,7 +3370,7 @@ int ObTableScanOp::multivalue_get_pure_data(
   int ret = OB_SUCCESS;
 
   const ObDASScanCtDef &scan_ctdef = MY_CTDEF.scan_ctdef_;
-  const storage::ObTableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
+  const storage::ObITableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
   uint32_t data_rowkey_cnt = read_info.get_schema_rowkey_count();
   uint32_t column_count = exprs.count() - 1;
@@ -3379,7 +3383,8 @@ int ObTableScanOp::multivalue_get_pure_data(
 
   if (OB_FAIL(array_expr->eval(eval_ctx_, json_datum))) {
     LOG_WARN("expression evaluate failed", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *json_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   get_exec_ctx(), tmp_allocator, *json_datum,
                                                                array_expr->datum_meta_,
                                                                array_expr->obj_meta_.has_lob_header(),
                                                                json_arr_data))) {
@@ -3486,7 +3491,7 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
         } else {
           uint32_t obj_idx = 0;
           bool is_none_unique_done = false;
-          const storage::ObTableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
+          const storage::ObITableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
           uint32_t data_rowkey_cnt = read_info.get_schema_rowkey_count();
           int64_t pos = sizeof(uint32_t);
 
@@ -3535,7 +3540,8 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
       }
     }
     if (OB_SUCC(ret) && !need_ignore_null) {
-      ObStorageDatum *store_datums = (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++]->storage_datums_;
+      blocksstable::ObStorageDatum *store_datums =
+          (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++]->storage_datums_;
       if (OB_FAIL(fill_generated_multivalue_column(store_datums))) {
         LOG_WARN("failed to fill generated column", K(ret));
       }
@@ -3544,7 +3550,7 @@ int ObTableScanOp::inner_get_next_multivalue_index_row()
   return ret;
 }
 
-int ObTableScanOp::fill_generated_multivalue_column(ObStorageDatum* store_datums)
+int ObTableScanOp::fill_generated_multivalue_column(blocksstable::ObStorageDatum *store_datums)
 {
   int ret = OB_SUCCESS;
 
@@ -3577,7 +3583,7 @@ int ObTableScanOp::init_spiv_index_rows()
   int ret = OB_SUCCESS;
   const ObTableScanSpec& spec = get_tsc_spec();
   const ObDASScanCtDef &scan_ctdef = MY_CTDEF.scan_ctdef_;
-  const storage::ObTableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
+  const storage::ObITableReadInfo& read_info = scan_ctdef.table_param_.get_read_info();
 
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
   uint32_t data_rowkey_cnt = read_info.get_schema_rowkey_count();
@@ -3714,7 +3720,8 @@ int ObTableScanOp::get_sparse_vector_data(
   docid_expr = exprs.at(docid_idx);
   if (OB_FAIL(sparse_vec_expr->eval(eval_ctx_, sparse_vec_datum))) {
     LOG_WARN("sparse vector expression evaluate failed", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, *sparse_vec_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                   get_exec_ctx(), allocator, *sparse_vec_datum,
                                                               sparse_vec_expr->datum_meta_,
                                                               sparse_vec_expr->obj_meta_.has_lob_header(),
                                                               sparse_vec_data))) {
@@ -3772,7 +3779,8 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
       }
     }
     if (OB_SUCC(ret) && !need_ignore_null_or_empty) {
-      ObStorageDatum *store_datums = (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++]->storage_datums_;
+      blocksstable::ObStorageDatum *store_datums =
+          (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++]->storage_datums_;
       const ObExprPtrIArray &exprs = MY_SPEC.output_;
       for (int64_t i = 0; i < exprs.count() && OB_SUCC(ret); i++) {
         ObExpr *expr = exprs.at(i);
@@ -3817,28 +3825,32 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
         } else if (OB_FALSE_IT(geo_wkb = in_datum->get_string())) {
         } else if (geo_wkb.length() > 0) {
           uint32_t srid = UINT32_MAX;
-          omt::ObSrsCacheGuard srs_guard;
+          common::ObSrsCacheGuard srs_guard;
           const ObSrsItem *srs_item = NULL;
           const ObSrsBoundsItem *srs_bound = NULL;
-          ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
+          common::ObISrsProvider *srs_provider = get_exec_ctx().get_srs_provider();
           
           ObS2Cellids cellids;
           ObString mbr_val(0, static_cast<char *>(domain_index_.mbr_buffer_));
 
           ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *in_datum,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                      get_exec_ctx(), tmp_allocator, *in_datum,
                       expr->datum_meta_, expr->obj_meta_.has_lob_header(), geo_wkb))) {
             LOG_WARN("failed to get real geo data.", K(ret));
           } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(geo_wkb, srid))) {
             LOG_WARN("failed to get srid", K(ret), K(geo_wkb));
+          } else if (OB_ISNULL(srs_provider)) {
+            ret = OB_NOT_INIT;
+            LOG_WARN("SRS provider is not configured", K(ret));
           } else if (srid != 0 &&
-              OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+              OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
             LOG_WARN("failed to get srs guard", K(ret), K(srid));
           } else if (srid != 0 &&
               OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
             LOG_WARN("failed to get srs item", K(ret), K(srid));
           } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
-                      OB_FAIL(SRS_SERVICE->get_srs_bounds(srid, srs_item, srs_bound))) {
+                      OB_FAIL(srs_provider->get_srs_bounds(srid, srs_item, srs_bound))) {
             LOG_WARN("failed to get srs bound", K(ret), K(srid));
           } else if (OB_FAIL(ObGeoTypeUtil::get_cellid_mbr_from_geom(geo_wkb, srs_item, srs_bound,
                                                                      cellids, mbr_val))) {
@@ -3869,9 +3881,10 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
       }
     }
     if (OB_SUCC(ret) && !need_ignore_null) {
-      ObDatumRow *row = (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++];
-      ObStorageDatum &cellid = row->storage_datums_[0];
-      ObStorageDatum &mbr = row->storage_datums_[1];
+      blocksstable::ObDatumRow *row =
+          (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++];
+      blocksstable::ObStorageDatum &cellid = row->storage_datums_[0];
+      blocksstable::ObStorageDatum &mbr = row->storage_datums_[1];
       if (OB_FAIL(fill_generated_cellid_mbr(cellid, mbr))) {
         LOG_WARN("fill cellid mbr failed", K(ret), K(cellid), K(mbr));
       }
@@ -3921,7 +3934,9 @@ int ObTableScanOp::init_spatial_index_rows()
   return ret;
 }
 
-int ObTableScanOp::fill_generated_cellid_mbr(const ObStorageDatum &cellid, const ObStorageDatum &mbr)
+int ObTableScanOp::fill_generated_cellid_mbr(
+    const blocksstable::ObStorageDatum &cellid,
+    const blocksstable::ObStorageDatum &mbr)
 {
   int ret = OB_SUCCESS;
   const ObExprPtrIArray &exprs = MY_SPEC.output_;
@@ -3931,7 +3946,7 @@ int ObTableScanOp::fill_generated_cellid_mbr(const ObStorageDatum &cellid, const
   } else {
     for (uint8_t i = 0; i < 2 && OB_SUCC(ret); i++) {
       ObObjDatumMapType type = i == 0 ? OBJ_DATUM_8BYTE_DATA : OBJ_DATUM_STRING;
-      const ObStorageDatum &value = i == 0 ? cellid : mbr;
+      const blocksstable::ObStorageDatum &value = i == 0 ? cellid : mbr;
       uint32_t idx = i == 0 ? domain_index_.cell_idx_ : domain_index_.mbr_idx_;
       ObExpr *expr = exprs.at(idx);
       ObDatum *datum = &expr->locate_datum_for_write(get_eval_ctx());
@@ -4001,7 +4016,8 @@ int ObTableScanOp::fetch_next_fts_index_rows()
     } else {
       ObString ft = ft_datum->get_string();
       ObArenaAllocator tmp_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(get_exec_ctx(),
+                                                            tmp_allocator,
                                                             *ft_datum,
                                                             ft_expr->datum_meta_,
                                                             ft_expr->obj_meta_.has_lob_header(),
@@ -4205,38 +4221,3 @@ int ObRandScanProcessor::inner_get_next_batch(const int64_t max_row_cnt)
 
 } // end namespace sql
 } // end namespace oceanbase
-
-// definition moved from share/ob_i_tablet_scan.cpp: printing the sql::ObExpr array needs a complete type, share must not depend upward on sql
-namespace oceanbase
-{
-namespace common
-{
-DEF_TO_STRING(ObVTableScanParam)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV(K_(tablet_id),
-       N_COLUMN_IDS, column_ids_,
-       N_INDEX_ID, index_id_,
-       N_KEY_RANGES, key_ranges_,
-       K_(range_array_pos),
-       N_TIMEOUT, timeout_,
-       N_SCAN_FLAG, scan_flag_,
-       N_SQL_MODE, sql_mode_,
-       N_RESERVED_CELL_COUNT, reserved_cell_count_,
-       N_SCHEMA_VERSION, schema_version_,
-       N_QUERY_BEGIN_SCHEMA_VERSION, runtime_schema_version_,
-       N_LIMIT_OFFSET, limit_param_,
-       N_FOR_UPDATE, for_update_,
-       N_WAIT, for_update_wait_timeout_,
-       N_FROZEN_VERSION, frozen_version_,
-       K_(is_get),
-       K_(pd_storage_flag),
-       KPC_(output_exprs),
-       KPC_(op_filters),
-       K_(table_scan_opt));
-  J_OBJ_END();
-  return pos;
-}
-}  // namespace common
-}  // namespace oceanbase

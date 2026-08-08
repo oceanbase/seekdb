@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_ra_row_store.h"
-#include "storage/tmp_file/ob_tmp_file_manager.h"
+#include "data_plane/tmp_file/ob_tmp_file.h"
 
 
 namespace oceanbase
@@ -237,7 +237,7 @@ void ObRARowStore::reset()
   inner_reader_.reset();
 
   if (is_file_open()) {
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(fd_))) {
+    if (OB_FAIL(data_plane::tmp_file_remove(fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
@@ -916,9 +916,9 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
-      if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
+      if (OB_FAIL(data_plane::tmp_file_alloc_dir(dir_id_))) {
         LOG_WARN("alloc file directory failed", K(ret));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(fd_, dir_id_))) {
+      } else if (OB_FAIL(data_plane::tmp_file_open(fd_, dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -928,13 +928,13 @@ int ObRARowStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     ret = OB_E(EventTable::EN_8) ret;
   }
   if (OB_SUCC(ret) && size > 0) {
-    tmp_file::ObTmpFileIOInfo io;
+    data_plane::ObTmpFileIOInfo io;
     io.fd_ = fd_;
     io.buf_ = static_cast<char *>(buf);
     io.size_ = size;
     io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
     io.io_timeout_ms_ = timeout_ms;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->write(io))) {
+    if (OB_FAIL(data_plane::tmp_file_write(io))) {
       LOG_WARN("write to file failed", K(ret), K(io), K(timeout_ms));
     }
   }
@@ -961,15 +961,15 @@ int ObRARowStore::read_file(void *buf, const int64_t size, const int64_t offset)
   }
 
   if (OB_SUCC(ret) && size > 0) {
-    tmp_file::ObTmpFileIOInfo io;
+    data_plane::ObTmpFileIOInfo io;
     io.fd_ = fd_;
     io.dir_id_ = dir_id_;
     io.buf_ = static_cast<char *>(buf);
     io.size_ = size;
     io.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     io.io_timeout_ms_ = timeout_ms;
-    tmp_file::ObTmpFileIOHandle handle;
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->pread(io, offset, handle))) {
+    data_plane::ObTmpFileIOHandle handle;
+    if (OB_FAIL(data_plane::tmp_file_pread(io, offset, handle))) {
       LOG_WARN("read form file failed", K(ret), K(io), K(offset), K(timeout_ms));
     } else if (handle.get_done_size() != size) {
       ret = OB_INNER_STAT_ERROR;

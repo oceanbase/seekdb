@@ -60,7 +60,7 @@ int ObExprPrivSTClipByBox2D::calc_result_type2(ObExprResType &type, ObExprResTyp
   return ret;
 }
 
-int ObExprPrivSTClipByBox2D::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator,
+int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, MultimodeAlloctor &allocator,
     bool &is_null_res, ObGeometry *&geo1, ObGeometry *&geo2, const ObSrsItem *&srs1,
     const ObSrsItem *&srs2)
 {
@@ -82,11 +82,11 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(omt::ObSrsCacheGuard &srs_gu
     ObString wkb1 = datum1->get_string();
     ObString wkb2 = datum2->get_string();
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_,
             allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb1))) {
       LOG_WARN(
           "fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()), K(wkb1));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
                    *datum2,
                    arg2->datum_meta_,
                    arg2->obj_meta_.has_lob_header(),
@@ -136,7 +136,7 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObString res_wkb;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
 
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, is_null_res, geo1, geo2, srs1, srs2))) {
     LOG_WARN("fail to process input geometry", K(ret), K(geo1), K(geo2), K(is_null_res));

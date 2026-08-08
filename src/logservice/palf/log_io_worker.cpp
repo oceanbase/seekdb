@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX PALF
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "log_io_worker.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl

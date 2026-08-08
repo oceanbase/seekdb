@@ -15,7 +15,7 @@
  */
 
 #include "ob_data_checkpoint.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "storage/ls/ob_ls.h"
 
@@ -261,7 +261,7 @@ int ObDataCheckpoint::flush(SCN recycle_scn, bool need_freeze)
 int ObDataCheckpoint::ls_freeze(SCN rec_scn)
 {
   int ret = OB_SUCCESS;
-  ObCheckPointService *checkpoint_srv = share::g_mp->check_point_service();
+  ObCheckPointService *checkpoint_srv = ::oceanbase::share::server_service<::oceanbase::storage::checkpoint::ObCheckPointService>();
   set_ls_freeze_finished_(false);
   if (OB_FAIL(checkpoint_srv->add_ls_freeze_task(this, rec_scn))) {
     STORAGE_LOG(WARN, "ls_freeze add task failed", K(ret));
@@ -619,7 +619,7 @@ int ObDataCheckpoint::traversal_flush_()
       ObCheckpointIterator iterator;
       prepare_list_.get_iterator(iterator);
       flush_tasks.reset();
-      ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+      ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
 
       while (OB_SUCC(ret)
              && iterator.has_next()

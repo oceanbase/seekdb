@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_tx_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_tx_redo_submitter.h"
 #include "storage/tx/ob_trans_service.h"
 #define NEED_MDS_REGISTER_DEFINE
@@ -432,7 +432,12 @@ int ObTxCtx::handle_timeout(const int64_t delay)
           // make scheduler retry commit if clog disk has fatal error
           bool clog_is_full = false;
           bool clog_is_hang = false;
-          if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+          logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
+          if (OB_ISNULL(log_service)) {
+            ret = OB_ERR_UNEXPECTED;
+            TRANS_LOG(WARN, "log service is null", KR(ret));
+          } else if (OB_FAIL(logservice::check_clog_disk_full_or_hang(
+              *log_service, clog_is_full, clog_is_hang))) {
             TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
@@ -1823,7 +1828,7 @@ int ObTxCtx::insert_mds_to_tx_table_(ObTxLogCb &log_cb)
           wrapper.get_node().get_data_source_type() != mds_node.get_data_source_type()) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "mds not match", KR(ret), KPC(this));
-      } else if (OB_FAIL(wrapper.assign(trans_id_, mds_node, share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator(), true))) {
+      } else if (OB_FAIL(wrapper.assign(trans_id_, mds_node, ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator(), true))) {
         TRANS_LOG(WARN, "assign mds failed", KR(ret), KPC(this));
       }
     }
@@ -3914,7 +3919,7 @@ int ObTxCtx::replay_rollback_to(const ObTxRollbackToLog &log,
         // if so, can decide that the current txn was replayed from middle, and mark it
         // replay incomplete
         share::SCN min_unreplayed_scn;
-        logservice::ObLogService *log_service = share::g_mp->log_service();
+        logservice::ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
         if (OB_ISNULL(log_service)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "tenant logservice is null", K(ret), K(timestamp), K_(trans_id));
@@ -4724,7 +4729,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "process_with_buffer_ctx failed", KR(ret), K(*this));
@@ -4732,7 +4737,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
                                          node.seq_no_, new_ctx))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "init new node failed", KR(ret), K(*this));
@@ -4741,14 +4746,14 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "set mds register_no failed", KR(ret), K(*this));
         } else if (OB_FAIL(tmp_buf_arr.push_back(new_node))) {
           mds_cache_.free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
-            share::g_mp->mds_service()->get_buffer_ctx_allocator().free(new_ctx);
+            ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
           }
           TRANS_LOG(WARN, "push multi source data failed", KR(ret), K(*this));
@@ -5295,7 +5300,7 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
       if (OB_FAIL(ret)) {
         mds_cache_.free_mds_node(data, node.get_register_no());
         if (OB_NOT_NULL(buffer_ctx)) {
-          share::g_mp->mds_service()->get_buffer_ctx_allocator().free(buffer_ctx);
+          ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(buffer_ctx);
         }
       } else if (OB_FAIL(notify_data_source_(NotifyType::REGISTER_SUCC, SCN(), false, tmp_array))) {
         if (OB_SUCCESS != (tmp_ret = mds_cache_.rollback_last_mds_node())) {
@@ -5777,7 +5782,7 @@ int ObTxCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
     TRANS_LOG(WARN, "alloc_tx_data failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_ISNULL(undo_node = (ObUndoStatusNode*)share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator().alloc(true, INT64_MAX))) {
+  } else if (OB_ISNULL(undo_node = (ObUndoStatusNode*)::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_allocator().alloc(true, INT64_MAX))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc_undo_status_node failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);

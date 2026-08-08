@@ -15,12 +15,15 @@
  */
 
 #include "ob_trans_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_tx_ctx.h"
 #include "storage/tx/ob_weak_read_util.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_control.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "data_plane/transaction/ob_tx_desc_lifecycle.h"
 // ------------------------------------------------------------------------------------------
 // Implimentation notes:
 // there are two relation we need care:
@@ -660,7 +663,7 @@ int ObTransService::get_weak_read_snapshot_version(const int64_t max_read_stale_
   bool monotinic_read = ObWeakReadUtil::enable_monotonic_weak_read();
   SCN wrs_scn = SCN::max_scn();
   {
-    storage::ObLSService *ls_svr = share::g_mp->ls_service();
+    storage::ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     storage::ObLS *tenant_ls = nullptr;
     storage::ObLS *ls = nullptr;
     if (OB_ISNULL(ls_svr)) {
@@ -1475,7 +1478,7 @@ int ObTransService::add_tx_exec_result(ObTxDesc &tx, const ObTxExecResult &exec_
   int ret = tx.add_exec_info(exec_info);
   ObTransTraceLog &tlog = tx.get_tlog();
   REC_TRANS_TRACE_EXT(&tlog, add_tx_exec_result, OB_ID(opid), tx.op_sn_,
-                      OB_ID(flag), exec_info.incomplete_,
+                      OB_ID(flag), exec_info.is_incomplete(),
                       OB_ID(thread_id), GETTID());
   return ret;
 }
@@ -1591,5 +1594,321 @@ OB_INLINE int ObTransService::tx_sanity_check_(ObTxDesc &tx)
 }
 
 } // transaction
+
+namespace data_plane
+{
+
+ObITransactionService *query_transaction_service()
+{
+  return ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+}
+
+bool tx_desc_is_explicit(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_explicit();
+}
+
+bool tx_desc_is_in_tx(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_in_tx();
+}
+
+bool tx_desc_has_temporary_tables(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->with_temporary_table();
+}
+
+transaction::ObTransID tx_desc_id(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_tx_id() : transaction::ObTransID();
+}
+
+bool tx_desc_in_tx_for_free_route(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->in_tx_for_free_route();
+}
+
+bool tx_desc_is_read_only(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_in_tx() && desc->is_rdonly();
+}
+
+bool tx_desc_is_committing(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_committing();
+}
+
+bool tx_desc_in_tx_or_has_extra_state(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->in_tx_or_has_extra_state();
+}
+
+bool tx_desc_is_clean(const transaction::ObTxDesc *desc)
+{
+  return OB_ISNULL(desc) || desc->is_clean();
+}
+
+uint32_t tx_desc_session_id(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_session_id() : 0;
+}
+
+int64_t tx_desc_seq_base(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_seq_base() : 0;
+}
+
+uint64_t tx_desc_operation_sequence(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_op_sn() : 0;
+}
+
+int tx_desc_serialize(const transaction::ObTxDesc *desc,
+                      char *buf,
+                      int64_t buf_len,
+                      int64_t &pos)
+{
+  return OB_NOT_NULL(desc) ? desc->serialize(buf, buf_len, pos)
+                           : OB_INVALID_ARGUMENT;
+}
+
+int64_t tx_desc_serialize_size(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_serialize_size() : 0;
+}
+
+share::SCN tx_desc_snapshot_version(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_tx_snapshot_version()
+                           : share::SCN::invalid_scn();
+}
+
+bool tx_desc_uses_rr_or_serializable(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_RR_or_SERIAL_isolevel();
+}
+
+bool tx_desc_uses_read_committed(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_RC_isolevel();
+}
+
+common::ObAddr tx_desc_scheduler(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_addr() : common::ObAddr();
+}
+
+int64_t tx_desc_active_timestamp(const transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) ? desc->get_active_ts() : 0;
+}
+
+bool tx_desc_contains_savepoint(transaction::ObTxDesc *desc,
+                                const common::ObString &savepoint)
+{
+  return OB_NOT_NULL(desc) && desc->contain_savepoint(savepoint);
+}
+
+bool tx_desc_is_ended(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_tx_end();
+}
+
+bool tx_desc_is_timed_out(transaction::ObTxDesc *desc)
+{
+  return OB_NOT_NULL(desc) && desc->is_tx_timeout();
+}
+
+void dump_tx_desc_trace(transaction::ObTxDesc *desc)
+{
+  if (OB_NOT_NULL(desc)) {
+    desc->dump_and_print_trace();
+  }
+}
+
+ObTxCommitTimeoutState cancel_timed_out_tx_commit(
+    transaction::ObTxDesc *desc,
+    transaction::ObITxCallback *&callback)
+{
+  ObTxCommitTimeoutState state = ObTxCommitTimeoutState::NONE;
+  callback = nullptr;
+  if (OB_NOT_NULL(desc) && desc->is_committing()) {
+    if (desc->is_tx_timeout()) {
+      callback = desc->cancel_commit_cb();
+      state = ObTxCommitTimeoutState::TRANSACTION;
+    } else if (desc->is_tx_commit_timeout()) {
+      callback = desc->cancel_commit_cb();
+      state = ObTxCommitTimeoutState::STATEMENT;
+    }
+  }
+  return state;
+}
+
+int64_t ObTxDescLogView::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  if (OB_LIKELY(OB_NOT_NULL(buf)) && OB_LIKELY(buf_len > 0)) {
+    if (OB_ISNULL(desc_)) {
+      (void)common::logdata_printf(buf, buf_len, pos, "NULL");
+    } else {
+      pos += desc_->to_string(buf, buf_len);
+    }
+  }
+  return pos;
+}
+
+ObTxWeakReadPolicy evaluate_tx_weak_read_policy(const transaction::ObTxDesc &tx)
+{
+  ObTxWeakReadPolicy policy = ObTxWeakReadPolicy::ALLOW;
+  if (!tx.is_clean()) {
+    policy = ObTxWeakReadPolicy::FORCE_STRONG;
+  } else if (transaction::is_RR_or_SERIAL_isolevel(tx.get_isolation_level())) {
+    policy = ObTxWeakReadPolicy::REJECT_ISOLATION;
+  }
+  return policy;
+}
+
+void prepare_tx_for_statement(transaction::ObTxDesc &tx)
+{
+  tx.clear_interrupt();
+}
+
+void initialize_plain_insert_snapshot(
+    const transaction::ObTxDesc &tx,
+    transaction::ObTxReadSnapshot &snapshot)
+{
+  snapshot.init_none_read();
+  snapshot.core_.tx_id_ = tx.get_tx_id();
+  snapshot.core_.scn_ = tx.get_tx_seq();
+}
+
+bool tx_owns_local_temporary_tables(
+    const transaction::ObTxDesc *tx,
+    const common::ObAddr &local_addr)
+{
+  return OB_NOT_NULL(tx)
+      && tx->with_temporary_table()
+      && tx->get_addr() == local_addr;
+}
+
+int allocate_tx_branches(transaction::ObTxDesc &tx,
+                         int64_t count,
+                         int16_t &first_branch_id)
+{
+  return tx.alloc_branch_id(count, first_branch_id);
+}
+
+int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx)
+{
+  return tx.clear_state_for_autocommit_retry();
+}
+
+static int transaction_abort_cause_(ObTxAbortReason reason)
+{
+  int cause = common::OB_INVALID_ARGUMENT;
+  switch (reason) {
+    case ObTxAbortReason::INCOMPLETE_RESULT:
+      cause = transaction::ObTxAbortCause::TX_RESULT_INCOMPLETE;
+      break;
+    case ObTxAbortReason::SESSION_DISCONNECT:
+      cause = transaction::ObTxAbortCause::SESSION_DISCONNECT;
+      break;
+  }
+  return cause;
+}
+
+const char *describe_transaction_abort_error(int error_code)
+{
+  return error_code >= 0
+      ? transaction::ObTxAbortCauseNames::of(error_code)
+      : common::ob_error_name(error_code);
+}
+
+const char *describe_transaction_abort_reason(ObTxAbortReason reason)
+{
+  return transaction::ObTxAbortCauseNames::of(transaction_abort_cause_(reason));
+}
+
+int abort_transaction_for_error(transaction::ObTxDesc &tx, int error_code)
+{
+  int ret = common::OB_SUCCESS;
+  ObITransactionService *txs = query_transaction_service();
+  if (OB_ISNULL(txs)) {
+    ret = common::OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "transaction service is null while aborting transaction",
+              K(ret), K(error_code), "tx_id", tx.get_tx_id());
+  } else {
+    ret = txs->abort_tx(tx, error_code);
+  }
+  return ret;
+}
+
+int abort_transaction(transaction::ObTxDesc &tx, ObTxAbortReason reason)
+{
+  int ret = common::OB_SUCCESS;
+  ObITransactionService *txs = query_transaction_service();
+  if (OB_ISNULL(txs)) {
+    ret = common::OB_ERR_UNEXPECTED;
+    TRANS_LOG(ERROR, "transaction service is null while aborting transaction",
+              K(ret), K(reason), "tx_id", tx.get_tx_id());
+  } else {
+    ret = txs->abort_tx(tx, transaction_abort_cause_(reason));
+  }
+  return ret;
+}
+
+void force_release_tx_when_tenant_gone(transaction::ObTxDesc &tx)
+{
+  transaction::ObTransService::force_release_tx_when_session_destroy(tx);
+}
+
+int clone_tx_desc(common::ObIAllocator &allocator,
+                  transaction::ObTxDesc *source,
+                  transaction::ObTxDesc *&clone)
+{
+  int ret = OB_SUCCESS;
+  int64_t serialized_length = 0;
+  int64_t serialize_pos = 0;
+  int64_t deserialize_pos = 0;
+  void *buffer = nullptr;
+  clone = nullptr;
+  if (OB_ISNULL(source)) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "unexpected null transaction descriptor", K(ret));
+  } else if (FALSE_IT(serialized_length = source->get_serialize_size())) {
+  } else if (OB_ISNULL(buffer = allocator.alloc(serialized_length))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    TRANS_LOG(WARN, "failed to allocate transaction descriptor buffer",
+              K(ret), K(serialized_length));
+  } else if (OB_FAIL(source->serialize(
+                 static_cast<char *>(buffer), serialized_length, serialize_pos))) {
+    TRANS_LOG(WARN, "failed to serialize transaction descriptor",
+              K(ret), K(serialize_pos), K(serialized_length));
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->acquire_tx(
+                 static_cast<const char *>(buffer), serialize_pos,
+                 deserialize_pos, clone))) {
+    TRANS_LOG(WARN, "failed to acquire cloned transaction descriptor",
+              K(ret), K(serialize_pos), K(deserialize_pos));
+  } else if (OB_ISNULL(clone) || serialize_pos != deserialize_pos) {
+    ret = OB_ERR_UNEXPECTED;
+    TRANS_LOG(WARN, "invalid cloned transaction descriptor",
+              K(ret), KP(clone), K(serialize_pos), K(deserialize_pos));
+    if (OB_NOT_NULL(clone)) {
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->release_tx(*clone);
+      clone = nullptr;
+    }
+  }
+  return ret;
+}
+
+void release_tx_desc(transaction::ObTxDesc *&desc)
+{
+  if (OB_NOT_NULL(desc)) {
+    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->release_tx(*desc);
+    desc = nullptr;
+  }
+}
+
+} // namespace data_plane
 } // namespace
 #undef TXN_API_SANITY_CHECK_FOR_TXN_FREE_ROUTE

@@ -17,6 +17,7 @@
 #ifndef OB_STORAGE_ACCESS_TABLE_READ_INFO_H_
 #define OB_STORAGE_ACCESS_TABLE_READ_INFO_H_
 
+#include "data_plane/access/ob_table_read_info.h"
 #include "storage/meta_mem/ob_fixed_meta_obj_array.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
 #include "storage/blocksstable/ob_datum_row.h"
@@ -94,31 +95,6 @@ private:
   COUNT_FUNC count_func_;
   AT_FUNC at_func_;
 };
-class ObITableReadInfo
-{
-public:
-  ObITableReadInfo() = default;
-  virtual ~ObITableReadInfo() = default;
-  virtual int64_t get_schema_column_count() const = 0;
-  virtual int64_t get_seq_read_column_count() const = 0;
-  virtual int64_t get_request_count() const = 0;
-  virtual int64_t get_schema_rowkey_count() const = 0;
-  virtual int64_t get_rowkey_count() const = 0;
-  virtual int64_t get_group_idx_col_index() const = 0;
-  virtual int64_t get_trans_col_index() const = 0;
-  virtual const common::ObIArray<ObColDesc> &get_columns_desc() const = 0;
-  virtual const ObColumnIndexArray &get_columns_index() const = 0;
-  virtual const ObColumnIndexArray &get_memtable_columns_index() const = 0;
-  virtual const blocksstable::ObStorageDatumUtils &get_datum_utils() const = 0;
-  virtual const common::ObIArray<ObColumnParam *> *get_columns() const = 0;
-  virtual const common::ObIArray<ObColExtend> *get_columns_extend() const = 0;
-  virtual bool is_access_rowkey_only() const = 0;
-  virtual bool need_truncate_filter() const = 0;
-  virtual bool is_valid() const = 0;
-  virtual void reset() = 0;
-  DECLARE_PURE_VIRTUAL_TO_STRING;
-};
-
 class ObReadInfoStruct : public ObITableReadInfo
 {
 public:

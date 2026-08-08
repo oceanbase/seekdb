@@ -1,0 +1,131 @@
+##############################
+#owner: kyle.sj
+#owner group: ob_connecor
+#description: ldc
+###############################
+
+#同城同机房:z2
+#同城异机房:z1
+#异地:z3
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=8,locality=HZ:HZ:SH,app_idc_name=z2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time='0s';
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+ob1.set_ds_global_config serverStateRefreshInterval=1000,minKeepCongestionInterval=1000,preCreateConnectionEnable=false;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+
+sleep 10;
+# 创建3个table:obtest1,obtest2,obtest3
+let $tablenum = 3;
+source sql/init_table.sql;
+sleep 10;
+
+###############################################################
+--echo 1. use same idc unmerge
+select database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z2)
+{
+  --echo ldc failed, use $zone, not z2!
+  --exit
+}
+
+select /*+READ_CONSISTENCY (weak)*/database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z2)
+{
+  --echo ldc failed, use $zone, not z2!
+  --exit
+}
+
+###############################################################
+--echo 2. same idc is merging, use same region unmerge
+ob1.mysql alter system suspend merge zone = 'z2';
+ob1.mysql alter system major freeze;
+sleep 5;
+
+ob1.mysql alter system start merge zone='z2';
+sleep 2;
+
+ob1.z2.check_state_in_congest MERGE;
+ob1.z2.obs0.check_state_in_congest ACTIVE;
+ob1.z2.obs1.check_state_in_congest ACTIVE;
+ob1.z2.obs0.check_not_exsit_in_congest;
+ob1.z2.obs1.check_not_exsit_in_congest;
+let $stat =deploy_get_value(ob1.z2.obs0.get_congestion_info alive_congested);
+--echo ob1.z2.obs0 alive_congested state : $stat
+let $stat =deploy_get_value(ob1.z2.obs1.get_congestion_info alive_congested);
+--echo ob1.z2.obs1 alive_congested state : $stat
+let $stat =deploy_get_value(ob1.z2.obs0.get_congestion_info dead_congested);
+--echo ob1.z2.obs0 dead_congested state : $stat
+let $stat =deploy_get_value(ob1.z2.obs1.get_congestion_info dead_congested);
+--echo ob1.z2.obs1 dead_congested state : $stat
+
+
+select database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z1)
+{
+  --echo ldc failed, use $zone, not z1!
+  --exit
+}
+
+select /*+READ_CONSISTENCY (weak)*/database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z1)
+{
+  --echo ldc failed, use $zone, not z1!
+  --exit
+}
+
+ob1.mysql alter system resume merge zone = 'z2';
+ob1.z2.check_version 2;
+ob1.z1.check_version 2;
+ob1.z3.check_version 2;
+sleep 5;
+
+source sql/check_sys_ddl.sql;
+
+###############################################################
+--echo 3. same idc and same region are both merging, use same idc merging
+ob1.mysql alter system suspend merge zone = 'z1';
+ob1.mysql alter system suspend merge zone = 'z2';
+sleep 2;
+
+ob1.mysql alter system major freeze;
+sleep 5;
+
+ob1.mysql alter system start merge zone='z1';
+ob1.mysql alter system start merge zone='z2';
+sleep 2;
+
+ob1.z1.check_state_in_congest MERGE;
+ob1.z2.check_state_in_congest MERGE;
+ob1.z3.check_state_in_congest ACTIVE;
+ob1.z1.obs0.check_not_exsit_in_congest;
+ob1.z1.obs1.check_not_exsit_in_congest;
+ob1.z2.obs0.check_not_exsit_in_congest;
+ob1.z2.obs1.check_not_exsit_in_congest;
+
+select database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z2)
+{
+  --echo ldc failed, use $zone, not z2!
+  --exit
+}
+
+select /*+READ_CONSISTENCY (weak)*/database();
+source include/get_ob_connector_last_query_addr.inc;
+if($zone != z2)
+{
+  --echo ldc failed, use $zone, not z2!
+  --exit
+}
+
+ob1.mysql alter system resume merge zone = 'z1';
+ob1.mysql alter system resume merge zone = 'z2';
+ob1.z1.check_version 3;
+ob1.z2.check_version 3;
+ob1.z3.check_version 3;

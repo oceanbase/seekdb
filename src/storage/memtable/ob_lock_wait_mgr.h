@@ -24,12 +24,13 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/utility.h"
 #include "ob_memtable_key.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_request.h"
 #include "storage/deadlock/ob_deadlock_detector_common_define.h"
 #include "share/ob_thread_pool.h"
-#include "sql/session/ob_sql_session_mgr.h"
+#include "query/session/ob_deadlock_session.h"
+#include "data_plane/memtable/ob_lock_wait_service.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_trans_define.h"
 #include "storage/tx/ob_trans_deadlock_adapter.h"
@@ -37,10 +38,6 @@
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObAllVirtualLockWaitStat;
-}
 namespace memtable
 {
 using namespace transaction;
@@ -104,9 +101,11 @@ class LocalDeadLockCollectCallBack {
 public:
   LocalDeadLockCollectCallBack(const ObTransID &self_trans_id,
                                const char *node_key_buffer,
-                               const uint32_t sess_id) :
+                               const uint32_t sess_id,
+                               query::ObIDeadlockSessionService &session_service) :
   self_trans_id_(self_trans_id),
-  sess_id_(sess_id) {
+  sess_id_(sess_id),
+  session_service_(&session_service) {
     int64_t str_len = strlen(node_key_buffer);// not contain '\0'
     int64_t min_len = str_len > 127 ? 127 : str_len;
     memcpy(node_key_buffer_, node_key_buffer, min_len);
@@ -120,11 +119,11 @@ public:
     char * buffer_trans_id = nullptr;
     char * buffer_row_key = nullptr;
     char * buffer_current_sql = nullptr;
-    SessionGuard sess_guard;
+    query::ObDeadlockSessionGuard sess_guard(*session_service_);
+    query::ObDeadlockSessionFacts session_facts;
     int step = 0;
-    if (++step && OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, sess_guard))) {
-    } else if (++step && !sess_guard.is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
+    if (++step && OB_FAIL(sess_guard.acquire(sess_id_))) {
+    } else if (++step && OB_FAIL(sess_guard.get_deadlock_facts(session_facts))) {
     } else if (OB_UNLIKELY(nullptr == (buffer_trans_id = (char*)ob_malloc(trans_id_str_len, "deadlockCB")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_UNLIKELY(nullptr == (buffer_row_key = (char*)ob_malloc(row_key_str_len, "deadlockCB")))) {
@@ -141,7 +140,7 @@ public:
                                                                         strlen(node_key_buffer_),
                                                                         buffer_row_key,
                                                                         row_key_str_len);
-      const ObString &cur_query_str = sess_guard->get_current_query_string();
+      const ObString &cur_query_str = session_facts.current_query_;
       ObTransDeadlockDetectorAdapter::copy_str_and_translate_apostrophe(cur_query_str.ptr(),
                                                                         cur_query_str.length(),
                                                                         buffer_current_sql,
@@ -177,6 +176,7 @@ private:
   ObTransID self_trans_id_;
   char node_key_buffer_[128];
   const uint32_t sess_id_;
+  query::ObIDeadlockSessionService *session_service_;
 };
 /*******************************************/
 
@@ -184,8 +184,6 @@ class ObLockWaitMgr: public share::ObThreadPool
 {
 public:
   friend class ObDeadLockChecker;
-  friend class observer::ObAllVirtualLockWaitStat;
-
 public:
   enum { LOCK_BUCKET_COUNT = 16384};
   static const int64_t OB_SESSPAIR_COUNT = 16;
@@ -202,8 +200,13 @@ public:
   ObLockWaitMgr();
   ~ObLockWaitMgr();
 
-  static int server_module_init(ObLockWaitMgr *&lock_wait_mgr);
-  int init();
+  static int server_module_init(
+      ObLockWaitMgr *&lock_wait_mgr,
+      query::ObIDeadlockSessionService &session_service,
+      data_plane::ObILockWaitService &repost_service);
+  int init(
+      query::ObIDeadlockSessionService &session_service,
+      data_plane::ObILockWaitService &repost_service);
   bool is_inited() { return is_inited_; };
   int start();
   void stop();
@@ -327,6 +330,8 @@ private:
 
 private:
   bool is_inited_;
+  query::ObIDeadlockSessionService *session_service_;
+  data_plane::ObILockWaitService *repost_service_;
   Hash hash_;
   int64_t sequence_[LOCK_BUCKET_COUNT];
   char hash_buf_[sizeof(SpHashNode) * LOCK_BUCKET_COUNT];

@@ -16,8 +16,10 @@
  
 #include "observer/ob_server_utils.h"
 #include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_all_virtual_sql_plan.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/monitor/ob_plan_info_manager.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -460,7 +462,7 @@ int ObAllVirtualSqlPlan::dump_plans()
     ObReqTimeGuard req_timeinfo_guard;
     ObPlanCache *plan_cache = NULL;
     SERVER_MODULE_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
+      plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_ISNULL(plan_cache)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
@@ -500,7 +502,7 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
     SERVER_MODULE_SCOPE {
-      plan_cache = share::g_mp->plan_cache();
+      plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_SUCCESS != (tmp_ret = plan_cache->ref_alloc_plan(plan_id_, guard))) {
         // should not panic
       } else if (FALSE_IT(plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {

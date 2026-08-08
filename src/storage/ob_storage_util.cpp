@@ -15,10 +15,9 @@
  */
 
 #include "ob_storage_util.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/engine/expr/ob_array_expr_utils.h"
-#include "sql/engine/vector/ob_fixed_length_base.h"
+#include "query/engine/expr/ob_array_expr_utils.h"
 
+#include "query/engine/vector/ob_fixed_length_base.h"
 namespace oceanbase
 {
 using namespace common;

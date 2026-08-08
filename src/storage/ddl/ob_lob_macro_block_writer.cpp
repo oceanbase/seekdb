@@ -278,7 +278,7 @@ int ObLobMacroBlockWriter::close()
     uint64_t last_lob_id = 0;
     if (OB_FAIL(lob_id_cache_.get_value(last_lob_id))) {
       LOG_WARN("get last lob id failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(lob_meta_tablet_id_, last_lob_id))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::set_tablet_autoinc_seq(lob_meta_tablet_id_, last_lob_id))) {
       LOG_WARN("update max lob id failed", K(ret), K(last_lob_id));
     }
   }

@@ -1,0 +1,41 @@
+# owner:yongle.xh
+# owner group:storage
+--disable_query_log
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=4);
+ob1.reboot;
+
+ob1.mysql alter system set merge_thread_count = 64;
+ob1.mysql alter system set minor_merge_concurrency = 64;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+alter system set undo_retention = 900;
+
+use test;
+create table test01 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3), index i1(f1));
+insert into test01(pk1, pk2,pk3, f1, f2) values(1,1,1,'1', '2');
+
+let $table_id=deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='test01', table_id, 1);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+ob1.mysql_p select version, count(*) from oceanbase.__all_virtual_table_mgr where table_id=$table_id and table_type=1  group by version order by 1;
+
+insert into test01(pk1, pk2,pk3, f1, f2) values(2,2,1,'1', '2');
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=0 and is_active=0, 0, 90;
+
+alter system set undo_retention = 1;
+sleep 35;
+ob1.mysql_p select version, count(*) from oceanbase.__all_virtual_table_mgr where table_id=$table_id and table_type=1  group by version order by 1;
+
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$table_id and table_type=1 and version=1, 0, 90;
+ob1.mysql_p select version, count(*) from oceanbase.__all_virtual_table_mgr where table_id=$table_id and table_type=1  group by version order by 1;

@@ -16,9 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_utils.h"
-#include "pl/ob_pl.h"
-#include "observer/ob_server.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "share/ob_server_struct.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "sql/pl/ob_pl.h"
+#include "data_plane/access/ob_datum_reshape.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
 #include "sql/das/ob_das_vec_define.h"
 namespace oceanbase
 {
@@ -176,7 +179,8 @@ int ObDASUtils::project_storage_row(const ObDASDMLBaseCtDef &dml_ctdef,
     } else if (FALSE_IT(storage_row.storage_datums_[i].shallow_copy_from_datum(dml_row.cells()[projector_idx]))) {
     } else if (storage_row.storage_datums_[i].is_null()) {
       //nothing to do
-    } else if (OB_FAIL(reshape_datum_value(col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
+    } else if (OB_FAIL(data_plane::ObDatumReshape::reshape_datum_value(
+            col_type, col_accuracy, allocator, storage_row.storage_datums_[i]))) {
       LOG_WARN("reshape storage value failed", K(ret));
     } else if (col_type.is_lob_storage() && col_type.has_lob_header()) {
       storage_row.storage_datums_[i].set_has_lob_header();
@@ -245,123 +249,6 @@ int ObDASUtils::padding_fixed_string_value(int64_t max_len, ObIAllocator &alloca
     // need to set collation type
     value.set_string(value.get_type(), ObString(len, str));
     value.set_collation_type(value.get_collation_type());
-  }
-  return ret;
-}
-
-int ObDASUtils::reshape_datum_value(const ObObjMeta &col_type,
-                                    const ObAccuracy &col_accuracy,
-                                    ObIAllocator &allocator,
-                                    blocksstable::ObStorageDatum &datum_value)
-{
-  int ret = OB_SUCCESS;
-  if (col_type.is_binary()) {
-    int32_t binary_len = col_accuracy.get_length();
-    int32_t len = datum_value.len_;
-    if (binary_len > len) {
-      char *dest_str = NULL;
-      const char *str = datum_value.ptr_;
-      if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
-      } else {
-        char pad_char = '\0';
-        MEMCPY(dest_str, str, len);
-        MEMSET(dest_str + len, pad_char, binary_len - len);
-        datum_value.set_string(ObString(binary_len, dest_str));
-      }
-    }
-  } else if (col_type.is_fixed_len_char_type()) {
-    const char *str = datum_value.ptr_;
-    int32_t len = datum_value.len_;
-    ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
-    for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-      if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-        break;
-      }
-    }
-    datum_value.set_string(ObString(len, str));
-  }
-  return ret;
-}
-
-int ObDASUtils::reshape_datum_vector_value(const ObObjMeta &col_type,
-                                           const ObAccuracy &col_accuracy,
-                                           ObIAllocator &allocator,
-                                           const ObDatumVector &datum_vector,
-                                           ObBatchSelector &batch_selector)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!batch_selector.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(batch_selector));
-  } else {
-    ObBatchSelector single_selector(static_cast<int64_t>(0), 1);
-    ObBatchSelector &selector = datum_vector.is_batch() ? batch_selector : single_selector;
-    if (col_type.is_binary()) {
-      const int32_t binary_len = col_accuracy.get_length();
-      const char pad_char = '\0';
-      int64_t i = 0;
-      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-        ObDatum &datum = datum_vector.datums_[i];
-        if (!datum.is_null() && datum.len_ < binary_len) {
-          const char *str = datum.ptr_;
-          ObLength len = datum.len_;
-          char *dest_str = nullptr;
-          if (OB_ISNULL(dest_str = (char *)(allocator.alloc(binary_len)))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc mem to binary", K(ret), K(binary_len));
-          } else {
-            MEMCPY(dest_str, str, len);
-            MEMSET(dest_str + len, pad_char, binary_len - len);
-            datum.ptr_ = dest_str;
-            datum.len_ = binary_len;
-          }
-        }
-      }
-      if (OB_LIKELY(OB_ITER_END == ret)) {
-        ret = OB_SUCCESS;
-      }
-    } else if (col_type.is_fixed_len_char_type()) {
-      const ObString space_pattern = ObCharsetUtils::get_const_str(col_type.get_collation_type(), ' ');
-      int64_t i = 0;
-      while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
-        ObDatum &datum = datum_vector.datums_[i];
-        if (!datum.is_null()) {
-          ObLength len = datum.len_;
-          const char *str = datum.ptr_;
-          for (; len >= space_pattern.length(); len -= space_pattern.length()) {
-            if (0 != MEMCMP(str + len - space_pattern.length(), space_pattern.ptr(), space_pattern.length())) {
-              break;
-            }
-          }
-          datum.len_ = len;
-        }
-      }
-      if (OB_LIKELY(OB_ITER_END == ret)) {
-        ret = OB_SUCCESS;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObDASUtils::wait_das_retry(int64_t retry_cnt)
-{
-  int ret = OB_SUCCESS;
-  uint32_t timeout_factor = static_cast<uint32_t>((retry_cnt > 100) ? 100 : retry_cnt);
-  int64_t sleep_us = 10000L * timeout_factor > THIS_WORKER.get_timeout_remain()
-                                            ? THIS_WORKER.get_timeout_remain()
-                                                : 10000L * timeout_factor;
-  if (sleep_us > 0) {
-    LOG_INFO("[DAS RETRY] will sleep", K(sleep_us), K(THIS_WORKER.get_timeout_remain()));
-    THIS_WORKER.sched_wait();
-    ob_usleep(static_cast<uint32_t>(sleep_us));
-    THIS_WORKER.sched_run();
-    if (THIS_WORKER.is_timeout()) {
-      ret = OB_TIMEOUT;
-      LOG_WARN("this worker is timeout after retry sleep. no more retry", K(ret));
-    }
   }
   return ret;
 }
@@ -526,6 +413,28 @@ bool ObDASUtils::is_es_match_scan(const ObDASBaseCtDef *attach_ctdef)
   }
 
   return bret;
+}
+
+int ObDASUtils::wait_das_retry(int64_t retry_cnt)
+{
+  int ret = OB_SUCCESS;
+  uint32_t timeout_factor =
+      static_cast<uint32_t>((retry_cnt > 100) ? 100 : retry_cnt);
+  int64_t sleep_us = 10000L * timeout_factor > THIS_WORKER.get_timeout_remain()
+      ? THIS_WORKER.get_timeout_remain()
+      : 10000L * timeout_factor;
+  if (sleep_us > 0) {
+    LOG_INFO("[DAS RETRY] will sleep",
+             K(sleep_us), K(THIS_WORKER.get_timeout_remain()));
+    THIS_WORKER.sched_wait();
+    ob_usleep(static_cast<uint32_t>(sleep_us));
+    THIS_WORKER.sched_run();
+    if (THIS_WORKER.is_timeout()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("this worker is timeout after retry sleep. no more retry", K(ret));
+    }
+  }
+  return ret;
 }
 
 }  // namespace sql

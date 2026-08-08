@@ -15,7 +15,7 @@
  */
 
 #include "ob_lcl_node.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/deadlock/ob_deadlock_detector_mgr.h"
 #include "storage/deadlock/ob_deadlock_inner_table_service.h"
 
@@ -133,7 +133,7 @@ void ObLCLNode::unregister_timer_task()
     LockGuard lock_guard(lock_);
     if (!ATOMIC_LOAD(&is_timer_task_canceled_)) {
       ATOMIC_STORE(&is_timer_task_canceled_, true);
-      ObTimeWheel &time_wheel = share::g_mp->dead_lock_detector_mgr()->get_time_wheel();
+      ObTimeWheel &time_wheel = ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->get_time_wheel();
       if (OB_SUCCESS == (tmp_ret = time_wheel.cancel(&push_state_task_))) {
         need_revert_self_ref = true;
         wait_running_task = ATOMIC_LOAD(&is_timer_task_running_);
@@ -168,7 +168,7 @@ int ObLCLNode::register_timer_with_necessary_retry_with_lock_()
 {
   int ret = OB_SUCCESS;
   int64_t delay = 0;
-  ObTimeWheel &time_wheel = share::g_mp->dead_lock_detector_mgr()->get_time_wheel();
+  ObTimeWheel &time_wheel = ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->get_time_wheel();
 
   DETECT_TIME_GUARD(100_ms);
   // timewheel execute timer task without lock's protection
@@ -215,7 +215,7 @@ int ObLCLNode::add_self_ref_count_()
   ObIDeadLockDetector *p_detector = nullptr;
 
   DETECT_TIME_GUARD(100_ms);
-  if (CLICK() && OB_FAIL(share::g_mp->dead_lock_detector_mgr()->detector_map_.get(self_key_, p_detector))) {
+  if (CLICK() && OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->detector_map_.get(self_key_, p_detector))) {
     // this may happen when register process not done, but user call unregister
     DETECT_LOG_(WARN, "get detector from map failed, which not expected", K(*this));
   } else if (p_detector != this) {
@@ -224,7 +224,7 @@ int ObLCLNode::add_self_ref_count_()
     DETECT_LOG_(WARN, "get detector from map use self_key_, but obj not myself",
                       K(*this), KP(p_detector));
     CLICK();
-    share::g_mp->dead_lock_detector_mgr()->detector_map_.revert(p_detector);
+    ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->detector_map_.revert(p_detector);
   } else {
     // do nothing
   }
@@ -235,7 +235,7 @@ int ObLCLNode::add_self_ref_count_()
 void ObLCLNode::revert_self_ref_count_()
 {
   DETECT_TIME_GUARD(100_ms);
-  share::g_mp->dead_lock_detector_mgr()->detector_map_.revert(this);
+  ::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->detector_map_.revert(this);
 }
 
 int ObLCLNode::add_resource_to_list_(const ObDependencyResource &resource,
@@ -522,7 +522,7 @@ int ObLCLNode::broadcast_(const BlockList &list,
   int ret = OB_SUCCESS;
   DETECT_TIME_GUARD(100_ms);
   for (int64_t idx = 0; idx < list.count() && OB_SUCC(ret); ++idx) {
-    if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_lcl_state_(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->post_lcl_state_(
             list.at(idx).get_user_key(),
             lclv,
             public_label,
@@ -577,7 +577,7 @@ int ObLCLNode::process_lcl_state(const int64_t lclv,
       CLICK();
       ObDeadLockCycleInfo cycle_info;
       cycle_info.set_dest_key(self_key_);
-      if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_cycle_info_(cycle_info))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->post_cycle_info_(cycle_info))) {
         DETECT_LOG_(WARN, "enqueue initial deadlock cycle info failed",
                     KR(ret), K(cycle_info), K(*this));
       }
@@ -815,7 +815,7 @@ int ObLCLNode::broadcast_cycle_info_(ObDeadLockCycleInfo &cycle_info)
   for (int64_t idx = 0; idx < block_list_copy.count() && OB_SUCC(ret); ++idx) {
     cycle_info.set_dest_key(block_list_copy.at(idx).get_user_key());
     if (CLICK() &&
-        OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_cycle_info_(cycle_info))) {
+        OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->post_cycle_info_(cycle_info))) {
       DETECT_LOG_(WARN, "enqueue deadlock cycle info failed", KR(ret), K(cycle_info));
     }
   }
@@ -856,7 +856,7 @@ int ObLCLNode::push_state_to_downstreams_with_lock_()
 
     if (!parent_list_.empty()) {
       for (int64_t idx = 0; idx < parent_list_.count(); ++idx) {
-        if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->post_parent_notification_(
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->post_parent_notification_(
                 parent_list_.at(idx).get_user_key(), self_key_))) {
           DETECT_LOG_(WARN, "enqueue parent notification failed",
                       KR(ret), K(parent_list_.at(idx)), K(*this));
@@ -885,7 +885,7 @@ void ObLCLNode::update_lcl_period_if_necessary_with_lock_()
     }
   }
   if (timeout_ts != 0 && ObClockGenerator::getRealClock() > timeout_ts) {
-    if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key_(self_key_))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::detector::ObDeadLockDetectorMgr>()->unregister_key_(self_key_))) {
       DETECT_LOG_(WARN, "fail to gc lcl node", K(*this), KR(ret), K(timeout_ts));
     }
   }

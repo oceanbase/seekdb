@@ -296,10 +296,3 @@ TEST(FixedSizeBlockMemoryContext, simple)
   }
   EXPECT_EQ(block_num, allocator.get_free_block_num());
 }
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("WARN");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

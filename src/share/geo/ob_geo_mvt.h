@@ -29,6 +29,8 @@ namespace oceanbase
 namespace common
 {
 
+class ObILobReadService;
+
 typedef struct _ObTileValue {
   VectorTile__Tile__Value value_;
   void *ptr_;
@@ -76,7 +78,11 @@ typedef common::hash::ObHashMap<ObTileValue, uint32_t> AttributeMap;
 class mvt_agg_result
 {
 public:
-  mvt_agg_result(common::ObIAllocator &alloc) : allocator_(alloc),
+  mvt_agg_result(common::ObIAllocator &alloc,
+                 ObILobReadService &lob_read_service)
+                   : allocator_(alloc),
+                     temp_allocator_(nullptr),
+                     lob_read_service_(lob_read_service),
                      inited_(false),
                      lay_name_("default"),
                      geom_name_(),
@@ -112,6 +118,7 @@ public:
   common::ObIAllocator &allocator_;
   // for single row iterate allocator;
   common::ObIAllocator *temp_allocator_;
+  ObILobReadService &lob_read_service_;
   bool inited_;
   common::ObString lay_name_;
   common::ObString geom_name_;

@@ -22,7 +22,8 @@
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {
@@ -30,7 +31,6 @@ using namespace common;
 using namespace obcall;
 using namespace share;
 using namespace share::schema;
-using namespace observer;
 namespace sql
 {
 typedef ObAlterSystemResolverUtil Util;
@@ -171,7 +171,6 @@ int ObFreezeResolver::resolve_target_(ObFreezeStmt *freeze_stmt,
   }
   return ret;
 }
-
 int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -389,7 +388,6 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
   }
   return ret;
 }
-
 int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -431,6 +429,7 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
 }
 
 
+
 int ObFlushDagWarningsResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;
@@ -470,10 +469,6 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
   }
   return ret;
 }
-
-
-
-
 int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

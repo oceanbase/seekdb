@@ -20,7 +20,7 @@
 #include "lib/task/ob_timer.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "observer/report/ob_i_disk_report.h"
+#include "data_plane/report/ob_i_disk_report.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 
 namespace oceanbase
@@ -70,7 +70,7 @@ struct ObDiskUsageReportKey
 
 typedef hash::HashMapPair<ObDiskUsageReportKey, std::pair<int64_t, int64_t>> ObDiskUsageReportMap;// pair(occupy_size, required_size)
 
-class ObDiskUsageReportTask : public observer::ObIDiskReport
+class ObDiskUsageReportTask : public data_plane::ObIDiskReport
 {
 public:
   ObDiskUsageReportTask();

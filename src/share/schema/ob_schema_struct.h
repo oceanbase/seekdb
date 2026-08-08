@@ -33,8 +33,7 @@
 #include "share/schema/ob_priv_type.h"
 #include "share/ob_priv_common.h"
 #include "lib/worker.h"
-#include "objit/common/ob_item_type.h"
-#include "share/ob_share_util.h"          // ObIDGenerator
+#include "share/ob_id_generator.h"
 #include "share/cache/ob_kv_storecache.h" // ObKVCacheHandle
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "lib/string/ob_sql_string.h"
@@ -58,15 +57,6 @@ class ObSqlString;
 class ObString;
 class ObDataTypeCastParams;
 class ObKVCacheHandle;
-}
-namespace sql
-{
-class ObSQLSessionInfo;
-class ObPartitionExecutorUtils;
-}
-namespace rootserver
-{
-class ObRandomZoneSelector;
 }
 namespace share
 {
@@ -2079,7 +2069,6 @@ class ObBasePartition : public ObSchema
   OB_UNIS_VERSION(1);
 public:
   friend class ObPartitionUtils;
-  friend class sql::ObPartitionExecutorUtils;
   ObBasePartition();
   explicit ObBasePartition(common::ObIAllocator *allocator);
   virtual void reset();
@@ -2132,6 +2121,10 @@ public:
   // careful, add_list_row only push row, not deep copy objs in row
   int add_list_row(const common::ObNewRow &row) {
     return list_row_values_.push_back(row);
+  }
+  int sort_list_row_values()
+  {
+    return list_row_values_.sort_array();
   }
   int set_low_bound_val(const common::ObRowkey &high_bound_val);
   const common::ObRowkey &get_low_bound_val() const

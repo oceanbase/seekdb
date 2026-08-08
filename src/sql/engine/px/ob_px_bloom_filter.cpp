@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_bloom_filter.h"
-#include "storage/blocksstable/encoding/ob_encoding_query_util.h"
+#include "data_plane/encoding/ob_cpu_features.h"
 
 using namespace oceanbase;
 using namespace common;
@@ -57,7 +57,7 @@ int ObPxBloomFilter::init(int64_t data_length, ObIAllocator &allocator,
     (void)calc_num_of_hash_func();
     bits_array_length_ = ceil((double)bits_count_ / 64);
     void *bits_array_buf = NULL;
-    bool simd_support = blocksstable::is_avx512_valid();
+    bool simd_support = data_plane::is_avx512_supported();
     might_contain_ = simd_support ? &ObPxBloomFilter::might_contain_simd
                      : &ObPxBloomFilter::might_contain_nonsimd;
     if (OB_ISNULL(bits_array_buf = allocator.alloc(
@@ -339,7 +339,7 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
     }
     if (OB_SUCC(ret)) {
       bits_array_ = bits_array;
-      might_contain_ = blocksstable::is_avx512_valid() ? &ObPxBloomFilter::might_contain_simd
+      might_contain_ = data_plane::is_avx512_supported() ? &ObPxBloomFilter::might_contain_simd
                        : &ObPxBloomFilter::might_contain_nonsimd;
     }
   }

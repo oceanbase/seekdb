@@ -49,6 +49,30 @@ int local_get_runtime_name_case_mode(ObNameCaseMode &name_case_mode)
   }
   return ret;
 }
+
+int local_check_ai_model_exists(const ObString &ai_model_name)
+{
+  int ret = OB_SUCCESS;
+  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  schema::ObSchemaGetterGuard guard;
+  const schema::ObAiModelSchema *ai_model_schema = nullptr;
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+    LOG_WARN("fail to get schema guard", KR(ret));
+  } else if (OB_FAIL(guard.get_ai_model_schema(ai_model_name, ai_model_schema))) {
+    LOG_WARN("fail to get ai model schema", KR(ret), K(ai_model_name));
+  } else if (OB_ISNULL(ai_model_schema)) {
+    ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
+    LOG_USER_ERROR(
+        OB_AI_FUNC_PARAM_VALUE_INVALID,
+        strlen("ai_model_name"),
+        "ai_model_name");
+    LOG_WARN("ai model name does not exist", KR(ret), K(ai_model_name));
+  }
+  return ret;
+}
 }
 const int64_t ObAiServiceExecutor::SPECIAL_ENDPOINT_ID_FOR_VERSION = -1;
 const int64_t ObAiServiceExecutor::INIT_ENDPOINT_VERSION = 0;
@@ -66,6 +90,8 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   ObAiModelEndpointInfo tmp_endpoint;
   if (OB_FAIL(endpoint.parse_from_json_base(allocator, endpoint_name, create_jbase))) {
     LOG_WARN("failed to parse ai service endpoint info", KR(ret), K(create_jbase));
+  } else if (OB_FAIL(local_check_ai_model_exists(endpoint.get_ai_model_name()))) {
+    LOG_WARN("invalid ai model name", KR(ret), K(endpoint));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     LOG_WARN("failed to start transaction", KR(ret));
   } else if (OB_FAIL(ObAiServiceProxy::check_ai_endpoint_exists(allocator, trans, endpoint_name, is_exists))) {
@@ -136,6 +162,8 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
+  } else if (OB_FAIL(local_check_ai_model_exists(new_endpoint.get_ai_model_name()))) {
+    LOG_WARN("invalid ai model name", KR(ret), K(new_endpoint));
   } else {
     // if change ai model name, check if the ai model endpoint has the same ai model name is already exists
     // if not exists, continue

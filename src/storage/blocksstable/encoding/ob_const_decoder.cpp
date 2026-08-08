@@ -385,7 +385,7 @@ int ObConstDecoder::const_only_operator(
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("Invalid argument", K(ret), K(filter));
             } else if (ref == 1) {
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), cmp_res))) {
+            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), cmp_res, nullptr))) {
               LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(datums.at(0)));
             } else if (get_cmp_ret(cmp_res)) {
               if (OB_FAIL(result_bitmap.bit_not())) {
@@ -404,9 +404,9 @@ int ObConstDecoder::const_only_operator(
               LOG_WARN("Invalid argument", K(ret),
                        K(datums), K(result_bitmap.size()), K(col_ctx));
             } else if (ref == 1) {
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res))) {
+            } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res, nullptr))) {
               LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(datums.at(0)));
-            } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res))) {
+            } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res, nullptr))) {
               LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(datums.at(1)));
             } else if (get_ge_cmp_ret(left_cmp_res) && get_le_cmp_ret(right_cmp_res)) {
               if (OB_FAIL(result_bitmap.bit_not())) {
@@ -533,7 +533,7 @@ int ObConstDecoder::comparison_operator(
       }
 
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(cmp_func(const_datum, ref_datum, cmp_res))) {
+      } else if (OB_FAIL(cmp_func(const_datum, ref_datum, cmp_res, nullptr))) {
         LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(ref_datum));
       } else if (get_cmp_ret(cmp_res)) {
         if (OB_FAIL(result_bitmap.bit_not())) {
@@ -559,7 +559,7 @@ int ObConstDecoder::comparison_operator(
         if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("There should not be null datum in dictionary", K(ret));
-        } else if (OB_FAIL(cmp_func(*trav_it, ref_datum, cmp_res))) {
+        } else if (OB_FAIL(cmp_func(*trav_it, ref_datum, cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datums", K(ret), K(*trav_it), K(ref_datum));
         } else if (!const_in_result_set == get_cmp_ret(cmp_res)) {
           found = true;
@@ -620,9 +620,9 @@ int ObConstDecoder::bt_operator(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res))) {
+      } else if(OB_FAIL(cmp_func(const_datum, datums.at(0), left_cmp_res, nullptr))) {
         LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(datums.at(0)));
-      } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res))) {
+      } else if(OB_FAIL(cmp_func(const_datum, datums.at(1), right_cmp_res, nullptr))) {
         LOG_WARN("Failed to compare datums", K(ret), K(const_datum), K(datums.at(1)));
       } else if ((left_cmp_res >= 0) && (right_cmp_res <= 0)) {
         if (OB_FAIL(result_bitmap.bit_not())) {
@@ -646,9 +646,9 @@ int ObConstDecoder::bt_operator(
         if (OB_UNLIKELY((*trav_it).is_null())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("There should not be null datum in dictionary", K(ret));
-        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(0), left_cmp_res))) {
+        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(0), left_cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datums", K(ret), K(*trav_it), K(datums.at(0)));
-        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(1), right_cmp_res))) {
+        } else if(OB_FAIL(cmp_func(*trav_it, datums.at(1), right_cmp_res, nullptr))) {
           LOG_WARN("Failed to compare datums", K(ret), K(*trav_it), K(datums.at(1)));
         } else if (!const_in_result_set == ((left_cmp_res >= 0)
                    && (right_cmp_res <= 0))) {

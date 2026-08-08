@@ -44,7 +44,7 @@
 #include "storage/tablelock/ob_lock_table.h"
 #include "storage/tx_storage/ob_tablet_gc_service.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
-#include "observer/vector_index/ob_plugin_vector_index_scheduler.h"
+#include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "storage/ls/ob_freezer_define.h"
 
 namespace oceanbase
@@ -663,13 +663,19 @@ private:
   ObLSReservedSnapshotMgr reserved_snapshot_mgr_;
   ObLSResvSnapClogHandler reserved_snapshot_clog_handler_;
   ObMediumCompactionClogHandler medium_compaction_clog_handler_;
+  int register_vector_index_log_handler_(
+      logservice::ObLogBaseType type,
+      data_plane::ObIVectorIndexLogHandler &handler);
+  void unregister_vector_index_log_handler_(logservice::ObLogBaseType type);
+  int register_composition_log_handler_(logservice::ObLogBaseType type);
+  void unregister_composition_log_handler_(logservice::ObLogBaseType type);
   int init_vector_idx_scheduler_();
   void stop_vector_idx_scheduler_();
   void destroy_vector_idx_scheduler_();
   // table_api removed from build: the vector index scheduler used to be hosted by
   // table::ObTenantTabletTTLMgr (together with tablet TTL); only the vector index
   // scheduler part is preserved here, driven by its own timer.
-  share::ObPluginVectorIndexLoadScheduler vector_idx_scheduler_;
+  data_plane::ObIVectorIndexScheduler *vector_idx_scheduler_;
   common::ObTimer vector_idx_scheduler_timer_;
 private:
   bool is_inited_;

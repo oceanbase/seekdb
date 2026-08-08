@@ -19,8 +19,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "common/ob_common_types.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/engine/basic/ob_truncate_filter_struct.h"
+#include "data_plane/truncate_info/ob_truncate_info.h"
 #include "ob_mds_info_distinct_mgr.h"
 
 namespace oceanbase
@@ -38,6 +37,17 @@ struct ObColDesc;
 }
 }
 
+namespace storage
+{
+
+class ObTruncateFilterEvaluator;
+
+}
+namespace sql
+{
+class ObPushdownFilterExecutor;
+class ObExternalPushdownFilterRuntime;
+}
 namespace storage
 {
 
@@ -109,13 +119,9 @@ public:
   {
     filter_type_ = ObTruncateFilterType::EMPTY_FILTER;
   }
-  OB_INLINE void uncombined_from_pd_filter()
-  {
-    has_combined_to_pd_filter_ = false;
-  }
+  void uncombined_from_pd_filter();
   TO_STRING_KV(K_(is_inited), K_(filter_type), K_(schema_rowkey_cnt), K_(base_version), K_(has_combined_to_pd_filter),
-               K_(mds_info_mgr), K_(truncate_info_array), KP_(truncate_filter_node), KP_(truncate_filter_executor),
-               KP_(pd_filter_node_with_truncate), KP_(pd_filter_with_truncate), KP_(outer_allocator));
+               K_(mds_info_mgr), K_(truncate_info_array), KP_(evaluator), KP_(pushdown_runtime), KP_(outer_allocator));
 private:
   int init_truncate_filter(
       const int64_t schema_rowkey_cnt,
@@ -134,20 +140,10 @@ private:
   bool has_combined_to_pd_filter_;
   ObArenaAllocator filter_allocator_;
   ObArenaAllocator truncate_info_allocator_;
-  sql::ObPushdownFilterFactory filter_factory_;
   ObMdsInfoDistinctMgr mds_info_mgr_;
   ObTruncateInfoArray truncate_info_array_;
-  // for pushdown filter interface
-  sql::ObExecContext exec_ctx_;
-  sql::ObEvalCtx eval_ctx_;
-  sql::ObPushdownExprSpec expr_spec_;
-  sql::ObPushdownOperator op_;
-  // the entire truncate filter node and executor
-  sql::ObPushdownFilterNode *truncate_filter_node_;
-  sql::ObTruncateAndFilterExecutor *truncate_filter_executor_;
-  // the query pushdown filter after combining truncate filter
-  sql::ObPushdownFilterNode *pd_filter_node_with_truncate_;
-  sql::ObPushdownFilterExecutor *pd_filter_with_truncate_;
+  ObTruncateFilterEvaluator *evaluator_;
+  sql::ObExternalPushdownFilterRuntime *pushdown_runtime_;
   common::ObIAllocator *outer_allocator_;
   // record all column idx needed for part_key or sub_part_key
   ObSEArray<uint64_t, COLUMN_IDX_CNT> ref_column_idxs_;

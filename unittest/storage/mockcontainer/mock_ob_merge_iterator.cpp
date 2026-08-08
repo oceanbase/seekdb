@@ -19,6 +19,8 @@
 #define private public
 #define protected public
 #include "mock_ob_merge_iterator.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {

@@ -43,8 +43,12 @@ public:
    *
    * @param [in] obrs Dataset returned by SQL execution
    */
-  ObMySQLResultSet(sql::ObSQLSessionInfo &session, common::ObIAllocator &allocator)
-      : ObResultSet(session, allocator), field_index_(0), param_index_(0), has_more_result_(false)
+  ObMySQLResultSet(
+      sql::ObSQLSessionInfo &session,
+      common::ObIAllocator &allocator,
+      query::ObIPlanCacheAccessService &plan_cache_access_service)
+      : ObResultSet(session, allocator, plan_cache_access_service),
+        field_index_(0), param_index_(0), has_more_result_(false)
   {
     is_user_sql_ = true;
   }

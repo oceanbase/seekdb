@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_table_store_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_table_store.h"
 
 namespace oceanbase
@@ -120,7 +120,7 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
     if (OB_FAIL(get_ith_table(pos_, table))) {
       LOG_WARN("fail to get ith table", K(ret), K(pos_));
     } else if (table->is_memtable() || table->is_ddl_mem_sstable()) {
-      ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+      ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
       if (OB_FAIL(table_handle.set_table(table, t3m, table->get_key().table_type_))) {
         LOG_WARN("failed to set memtable to table handle", K(ret), KPC(table));
       }

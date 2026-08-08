@@ -107,9 +107,3 @@ TEST(ObExprDatumDescriptor, first_batch_eval_clears_stale_pack_for_skipped_rows)
 } // namespace
 } // namespace sql
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

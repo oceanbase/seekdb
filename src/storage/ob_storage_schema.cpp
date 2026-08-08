@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_schema.h"
+#include "data_plane/lob/ob_lob_value.h"
 
 namespace oceanbase
 {
@@ -728,7 +729,7 @@ int ObStorageSchema::generate_column_array(const ObTableSchema &input_schema)
       if (OB_FAIL(datum.from_obj_enhance(orig_default_val))) {
         STORAGE_LOG(WARN, "Failed to transfer obj to datum", K(ret));
       } else if (is_lob_storage(col->get_data_type()) && !datum.has_lob_header()
-              && OB_FAIL(ObLobManager::fill_lob_header(*allocator_, datum))) {
+              && OB_FAIL(data_plane::fill_lob_header(*allocator_, datum))) {
         STORAGE_LOG(WARN, "failed to fill lob header", K(ret), K(datum));
       } else if (orig_default_val.is_fixed_len_char_type()
               && OB_FAIL(trim(orig_default_val.get_collation_type(), datum))) {
@@ -974,8 +975,8 @@ int ObStorageSchema::get_store_column_count(int64_t &column_count, const bool fu
 
 // will call in deserialize for compat to init store_column_cnt_
 
-int ObStorageSchema::init_column_meta_array(
-    common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const
+int ObStorageSchema::get_column_default_checksums(
+    common::ObIArray<share::schema::ObColumnDefaultChecksum> &checksums) const
 {
   int ret = OB_SUCCESS;
   ObArray<ObColDesc> columns;
@@ -999,17 +1000,14 @@ int ObStorageSchema::init_column_meta_array(
         STORAGE_LOG(WARN, "failed to set column map", K(ret), K(i), K(column_array_.at(i)));
       }
     }
-    blocksstable::ObSSTableColumnMeta col_meta;
     uint64_t idx = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
       const uint64_t column_idx = columns.at(i).col_id_;
-      col_meta.column_id_ = column_idx;
-      col_meta.column_checksum_ = 0;
+      int64_t default_checksum = 0;
       if (OB_FAIL(tmp_map.get_refactored(column_idx, idx))) {
         // if it's multi version extra rowkey, no problem
         if (column_idx == OB_HIDDEN_TRANS_VERSION_COLUMN_ID ||
             column_idx == OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID) {
-          col_meta.column_default_checksum_ = 0;
           ret = OB_SUCCESS;
         } else {
           STORAGE_LOG(WARN, "failed to get column schema", K(ret), K(i), K(columns.at(i)));
@@ -1023,11 +1021,13 @@ int ObStorageSchema::init_column_meta_array(
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "virtual generated column should be filtered already", K(ret), K(col_schema));
         } else {
-          col_meta.column_default_checksum_ = col_schema.default_checksum_;
+          default_checksum = col_schema.default_checksum_;
         }
       }
-      if (OB_SUCC(ret) && OB_FAIL(meta_array.push_back(col_meta))) {
-        STORAGE_LOG(WARN, "Fail to push column meta", K(ret));
+      if (OB_SUCC(ret)
+          && OB_FAIL(checksums.push_back(
+              share::schema::ObColumnDefaultChecksum(column_idx, default_checksum)))) {
+        STORAGE_LOG(WARN, "Fail to push column default checksum", K(ret));
       }
     } // end for
     if (tmp_map.created()) {

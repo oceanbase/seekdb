@@ -742,7 +742,7 @@ int ObExprLike::cg_expr(ObExprCGCtx &op_cg_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[2]->datum_meta_));
   } else {
-    //Do optimization even if pattern_expr/escape is pushdown parameter, pattern and escape are 
+    //Do optimization even if pattern_expr/escape is pushdown parameter, pattern and escape are
     //checked whether the same as last time which is recorded in like_ctx for each row in execution.
     bool pattern_literal = pattern_expr->is_const_expr();
     bool escape_literal = escape_expr->is_const_expr();
@@ -926,10 +926,10 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_
     ObDatum pattern_inrow = pattern;
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, text,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_val))) {
       LOG_WARN("failed to read text", K(ret), K(text_val));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, pattern,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, pattern,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), pattern_val))) {
       LOG_WARN("failed to read pattern", K(ret), K(pattern_val));
     } else {
@@ -1104,7 +1104,7 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
           ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
           common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
           ObString text_val = text_datums[i].get_string();
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator,
                                                                 text_datums[i],
                                                                 expr.args_[0]->datum_meta_,
                                                                 expr.args_[0]->obj_meta_.has_lob_header(),
@@ -1132,7 +1132,7 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
         if (!(skip.at(i) || eval_flags.at(i))) {
           if (NullCheck && text_datums[i].is_null()) {
             res_datums[i].set_null();
-          } else if (!ob_is_text_tc(text_type)) { 
+          } else if (!ob_is_text_tc(text_type)) {
             if (UseInstrMode) {
             int64_t res = ALL_PERCENT_SIGN == InstrMode ? 1
                 : match_with_instr_mode<PERCENT_SIGN_START(InstrMode), PERCENT_SIGN_END(InstrMode)>
@@ -1146,7 +1146,7 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
             ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
             common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
             ObString text_val = text_datums[i].get_string();
-            if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator,
+            if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator,
                                                                   text_datums[i],
                                                                   expr.args_[0]->datum_meta_,
                                                                   expr.args_[0]->obj_meta_.has_lob_header(),
@@ -1310,7 +1310,7 @@ int ObExprLike::eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DE
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObString pattern_val = pattern_datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *pattern_datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *pattern_datum,
                 expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), pattern_val))) {
       LOG_WARN("failed to read pattern", K(ret), K(pattern_val));
     } else {

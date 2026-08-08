@@ -18,6 +18,8 @@
 #define private public
 #define protected public
 #include "mockcontainer/mock_ob_iterator.h"
+#undef protected
+#undef private
 
 
 namespace oceanbase
@@ -348,13 +350,3 @@ TEST(ObRowFuseTest, test_row_flag_fuse)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_row_fuse.log");
-  OB_LOGGER.set_file_name("test_row_fuse.log");
-  OB_LOGGER.set_log_level("INFO");
-  CLOG_LOG(INFO, "begin unittest: test_row_fuse");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

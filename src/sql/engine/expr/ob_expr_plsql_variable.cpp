@@ -18,7 +18,7 @@
 
 #include "ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "pl/ob_pl.h"
+#include "sql/pl/ob_pl.h"
 
 namespace oceanbase
 {
@@ -189,7 +189,8 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
   }
   OZ(res.from_obj(result, expr.obj_datum_map_));
   if (is_lob_storage(result.get_type())) {
-    OZ(ob_adjust_lob_datum(result, expr.obj_meta_, ctx.exec_ctx_.get_allocator(), res));
+    OZ(ob_adjust_lob_datum(ctx.exec_ctx_, result, expr.obj_meta_,
+                           ctx.exec_ctx_.get_allocator(), res));
   }
   OZ(expr.deep_copy_datum(ctx, res));
   return ret;

@@ -16,12 +16,12 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_tablet_scheduler.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_index_build_task.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_management_service.h"
 #include "share/ob_ddl_checksum.h"
-#include "src/observer/ob_inner_sql_connection.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "lib/utility/serialization.h"
 
 using namespace oceanbase::rootserver;
@@ -61,7 +61,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -77,7 +77,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
           && tablets.count() > 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(ref_data_table_id), K(task_id), K(parallelism), K(snapshot_version), K(trace_id), K(tablets.count()));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(ref_data_table_id, ref_data_table_tablets))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, ref_data_table_id, ref_data_table_tablets))) {
     LOG_WARN("failed to get ref data table tablet ids", K(ret), K(ref_data_table_id), K(ref_data_table_tablets));
   } else if (OB_UNLIKELY(tablets.count() != ref_data_table_tablets.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -117,9 +117,11 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
       tablet_data_row_cnt = 0;
       part_tablets.reuse();
       partition_names.reuse();
-      if (OB_FAIL(ObDDLUtil::get_tablet_data_size(ref_data_table_tablets.at(i), tablet_data_size))) {
+      if (OB_FAIL(ObDDLUtil::get_tablet_data_size(
+          *GCTX.meta_db_pool_, ref_data_table_tablets.at(i), tablet_data_size))) {
         LOG_WARN("fail to get tablet data size", K(ret), K(ref_data_table_tablets.at(i)), K(tablet_data_size));
-      } else if (OB_FAIL(ObDDLUtil::get_tablet_data_row_cnt(ref_data_table_tablets.at(i), tablet_data_row_cnt))) {
+      } else if (OB_FAIL(ObDDLUtil::get_tablet_data_row_cnt(
+          *GCTX.meta_db_pool_, ref_data_table_tablets.at(i), tablet_data_row_cnt))) {
         LOG_WARN("fail to get tablet row count", K(ret), K(ref_data_table_tablets.at(i)), K(tablet_data_row_cnt));
       } else if (OB_FAIL(tablet_id_to_data_size_.set_refactored(ref_data_table_tablets.at(i).id(), tablet_data_size, true /* overwrite */))) {
         LOG_WARN("table id to data size map set fail", K(ret), K(ref_data_table_tablets.at(i).id()), K(tablet_data_size));
@@ -127,7 +129,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
         LOG_WARN("table id to data size map set fail", K(ret), K(ref_data_table_tablets.at(i).id()), K(tablet_data_row_cnt));
       } else if (OB_FAIL(part_tablets.push_back(tablets.at(i)))) {
         LOG_WARN("fail to push back", K(ret), K(tablets.at(i)));
-      } else if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(ref_data_table_id, table_id, part_tablets, arena, partition_names))) {
+      } else if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(*GCTX.schema_service_, ref_data_table_id, table_id, part_tablets, arena, partition_names))) {
         LOG_WARN("fail to get index table batch partition names", K(ret), K(ref_data_table_id), K(table_id), K(part_tablets), K(partition_names));
       } else {
         if (OB_FAIL(tablet_finished_map.get_refactored(tablets.at(i).id(), is_finished_status))) {
@@ -137,7 +139,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
         }
         for (int64_t j = 0; j < running_sql_info.count() && OB_SUCC(ret); j++) {
           is_running_status = false;
-          if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(0), arena, is_running_status))) {
+          if (OB_FAIL(ObDDLTaskUtil::check_target_partition_is_running(running_sql_info.at(j), partition_names.at(0), arena, is_running_status))) {
             LOG_WARN("fail to check target partition is running", K(ret), K(running_sql_info.at(j)), K(partition_names.at(0)), K(is_running_status));
           } else if (is_running_status) {
             break;
@@ -428,7 +430,7 @@ int ObDDLTabletScheduler::get_unfinished_tablets(const share::ObDDLType task_typ
   } else if (OB_UNLIKELY(tablet_queue.count() < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet queue is null", K(ret), K(tablet_queue.count()));
-  } else if (OB_FAIL(ObDDLUtil::get_ls_host_left_disk_space(left_space_size))) {
+  } else if (OB_FAIL(ObDDLUtil::get_ls_host_left_disk_space(*GCTX.sql_proxy_, left_space_size))) {
     LOG_WARN("fail to get local disk free space", K(ret), K(left_space_size));
   } else if (OB_FAIL(calculate_candidate_tablets(left_space_size, tablet_queue, tablets))) {
     LOG_WARN("fail to use strategy to get tablets", K(ret), K(left_space_size), K(tablet_queue), K(tablets));
@@ -604,14 +606,14 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
     } else {
       ObArray<ObString> partition_names;
       bool is_running_status = false;
-      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(
+      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(*GCTX.schema_service_,
             ref_data_table_id_, table_id_, running_tablet_queue, arena, partition_names))) {
         LOG_WARN("fail to get index table batch partition names", K(ret), K(ref_data_table_id_), K(table_id_), K(running_tablet_queue), K(partition_names));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_names.count(); i++) {
         is_running_status = false;
         for (int64_t j = 0; OB_SUCC(ret) && j < running_sql_info.count(); j++) {
-          if (OB_FAIL(ObDDLUtil::check_target_partition_is_running(
+          if (OB_FAIL(ObDDLTaskUtil::check_target_partition_is_running(
                 running_sql_info.at(j), partition_names.at(i), arena, is_running_status))) {
             LOG_WARN("fail to check target partition is running", K(ret), K(running_sql_info.at(j)), K(partition_names.at(i)), K(is_running_status));
           } else if (is_running_status) {

@@ -1,0 +1,80 @@
+# owner: jiahua.cjh
+# owner group: storage
+# description: deny double ddl request while a constraint is adding
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from __all_virtual_core_meta_table where role = 1, host, 1);
+let $leader_obs = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+sleep 2;
+
+let $ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $mysql_port0 = deploy_get_value(ob1.z2.obs0.mysql_port);
+connect(conn_obtest1,$ip0,root@obtest,,test,$mysql_port0);
+connect(conn_obtest2,$ip0,root@obtest,,test,$mysql_port0);
+
+
+## 1. check adding foreign key constraint
+connection conn_obtest1;
+create table t1(id int, parent_id int, name varchar(12));
+create table t2(id int, name varchar(12), primary key(id));
+send alter table t1 add constraint fk_parent_id foreign key(parent_id) references t2(id);
+sleep 10;
+
+connection conn_obtest2;
+--error 1235
+alter table t1 modify name varchar(10);
+
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 5;
+
+connection conn_obtest1;
+reap;
+
+
+## 2. check adding not null constraint
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+sleep 2;
+
+connection conn_obtest1;
+create table t3(id int, parent_id int, name varchar(12));
+send alter table t3 modify parent_id int not null;
+sleep 10;
+
+connection conn_obtest2;
+--error 1235
+alter table t3 modify name varchar(10);
+
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 5;
+
+connection conn_obtest1;
+reap;
+
+
+## 3. check adding check constraint
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+sleep 2;
+
+connection conn_obtest1;
+create table t4(id int, age int, name varchar(12));
+send alter table t4 add check (age > 18);
+sleep 10;
+
+connection conn_obtest2;
+--error 1235
+alter table t4 modify name varchar(10);
+
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 5;
+
+connection conn_obtest1;
+reap;

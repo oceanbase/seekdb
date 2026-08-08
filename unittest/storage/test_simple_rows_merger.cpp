@@ -435,9 +435,3 @@ TEST_F(ObSimpleRowsMergerTest, reset_range)
   ASSERT_EQ(ret, OB_SUCCESS);
   ASSERT_TRUE(merger.empty());
 }
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

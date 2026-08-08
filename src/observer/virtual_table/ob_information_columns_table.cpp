@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/ob_server_runtime_access.h"
 #include "observer/virtual_table/ob_information_columns_table.h"
 #include "observer/virtual_table/ob_table_columns.h"
 #include "share/geo/ob_geo_utils.h"
@@ -228,8 +229,8 @@ int ObInfoSchemaColumnsTable::iterate_table_schema_array(const bool is_filter_ta
                               || 0 == table_schema->get_column_count()
                               || (table_schema->is_sys_view()
                                   && table_schema->get_schema_version() <= GCTX.start_time_
-                                  && (nullptr == GCTX.sql_engine_
-                                      || OB_HASH_NOT_EXIST == GCTX.sql_engine_->get_dep_info_queue()
+                                  && (nullptr == ::oceanbase::observer::get_observer_sql_engine()
+                                      || OB_HASH_NOT_EXIST == ::oceanbase::observer::get_observer_sql_engine()->get_dep_info_queue()
                                       .read_consistent_sys_view_from_set(table_schema->get_table_id()))));
       if (OB_FAIL(ret)) {
       } else if (is_normal_view && view_is_invalid) {

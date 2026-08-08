@@ -1,0 +1,32 @@
+ob1=OBI(cluster=1, proxy_num=0);
+ob1.z1.obs0.set extra_config=_enable_defensive_check=false,$extra_conf;
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set syslog_level='info';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+create table t1(a int, b int);
+begin;
+insert into t1 (a, b) values (1, 2), (3, 4), (5, 6);
+alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "tx data memtable mgr release head memtable";
+select * from t1;
+a	b
+1	2
+3	4
+5	6
+insert into t1 (a, b) values (1, 2);
+commit;
+select * from t1;
+a	b
+1	2
+3	4
+5	6
+1	2
+alter system minor freeze;
+ob1.z1.obs0.check_log_until_success -c "tx data memtable mgr release head memtable";
+select * from t1;
+a	b
+1	2
+3	4
+5	6
+1	2

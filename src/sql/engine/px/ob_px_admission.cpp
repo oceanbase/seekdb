@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_px_admission.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "query/runtime/ob_query_runtime_environment.h"
 #include "ob_px_target_monitor.h"
 
 using namespace oceanbase::common;
@@ -188,24 +188,6 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     LOG_DEBUG("release resource, notify wait threads");
   }
 }
-// Supply SQC end used Admission module.
-// Bound SQC admission by local server CPU capacity.
-void ObPxSubAdmission::acquire(int64_t max, int64_t min, int64_t &acquired_cnt)
-{
-  UNUSED(min);
-  oceanbase::omt::ObServerRuntime *runtime = nullptr;
-  oceanbase::omt::ObThWorker *worker = nullptr;
-  int64_t upper_bound = 1;
-  if (nullptr == (worker = THIS_THWORKER_SAFE)) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server worker", K(max), K(min));
-  } else if (nullptr == (runtime = worker->get_runtime())) {
-    LOG_ERROR_RET(OB_ERR_UNEXPECTED, "can't find server runtime", KP(worker), K(max), K(min));
-  } else {
-    upper_bound = runtime->min_cpu() * GCONF._max_px_workers_per_cpu;
-  }
-  acquired_cnt = std::min(max, upper_bound);
-}
-
 void ObPxSubAdmission::release(int64_t acquired_cnt)
 {
   UNUSED(acquired_cnt);

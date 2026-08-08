@@ -1,0 +1,129 @@
+##########################
+# owner : keqing.llt
+# owner group: CLOG
+# description: test for specific gc process
+# 需要三台机器，否则无法模拟断网
+##########################
+
+ob1=OBI(cluster=1:1:1, proxy_num=0);
+
+let $extra_conf = "cpu_count=16,memory_budget='20G',__min_full_resource_pool_memory='1073741824',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='20G'";
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+ob1.z3.obs0.set extra_config=$extra_conf;
+
+sleep 3;
+ob1.reboot;
+sleep 3;
+let $cpu = 1;
+let $memory = '2G';
+let $disk = '2G';
+let $iops = 100000;
+let $session = 64;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# mysql tenant
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MEMORY_SIZE $memory, MAX_IOPS $iops, LOG_DISK_SIZE $disk;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1', 'z2', 'z3');;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+
+source include/check_schema_sync.inc;
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.port);
+let $z2_ip = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_port = deploy_get_value(ob1.z2.obs0.port);
+let $z3_ip = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_port = deploy_get_value(ob1.z3.obs0.port);
+
+ob1.check_until_timeout select count(*) from __all_virtual_ls_meta_table where tenant_id = '$mysql_tenant_id' and ls_id = 1001 and role = 1, 1, 60;
+ob1.check_until_timeout select count(*) from __all_virtual_ls_meta_table where tenant_id = '$mysql_tenant_id' and ls_id = 1001 and role = 1 and svr_ip = '$z3_ip' and svr_port = '$z3_port', 0, 60;
+let $leader_ip=deploy_get_value(ob1.select select svr_ip as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1001 and role = 1,  host, 1);
+let $leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1001 and role = 1 order by svr_ip, svr_port limit 1, host, 1);
+
+if ($leader_ip == $z1_ip)
+{
+  let $follower_ip_1 = $z2_ip;
+  let $follower_port_1 = $z2_port;
+  let $follower_ip_2 = $z3_ip;
+  let $follower_port_2 = $z3_port;
+}
+
+if ($leader_ip == $z2_ip)
+{
+  let $follower_ip_1 = $z1_ip;
+  let $follower_port_1 = $z1_port;
+  let $follower_ip_2 = $z3_ip;
+  let $follower_port_2 = $z3_port;
+}
+
+let $follower_ip_port_1=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1001 and svr_ip = '$follower_ip_1' and svr_port = '$follower_port_1', host, 1);
+let $follower_ip_port_2=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1001 and svr_ip = '$follower_ip_2' and svr_port = '$follower_port_2', host, 1);
+let $leader_obs=deploy_get_value(ob1.get_obs_by_addr $leader_ip_port);
+let $follower_obs_1=deploy_get_value(ob1.get_obs_by_addr $follower_ip_port_1);
+let $follower_obs_2=deploy_get_value(ob1.get_obs_by_addr $follower_ip_port_2);
+
+# 建表
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+sleep 3;
+create table t1 (c1 int primary key);
+source include/check_schema_sync.inc;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+alter system set syslog_level='TRACE';
+
+# leader和两个follower断网
+$leader_obs.block_net $follower_obs_1;
+$follower_obs_1.block_net $leader_obs;
+$leader_obs.block_net $follower_obs_2;
+$follower_obs_2.block_net $leader_obs;
+
+ob_connect(conn_mysql, $leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000000;
+# 在原leader上插入数据
+begin;
+eval insert into t1 values (1);
+# 预期commit会卡住
+send commit;
+
+sleep 10;
+ob_connect(conn_sys, ob1.z2.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# 等待切主
+let $count = 0;
+while ($count != 1)
+{
+  let $count = query_get_value(select count(*) from __all_virtual_log_stat where tenant_id='$mysql_tenant_id' and ls_id=1001 and svr_ip='$follower_ip_1' and svr_port='$follower_port_1' and role = 'LEADER', count(*), 1);
+  sleep 1;
+}
+drop tenant mysql force;
+# 等待另两台server GC完成
+while ($count != 0)
+{
+  let $count = query_get_value(select count(*) from __all_virtual_log_stat where tenant_id='$mysql_tenant_id', count(*), 1);
+  sleep 5;
+}
+
+# 恢复网络
+$leader_obs.clean_net $follower_obs_1;
+$leader_obs.clean_net $follower_obs_2;
+$follower_obs_1.clean_net $leader_obs;
+$follower_obs_2.clean_net $leader_obs;
+
+# 恢复网络后首先预期能看到之前断网的副本
+while ($count == 0)
+{
+  let $count = query_get_value(select count(*) from __all_virtual_log_stat where tenant_id='$mysql_tenant_id', count(*), 1);
+  sleep 1;
+}
+
+# 恢复后的副本预期会被gc掉
+# 目前无法gc成功, 先注释掉, 等待修复后打开
+# while ($count != 0)
+# {
+#  let $count = query_get_value(select count(*) from __all_virtual_log_stat where tenant_id='$mysql_tenant_id', count(*), 1);
+#  sleep 5;
+#}

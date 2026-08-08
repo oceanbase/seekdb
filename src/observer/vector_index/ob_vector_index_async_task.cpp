@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -366,7 +367,7 @@ int ObVecTaskManager::create_task()
   ObSEArray<ObTabletID, 1> tablet_ids;
   ObArray<ObVecIndexAsyncTaskCtx*> task_ctx_array;
   ObArenaAllocator allocator("VecTaskCtx", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  if (OB_FAIL(ObDDLUtil::get_tablets(index_table_id_, tablet_ids))) {
+  if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, index_table_id_, tablet_ids))) {
     LOG_WARN("failed to get tablet ids", K(ret));
   } else {
     for (int i = 0; i < tablet_ids.count() && OB_SUCC(ret); i++) {
@@ -479,3 +480,27 @@ int ObVecTaskManager::check_task_status()
 
 } // end namespace share
 } // end namespace oceanbase
+
+namespace oceanbase
+{
+namespace data_plane
+{
+
+int process_vector_index_embedding_task(const int64_t index_table_id)
+{
+  share::ObVecTaskManager manager(
+      index_table_id,
+      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING);
+  return manager.process_task();
+}
+
+int process_vector_index_optimization_task(const int64_t index_table_id)
+{
+  share::ObVecTaskManager manager(
+      index_table_id,
+      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL);
+  return manager.process_task();
+}
+
+} // namespace data_plane
+} // namespace oceanbase

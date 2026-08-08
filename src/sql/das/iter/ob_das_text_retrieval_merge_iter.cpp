@@ -35,7 +35,8 @@ ObIRIterLoserTreeItem::ObIRIterLoserTreeItem()
 }
 
 ObIRIterLoserTreeCmp::ObIRIterLoserTreeCmp()
-  : cmp_func_(), iter_doc_ids_(nullptr), is_inited_(false)
+  : cmp_func_(), iter_doc_ids_(nullptr), datum_access_ctx_(nullptr),
+    is_inited_(false)
 {
 }
 
@@ -43,15 +44,20 @@ ObIRIterLoserTreeCmp::~ObIRIterLoserTreeCmp()
 {
 }
 
-int ObIRIterLoserTreeCmp::init(ObDatumMeta doc_id_meta, const ObIArray<ObDocIdExt> *iter_doc_ids)
+int ObIRIterLoserTreeCmp::init(
+    ObDatumMeta doc_id_meta,
+    const ObIArray<ObDocIdExt> *iter_doc_ids,
+    const common::ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(iter_doc_ids)) {
+  if (OB_ISNULL(iter_doc_ids) || OB_ISNULL(datum_access_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(iter_doc_ids_));
+    LOG_WARN("unexpected nullptr", K(ret), KP(iter_doc_ids),
+             KP(datum_access_ctx));
   } else {
     iter_doc_ids_ = iter_doc_ids;
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(doc_id_meta.type_, doc_id_meta.cs_type_);
+    datum_access_ctx_ = datum_access_ctx;
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(doc_id_meta.type_, doc_id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -74,7 +80,10 @@ int ObIRIterLoserTreeCmp::cmp(
     LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
-    if (OB_FAIL(cmp_func_(iter_doc_ids_->at(l.iter_idx_).get_datum(), iter_doc_ids_->at(r.iter_idx_).get_datum(), tmp_ret))) {
+    if (OB_FAIL(cmp_func_(
+            iter_doc_ids_->at(l.iter_idx_).get_datum(),
+            iter_doc_ids_->at(r.iter_idx_).get_datum(), tmp_ret,
+            datum_access_ctx_))) {
       LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;
@@ -721,7 +730,7 @@ int ObDASTextRetrievalMergeIter::init_total_doc_cnt_param(
     }
     scan_param.pd_storage_filters_ = rtdef->p_pd_expr_op_->pd_storage_filters_;
     if (OB_NOT_NULL(tx_desc)) {
-      scan_param.tx_id_ = tx_desc->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(tx_desc);
     } else {
       scan_param.tx_id_.reset();
     }
@@ -1879,9 +1888,17 @@ int ObDASTRDaatIter::do_table_scan()
 int ObDASTRDaatIter::inner_init(ObDASIterParam &param)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ObDASTextRetrievalMergeIter::inner_init(param))) {
     LOG_WARN("failed to init text retrieval", K(ret));
-  } else if (OB_FAIL(loser_tree_cmp_.init(ir_ctdef_->inv_scan_domain_id_col_->datum_meta_, &iter_doc_ids_))) {
+  } else if (OB_ISNULL(eval_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null evaluation context", K(ret));
+  } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (OB_FAIL(loser_tree_cmp_.init(
+                 ir_ctdef_->inv_scan_domain_id_col_->datum_meta_,
+                 &iter_doc_ids_, datum_access_ctx))) {
     LOG_WARN("failed to init loser tree comparator", K(ret));
   } else if (0 == query_tokens_.count()) {
     processing_type_ = RetrievalProcType::DAAT;

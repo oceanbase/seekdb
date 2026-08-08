@@ -18,6 +18,7 @@
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_CONTEXT_
 
 #include "lib/allocator/ob_fifo_allocator.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/checksum/ob_crc64.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_spin_lock.h"

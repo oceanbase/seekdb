@@ -194,7 +194,8 @@ int ObFunctionTableOp::inner_get_next_row_udf()
           if (OB_FAIL(datum.from_obj(obj_stack[i], datum_map))) {
             LOG_WARN("failed to convert datum", K(ret));
           } else if (is_lob_storage(obj_stack[i].get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(obj_stack[i], expr->obj_meta_, datum_map,
+                     OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), obj_stack[i],
+                                                 expr->obj_meta_, datum_map,
                                                  get_exec_ctx().get_allocator(), datum))) {
             LOG_WARN("adjust lob datum failed", K(ret), K(obj_stack[i].get_meta()), K(expr->obj_meta_));
           }

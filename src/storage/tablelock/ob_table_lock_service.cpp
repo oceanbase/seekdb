@@ -15,8 +15,9 @@
  */
 
 #define USING_LOG_PREFIX TABLELOCK
+#include "data_plane/tablelock/ob_table_lock.h"
 #include "storage/tablelock/ob_table_lock_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablelock/ob_table_lock_local_executor.h"
 
 #include "storage/tx/ob_trans_service.h"
@@ -45,7 +46,7 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   origin_timeout_us_(-1),
   timeout_us_(-1),
   abs_timeout_ts_(-1),
-  trans_state_(),
+  tx_started_(false),
   tx_desc_(nullptr),
   tx_param_(),
   current_savepoint_(),
@@ -237,8 +238,21 @@ int64_t ObTableLockService::ObOBJLockGarbageCollector::GARBAGE_COLLECT_TIMEOUT =
 ObTableLockService::ObOBJLockGarbageCollector::ObOBJLockGarbageCollector()
   : timer_(),
     timer_task_(*this),
-    last_success_timestamp_(0) {}
+    last_success_timestamp_(0),
+    sql_proxy_(nullptr) {}
 ObTableLockService::ObOBJLockGarbageCollector::~ObOBJLockGarbageCollector() {}
+
+int ObTableLockService::ObOBJLockGarbageCollector::init(common::ObMySQLProxy &sql_proxy)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(sql_proxy_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("object lock garbage collector init twice", K(ret));
+  } else {
+    sql_proxy_ = &sql_proxy;
+  }
+  return ret;
+}
 
 int ObTableLockService::ObOBJLockGarbageCollector::start()
 {
@@ -278,6 +292,7 @@ void ObTableLockService::ObOBJLockGarbageCollector::wait()
 void ObTableLockService::ObOBJLockGarbageCollector::destroy()
 {
   timer_.destroy();
+  sql_proxy_ = nullptr;
   LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector destroys successfully", KPC(this));
 }
 
@@ -313,7 +328,10 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_()
   if (!timer_.inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("timer of ObTableLockService::ObOBJLockGarbageCollector is not running", K(ret));
-  } else if (OB_FAIL(ObTableLockDetector::do_detect_and_clear())) {
+  } else if (OB_ISNULL(sql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql proxy is not installed", K(ret));
+  } else if (OB_FAIL(ObTableLockDetector::do_detect_and_clear(*sql_proxy_))) {
     LOG_WARN("do_detect_and_clear failed", K(ret));
   }
   return ret;
@@ -406,12 +424,15 @@ bool ObTableLockService::ObTableLockCtx::is_deadlock_avoid_enabled() const
   return tablelock::is_deadlock_avoid_enabled(is_from_sql_, origin_timeout_us_);
 }
 
-int ObTableLockService::server_module_init(ObTableLockService* &lock_service)
+int ObTableLockService::server_module_init(
+    ObTableLockService* &lock_service,
+    query::ObIDeadlockSessionService &session_service)
 {
-  return lock_service->init();
+  return lock_service->init(session_service);
 }
 
-int ObTableLockService::init()
+int ObTableLockService::init(
+    query::ObIDeadlockSessionService &session_service)
 {
   int ret = OB_SUCCESS;
 
@@ -425,7 +446,12 @@ int ObTableLockService::init()
              KP(GCTX.sql_proxy_));
   } else {
     sql_proxy_ = GCTX.sql_proxy_;
-    is_inited_ = true;
+    if (OB_FAIL(obj_lock_garbage_collector_.init(*sql_proxy_))) {
+      LOG_WARN("init object lock garbage collector failed", K(ret));
+    } else {
+      session_service_ = &session_service;
+      is_inited_ = true;
+    }
   }
 
   if (OB_FAIL(ret)) {
@@ -455,6 +481,7 @@ void ObTableLockService::destroy()
 {
   obj_lock_garbage_collector_.destroy();
   sql_proxy_ = nullptr;
+  session_service_ = nullptr;
   is_inited_ = false;
 }
 
@@ -1025,7 +1052,7 @@ int ObTableLockService::handle_task_result_(LocalExecutor &executor,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObTransService *txs = share::g_mp->trans_service();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   can_retry = true;
   retry_ctx.need_retry_ = true;
@@ -1212,8 +1239,8 @@ int ObTableLockService::batch_pre_check_lock_(ObTableLockCtx &ctx,
   int last_ret = OB_SUCCESS;
   int64_t USLEEP_TIME = 100; // 0.1 ms
   bool need_retry = false;
-  observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
-      observer::handle_batch_lock_task);
+  ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
+      handle_batch_lock_task);
   // only used in LOCK_TABLE/LOCK_PARTITION
   if (LOCK_TABLE == ctx.task_type_ ||
       LOCK_PARTITION == ctx.task_type_) {
@@ -1265,15 +1292,12 @@ int ObTableLockService::batch_pre_check_lock_(ObTableLockCtx &ctx,
 int ObTableLockService::deal_with_deadlock_(ObTableLockCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  SessionGuard session_guard;
   const uint32_t sess_id = ctx.tx_desc_->get_session_id();
-  if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id, session_guard))) {
-    LOG_WARN("get session info failed", K(ret), K(sess_id));
-  } else if (!session_guard.is_valid()) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session guard invalid", K(ret), K(sess_id));
+  if (OB_ISNULL(session_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("deadlock session service is not initialized", K(ret), K(sess_id));
   } else {
-    ret = ObTransDeadlockDetectorAdapter::kill_tx(sess_id);
+    ret = ObTransDeadlockDetectorAdapter::kill_tx(*session_service_, sess_id);
   }
   if (!OB_SUCC(ret)) {
     LOG_WARN("kill trans or stmt failed", K(ret), K(sess_id));
@@ -1290,6 +1314,7 @@ int ObTableLockService::get_table_partition_level_(const ObTableID table_id,
   ObArenaAllocator allocator("TableSchema");
 
   if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
+      GCTX.schema_service_,
       *sql_proxy_,
       allocator,
       table_id,
@@ -1454,7 +1479,7 @@ int ObTableLockService::pack_and_execute_task_(LocalExecutor &executor,
 }
 
 template <>
-int ObTableLockService::pack_and_execute_task_(observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> &executor,
+int ObTableLockService::pack_and_execute_task_(ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> &executor,
                                            ObTableLockCtx &ctx,
                                            const ObLockIDArray &lock_ids,
                                            ObRetryCtx &retry_ctx)
@@ -1556,16 +1581,16 @@ int ObTableLockService::inner_process_obj_lock_batch_(ObTableLockCtx &ctx,
 {
   int ret = OB_SUCCESS;
   if (ctx.is_unlock_task()) {
-    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
-        observer::handle_high_priority_batch_lock_task);
+    ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
+        handle_high_priority_batch_lock_task);
     ret = execute_lock_set_(executor, ctx, lock_map);
   } else if (ctx.is_replace_task()) {
-    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> executor(
-        observer::handle_batch_replace_lock_task);
+    ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObReplaceLockParam>> executor(
+        handle_batch_replace_lock_task);
     ret = execute_lock_set_(executor, ctx, lock_map);
   } else {
-    observer::ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
-        observer::handle_batch_lock_task);
+    ObLocalBatchLockExecutor<ObLockTaskBatchRequest<ObLockParam>> executor(
+        handle_batch_lock_task);
     ret = execute_lock_set_(executor, ctx, lock_map);
   }
   return ret;
@@ -1959,8 +1984,8 @@ int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
   tx_param.lock_timeout_us_ = -1; // use abs_timeout_ts as lock wait timeout
   // no session id here
 
-  ObTransService *txs = share::g_mp->trans_service();
-  if (ctx.trans_state_.is_start_trans_executed()) {
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+  if (ctx.tx_started_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("start_trans is executed", K(ret));
   } else if (OB_FAIL(txs->acquire_tx(ctx.tx_desc_))) {
@@ -1969,7 +1994,7 @@ int ObTableLockService::start_tx_(ObTableLockCtx &ctx)
     if (OB_FAIL(txs->start_tx(*ctx.tx_desc_, tx_param))) {
       LOG_WARN("fail start trans", K(ret), K(tx_param));
     } else {
-      ctx.trans_state_.set_start_trans_executed(true);
+      ctx.tx_started_ = true;
     }
     // start tx failed, release the txDesc I just created.
     if (OB_FAIL(ret)) {
@@ -1988,11 +2013,10 @@ int ObTableLockService::end_tx_(ObTableLockCtx &ctx, const bool is_rollback)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  if (!ctx.trans_state_.is_start_trans_executed()
-      || !ctx.trans_state_.is_start_trans_success()) {
+  if (!ctx.tx_started_) {
     LOG_INFO("end_trans skip", K(ret), K(ctx));
   } else {
-    ObTransService *txs = share::g_mp->trans_service();
+    ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     const int64_t stmt_timeout_ts = ctx.abs_timeout_ts_;
     if (is_rollback) {
       if (OB_FAIL(txs->rollback_tx(*ctx.tx_desc_))) {
@@ -2009,10 +2033,10 @@ int ObTableLockService::end_tx_(ObTableLockCtx &ctx, const bool is_rollback)
       LOG_ERROR("release tx failed", K(ret), K(tmp_ret), KPC(ctx.tx_desc_));
     }
     ctx.tx_desc_ = NULL;
-    ctx.trans_state_.clear_start_trans_executed();
+    ctx.tx_started_ = false;
   }
 
-  ctx.trans_state_.reset();
+  ctx.tx_started_ = false;
   LOG_DEBUG("ObTableLockService::end_tx_", K(ret), K(tmp_ret), K(ctx), K(is_rollback));
 
   return ret;
@@ -2026,7 +2050,7 @@ int ObTableLockService::start_sub_tx_(ObTableLockCtx &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("start_sub_tx is executed", K(ret));
   } else {
-    ObTransService *txs = share::g_mp->trans_service();
+    ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     const ObTxParam &tx_param = ctx.tx_param_;
     const ObTxIsolationLevel &isolation_level = tx_param.isolation_;
     const int64_t expire_ts = ctx.abs_timeout_ts_;
@@ -2052,7 +2076,7 @@ int ObTableLockService::end_sub_tx_(ObTableLockCtx &ctx, const bool is_rollback)
   } else {
     const auto &savepoint = ctx.current_savepoint_;
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
-    ObTransService *txs = share::g_mp->trans_service();
+    ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 	    if (is_rollback &&
 	        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
 	                                                    savepoint,
@@ -2078,7 +2102,7 @@ int ObTableLockService::start_stmt_(ObTableLockCtx &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("start_stmt_ is executed", K(ret));
   } else {
-    ObTransService *txs = share::g_mp->trans_service();
+    ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     const ObTxParam &tx_param = ctx.tx_param_;
     const ObTxIsolationLevel &isolation_level = tx_param.isolation_;
     const int64_t expire_ts = ctx.abs_timeout_ts_;
@@ -2104,7 +2128,7 @@ int ObTableLockService::end_stmt_(ObTableLockCtx &ctx, const bool is_rollback)
   } else {
     const auto &savepoint = ctx.stmt_savepoint_;
     const int64_t expire_ts = OB_MAX(ctx.abs_timeout_ts_, DEFAULT_TIMEOUT_US + ObTimeUtility::current_time());
-    ObTransService *txs = share::g_mp->trans_service();
+    ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     // just rollback the whole stmt, if it is needed.
 	    if (is_rollback &&
 	        OB_FAIL(txs->rollback_to_implicit_savepoint(*ctx.tx_desc_,
@@ -2133,7 +2157,7 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only get schema_version for LOCK TABLE and UNLOCK TABLE request", K(ret), K(ctx));
   } else if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
-               *sql_proxy_, allocator, ctx.table_id_, table_schema))) {
+               GCTX.schema_service_, *sql_proxy_, allocator, ctx.table_id_, table_schema))) {
     if (OB_TABLE_NOT_EXIST == ret) {
       LOG_INFO("table not exist, check whether it meets expectations", K(ret), K(ctx));
     } else {
@@ -2148,4 +2172,67 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
 
 } // tablelock
 } // transaction
+
+namespace data_plane
+{
+
+int lock_table(transaction::ObTxDesc &tx,
+               const transaction::ObTxParam &tx_param,
+               const uint64_t table_id,
+               const transaction::tablelock::ObTableLockMode lock_mode,
+               const int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  transaction::tablelock::ObTableLockService *lock_service =
+      share::server_service<transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(lock_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("table lock service is not installed", K(ret));
+  } else {
+    transaction::tablelock::ObLockTableRequest request;
+    request.table_id_ = table_id;
+    request.owner_id_.set_default();
+    request.lock_mode_ = lock_mode;
+    request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
+    request.timeout_us_ = timeout_us;
+    request.is_from_sql_ = true;
+    if (OB_FAIL(lock_service->lock(tx, tx_param, request))) {
+      LOG_WARN("failed to lock table", K(ret), K(request));
+    }
+  }
+  return ret;
+}
+
+int lock_partition_or_subpartition(
+    transaction::ObTxDesc &tx,
+    const transaction::ObTxParam &tx_param,
+    const uint64_t table_id,
+    const uint64_t partition_object_id,
+    const transaction::tablelock::ObTableLockMode lock_mode,
+    const int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  transaction::tablelock::ObTableLockService *lock_service =
+      share::server_service<transaction::tablelock::ObTableLockService>();
+  if (OB_ISNULL(lock_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("table lock service is not installed", K(ret));
+  } else {
+    transaction::tablelock::ObLockPartitionRequest request;
+    request.table_id_ = table_id;
+    request.part_object_id_ = partition_object_id;
+    request.owner_id_.set_default();
+    request.lock_mode_ = lock_mode;
+    request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
+    request.timeout_us_ = timeout_us;
+    request.is_from_sql_ = true;
+    if (OB_FAIL(lock_service->lock_partition_or_subpartition(
+            tx, tx_param, request))) {
+      LOG_WARN("failed to lock partition", K(ret), K(request));
+    }
+  }
+  return ret;
+}
+
+} // namespace data_plane
 } // oceanbase

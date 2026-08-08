@@ -15,8 +15,8 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "observer/ob_inner_sql_connection.h"  //ObInnerSQLConnection
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
+#include "share/ob_share_util.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h" //ObInnerConnectionLockUtil
 
 using namespace oceanbase::lib;
@@ -293,7 +293,7 @@ int ObDDLHelper::init(rootserver::ObDDLService &ddl_service)
     task_id_ = OB_INVALID_ID;
     schema_version_cnt_ = 0;
     object_id_cnt_ = 0;
-    if (OB_FAIL(schema_guard_wrapper_.init(&ddl_service))) {
+    if (OB_FAIL(schema_guard_wrapper_.init())) {
       LOG_WARN("fail to init schema guard wrapper", KR(ret));
     } else {
       inited_ = true;
@@ -570,7 +570,7 @@ int ObDDLHelper::lock_objects_in_map_(
   ObArray<ObLockObjPair> lock_pairs;
   const int64_t lock_cnt = lock_map.size();
   ObTimeoutCtx ctx;
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(lock_cnt < 0)) {
@@ -582,8 +582,7 @@ int ObDDLHelper::lock_objects_in_map_(
     LOG_WARN("fail to reserve lock pairs", KR(ret), K(lock_cnt));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
     LOG_WARN("fail to set timeout ctx", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (get_trans_().get_connection()))) {
+  } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trans conn is NULL", KR(ret));
   } else {
@@ -871,12 +870,11 @@ int ObDDLHelper::obj_lock_with_lock_id_(
     const ObLockOBJType obj_type)
 {
   int ret = OB_SUCCESS;
-  observer::ObInnerSQLConnection *conn = nullptr;
+  common::sqlclient::ObISQLConnection *conn = nullptr;
   if (OB_UNLIKELY(OB_INVALID_ID == obj_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parallel ddl lock name is invalid", KR(ret), K(obj_id));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trans conn is NULL", KR(ret));
   } else {

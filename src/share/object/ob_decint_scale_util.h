@@ -15,12 +15,12 @@
  */
 #ifndef OCEANBASE_SHARE_OBJECT_OB_DECINT_SCALE_UTIL_H_
 #define OCEANBASE_SHARE_OBJECT_OB_DECINT_SCALE_UTIL_H_
-// moved down from sql ObDatumCast: decimal-int scaling/precision check(pure wide:: math with a single implementation);
-// user truncation warningthrough the WarnFn callback,sql statically registers the exec_ctx adapter(share does not touch sql types)。
+// Decimal-int scaling and precision checks shared by object and datum casts.
 #include "common/object/ob_object.h"
 #include "common/wide_integer/ob_wide_integer_helper.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/object/ob_obj_cast.h"  // ObCastMode
+#include "share/object/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -28,10 +28,6 @@ namespace common
 {
 namespace decint_scale
 {
-typedef void (*WarnFn)(const void *payload, const int64_t code,
-                       const ObString &type_str, const ObString &input, const ObCastMode cast_mode);
-extern WarnFn g_warn_from_exec_ctx;   // sql ob_datum_cast.cpp statically registered(payload=ObExecContext*)
-
 inline bool need_scale(const ObScale in_scale, const int32_t in_bytes,
                        const ObScale out_scale, const int32_t out_bytes)
 {
@@ -42,7 +38,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
                      const ObScale in_scale, const ObScale out_scale,
                      const ObPrecision out_prec, const ObCastMode cast_mode,
                      ObDecimalIntBuilder &val,
-                     const void *warn_payload, WarnFn warn_fn);
+                     const ObIObjCastRuntime *runtime);
 
 int check_decimalint_accuracy(const ObCastMode cast_mode,
                               const ObDecimalInt *res_decint, const int32_t int_bytes,

@@ -22,6 +22,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_sel_estimator.h"
+#include "sql/engine/expr/ob_datum_cast.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 namespace oceanbase
@@ -29,6 +30,24 @@ namespace oceanbase
 namespace sql
 {
 inline double revise_selectivity_ndv(double ndv) { return ndv < 1.0 ? 1.0 : ndv; }
+
+static int get_opt_selectivity_datum_access_ctx(
+    const OptSelectivityCtx &ctx,
+    const ObDatumAccessContext *&datum_access_ctx)
+{
+  int ret = OB_SUCCESS;
+  ObExecContext *exec_ctx = ctx.get_opt_ctx().get_exec_ctx();
+  if (OB_ISNULL(exec_ctx)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("optimizer execution context is not initialized", K(ret));
+  } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("failed to get optimizer datum access context", K(ret));
+  } else if (OB_ISNULL(datum_access_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null datum access context", K(ret));
+  }
+  return ret;
+}
 
 void OptSelectivityCtx::init_op_ctx(ObLogicalOperator *child_op)
 {
@@ -1954,10 +1973,15 @@ int ObOptSelectivity::calc_column_range_selectivity(const OptTableMetas &table_m
     ObObj endscalar;
     ObObj *new_start_obj = NULL;
     ObObj *new_end_obj = NULL;
+    const ObDatumAccessContext *datum_access_ctx = NULL;
     ObArenaAllocator tmp_alloc("ObOptSel");
     bool convert2sortkey = true;
-    if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&start_obj, tmp_alloc, new_start_obj)) ||
-        OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&end_obj, tmp_alloc, new_end_obj))) {
+    if (OB_FAIL(get_opt_selectivity_datum_access_ctx(ctx, datum_access_ctx))) {
+      LOG_WARN("failed to get datum access context", K(ret));
+    } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                   &start_obj, tmp_alloc, new_start_obj, datum_access_ctx)) ||
+               OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                   &end_obj, tmp_alloc, new_end_obj, datum_access_ctx))) {
       LOG_WARN("failed to convert valid obj for opt stats", K(ret), K(start_obj), K(end_obj),
                                                             KPC(new_start_obj), KPC(new_end_obj));
     } else if (OB_ISNULL(new_start_obj) || OB_ISNULL(new_end_obj)) {
@@ -2123,6 +2147,7 @@ int ObOptSelectivity::refine_out_of_bounds_sel(const OptTableMetas &table_metas,
   uint64_t table_id = col_expr.get_table_id();
   uint64_t column_id = col_expr.get_column_id();
   const OptTableMeta *table_meta = table_metas.get_table_meta_by_table_id(table_id);
+  const ObDatumAccessContext *datum_access_ctx = NULL;
   double increase_rows_ratio = 0.0;
   double not_null_sel = 0;
   if (NULL == table_meta || min_val.is_min_value() || max_val.is_min_value() ||
@@ -2134,6 +2159,8 @@ int ObOptSelectivity::refine_out_of_bounds_sel(const OptTableMetas &table_metas,
     // do nothing
   } else if (OB_FAIL(get_column_ndv_and_nns(table_metas, ctx, col_expr, NULL, &not_null_sel))) {
     LOG_WARN("failed to get column ndv and nns", K(ret));
+  } else if (OB_FAIL(get_opt_selectivity_datum_access_ctx(ctx, datum_access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
   } else {
     bool contain_inf = false;
     double out_of_bounds_sel = 0.0;
@@ -2155,7 +2182,13 @@ int ObOptSelectivity::refine_out_of_bounds_sel(const OptTableMetas &table_metas,
         } else if (startobj.is_min_value() || endobj.is_max_value() ||
                    startobj.is_null()  || endobj.is_null()) {
           contain_inf = true;
-        } else if (OB_FAIL(get_single_range_out_of_bounds_sel(min_val, max_val, startobj, endobj, tmp_sel))) {
+        } else if (OB_FAIL(get_single_range_out_of_bounds_sel(
+                       min_val,
+                       max_val,
+                       startobj,
+                       endobj,
+                       datum_access_ctx,
+                       tmp_sel))) {
           LOG_WARN("failed to calc single out of bounds sel", K(ret));
         } else {
           out_of_bounds_sel += tmp_sel;
@@ -2177,6 +2210,7 @@ int ObOptSelectivity::get_single_range_out_of_bounds_sel(const ObObj &min_val,
                                                          const ObObj &max_val,
                                                          const ObObj &start_val,
                                                          const ObObj &end_val,
+                                                         const ObDatumAccessContext *datum_access_ctx,
                                                          double &selectivity)
 {
   int ret = OB_SUCCESS;
@@ -2188,8 +2222,10 @@ int ObOptSelectivity::get_single_range_out_of_bounds_sel(const ObObj &min_val,
   ObObj end_scalar;
   ObArenaAllocator tmp_alloc("ObOptSel");
   selectivity = 0.0;
-  if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&start_val, tmp_alloc, new_start)) ||
-      OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&end_val, tmp_alloc, new_end))) {
+  if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+          &start_val, tmp_alloc, new_start, datum_access_ctx)) ||
+      OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+          &end_val, tmp_alloc, new_end, datum_access_ctx))) {
     LOG_WARN("failed to convert valid obj for opt stats", K(ret), K(start_val), K(end_val),
                                                           KPC(new_start), KPC(new_end));
   } else if (OB_FAIL(ObOptEstObjToScalar::convert_objs_to_scalars(
@@ -2608,7 +2644,11 @@ int ObOptSelectivity::get_range_sel_by_histogram(const OptSelectivityCtx &ctx,
                                                  double &selectivity)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *datum_access_ctx = NULL;
   selectivity = 0;
+  if (OB_FAIL(get_opt_selectivity_datum_access_ctx(ctx, datum_access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
     const ObNewRange *range = ranges.at(i);
     double tmp_selectivity = 0;
@@ -2629,8 +2669,10 @@ int ObOptSelectivity::get_range_sel_by_histogram(const OptSelectivityCtx &ctx,
         ObObj *new_startobj = NULL;
         ObObj *new_endobj = NULL;
         ObArenaAllocator tmp_alloc("ObOptSel");
-        if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(startobj, tmp_alloc, new_startobj)) ||
-            OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(endobj, tmp_alloc, new_endobj))) {
+        if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                startobj, tmp_alloc, new_startobj, datum_access_ctx)) ||
+            OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                endobj, tmp_alloc, new_endobj, datum_access_ctx))) {
           LOG_WARN("failed to convert valid obj for opt stats", K(ret), KPC(startobj), KPC(endobj),
                                                                 KPC(new_startobj), KPC(new_endobj));
         } else if (OB_ISNULL(new_startobj) || OB_ISNULL(new_endobj)) {
@@ -4894,8 +4936,12 @@ int ObHistEqualSelHelper::inner_get_sel(const OptSelectivityCtx &ctx,
   int64_t idx = -1;
   bool is_equal = false;
   ObObj *new_value = NULL;
+  const ObDatumAccessContext *datum_access_ctx = NULL;
   ObArenaAllocator tmp_alloc("ObOptSel");
-  if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(&compare_value_, tmp_alloc, new_value))) {
+  if (OB_FAIL(get_opt_selectivity_datum_access_ctx(ctx, datum_access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 &compare_value_, tmp_alloc, new_value, datum_access_ctx))) {
     LOG_WARN("failed to convert valid obj for opt stats", K(ret), K(compare_value_), KPC(new_value));
   } else if (OB_ISNULL(new_value)) {
     ret = OB_ERR_UNEXPECTED;

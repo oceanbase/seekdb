@@ -29,6 +29,7 @@
 #include "sql/engine/expr/ob_expr_join_filter.h"
 #include "sql/engine/aggregate/ob_adaptive_bypass_ctrl.h"
 #include "sql/optimizer/ob_dynamic_sampling.h"
+#include "sql/optimizer/ob_log_plan_factory.h"
 #include "share/config/ob_config_helper.h"
 
 
@@ -42,7 +43,6 @@ namespace sql
 {
 //  class ObLogicalOperator;
 class ObRawExprFactory;
-class ObLogPlanFactory;
 
 enum class ObEstCorrelationType
 {

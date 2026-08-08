@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -73,7 +73,7 @@ int ObTabletDDLKvMgr::init(const common::ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletDDLKvMgr is already inited", K(ret));
@@ -123,7 +123,7 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
   ObTabletHandle tablet_handle;
   ObTabletFullDirectLoadMgr *tablet_mgr = nullptr;
   ObTabletDirectLoadMgrHandle direct_load_mgr_hdl;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -148,7 +148,7 @@ int ObTabletDDLKvMgr::get_rec_scn(SCN &rec_scn)
     LOG_WARN("unexpected err", K(ret), K(tablet_id_));
   }
   if (OB_SUCC(ret) && nullptr != tablet_mgr) {
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
       LOG_WARN("failed to get log stream", K(ret));
     } else if (OB_FAIL(ls->get_tablet(tablet_id_,
                                                       tablet_handle,
@@ -759,7 +759,7 @@ int ObTabletDDLKvMgr::alloc_ddl_kv(
 {
   int ret = OB_SUCCESS;
   kv_handle.reset();
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObDDLKVHandle tmp_kv_handle;
   ObDDLKV *kv = nullptr;
   ObDDLMemtable *ddl_memtable = nullptr;

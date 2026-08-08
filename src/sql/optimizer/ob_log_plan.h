@@ -90,6 +90,7 @@ class ObSelectLogPlan;
 class ObThreeStageAggrInfo;
 struct ObTextRetrievalInfo;
 class ObHashRollupInfo;
+class ObStrictPwjComparer;
 
 struct TableDependInfo {
   TO_STRING_KV(

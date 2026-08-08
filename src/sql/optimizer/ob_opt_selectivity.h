@@ -41,6 +41,7 @@ namespace common
 class ObOptStatManager;
 class ObHistogram;
 class ObOptColumnStatHandle;
+struct ObDatumAccessContext;
 }
 namespace sql
 {
@@ -861,6 +862,7 @@ public:
                                                 const ObObj &max_val,
                                                 const ObObj &start_val,
                                                 const ObObj &end_val,
+                                                const common::ObDatumAccessContext *datum_access_ctx,
                                                 double &selectivity);
 
   static int check_column_in_current_level_stmt(const ObDMLStmt *stmt,

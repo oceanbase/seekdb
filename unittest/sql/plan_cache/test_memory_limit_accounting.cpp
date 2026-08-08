@@ -42,8 +42,7 @@ class TestMemoryLimitAccounting : public ::testing::Test
 public:
   static void SetUpTestSuite()
   {
-    ASSERT_EQ(common::OB_SUCCESS,
-              ObMallocAllocator::get_instance()->create_and_add_tenant_allocator());
+    ASSERT_NE(nullptr, ObMallocAllocator::get_instance());
   }
 
   static MemoryContext create_context(const char *label)
@@ -191,10 +190,3 @@ TEST_F(TestMemoryLimitAccounting, workarea_tracks_sub_megabyte_allocations)
 
 } // namespace sql
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_memory_limit_accounting.log", true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

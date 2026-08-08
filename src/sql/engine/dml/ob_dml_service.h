@@ -17,10 +17,11 @@
 #ifndef DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #define DEV_SRC_SQL_ENGINE_DML_OB_DML_SERVICE_H_
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "data_plane/ob_i_write_context_service.h"
 #include "sql/das/ob_das_context.h"
 #include "ob_table_modify_op.h"
-#include "storage/tx_storage/ob_access_service.h"
 
 namespace oceanbase
 {
@@ -168,14 +169,15 @@ public:
                                   concurrent_control::ObWriteFlag &write_flag,
                                   bool use_snapshot_opt);
 
-  static int init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
-                            ObDASDMLBaseRtDef &base_rtdef,
-                            transaction::ObTxReadSnapshot &snapshot,
-                            const int16_t write_branch_id,
-                            common::ObIAllocator &das_alloc,
-                            storage::ObStoreCtxGuard &store_ctx_gurad,
-                            storage::ObDMLBaseParam &dml_param,
-                            bool use_snapshot_opt);
+  static int prepare_dml_execution(
+      const ObDASDMLBaseCtDef &base_ctdef,
+      ObDASDMLBaseRtDef &base_rtdef,
+      transaction::ObTxReadSnapshot &snapshot,
+      int16_t write_branch_id,
+      common::ObIAllocator &das_alloc,
+      data_plane::ObWriteContext &write_context,
+      data_plane::ObDmlExecution &execution,
+      bool use_snapshot_opt);
   static int init_das_dml_rtdef(ObDMLRtCtx &dml_rtctx,
                                 const ObDASDMLBaseCtDef &das_ctdef,
                                 ObDASDMLBaseRtDef &das_rtdef,
@@ -315,7 +317,7 @@ public:
       das_allocator_(nullptr),
       ft_doc_word_infos_(nullptr),
       use_snapshot_opt_(false),
-      dml_param_()
+      dml_execution_()
   { }
   int write_tablet(DMLIterator &iter, int64_t &affected_rows);
   int write_rows(const common::ObTabletID &tablet_id,
@@ -338,7 +340,7 @@ public:
   common::ObIArray<ObFTDocWordInfo> *ft_doc_word_infos_;
   bool use_snapshot_opt_;
 private:
-  storage::ObDMLBaseParam dml_param_;
+  data_plane::ObDmlExecution dml_execution_;
 };
 
 template <int N, typename DMLIterator>
@@ -353,21 +355,26 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
       LOG_WARN("write tablet with ignore failed", K(ret));
     }
   } else {
-    ObAccessService *as = share::g_mp->access_service();
-    storage::ObStoreCtxGuard store_ctx_guard;
+    data_plane::ObIWriteContextService *as =
+        ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>();
+    data_plane::ObWriteContext write_context;
     concurrent_control::ObWriteFlag write_flag;
 
     // write_flag should be inited before get store ctx, as it will be used in the call function
     (void)ObDMLService::init_dml_write_flag(*ctdef_, *rtdef_, write_flag, use_snapshot_opt_);
-    if (OB_FAIL(as->get_write_store_ctx_guard(rtdef_->timeout_ts_,
-                                              *tx_desc_,
-                                              *snapshot_,
-                                              write_branch_id_,
-                                              write_flag,
-                                              store_ctx_guard))) {
+    if (OB_ISNULL(as)) {
+      ret = common::OB_ERR_UNEXPECTED;
+      LOG_WARN("write context service is null", K(ret));
+    } else if (OB_FAIL(as->acquire_write_context(rtdef_->timeout_ts_,
+                                                 *tx_desc_,
+                                                 *snapshot_,
+                                                 write_branch_id_,
+                                                 write_flag,
+                                                 write_context))) {
       LOG_WARN("fail to get_write_store_ctx_guard", K(ret));
-    } else if (OB_FAIL(ObDMLService::init_dml_param(
-        *ctdef_, *rtdef_, *snapshot_, write_branch_id_, *das_allocator_, store_ctx_guard, dml_param_, use_snapshot_opt_))) {
+    } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+        *ctdef_, *rtdef_, *snapshot_, write_branch_id_, *das_allocator_,
+        write_context, dml_execution_, use_snapshot_opt_))) {
       SQL_DAS_LOG(WARN, "init dml param failed", K(ret), K(ctdef_->table_id_), K(ctdef_->index_tid_));
 
     } else if (OB_FAIL(write_rows(tablet_id_, *ctdef_, *rtdef_, iter, affected_rows))) {
@@ -386,8 +393,10 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
                     KPC(doc_word_info));
         if (OB_FAIL(iter.rewind(related_ctdef, doc_word_info))) {
           SQL_DAS_LOG(WARN, "rewind iterator failed", K(ret));
-        } else if (OB_FAIL(ObDMLService::init_dml_param(*related_ctdef, *related_rtdef,
-            *snapshot_, write_branch_id_, *das_allocator_, store_ctx_guard, dml_param_, use_snapshot_opt_))) {
+        } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+                       *related_ctdef, *related_rtdef, *snapshot_,
+                       write_branch_id_, *das_allocator_, write_context,
+                       dml_execution_, use_snapshot_opt_))) {
           SQL_DAS_LOG(WARN, "init index dml param failed", K(ret),
                       K(related_ctdef->table_id_), K(related_ctdef->index_tid_));
         } else if (OB_FAIL(write_rows(related_tablet_id,
@@ -419,7 +428,8 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
   affected_rows = 0;
   const ObDASWriteBuffer::DmlRow *dml_row = nullptr;
   ObDASWriteBuffer::Iterator write_iter;
-  ObAccessService *as = share::g_mp->access_service();
+  data_plane::ObIWriteContextService *as =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>();
   const bool with_local_index = related_ctdefs_ != nullptr && !related_ctdefs_->empty();
   if (OB_FAIL(iter.get_write_buffer().begin(write_iter))) {
     LOG_WARN("begin write iterator failed", K(ret));
@@ -445,22 +455,32 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
     } else {
       SQL_DAS_LOG(TRACE, "write table dml row with ignore", KPC(dml_row), K(tablet_id_),
                   K(ctdef_->table_id_), K(ctdef_->index_tid_));
-      DMLIterator single_row_iter(ctdef_, single_row_buffer, *das_allocator_);
-      storage::ObStoreCtxGuard store_ctx_guard;
+      DMLIterator single_row_iter(
+          ctdef_,
+          single_row_buffer,
+          *das_allocator_,
+          iter.get_srs_provider(),
+          iter.get_lob_read_options());
+      data_plane::ObWriteContext write_context;
       concurrent_control::ObWriteFlag write_flag;
 
       (void)ObDMLService::init_dml_write_flag(*ctdef_, *rtdef_, write_flag, use_snapshot_opt_);
-      if (OB_FAIL(as->get_write_store_ctx_guard(rtdef_->timeout_ts_,
-                                                *tx_desc_,
-                                                *snapshot_,
-                                                write_branch_id_,
-                                                write_flag,
-                                                store_ctx_guard))) {
+      if (OB_ISNULL(as)) {
+        ret = common::OB_ERR_UNEXPECTED;
+        LOG_WARN("write context service is null", K(ret));
+      } else if (OB_FAIL(as->acquire_write_context(rtdef_->timeout_ts_,
+                                                   *tx_desc_,
+                                                   *snapshot_,
+                                                   write_branch_id_,
+                                                   write_flag,
+                                                   write_context))) {
         LOG_WARN("fail to get_write_store_ctx_guard", K(ret));
-      } else if (OB_FAIL(ObDMLService::init_dml_param(*ctdef_, *rtdef_, *snapshot_, write_branch_id_,
-          *das_allocator_, store_ctx_guard, dml_param_, use_snapshot_opt_))) {
+      } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+                     *ctdef_, *rtdef_, *snapshot_, write_branch_id_,
+                     *das_allocator_, write_context, dml_execution_,
+                     use_snapshot_opt_))) {
         SQL_DAS_LOG(WARN, "init dml param failed", K(ret), KPC_(ctdef), KPC_(rtdef));
-      } else if (with_local_index && FALSE_IT(dml_param_.write_flag_.set_skip_flush_redo())) {
+      } else if (with_local_index && FALSE_IT(dml_execution_.set_skip_flush_redo(true))) {
       } else if (OB_FAIL(write_rows(tablet_id_,
                                     *ctdef_,
                                     *rtdef_,
@@ -480,17 +500,19 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
                       K(related_ctdef->table_id_), K(related_ctdef->index_tid_));
           if (OB_FAIL(single_row_iter.rewind(related_ctdef, doc_word_info))) {
             SQL_DAS_LOG(WARN, "rewind iterator failed", K(ret));
-          } else if (OB_FAIL(ObDMLService::init_dml_param(*related_ctdef,
-                                                          *related_rtdef,
-                                                          *snapshot_,
-                                                          write_branch_id_,
-                                                          *das_allocator_,
-                                                          store_ctx_guard,
-                                                          dml_param_,
-                                                          use_snapshot_opt_))) {
+          } else if (OB_FAIL(ObDMLService::prepare_dml_execution(
+                         *related_ctdef,
+                         *related_rtdef,
+                         *snapshot_,
+                         write_branch_id_,
+                         *das_allocator_,
+                         write_context,
+                         dml_execution_,
+                         use_snapshot_opt_))) {
             SQL_DAS_LOG(WARN, "init index dml param failed", K(ret),
                         KPC(related_ctdef), KPC(related_rtdef));
-          } else if (i == related_ctdefs_->count() - 1 && FALSE_IT(dml_param_.write_flag_.unset_skip_flush_redo())) {
+          } else if (i == related_ctdefs_->count() - 1
+                     && FALSE_IT(dml_execution_.set_skip_flush_redo(false))) {
           } else if (OB_FAIL(write_rows(related_tablet_id,
                                         *related_ctdef,
                                         *related_rtdef,
@@ -513,7 +535,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
       //rollback to savepoint
       if (OB_FAIL(ObDMLService::rollback_local_savepoint(*tx_desc_,
                                                          savepoint_no,
-                                                         dml_param_.timeout_))) {
+                                                         dml_execution_.timeout()))) {
         SQL_DAS_LOG(WARN, "rollbakc to local savepoint failed", K(ret));
       }
     } else if (OB_SUCC(ret)) {

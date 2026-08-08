@@ -1,0 +1,99 @@
+# owner: yanmu.ztl
+# desription: basic case for flush location
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set syslog_level = 'share.pt:trace';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+
+connection conn_sys;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3', locality='F@z1, F@z2, R@z3' set ob_tcp_invited_nodes='%', recyclebin = OFF;
+let $mysql_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name="mysql", tenant_id, 1);
+sleep 10;
+
+ob_connect(conn_mysql_z1, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_sys_z3, ob1.z3.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_z1;
+create table t1(a int primary key);
+
+--disable_result_log
+# warm up user cache
+# note: user leader cache need trigger by nonblock_get_strong_leader(). there is no reliable method to ensure user leader cache exists.
+select * from t1;
+
+# warm up sys cache & sys leader cache
+connection conn_sys;
+select * from __all_core_table;
+select * from __all_root_table;
+select 1 from dual;
+--enable_result_log
+
+# case 1: sys tenant excute cmd
+connection conn_sys;
+# tenant not exist
+--error 5160
+alter system flush location cache tenant = "missing_tenant";
+--error 5160
+alter system flush location cache tenant = "sys","missing_tenant";
+# invalid input
+--error 1210
+alter system flush location cache tenant = "";
+# flush: sys cache, sys leader cache, all user cache
+alter system flush location cache tenant = "sys";
+# flush: tenant's user leader cache(if exists), all user cache
+alter system flush location cache tenant = "mysql";
+# flush: sys cache, sys leader cache, tenant's user leader cache(if exists), all user cache
+alter system flush location cache tenant = "sys","mysql";
+# flush: sys cache, sys leader cache, all tenant's user leader cache(if exists), all user cache
+alter system flush location cache;
+
+# case 2: mysql tenant execute cmd
+# normal tenant can't specify tenant_list
+connection conn_mysql_z1;
+--error 1227
+alter system flush location cache tenant = "missing_tenant";
+--error 1227
+alter system flush location cache tenant = "sys","missing_tenant";
+--error 1227
+alter system flush location cache tenant = "";
+--error 1227
+alter system flush location cache tenant = "sys";
+--error 1227
+alter system flush location cache tenant = "mysql";
+--error 1227
+alter system flush location cache tenant = "sys","mysql";
+# flush: tenant's user leader cache(if exists), all user cache
+alter system flush location cache;
+
+# case 3: erase location when renew_location
+# erase location when fetch nothing by sql renew
+connection conn_sys_z3;
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name = "mysql" and database_name = "test" and table_name = "t1" and partition_id = 0;
+# clear meta table to trigger erase_location()
+alter system change tenant tenant_id = 1001;
+delete from oceanbase.__all_tenant_meta_table where 1 = 1;
+alter system change tenant tenant_id = 1;
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name = "mysql" and database_name = "test" and table_name = "t1" and partition_id = 0;

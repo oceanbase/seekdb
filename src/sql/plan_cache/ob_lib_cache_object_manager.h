@@ -21,7 +21,7 @@
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
 #include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_req_time_service.h"
+#include "query/plan_cache/ob_plan_cache_access_service.h"
 
 namespace oceanbase
 {
@@ -141,7 +141,6 @@ int ObLCObjectManager::alloc(lib::MemoryContext &mem_ctx,
 {
   int ret = OB_SUCCESS;
   void *ptr = NULL;
-  observer::ObGlobalReqTimeService::check_req_timeinfo();
   if (NULL == (ptr = (char *)mem_ctx->get_arena_allocator().alloc(sizeof(ClassT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "failed to allocate memory for lib cache node", K(ret));

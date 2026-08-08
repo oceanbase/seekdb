@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX COMMON
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "storage/compaction/ob_table_ckm_items.h"
 #include "share/schema/ob_col_desc.h"  // ObColDesc complete type(batch-2 pure header), previously hidden behind a transitive include
 #include "share/schema/ob_schema_getter_guard.h"  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_column_schema.h"  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_multi_version_schema_service.h"  // previously hidden behind a transitive include
-#include "share/ob_force_print_log.h"  // FLOG_*, previously hidden behind a transitive include
 #include "common/mysqlclient/ob_mysql_proxy.h"
-#include "rootserver/freeze/ob_major_merge_progress_util.h"
+#include "share/ob_force_print_log.h"  // FLOG_*, previously hidden behind a transitive include
 #ifdef ERRSIM
 #endif
 namespace oceanbase

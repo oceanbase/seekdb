@@ -17,12 +17,13 @@
 #define USING_LOG_PREFIX SQL_CG
 #include "ob_dml_cg_service.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/optimizer/ob_log_for_update.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
 #include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -2320,16 +2321,9 @@ int ObDmlCgService::fill_multivalue_extra_info_on_table_param(
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("table schema is NULL", K(ret));
   } else {
-    ObTableSchemaParam& table_param = das_dml_ctdef.table_param_.get_data_table_ref();
-    table_param.set_data_table_rowkey_column_num(table_schema->get_rowkey_column_num());
-    uint64_t max_idx = table_param.get_column_count();
-    for (int64_t i = max_idx - 2; i >= 0; --i) {
-      if (OB_ISNULL(table_param.get_column_by_idx(i))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table column is NULL", K(ret));
-      } else {
-        table_param.get_column_by_idx(i)->set_nullable_for_write(true);
-      }
+    if (OB_FAIL(das_dml_ctdef.table_param_.configure_multivalue_index(
+            table_schema->get_rowkey_column_num()))) {
+      LOG_WARN("fail to configure multivalue index write plan", K(ret));
     }
   }
 
@@ -2354,9 +2348,9 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
     LOG_WARN("table schema is NULL", K(ret));
   } else if (OB_FAIL(guard->get_schema_version(t_version))) {
     LOG_WARN("get runtime schema version failed", K(ret));
-  } else if (OB_FAIL(das_dml_ctdef.table_param_.convert(table_schema,
-                                                        t_version,
-                                                        das_dml_ctdef.column_ids_))) {
+  } else if (OB_FAIL(das_dml_ctdef.table_param_.build(table_schema,
+                                                      t_version,
+                                                      das_dml_ctdef.column_ids_))) {
     LOG_WARN("fail to convert table param", K(ret), K(das_dml_ctdef));
   } else if (OB_FAIL(das_dml_ctdef.table_param_.set_data_table_rowkey_tags(guard,
                                                                            table_schema))) {
@@ -2379,7 +2373,7 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
                 vec_param,
                 true))
             && vec_param.sync_mode_async_) {
-          das_dml_ctdef.table_param_.get_data_table_ref().set_has_async_index(true);
+          das_dml_ctdef.table_param_.set_has_async_index(true);
           break;
         }
       }

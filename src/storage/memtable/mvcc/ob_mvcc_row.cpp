@@ -15,7 +15,7 @@
  */
 
 #include "ob_mvcc_row.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_row_compactor.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/tx/ob_tx_ctx.h"
@@ -719,9 +719,9 @@ int ObMvccRow::elr(const ObTransID &tx_id,
     // TODO shanyan.g
     if (NULL != key) {
       wakeup_waiter(tablet_id, *key);
-      share::g_mp->lock_wait_mgr()->reset_hash_holder(tablet_id, *key, tx_id);
+      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->reset_hash_holder(tablet_id, *key, tx_id);
     } else {
-      share::g_mp->lock_wait_mgr()->wakeup(tx_id);
+      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->wakeup(tx_id);
     }
   }
   return ret;
@@ -805,16 +805,16 @@ int ObMvccRow::remove_callback(ObMvccRowCallback &cb)
   ObMvccTransNode *node = cb.get_trans_node();
   if (OB_NOT_NULL(node)) {
     node->remove_callback();
-    if (OB_ISNULL(share::g_mp->lock_wait_mgr())) {
+    if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
     } else {
-      share::g_mp->lock_wait_mgr()->transform_row_lock_to_tx_lock(
+      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->transform_row_lock_to_tx_lock(
           cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       if (cb.is_non_unique_local_index_cb()) {
         // row lock holder is no need to set for non-unique local index, so the reset can be skipped
       } else {
-        share::g_mp->lock_wait_mgr()->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
+        ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->reset_hash_holder(cb.get_tablet_id(), *cb.get_key(), ObTransID(node->tx_id_));
       }
     }
   }
@@ -830,7 +830,7 @@ int ObMvccRow::wakeup_waiter(const ObTabletID &tablet_id,
 {
   int ret = OB_SUCCESS;
   ObLockWaitMgr *lwm = NULL;
-  if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
+  if (OB_ISNULL(lwm = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "server LockWaitMgr is null", K(ret), KPC(this));
   } else {

@@ -116,7 +116,7 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   ObGeoSrid srid = 0;
   const ObSrsItem *srs_item = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   bool is_geog = false;
 
   if (arg_x->is_boolean_ || arg_y->is_boolean_) {
@@ -146,9 +146,8 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_POINT);
       LOG_WARN("srid input value out of range", K(ret), K(datum_srid->get_int()));
     } else if (0 != (srid = datum_srid->get_uint32())) {
-      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-        LOG_WARN("fail to get srs guard", K(ret));
-      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+              ctx, srs_guard, srid, srs_item))) {
         LOG_WARN("fail to get srs item", K(ret));
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;

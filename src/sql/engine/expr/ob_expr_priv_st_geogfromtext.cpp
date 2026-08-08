@@ -84,12 +84,12 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
   } else {
     ObGeoSrid srid = 0;
     const ObSrsItem *srs_item = NULL;
-    omt::ObSrsCacheGuard srs_guard;
+    common::ObSrsCacheGuard srs_guard;
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     ObGeometry *geo = NULL;
     bool is_geog = false;
     ObString wkt = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
       LOG_WARN("fail to get real data.", K(ret), K(wkt));
     } else if (OB_NOT_NULL(wkt.find(';'))) {
@@ -105,9 +105,8 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-      LOG_WARN("failed to get srs guard", K(ret));
-    } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                   ctx, srs_guard, srid, srs_item))) {
       LOG_WARN("failed to get srs item", K(ret));
     } else if (OB_ISNULL(srs_item)) {
       ret = OB_ERR_UNEXPECTED;

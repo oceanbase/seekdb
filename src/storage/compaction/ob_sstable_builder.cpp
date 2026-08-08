@@ -376,11 +376,11 @@ int ObSSTableRebuilder::check_cur_macro_need_merge(
   need_merge = true;
 
   if (last_macro_blocks_sum == 0 // is first macro block
-      || last_macro_blocks_sum + macro_block_sum >= DEFAULT_MACRO_BLOCK_SIZE) {
+      || last_macro_blocks_sum + macro_block_sum >= OB_DEFAULT_MACRO_BLOCK_SIZE) {
     need_merge = false;
   } else if (OB_FAIL(macro_writer_.get_estimate_meta_block_size(curr_macro_meta, estimate_meta_size))) {
     STORAGE_LOG(WARN, "fail to get_estimate_meta_block_size", K(ret), K(curr_macro_meta));
-  } else if (last_macro_blocks_sum + estimate_meta_size + macro_block_sum >= DEFAULT_MACRO_BLOCK_SIZE) {
+  } else if (last_macro_blocks_sum + estimate_meta_size + macro_block_sum >= OB_DEFAULT_MACRO_BLOCK_SIZE) {
     need_merge = false;
   }
 

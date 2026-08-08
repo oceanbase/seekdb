@@ -16,18 +16,19 @@
 
 #define USING_LOG_PREFIX PL
 #include "ob_pl_type.h"
-#include "share/rc/ob_module_provider.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "pl/ob_pl_package.h"
+#include "sql/engine/expr/ob_lob_result_materializer.h"
 #include "sql/resolver/ob_stmt_resolver.h"
+#include "sql/pl/ob_pl_stmt.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "share/schema/ob_routine_info.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
 namespace oceanbase
 {
 using namespace common;
 using namespace sql;
 using namespace share::schema;
-using namespace observer;
 using namespace obmysql;
 
 namespace pl
@@ -126,7 +127,7 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
   } else if (!iparam->is_extern_type()) {
     ObDataType *data_type = NULL;
     ObPLEnumSetCtx* enum_set_ctx_bk = pl_type.get_enum_set_ctx();
-    OX (pl_type = iparam->get_pl_data_type());
+    OX (pl_type = get_pl_data_type(*iparam));
     OX (pl_type.set_enum_set_ctx(enum_set_ctx_bk));
     OZ (pl_type.set_type_info(iparam->get_extended_type_info()));
     OX (data_type = pl_type.get_data_type());
@@ -163,7 +164,7 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
       }
       case SP_EXTERN_LOCAL_VAR : {
         ObDataType *data_type = NULL;
-        OX (pl_type = iparam->get_pl_data_type());
+        OX (pl_type = get_pl_data_type(*iparam));
         OX (data_type = pl_type.get_data_type());
         CK (OB_NOT_NULL(data_type));
         if (OB_SUCC(ret)) {
@@ -388,7 +389,9 @@ int ObPLDataType::convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const
     CK (OB_NOT_NULL(get_data_type()));
     OX (result_type.set_meta(get_data_type()->get_meta_type()));
     OX (result_type.set_accuracy(get_data_type()->get_accuracy()));
-    OZ (ObSPIService::spi_convert(ctx.session_info_, tmp_alloc, *src, result_type, tmp));
+    OZ (ObSPIService::spi_convert(
+        ctx.session_info_, tmp_alloc, *src, result_type, tmp,
+        ctx.params_.srs_provider_, ctx.params_.lob_read_service_));
     OZ (deep_copy_obj(ctx.allocator_, tmp, *dst));
     OX (src ++);
     OX (dst ++);
@@ -1343,7 +1346,10 @@ int ObPLCursorInfo::set_and_register_snapshot(const transaction::ObTxReadSnapsho
   OZ (set_snapshot(snapshot));
   if (OB_SUCC(ret) && snapshot.is_valid()) {
     set_need_check_snapshot(true);
-    OZ (share::g_mp->trans_service()->register_tx_snapshot_verify(get_snapshot()));
+    data_plane::ObITransactionService *tx_service =
+        data_plane::query_transaction_service();
+    CK (OB_NOT_NULL(tx_service));
+    OZ (tx_service->register_tx_snapshot_verify(get_snapshot()));
   }
   return ret;
 }
@@ -1648,7 +1654,10 @@ int ObPLCursorInfo::prepare_spi_result(ObPLExecCtx *ctx, ObSPIResultSet *&spi_re
   }
   OX (spi_result = new (spi_cursor_) ObSPIResultSet());
   OX (last_stream_cursor_ = true);
-  OZ (spi_result->init(*ctx->exec_ctx_->get_my_session()));
+  CK (OB_NOT_NULL(ctx->exec_ctx_->get_plan_cache_access_service()));
+  OZ (spi_result->init(
+      *ctx->exec_ctx_->get_my_session(),
+      *ctx->exec_ctx_->get_plan_cache_access_service()));
   return ret;
 }
 
@@ -1705,55 +1714,4 @@ int ObPLCursorInfo::set_current_position(int64_t position) {
 }
 
 }  // namespace pl
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_routine_info.h(previously OB_INLINE, constructs ObPLDataType by value) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-pl::ObPLDataType ObRoutineParam::get_pl_data_type() const
-  {
-    pl::ObPLDataType type;
-    if (is_pl_integer_type()) {
-      type.set_pl_integer_type(get_pl_integer_type(), get_param_type());
-      pl::ObPLIntegerType pls_type = type.get_pl_integer_type();
-      switch (pls_type) {
-        case pl::PL_PLS_INTEGER:
-        case pl::PL_BINARY_INTEGER:
-        case pl::PL_SIMPLE_INTEGER: {
-          type.set_range(-2147483648, 2147483647);
-          type.set_not_null(pl::PL_SIMPLE_INTEGER == pls_type);
-        }
-        break;
-        case pl::PL_NATURAL:
-        case pl::PL_NATURALN: {
-          type.set_range(0, 2147483647);
-          type.set_not_null(pl::PL_NATURALN == pls_type);
-        }
-        break;
-        case pl::PL_POSITIVE:
-        case pl::PL_POSITIVEN: {
-          type.set_range(1, 2147483647);
-          type.set_not_null(pl::PL_POSITIVEN == pls_type);
-        }
-        break;
-        case pl::PL_SIGNTYPE: {
-          type.set_range(-1, 1);
-        }
-        break;
-        default: // do nothing ...
-        break;
-      }
-    } else {
-      type.set_data_type(get_param_type());
-    }
-    return type;
-  }
-
-}  // namespace schema
-}  // namespace share
 }  // namespace oceanbase

@@ -18,7 +18,7 @@
 
 #include "ob_server_reload_config.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
@@ -97,8 +97,8 @@ int ObServerReloadConfig::operator()()
 
       reload_memstore_freezer_config_();
       reload_scheduler_config_();
-      if (OB_NOT_NULL(GCTX.server_runtime_controller_)) {
-        GCTX.server_runtime_controller_->reload_request_queue_size();
+      if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
+        ::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->reload_request_queue_size();
       }
   }
 
@@ -117,7 +117,9 @@ int ObServerReloadConfig::operator()()
 
   lib::g_runtime_enabled = true;
 
-    common::ObKVGlobalCache::get_instance().reload_wash_interval();
+    common::ObKVGlobalCache::get_instance().reload_config(
+        common::ObKVCacheRuntimeOptions(
+            GCONF._cache_wash_interval));
     int64_t data_disk_size = 0;
     int64_t data_disk_percentage = 0;
     int64_t reserved_size = 0;
@@ -145,7 +147,7 @@ int ObServerReloadConfig::operator()()
   // moved from share ObConfigManager::reload_config(share base must not touch observer components;
   // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->refresh_runtime_resources())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->refresh_runtime_resources())) {
     LOG_WARN("refresh server runtime resources failed", K(ret));
   }
   return ret;
@@ -153,14 +155,14 @@ int ObServerReloadConfig::operator()()
 
 void ObServerReloadConfig::reload_scheduler_config_()
 {
-  (void) share::g_mp->dag_scheduler()->reload_config();
-  (void) share::g_mp->tablet_scheduler()->reload_runtime_config();
+  (void) ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->reload_config();
+  (void) ::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->reload_runtime_config();
 }
 
 
 void ObServerReloadConfig::reload_memstore_freezer_config_()
 {
   // The memstore freezer must be updated before ObSharedMemAllocMgr.
-  share::g_mp->memstore_freezer()->reload_config();
-  share::g_mp->shared_mem_alloc_mgr()->update_throttle_config();
+  ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->reload_config();
+  ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->update_throttle_config();
 }

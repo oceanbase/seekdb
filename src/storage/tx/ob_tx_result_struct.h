@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-/* moved from share/ob_rpc_struct.h: holds transaction::ObTxExecResult by value,
- * share must not depend upward on storage/tx, so the whole type lives in storage/tx (ns obrpc is unchanged, serialization compatible) */
+/* Storage-owned RPC result containing ObTxExecResult by value. The obrpc
+ * namespace and wire format are stable. */
 #ifndef OCEANBASE_STORAGE_TX_OB_TX_RESULT_STRUCT_H_
 #define OCEANBASE_STORAGE_TX_OB_TX_RESULT_STRUCT_H_
 

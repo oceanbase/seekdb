@@ -23,7 +23,7 @@
 #include "common/ob_tablet_id.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "storage/ob_storage_clog_recorder.h"
-#include "logservice/ob_log_base_header.h"
+#include "share/log/ob_log_base_header.h"
 
 namespace oceanbase
 {

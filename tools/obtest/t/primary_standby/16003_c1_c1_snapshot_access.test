@@ -1,0 +1,81 @@
+#rs
+#msy
+#快照接入的备库作为主库可以同步
+#新主库上会缺少一部分合并信息
+#快照接入的备库在主库已经回收掉了部分合并信息后，仍然可以同步, 验证备库快照接入完成之前，不能进行DDL操作
+#case 2, 快照接入之前存在延迟删除的分区
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+use test;
+create table t6 (c1 int primary key, c2 int) partition by list(c1) (partition p0 values in (10,11), partition p1 values in (100));
+insert into t6 values(11,1),(100,1);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+
+#删除主库的前两个快照接入的版本
+ob1.mysql delete from oceanbase.__all_core_table where table_name like "%freeze%" and row_id = 1;
+ob1.mysql delete from oceanbase.__all_core_table where table_name like "%freeze%" and row_id = 2;
+ob1.mysql delete from oceanbase.__all_freeze_schema_version where frozen_version < 3;
+
+#备库在3版本快照接入
+ob2.reset;
+ob2.deploy;
+ob2.bootstrap;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+let $cluster_id = query_get_value(select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+let $cluster_name = query_get_value(select cluster_name from oceanbase.v\$ob_cluster, cluster_name, 1);
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'BEFORE_STANDBY_FINISH_REPLY_SNAPSHOT_SCHEMA wait_for continue_signal';
+ob1.mysql alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 2, 100;
+connection conn2;
+--error 4179
+set global ob_query_timeout = 100000000;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%global%" and column_name = 'standby_snapshot_frozen_version';
+#ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%freeze%" and column_name = 'frozen_timestamp' and row_id = 1;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%freeze%" and column_name = 'frozen_version' and row_id = 1;
+
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql set global ob_query_timeout = 30000000;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+#建表二级分区，然后删除一级分区
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+use test;
+create table tt(c1 int, c2 int, c3 varchar(20),primary key(c1,c2),index idx(c1, c2) local) partition by range columns (c1, c2) subpartition by hash(c1) subpartitions 10 (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+alter table tt drop partition p0;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob2.check_version 4;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 600;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+sleep 10;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;
+
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3.reboot;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_cluster where switchover_info like "SYNCED STANDBY CLUSTERS: %,%", 1, 300;

@@ -15,23 +15,18 @@
  */
 
 #include "storage/multi_data_source/runtime_utility/common_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/ob_log_service_handler.h"
 #include "logservice/ob_log_service.h"
-#include "rootserver/freeze/ob_major_freeze_service.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_service.h"
-#include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
-#include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
-#include "observer/ob_system_package_load_service.h" // for ObSystemPackageLoadService
-#include "share/ob_internal_table_change_notifier.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/ls/ob_ls.h"
+#include "storage/ls/ob_i_ls_runtime_adapter.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx/ob_timestamp_service.h"
 #include "storage/tx/ob_trans_id_service.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
@@ -56,10 +51,11 @@ const uint64_t ObLS::INNER_TABLET_ID_LIST[TOTAL_INNER_TABLET_NUM] = {
 
 ObLS::ObLS()
   : ls_tx_svr_(this),
-    replay_handler_(this),
+    replay_handler_(),
     ls_freezer_(this),
     ls_sync_tablet_seq_handler_(),
     ls_ddl_log_handler_(),
+    vector_idx_scheduler_(nullptr),
     is_inited_(false),
     running_state_(),
     state_seq_(-1),
@@ -78,8 +74,8 @@ int ObLS::init(const ObRestoreStatus &restore_status,
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObLogService *logservice = share::g_mp->log_service();
-  ObTransService *txs_svr = share::g_mp->trans_service();
+  ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
+  ObTransService *txs_svr = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
@@ -178,7 +174,7 @@ int ObLS::create_ls(const palf::PalfBaseInfo &palf_base_info)
   bool need_retry = false;
   static const int64_t SLEEP_TS = 100_ms;
   int64_t retry_cnt = 0;
-  ObLogService *logservice = share::g_mp->log_service();
+  ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ls do not init", K(ret));
@@ -214,7 +210,7 @@ int ObLS::create_ls(const palf::PalfBaseInfo &palf_base_info)
 int ObLS::load_ls()
 {
   int ret = OB_SUCCESS;
-  ObLogService *logservice = share::g_mp->log_service();
+  ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   bool is_palf_exist = false;
 
   if (OB_FAIL(logservice->check_palf_exist(is_palf_exist))) {
@@ -236,7 +232,7 @@ int ObLS::remove_ls()
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObLogService *logservice = share::g_mp->log_service();
+  ObLogService *logservice = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("ls do not init", K(ret));
@@ -411,7 +407,7 @@ void ObLS::destroy()
   {
     
   }
-  ObTransService *txs_svr = (OB_NOT_NULL(share::g_mp) ? share::g_mp->trans_service() : nullptr);
+  ObTransService *txs_svr = (true ? ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>() : nullptr);
   FLOG_INFO("ObLS destroy", K(this), K(*this), K(lbt()));
   if (running_state_.is_running()) {
     if (OB_TMP_FAIL(offline_(start_ts))) {
@@ -473,7 +469,7 @@ int ObLS::offline_compaction_()
 {
   int ret = OB_SUCCESS;
   if (FALSE_IT(ls_freezer_.offline())) {
-  } else if (OB_FAIL(share::g_mp->tablet_scheduler()->check_ls_compaction_finish())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->check_ls_compaction_finish())) {
     LOG_WARN("check compaction finish failed", K(ret), K(ls_meta_));
   }
   return ret;
@@ -485,8 +481,8 @@ int ObLS::start_local_log_()
   palf::LSN end_lsn;
   bool is_done = false;
   bool is_clear = false;
-  logservice::ObLogApplyService *apply_service = share::g_mp->log_service()->get_log_apply_service();
-  logservice::ObLogReplayService *replay_service = share::g_mp->log_service()->get_log_replay_service();
+  logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
+  logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
     LOG_WARN("get local log end failed", K(ret));
   }
@@ -522,8 +518,8 @@ int ObLS::stop_local_log_()
   int ret = OB_SUCCESS;
   bool is_done = false;
   palf::LSN end_lsn;
-  logservice::ObLogApplyService *apply_service = share::g_mp->log_service()->get_log_apply_service();
-  logservice::ObLogReplayService *replay_service = share::g_mp->log_service()->get_log_replay_service();
+  logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
+  logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   if (OB_FAIL(apply_service->wait_append_sync())) {
     LOG_WARN("wait local append callbacks failed", K(ret));
   } else if (OB_FAIL(apply_service->stop_local_append())) {
@@ -666,6 +662,70 @@ int ObLS::online_advance_epoch_()
   return ret;
 }
 
+int ObLS::register_vector_index_log_handler_(
+    const logservice::ObLogBaseType type,
+    data_plane::ObIVectorIndexLogHandler &handler)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(replay_handler_.register_handler(type, &handler.replay_handler()))) {
+    LOG_WARN("replay handler register failed", K(ret), K(type), K(ls_meta_));
+  } else if (OB_FAIL(local_log_handler_set_.register_handler(
+                 type, &handler.local_handler()))) {
+    LOG_WARN("local handler register failed", K(ret), K(type), K(ls_meta_));
+    replay_handler_.unregister_handler(type);
+  } else if (OB_FAIL(checkpoint_executor_.register_handler(
+                 type, &handler.checkpoint_handler()))) {
+    LOG_WARN("checkpoint handler register failed", K(ret), K(type), K(ls_meta_));
+    local_log_handler_set_.unregister_handler(type);
+    replay_handler_.unregister_handler(type);
+  }
+  return ret;
+}
+
+void ObLS::unregister_vector_index_log_handler_(
+    const logservice::ObLogBaseType type)
+{
+  replay_handler_.unregister_handler(type);
+  local_log_handler_set_.unregister_handler(type);
+  checkpoint_executor_.unregister_handler(type);
+}
+
+int ObLS::register_composition_log_handler_(
+    const logservice::ObLogBaseType type)
+{
+  int ret = OB_SUCCESS;
+  data_plane::ObLogServiceHandler handler;
+  ObILSRuntimeAdapter *adapter =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObILSRuntimeAdapter>();
+  if (OB_ISNULL(adapter)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LS runtime adapter is not initialized", K(ret), K(type));
+  } else if (OB_FAIL(adapter->resolve_log_handler(type, handler))) {
+    LOG_WARN("failed to get composition log handler", K(ret), K(type), K(ls_meta_));
+  } else if (OB_UNLIKELY(!handler.is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("composition log handler is invalid", K(ret), K(type), K(ls_meta_));
+  } else if (OB_FAIL(replay_handler_.register_handler(type, handler.replay_))) {
+    LOG_WARN("replay handler register failed", K(ret), K(type), K(ls_meta_));
+  } else if (OB_FAIL(local_log_handler_set_.register_handler(type, handler.local_))) {
+    LOG_WARN("local handler register failed", K(ret), K(type), K(ls_meta_));
+    replay_handler_.unregister_handler(type);
+  } else if (OB_FAIL(checkpoint_executor_.register_handler(type, handler.checkpoint_))) {
+    LOG_WARN("checkpoint handler register failed", K(ret), K(type), K(ls_meta_));
+    local_log_handler_set_.unregister_handler(type);
+    replay_handler_.unregister_handler(type);
+  }
+  return ret;
+}
+
+void ObLS::unregister_composition_log_handler_(
+    const logservice::ObLogBaseType type)
+{
+  replay_handler_.unregister_handler(type);
+  local_log_handler_set_.unregister_handler(type);
+  checkpoint_executor_.unregister_handler(type);
+}
+
 int ObLS::register_common_service()
 {
   int ret = OB_SUCCESS;
@@ -677,9 +737,12 @@ int ObLS::register_common_service()
   REGISTER_TO_LOGSERVICE(RESERVED_SNAPSHOT_LOG_BASE_TYPE, &reserved_snapshot_clog_handler_);
   REGISTER_TO_LOGSERVICE(MEDIUM_COMPACTION_LOG_BASE_TYPE, &medium_compaction_clog_handler_);
 
-  REGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE, share::g_mp->timestamp_service());
-  REGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE, share::g_mp->trans_id_service());
-  REGISTER_TO_LOGSERVICE(MAJOR_FREEZE_LOG_BASE_TYPE, share::g_mp->primary_major_freeze_service());
+  REGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE, ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>());
+  REGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE, ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>());
+  if (OB_SUCC(ret) &&
+      OB_FAIL(register_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register major freeze log handler", K(ret), K(ls_meta_));
+  }
   return ret;
 }
 
@@ -687,25 +750,38 @@ int ObLS::register_local_services_()
 {
   int ret = OB_SUCCESS;
 
-  REGISTER_TO_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
-  REGISTER_TO_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
-  REGISTER_TO_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());
-  REGISTER_TO_LOGSERVICE(SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE, share::g_mp->system_package_load_service());
-  // ObInternalTableChangeNotifier only needs local lifecycle callbacks.
+  if (OB_FAIL(register_composition_log_handler_(DBMS_SCHEDULER_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register DBMS scheduler log handler", K(ret), K(ls_meta_));
+  } else if (OB_FAIL(register_composition_log_handler_(SYS_DDL_SCHEDULER_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register DDL scheduler log handler", K(ret), K(ls_meta_));
+  } else if (OB_FAIL(register_composition_log_handler_(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register DDL service launcher log handler", K(ret), K(ls_meta_));
+  } else if (OB_FAIL(register_composition_log_handler_(
+                 SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register system package service log handler", K(ret), K(ls_meta_));
+  } else if (OB_FAIL(register_composition_log_handler_(VEC_INDEX_SERVICE_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to register vector index service log handler", K(ret), K(ls_meta_));
+  }
+  logservice::ObILocalLogHandler *refresh_handler =
+      ::oceanbase::share::server_service<::oceanbase::logservice::ObILocalLogHandler>();
   if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(refresh_handler)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("internal table refresh handler is not initialized", K(ret));
   } else if (OB_FAIL(local_log_handler_set_.register_handler(
-      INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE,
-      &share::ObInternalTableChangeNotifier::get_instance()))) {
-    LOG_WARN("local_log_handler_set_ register notifier failed", K(ret));
+      INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE, refresh_handler))) {
+    LOG_WARN("failed to register internal table refresh handler", K(ret));
   }
 #ifdef OB_BUILD_SYS_VEC_IDX
-  REGISTER_TO_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, share::g_mp->plugin_vector_index_service());
   if (OB_SUCC(ret)) {
     // The vector index scheduler owns its lifecycle independently.
     if (OB_FAIL(init_vector_idx_scheduler_())) {
       LOG_WARN("fail to init vector index scheduler", KR(ret));
     } else {
-      REGISTER_TO_LOGSERVICE(VEC_INDEX_LOG_BASE_TYPE, &vector_idx_scheduler_);
+      if (OB_FAIL(register_vector_index_log_handler_(
+              VEC_INDEX_LOG_BASE_TYPE, *vector_idx_scheduler_))) {
+        LOG_WARN("register vector index log handler failed", KR(ret));
+      }
     }
   }
 #endif
@@ -729,14 +805,31 @@ int ObLS::register_to_service_()
 int ObLS::init_vector_idx_scheduler_()
 {
   int ret = OB_SUCCESS;
-  if (vector_idx_scheduler_timer_.inited()) {
+  ObILSRuntimeAdapter *adapter =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObILSRuntimeAdapter>();
+  if (OB_ISNULL(adapter)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LS runtime adapter is not initialized", K(ret));
+  } else if (vector_idx_scheduler_timer_.inited() ||
+             OB_NOT_NULL(vector_idx_scheduler_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("vector index scheduler init twice", KR(ret));
   } else if (OB_FAIL(vector_idx_scheduler_timer_.init(
       "VecIdxSched", common::ObMemAttr("VecIdxSched")))) {
     LOG_WARN("fail to init vector index scheduler timer", KR(ret));
-  } else if (OB_FAIL(vector_idx_scheduler_.init(this, vector_idx_scheduler_timer_))) {
+  } else if (OB_FAIL(adapter->create_vector_index_scheduler(
+                 *this, vector_idx_scheduler_timer_, vector_idx_scheduler_))) {
     LOG_WARN("fail to init vector idx scheduler", KR(ret));
+  }
+  if (OB_SUCCESS != ret) {
+    if (OB_NOT_NULL(vector_idx_scheduler_) && OB_NOT_NULL(adapter)) {
+      adapter->destroy_vector_index_scheduler(vector_idx_scheduler_);
+    }
+    if (vector_idx_scheduler_timer_.inited()) {
+      vector_idx_scheduler_timer_.stop();
+      vector_idx_scheduler_timer_.wait();
+      vector_idx_scheduler_timer_.destroy();
+    }
   }
   return ret;
 }
@@ -745,7 +838,9 @@ void ObLS::stop_vector_idx_scheduler_()
 {
   if (vector_idx_scheduler_timer_.inited()) {
     vector_idx_scheduler_timer_.stop();
-    vector_idx_scheduler_.stop();
+  }
+  if (OB_NOT_NULL(vector_idx_scheduler_)) {
+    vector_idx_scheduler_->stop();
   }
 }
 
@@ -754,7 +849,16 @@ void ObLS::destroy_vector_idx_scheduler_()
   if (vector_idx_scheduler_timer_.inited()) {
     vector_idx_scheduler_timer_.wait();
     vector_idx_scheduler_timer_.destroy();
-    vector_idx_scheduler_.destroy();
+  }
+  ObILSRuntimeAdapter *adapter =
+      ::oceanbase::share::server_service<::oceanbase::storage::ObILSRuntimeAdapter>();
+  if (OB_NOT_NULL(vector_idx_scheduler_)) {
+    if (OB_NOT_NULL(adapter)) {
+      adapter->destroy_vector_index_scheduler(vector_idx_scheduler_);
+    } else {
+      FLOG_ERROR_RET(OB_ERR_UNEXPECTED,
+          "cannot destroy vector index scheduler without runtime adapter");
+    }
   }
 }
 
@@ -769,19 +873,20 @@ void ObLS::unregister_common_service_()
   UNREGISTER_FROM_LOGSERVICE(MEDIUM_COMPACTION_LOG_BASE_TYPE, &medium_compaction_clog_handler_);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TIMESTAMP_LOG_BASE_TYPE);
   UNREGISTER_REPLAY_CHECKPOINT_HANDLER(TRANS_ID_LOG_BASE_TYPE);
-  UNREGISTER_FROM_LOGSERVICE(MAJOR_FREEZE_LOG_BASE_TYPE, nullptr);
+  unregister_composition_log_handler_(MAJOR_FREEZE_LOG_BASE_TYPE);
 }
 
 void ObLS::unregister_local_services_()
 {
-  UNREGISTER_FROM_LOGSERVICE(DBMS_SCHEDULER_LOG_BASE_TYPE, share::g_mp->dbms_sched_service());
-  UNREGISTER_FROM_LOGSERVICE(SYS_DDL_SCHEDULER_LOG_BASE_TYPE, share::g_mp->ddl_scheduler());
-  UNREGISTER_FROM_LOGSERVICE(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE, share::g_mp->ddl_service_launcher());
-  UNREGISTER_FROM_LOGSERVICE(SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE, share::g_mp->system_package_load_service());
+  unregister_composition_log_handler_(DBMS_SCHEDULER_LOG_BASE_TYPE);
+  unregister_composition_log_handler_(SYS_DDL_SCHEDULER_LOG_BASE_TYPE);
+  unregister_composition_log_handler_(DDL_SERVICE_LAUNCHER_LOG_BASE_TYPE);
+  unregister_composition_log_handler_(
+      SYSTEM_PACKAGE_LOAD_SERVICE_LOG_BASE_TYPE);
   local_log_handler_set_.unregister_handler(INTERNAL_TABLE_NOTIFIER_LOG_BASE_TYPE);
 #ifdef OB_BUILD_SYS_VEC_IDX
-  UNREGISTER_FROM_LOGSERVICE(VEC_INDEX_SERVICE_LOG_BASE_TYPE, share::g_mp->plugin_vector_index_service());
-  UNREGISTER_FROM_LOGSERVICE(VEC_INDEX_LOG_BASE_TYPE, &vector_idx_scheduler_);
+  unregister_composition_log_handler_(VEC_INDEX_SERVICE_LOG_BASE_TYPE);
+  unregister_vector_index_log_handler_(VEC_INDEX_LOG_BASE_TYPE);
   destroy_vector_idx_scheduler_();
 #endif
 }
@@ -1145,7 +1250,7 @@ int ObLS::replay_get_tablet_no_check(
     } else if (scn <= tablet_change_checkpoint_scn) {
       ret = OB_OBSOLETE_CLOG_NEED_SKIP;
       LOG_WARN("tablet already gc", K(ret), K(key), K(scn), K(tablet_change_checkpoint_scn));
-    } else if (OB_FAIL(share::g_mp->log_service()->get_log_replay_service()->get_max_replayed_scn(max_scn))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service()->get_max_replayed_scn(max_scn))) {
       LOG_WARN("failed to get_max_replayed_scn", KR(ret), K_(ls_meta), K(scn), K(tablet_id));
     }
     // double check for this scenario:
@@ -1262,7 +1367,7 @@ int ObLS::logstream_freeze(const bool is_sync,
   }
 
   if (OB_SUCC(ret)) {
-    share::g_mp->memstore_freezer()->record_freezer_source_event(source);
+    ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->record_freezer_source_event(source);
   }
 
   return ret;
@@ -1384,7 +1489,7 @@ int ObLS::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
   }
 
   if (OB_SUCC(ret)) {
-    share::g_mp->memstore_freezer()->record_freezer_source_event(source);
+    ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->record_freezer_source_event(source);
   }
 
   return ret;

@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "sql/engine/vector/ob_bitmap_null_vector_base.h"
-#include "sql/engine/vector/ob_discrete_base.h"
-#include "sql/engine/vector/ob_uniform_base.h"
+#include "query/engine/vector/ob_bitmap_null_vector_base.h"
+#include "query/engine/vector/ob_discrete_base.h"
+#include "query/engine/vector/ob_uniform_base.h"
 #include "storage/ddl/ob_ddl_vector.h"
 
 namespace oceanbase

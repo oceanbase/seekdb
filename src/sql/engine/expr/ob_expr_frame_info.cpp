@@ -656,7 +656,8 @@ int ObTempExpr::row_to_frame(const ObNewRow &row, ObTempExprCtx &temp_expr_ctx) 
     } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
       LOG_WARN("fail to from obj", K(v), K(idx_col), K(row), K(ret));
     } else if (is_lob_storage(v.get_type()) &&
-               OB_FAIL(ob_adjust_lob_datum(v, expr.obj_meta_, expr.obj_datum_map_,
+               OB_FAIL(ob_adjust_lob_datum(temp_expr_ctx.exec_ctx_, v,
+                                           expr.obj_meta_, expr.obj_datum_map_,
                                            temp_expr_ctx.exec_ctx_.get_allocator(), expr_datum))) {
       LOG_WARN("adjust lob datum failed", K(ret), K(v.get_meta()), K(expr.obj_meta_));                                   
     }

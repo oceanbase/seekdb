@@ -17,14 +17,13 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_multiple_merge.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_aggregated_store.h"
-#include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "query/engine/expr/ob_expr_lob_utils.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
 
 namespace oceanbase
 {
@@ -931,7 +930,7 @@ void ObMultipleMerge::report_tablet_stat()
     tablet_stat.pushdown_micro_block_cnt_ = access_ctx_->table_store_stat_.pushdown_micro_access_cnt_;
     if (!tablet_stat.is_valid()) {
       // do nothing
-    } else if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->report_stat(tablet_stat, report_succ))) {
+    } else if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->report_stat(tablet_stat, report_succ))) {
       STORAGE_LOG_RET(ERROR, tmp_ret, "failed to report tablet stat", K(tmp_ret), K(tablet_stat));
     }
   }
@@ -1318,8 +1317,10 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
           if (OB_FAIL(datum.from_obj(def_cell, expr->obj_datum_map_))) {
             LOG_WARN("convert obj to datum failed", K(ret));
           } else if (is_lob_storage(def_cell.get_type()) &&
-                     OB_FAIL(sql::ob_adjust_lob_datum(def_cell, expr->obj_meta_, expr->obj_datum_map_,
-                                                      lob_reader_.get_allocator(), datum))) {
+                     OB_FAIL(sql::ob_adjust_lob_datum(
+                         access_param_->get_op()->get_eval_ctx().exec_ctx_,
+                         def_cell, expr->obj_meta_, expr->obj_datum_map_,
+                         lob_reader_.get_allocator(), datum))) {
             LOG_WARN("adjust lob datum failed", K(ret), K(def_cell.get_meta()), K(expr->obj_meta_));
           } else {
             eval_info.evaluated_ = true;
@@ -1697,7 +1698,7 @@ int ObMultipleMerge::refresh_tablet_iter()
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
       LOG_WARN("timeout reached", K(ret), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
       LOG_WARN("failed to get ls", K(ret));
     } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,

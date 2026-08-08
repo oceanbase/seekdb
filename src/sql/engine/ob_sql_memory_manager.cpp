@@ -18,7 +18,7 @@
 
 #include "ob_sql_memory_manager.h"
 #include "sql/engine/px/ob_px_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 
@@ -36,8 +36,9 @@ namespace
 common::MemoryUsageTracker *resolve_sql_memory_usage_tracker(const int64_t ctx_id)
 {
   common::MemoryUsageTracker *tracker = nullptr;
-  if (common::ObCtxIds::WORK_AREA == ctx_id && nullptr != share::g_mp) {
-    ObSqlMemoryManager *manager = share::g_mp->sql_memory_manager();
+  if (common::ObCtxIds::WORK_AREA == ctx_id) {
+    ObSqlMemoryManager *manager =
+        share::server_service<ObSqlMemoryManager>();
     if (nullptr != manager) {
       tracker = &manager->get_workarea_managed_tracker();
     }

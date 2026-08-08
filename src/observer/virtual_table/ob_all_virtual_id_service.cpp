@@ -15,7 +15,6 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_id_service.h"
-#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

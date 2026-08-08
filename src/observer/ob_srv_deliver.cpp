@@ -18,7 +18,6 @@
 
 #include "observer/ob_srv_deliver.h"
 #include "rpc/ob_sql_request_operator.h"
-#include "share/rc/ob_module_provider.h"
 
 #include "util/easy_mod_stat.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"

@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_vector_index_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
@@ -30,7 +30,7 @@ namespace observer
 int ObVectorIndexInfoIterator::open()
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (is_opened_) {
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "The ObVectorIndexInfoIterator has been opened", K(ret));
@@ -61,7 +61,7 @@ int ObVectorIndexInfoIterator::get_next_info(ObVectorIndexInfo &info)
     // fill cache info
     ObTabletID tablet_id = cache_tablet_ids_.at(cache_idx_).tablet_id_;
     ObIvfCacheMgrGuard cache_mgr_guard;
-    if (OB_FAIL(share::g_mp->plugin_vector_index_service()->acquire_ivf_cache_mgr_guard(tablet_id, cache_mgr_guard))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>()->acquire_ivf_cache_mgr_guard(tablet_id, cache_mgr_guard))) {
       SERVER_LOG(WARN, "failed to get cache mgr guard", K(tablet_id), KR(ret));
     } else if (OB_FAIL(cache_mgr_guard.get_ivf_cache_mgr()->fill_cache_info(info))) {
       SERVER_LOG(WARN, "failed to fill cache info", K(ret), K(tablet_id));
@@ -75,7 +75,7 @@ int ObVectorIndexInfoIterator::get_next_info(ObVectorIndexInfo &info)
       tablet_id = partial_tablet_ids_.at(index_idx_ - complete_tablet_ids_.count()).tablet_id_;
     }
     ObPluginVectorIndexAdapterGuard adapter_guard;
-    if (OB_FAIL(share::g_mp->plugin_vector_index_service()->get_adapter_inst_guard(tablet_id, adapter_guard))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>()->get_adapter_inst_guard(tablet_id, adapter_guard))) {
       if (OB_HASH_NOT_EXIST != ret) {
         SERVER_LOG(WARN, "failed to get adapter inst guard", K(tablet_id), KR(ret));
       }

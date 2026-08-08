@@ -1,0 +1,29 @@
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+alter system set major_freeze_duty_time = 'Disable';
+alter system set ob_compaction_schedule_interval = '10s';
+alter system set _enable_adaptive_compaction = 'False';
+ob1.mysql alter system set merger_check_interval='10s';
+drop table if exists t1;
+Warnings:
+Note	1051	Unknown table 'oceanbase.t1'
+create table t1 (c1 bigint, c2 varchar(100)) COMPRESSION = 'None' TABLET_SIZE = 2097152;
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+ob1.check_until_timeout select parallel_degree from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE', 1, 100;
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+ob1.check_until_timeout select count(1) > 0 from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE' and parallel_degree > 1, 1, 100;
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+insert into t1 select random(), randstr(100, random()) from table(generator(100000));
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id = $sys_tenant_id and LAST_SCN != GLOBAL_BROADCAST_SCN, 0, 300;
+ob1.check_until_timeout select count(1) > 0 from __all_virtual_tablet_compaction_history where tenant_id = $sys_tenant_id and tablet_id = $t1_id and type = 'MAJOR_MERGE' and parallel_degree > $last_parallel_degree, 1, 200;

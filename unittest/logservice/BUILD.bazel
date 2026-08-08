@@ -1,0 +1,30 @@
+load("//bazel:defs.bzl", "seekdb_module_cc_test")
+
+package(default_visibility = ["//visibility:private"])
+
+seekdb_module_cc_test(
+    name = "logservice_tests",
+    srcs = glob(["**/*.cpp"]),
+    test_hdrs = glob(
+        [
+            "**/*.h",
+            "**/*.hh",
+            "**/*.hpp",
+            "**/*.ipp",
+        ],
+        allow_empty = True,
+    ),
+    module_interface = "//src/logservice:logservice_unit_test_interface",
+    unity_exceptions = {
+        'test_fixed_sliding_window.cpp': 'rewrites C++ access control before including production headers',
+        'test_log_entry_and_group_entry.cpp': 'rewrites C++ access control before including production headers',
+        'test_log_group_buffer.cpp': 'rewrites C++ access control before including production headers',
+        'test_log_meta.cpp': 'rewrites C++ access control before including production headers',
+        'test_log_meta_info.cpp': 'rewrites C++ access control before including production headers',
+        'test_lsn_allocator.cpp': 'rewrites C++ access control before including production headers',
+        'test_palf_throttling.cpp': 'rewrites C++ access control before including production headers',
+        'test_role_change_handler.cpp': 'rewrites C++ access control before including production headers',
+        'test_server_log_block_mgr.cpp': 'rewrites C++ access control before including production headers',
+    },
+    shard_count = 4,
+)

@@ -23,7 +23,7 @@ namespace oceanbase
 namespace sql
 {
 ObExprQuarter::ObExprQuarter(ObIAllocator& alloc)
-    : ObFuncExprOperator(alloc, 
+    : ObFuncExprOperator(alloc,
                          T_FUN_SYS_QUARTER,
                          N_QUARTER,
                          1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -86,7 +86,7 @@ int ObExprQuarter::calc_quater(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
     LOG_WARN("get time zone failed", K(ret));
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                  *param_datum, expr.args_[0]->datum_meta_.type_, expr.args_[0]->datum_meta_.scale_,
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),

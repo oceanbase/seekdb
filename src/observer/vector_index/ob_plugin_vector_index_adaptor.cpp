@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
@@ -74,6 +74,16 @@ void ObVectorIndexInfo::reset()
   data_tablet_id_ = common::ObTabletID::INVALID_TABLET_ID;
   MEMSET(statistics_, '\0', sizeof(statistics_));
   MEMSET(sync_info_, '\0', sizeof(sync_info_));
+}
+
+void ObPluginVectorIndexAdaptor::deallocate_query_distances(
+    const float *distances,
+    bool is_snap)
+{
+  ObVectorIndexMemData *mem_data = is_snap ? snap_data_ : incr_data_;
+  if (nullptr != distances && nullptr != mem_data && nullptr != mem_data->mem_ctx_) {
+    mem_data->mem_ctx_->Deallocate(const_cast<float *>(distances));
+  }
 }
 
 OB_DEF_SERIALIZE_SIZE(ObVectorIndexParam)
@@ -771,7 +781,7 @@ int ObPluginVectorIndexAdaptor::fill_vector_index_info(ObVectorIndexInfo &info)
   } else {
     ObRbMemMgr *mem_mgr = nullptr;
     
-    if (OB_ISNULL(mem_mgr = share::g_mp->rb_mem_mgr())) {
+    if (OB_ISNULL(mem_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>())) {
       int ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("mem_mgr is null");
     } else if (OB_FAIL(databuff_printf(
@@ -1121,7 +1131,7 @@ int ObPluginVectorIndexAdaptor::get_current_scn(share::SCN &current_scn)
 {
   int ret = OB_SUCCESS;
   
-  transaction::ObTransService *txs = share::g_mp->trans_service();
+  transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   current_scn.set_invalid();
   int64_t start_us = ObTimeUtility::fast_current_time();
@@ -2972,7 +2982,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
   INIT_SUCC(ret);
   ObArray<uint64_t> d_vids;
   common::ObNewRowIterator *incr_iter = nullptr;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   SCN last_row_scn = SCN::min_scn();
   SCN base_scn = SCN::min_scn();
   roaring::api::roaring64_bitmap_t *ibitmap = nullptr;
@@ -3194,7 +3204,7 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
   ObArray<uint64_t> i_vids;
   share::SCN snapshot_scn;
   const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
-  transaction::ObTransService *txs = share::g_mp->trans_service();
+  transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   ObTimeoutCtx timeout_ctx;
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_SYS;
@@ -4364,9 +4374,8 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
   } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(*query_cond->scan_param_, table_scan_iter))) {
     LOG_WARN("failed to rescan", K(ret));
   } else {
-    ObHNSWDeserializeCallback::CbParam param;
-    param.iter_ = query_cond->row_iter_;
-    param.allocator_ = &tmp_allocator;
+    ObHNSWDeserializeCallback::CbParam param(
+        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_);
     ObHNSWDeserializeCallback callback(static_cast<void*>(this));
     ObIStreamBuf::Callback cb = callback;
     ObVectorIndexSerializer index_seri(tmp_allocator);

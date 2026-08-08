@@ -16,6 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/ob_server_runtime_access.h"
+#include "share/rc/ob_server_runtime.h"
+#include "util/easy_mod_stat.h"
 #include "observer/mysql/obmp_connect.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "observer/ob_server.h"
@@ -25,8 +28,8 @@
 #include "rpc/obmysql/packet/ompk_auth_switch.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 #include "observer/mysql/ob_mysql_result_set.h"
-#include "observer/ob_service.h"
 #include "share/ob_version_parser.h"
+#include "observer/ob_service.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -58,7 +61,7 @@ ObString extract_user_name(const ObString &in)
 }  // namespace observer
 }  // namespace oceanbase
 
-ObMPConnect::ObMPConnect(const ObGlobalContext &gctx)
+ObMPConnect::ObMPConnect(const oceanbase::share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       user_name_(),
       client_ip_(),
@@ -124,7 +127,6 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
 {
   int ret = OB_SUCCESS;
   const ObString &sql = multi_stmt_item.get_sql();
-  ObVirtualTableIteratorFactory vt_iter_factory(*gctx_.vt_iter_creator_);
   ObSchemaGetterGuard schema_guard;
   // init_connect can execute query and dml statements, must add req_timeinfo_guard
   observer::ObReqTimeGuard req_timeinfo_guard;
@@ -145,14 +147,15 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     ctx.retry_times_ = 0; // This is the initialization SQL execution when establishing a connection, no retry
     ctx.schema_guard_ = &schema_guard;
-    HEAP_VAR(ObMySQLResultSet, result, session, allocator) {
+    HEAP_VAR(ObMySQLResultSet, result, session, allocator,
+             ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
       result.set_has_more_result(has_more_result);
       if (OB_FAIL(result.init())) {
         LOG_WARN("result set init failed");
-      } else if (OB_ISNULL(gctx_.sql_engine_)) {
+      } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-      } else if (OB_FAIL(gctx_.sql_engine_->stmt_query(sql, ctx, result))) {
+      } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx, result))) {
         LOG_WARN("sql execute failed", K(multi_stmt_item), K(sql), K(ret));
       } else {
         int open_ret = result.open();
@@ -218,7 +221,7 @@ int ObMPConnect::process()
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));
-  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session mgr is NULL", K(ret));
   } else if (OB_FAIL(conn->ret_)) {
@@ -707,9 +710,10 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     session.set_peer_addr(get_peer());
     session.set_client_addr(get_peer());
     session.set_trans_type(transaction::ObTxClass::USER);
-    // Lock the server runtime until the connection is destroyed.
-    if (NULL != gctx_.server_runtime_controller_) {
-      if (OB_FAIL(gctx_.server_runtime_controller_->lock_runtime(conn.runtime_))) {
+    // Lock the single server runtime until the connection is destroyed.
+    if (NULL != share::server_service<omt::ObServerRuntimeController>()) {
+      if (OB_FAIL(share::server_service<omt::ObServerRuntimeController>()
+                      ->lock_runtime(conn.runtime_))) {
         LOG_WARN("can't get server runtime", K(ret));
       } else if (OB_ISNULL(conn.runtime_)) {
         ret = OB_ERR_UNEXPECTED;

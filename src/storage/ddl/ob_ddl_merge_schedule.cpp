@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
 #include "storage/ddl/ob_ddl_merge_schedule.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_ddl_checksum.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -31,7 +31,6 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 
-using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -208,7 +207,7 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     ObDDLTableMergeDagParam param;
     ObArenaAllocator arena(ObMemAttr("DDL_Mrg_Par"));
     ObTabletDDLCompleteMdsUserData  ddl_complete;
-    if (OB_FAIL(ObDDLUtil::is_major_exist(tablet_handle.get_obj()->get_tablet_meta().tablet_id_, is_major_sstable_exist))) {
+    if (OB_FAIL(ObDDLStorageUtil::is_major_exist(tablet_handle.get_obj()->get_tablet_meta().tablet_id_, is_major_sstable_exist))) {
       LOG_WARN("failed to check major sstable exist", K(ret), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));
     } else if (is_major_sstable_exist) {
       LOG_INFO("major sstable already exist, don't need to schdule ddl merge", K(ret), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));

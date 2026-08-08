@@ -35,15 +35,20 @@ namespace oceanbase
 {
 namespace sql
 {
-int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
+int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
+                                 common::ObSrsCacheGuard &srs_guard,
                                  const uint32_t srid,
                                  const ObSrsItem *&srs)
 {
   int ret = OB_SUCCESS;
+  common::ObISrsProvider *srs_provider = ctx.exec_ctx_.get_srs_provider();
 
   if (!ObGeoTypeUtil::need_get_srs(srid)) {
     // do nothing
-  } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+  } else if (OB_ISNULL(srs_provider)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("SRS provider is not configured", K(ret));
+  } else if (OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
     LOG_WARN("fail to get srs guard", K(ret));
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("fail to get srs", K(ret), K(srid));
@@ -53,7 +58,7 @@ int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
 }
 
 int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
-                                 omt::ObSrsCacheGuard &srs_guard,
+                                 common::ObSrsCacheGuard &srs_guard,
                                  const ObString &wkb,
                                  const ObSrsItem *&srs,
                                  bool use_little_bo, /* = false */
@@ -61,7 +66,6 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   uint32_t srid = UINT32_MAX;
-  ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (use_little_bo) {
     if (wkb.length() < WKB_GEO_SRID_SIZE) {
       ret = OB_ERR_GIS_INVALID_DATA;
@@ -78,10 +82,7 @@ int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
   } 
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(session)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get session", K(ret));
-  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(ctx, srs_guard, srid, srs))) {
     LOG_WARN("fail to get srs inner", K(ret), K(srid));
   }
 
@@ -120,9 +121,10 @@ int ObGeoExprUtils::build_geometry(ObIAllocator &allocator,
 }
 
 // 3d-wkb is allow, and will return ObGeometry3D obj
-int ObGeoExprUtils::construct_geometry(ObIAllocator &allocator,
+int ObGeoExprUtils::construct_geometry(ObEvalCtx &ctx,
+                                       ObIAllocator &allocator,
                                        const ObString &wkb,
-                                       omt::ObSrsCacheGuard &srs_guard,
+                                       common::ObSrsCacheGuard &srs_guard,
                                        const ObSrsItem *&srs,
                                        ObGeometry *&geo,
                                        const char *func_name,
@@ -143,7 +145,7 @@ int ObGeoExprUtils::construct_geometry(ObIAllocator &allocator,
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
     }
   } else if (FALSE_IT(srid = static_cast<ObGeoSrid>(ObGeoWkbByteOrderUtil::read<uint32_t>(data, ObGeoWkbByteOrder::LittleEndian)))) {
-  } else if (OB_FAIL(get_srs_item(srs_guard, srid, srs))) {
+  } else if (OB_FAIL(get_srs_item(ctx, srs_guard, srid, srs))) {
     if (OB_ERR_SRS_NOT_FOUND == ret) {
       LOG_USER_WARN(OB_ERR_SRS_NOT_FOUND, srid); // adapt mysql
       ret = OB_SUCCESS;
@@ -874,13 +876,13 @@ int ObGeoExprUtils::length_unit_conversion(const ObString &unit_str, const ObSrs
 }
 
 int ObGeoExprUtils::get_input_geometry(const char* func_name, MultimodeAlloctor &allocator, ObDatum *gis_datum, ObEvalCtx &ctx, ObExpr *gis_arg,
-    omt::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo)
+    common::ObSrsCacheGuard &srs_guard, const ObSrsItem *&srs, ObGeometry *&geo)
 {
   int ret = OB_SUCCESS;
   ObString wkb = gis_datum->get_string();
   ObGeoType type = ObGeoType::GEOTYPEMAX;
   uint32_t srid = -1;
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
           *gis_datum,
           gis_arg->datum_meta_,
           gis_arg->obj_meta_.has_lob_header(),
@@ -1105,10 +1107,16 @@ void ObGeoExprUtils::expr_get_const_param_cache(ObGeoConstParamCache* const_para
   }
 }
 
-int ObGeoExprUtils::expr_prepare_build_geometry(MultimodeAlloctor &allocator, const ObDatum &datum, const ObExpr &gis_arg, ObString& wkb, ObGeoType& type, uint32_t& srid)
+int ObGeoExprUtils::expr_prepare_build_geometry(ObExecContext &exec_ctx,
+                                                MultimodeAlloctor &allocator,
+                                                const ObDatum &datum,
+                                                const ObExpr &gis_arg,
+                                                ObString &wkb,
+                                                ObGeoType &type,
+                                                uint32_t &srid)
 {
   INIT_SUCC(ret);
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, datum,
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx, allocator, datum,
             gis_arg.datum_meta_, gis_arg.obj_meta_.has_lob_header(), wkb))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb));
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb, type, srid))) {
@@ -1318,9 +1326,9 @@ int ObGeoExprUtils::get_intersects_res(ObGeometry &geo1, ObGeometry &geo2,
       } else {
         res = result;
       }
-    } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(geo1, geo2, T_FUN_SYS_ST_INTERSECTS)) {
+    } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(geo1, geo2, ObGeoPredicate::INTERSECTS)) {
       result = false;
-      if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(&geo1, &geo2, T_FUN_SYS_ST_INTERSECTS, result))) {
+      if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(&geo1, &geo2, ObGeoPredicate::INTERSECTS, result))) {
         LOG_WARN("fail to get res.", K(ret));
       }
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, result))) {

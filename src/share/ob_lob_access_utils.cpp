@@ -15,12 +15,14 @@
  */
 
 #define USING_LOG_PREFIX COMMON
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
+#include "lib/ob_check_macros.h"
 #include "ob_lob_access_utils.h"
-#include "share/ob_i_lob_read_service.h"          // Lob-read domain port injected by the server.
-#include "share/rc/ob_server_runtime.h"              // share::g_mp->lob_read_service()
-#include "storage/lob/ob_lob_diff_struct.h"  // storage::ObLobDiffHeader(pure header conf L2)
+#include "share/ob_i_lob_read_service.h"
+#include "share/lob/ob_lob_diff_struct.h"
+#include "share/lob/ob_lob_text_iter_context.h"
+#include "share/object/ob_obj_cast.h"
 
 namespace oceanbase
 {
@@ -41,10 +43,9 @@ void ObLobTextIterCtx::init(bool is_clone /* false */)
 
 
 int ObTextStringIter::init(uint32_t buffer_len,
-                           const sql::ObBasicSessionInfo *session,
+                           const ObLobReadOptions *options,
                            ObIAllocator *res_allocator,
-                           ObIAllocator *tmp_allocator,
-                           storage::ObLobAccessCtx *lob_access_ctx)
+                           ObIAllocator *tmp_allocator)
 {
   int ret = OB_SUCCESS;
   if (is_init_) {
@@ -70,6 +71,9 @@ int ObTextStringIter::init(uint32_t buffer_len,
     } else if (OB_ISNULL(res_allocator)) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "Lob: iter with null allocator", K(ret));
+    } else if (OB_ISNULL(options) || OB_ISNULL(options->read_service_)) {
+      ret = OB_NOT_INIT;
+      COMMON_LOG(WARN, "Lob: outrow iter requires an explicit read service", K(ret));
     } else { // outrow lob
       ObIAllocator *allocator = (tmp_allocator == nullptr) ? res_allocator : tmp_allocator;
       char *ctx_buffer = static_cast<char *>(allocator->alloc(sizeof(ObLobTextIterCtx)));
@@ -77,9 +81,10 @@ int ObTextStringIter::init(uint32_t buffer_len,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         COMMON_LOG(WARN,"Lob: failed to alloc output buffer", K(ret), KP(ctx_buffer));
       } else {
-        ctx_ = new (ctx_buffer) ObLobTextIterCtx(locator, session, res_allocator, buffer_len);
+        ctx_ = new (ctx_buffer) ObLobTextIterCtx(
+            locator, *options->read_service_, options->timeout_ts_, res_allocator, buffer_len);
         ctx_ ->init();
-        ctx_->lob_access_ctx_ = lob_access_ctx;
+        ctx_->access_context_ = options->access_context_;
       }
     }
   }
@@ -182,7 +187,7 @@ int ObTextStringIter::get_inrow_or_outrow_prefix_data(ObString &data_str, uint32
 int ObTextStringIter::reserve_data()
 {
   int ret = OB_SUCCESS;
-  if (!is_outrow_ || !has_lob_header_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->lob_query_iter_)) {
+  if (!is_outrow_ || !has_lob_header_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->read_cursor_)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow_), K(has_lob_header_), KP(ctx_));
   } else if (ctx_->reserved_len_ == 0 && ctx_->reserved_byte_len_ == 0) {
@@ -438,7 +443,7 @@ int ObTextStringIter::get_byte_len(int64_t &byte_len)
 // Notice: if input is an outrow lob, the result will be a templob!
 int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
                                                           ObObj &out_obj,
-                                                          const sql::ObBasicSessionInfo *session,
+                                                          const ObLobReadOptions *options,
                                                           ObIAllocator *allocator,
                                                           bool allow_persist_inrow,
                                                           bool need_deep_copy)
@@ -478,7 +483,7 @@ int ObTextStringIter::convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
         ObString src_block_data;
         ObTextStringIter instr_iter(in_obj);
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(instr_iter.init(0, session, allocator))) {
+        } else if (OB_FAIL(instr_iter.init(0, options, allocator))) {
           COMMON_LOG(WARN, "Lob: init text string iter failed", K(instr_iter));
         } else {
           while (OB_SUCC(ret)
@@ -785,7 +790,7 @@ int64_t ObDeltaLob::get_serialize_size() const
 int ObDeltaLob::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
 {
   int ret = OB_SUCCESS;
-  storage::ObLobDiffHeader *diff_header = nullptr;
+  ObLobDiffHeader *diff_header = nullptr;
   if (OB_FAIL(serialize_header(buf, buf_len, pos, diff_header))) {
     LOG_WARN("serialize_header fail", KR(ret), K(buf_len), K(pos), KP(buf));
   } else if (OB_FAIL(serialize_partial_data(buf, buf_len, pos))) {
@@ -796,7 +801,7 @@ int ObDeltaLob::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
   return ret;
 }
 
-int ObDeltaLob::serialize_header(char* buf, const int64_t buf_len, int64_t& pos, storage::ObLobDiffHeader *&diff_header) const
+int ObDeltaLob::serialize_header(char* buf, const int64_t buf_len, int64_t& pos, ObLobDiffHeader *&diff_header) const
 {
   int ret = OB_SUCCESS;
   int64_t size = get_header_serialize_size();
@@ -806,7 +811,7 @@ int ObDeltaLob::serialize_header(char* buf, const int64_t buf_len, int64_t& pos,
   } else {
     ObMemLobCommon *mem_common = new (buf + pos) ObMemLobCommon(ObMemLobType::TEMP_DELTA_LOB, false);
     ObLobCommon *lob_common = new (mem_common->data_) ObLobCommon();
-    diff_header = new (lob_common->buffer_) storage::ObLobDiffHeader();
+    diff_header = new (lob_common->buffer_) ObLobDiffHeader();
     diff_header->diff_cnt_ = get_lob_diff_cnt();
     diff_header->persist_loc_size_ = static_cast<uint32_t>(get_partial_data_serialize_size());
     pos += size;
@@ -818,13 +823,13 @@ int ObDeltaLob::deserialize(const ObLobLocatorV2 &lob_locator)
 {
   int ret = OB_SUCCESS;
   ObLobCommon *lob_common = nullptr;
-  storage::ObLobDiffHeader *diff_header = nullptr;
+  ObLobDiffHeader *diff_header = nullptr;
   if (! lob_locator.is_delta_temp_lob()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input not delta tmp lob", KR(ret), K(lob_locator));
   } else if (OB_FAIL(lob_locator.get_disk_locator(lob_common))) {
     LOG_WARN("get disk locator failed.", K(ret), K(lob_locator));
-  } else if (OB_ISNULL(diff_header = reinterpret_cast<storage::ObLobDiffHeader*>(lob_common->buffer_))){
+  } else if (OB_ISNULL(diff_header = reinterpret_cast<ObLobDiffHeader*>(lob_common->buffer_))){
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(deserialize_partial_data(diff_header))) {
     LOG_WARN("deserialize_partial_data fail", KR(ret), K(lob_locator), KPC(diff_header));
@@ -859,14 +864,14 @@ int ObDeltaLob::has_diff(const ObLobLocatorV2 &locator, bool &res)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unsupport out row delta tmp lob locator", KR(ret), KPC(lob_common), K(locator));
   } else {
-    storage::ObLobDiffHeader *diff_header = reinterpret_cast<storage::ObLobDiffHeader*>(lob_common->buffer_);
+    ObLobDiffHeader *diff_header = reinterpret_cast<ObLobDiffHeader*>(lob_common->buffer_);
     res = diff_header->diff_cnt_ > 0;
   }
   return ret;
 }
 
-// ===== lob-read domain: definitions moved back from storage/lob/ob_lob_manager.cpp(after dependency inversion share-clean) =====
-// these methods read out-of-row lob through the share::g_mp->lob_read_service() port and no longer depend directly on storage::ObLobManager。
+// Out-of-row reads go through the injected service port; Storage remains the
+// implementation owner and Share does not include its manager.
 
 void ObLobTextIterCtx::reuse()
 {
@@ -877,21 +882,15 @@ void ObLobTextIterCtx::reuse()
   last_accessed_byte_len_ = 0;
   last_accessed_len_ = 0;
   iter_count_ = 0;
-  if (OB_NOT_NULL(lob_query_iter_)) {
-    ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
-    if (OB_NOT_NULL(lob_read_service)) {
-      lob_read_service->free_lob_query_iter(*this);
-    }
+  if (OB_NOT_NULL(read_cursor_)) {
+    read_service_.free_lob_query_iter(*this);
   }
 }
 
 ObTextStringIter::~ObTextStringIter()
 {
-  if (is_outrow_ && OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->lob_query_iter_)) {
-    ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
-    if (OB_NOT_NULL(lob_read_service)) {
-      lob_read_service->free_lob_query_iter(*ctx_);
-    }
+  if (OB_NOT_NULL(ctx_) && OB_NOT_NULL(ctx_->read_cursor_)) {
+    ctx_->read_service_.free_lob_query_iter(*ctx_);
   }
 }
 
@@ -899,14 +898,11 @@ int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr
 {
   UNUSED(allocator);
   int ret = OB_SUCCESS;
-  ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
   if (!has_lob_header_ || !is_outrow_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->alloc_)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header_), K(is_outrow_), KP(ctx_));
-  } else if (OB_ISNULL(lob_read_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
-  } else if (OB_FAIL(lob_read_service->get_outrow_lob_full_data(*ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_))) {
+  } else if (OB_FAIL(ctx_->read_service_.get_outrow_lob_full_data(
+                 *ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_))) {
     COMMON_LOG(WARN, "Lob: get_outrow_lob_full_data via port failed", K(ret));
   }
   return ret;
@@ -915,14 +911,11 @@ int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr
 int ObTextStringIter::get_delta_lob_full_data(ObLobLocatorV2& lob_locator, ObIAllocator *allocator, ObString &data_str)
 {
   int ret = OB_SUCCESS;
-  ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
   if (OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), KP(ctx_));
-  } else if (OB_ISNULL(lob_read_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
-  } else if (OB_FAIL(lob_read_service->get_delta_lob_full_data(*ctx_, type_, cs_type_, lob_locator, allocator, data_str))) {
+  } else if (OB_FAIL(ctx_->read_service_.get_delta_lob_full_data(
+                 *ctx_, type_, cs_type_, lob_locator, allocator, data_str))) {
     COMMON_LOG(WARN, "Lob: get_delta_lob_full_data via port failed", K(ret));
   }
   return ret;
@@ -931,14 +924,11 @@ int ObTextStringIter::get_delta_lob_full_data(ObLobLocatorV2& lob_locator, ObIAl
 int ObTextStringIter::get_outrow_prefix_data(uint32_t prefix_char_len)
 {
   int ret = OB_SUCCESS;
-  ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
   if (!has_lob_header_ || !is_outrow_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->alloc_)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header_), K(is_outrow_), KP(ctx_));
-  } else if (OB_ISNULL(lob_read_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
-  } else if (OB_FAIL(lob_read_service->get_outrow_prefix_data(*ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_, prefix_char_len))) {
+  } else if (OB_FAIL(ctx_->read_service_.get_outrow_prefix_data(
+                 *ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_, prefix_char_len))) {
     COMMON_LOG(WARN, "Lob: get_outrow_prefix_data via port failed", K(ret), K(prefix_char_len));
   }
   return ret;
@@ -947,14 +937,11 @@ int ObTextStringIter::get_outrow_prefix_data(uint32_t prefix_char_len)
 int ObTextStringIter::get_first_block(ObString &str)
 {
   int ret = OB_SUCCESS;
-  ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
   if (!is_outrow_ || OB_ISNULL(ctx_) || !has_lob_header_) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow_), KP(ctx_), K(has_lob_header_));
-  } else if (OB_ISNULL(lob_read_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
-  } else if (OB_FAIL(lob_read_service->get_first_block(*ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_, str, state_))) {
+  } else if (OB_FAIL(ctx_->read_service_.get_first_block(
+                 *ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_, str, state_))) {
     COMMON_LOG(WARN, "Lob: get_first_block via port failed", K(ret));
   }
   return ret;
@@ -965,19 +952,16 @@ int ObTextStringIter::get_next_block_inner(ObString &str)
   // 1. calc reserved len and memmove(done locally on the share side)
   // 2. fetch the next chunk through the port and update ctx
   int ret = OB_SUCCESS;
-  ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
-  if (!is_outrow_ || !has_lob_header_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->lob_query_iter_)) {
+  if (!is_outrow_ || !has_lob_header_ || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->read_cursor_)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow_), K(has_lob_header_), KP(ctx_));
   } else if (ctx_->content_byte_len_ == 0) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: no data", K(ret), K(is_outrow_), KP(ctx_));
-  } else if (OB_ISNULL(lob_read_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
   } else if (OB_FAIL(reserve_data())) {
     COMMON_LOG(WARN, "Lob: reserve_data failed", K(ret), K(is_outrow_), KP(ctx_));
-  } else if (OB_FAIL(lob_read_service->get_next_block_inner(*ctx_, cs_type_, has_lob_header_, is_outrow_, str, state_))) {
+  } else if (OB_FAIL(ctx_->read_service_.get_next_block_inner(
+                 *ctx_, cs_type_, has_lob_header_, is_outrow_, str, state_))) {
     COMMON_LOG(WARN, "Lob: get_next_block_inner via port failed", K(ret));
   }
   return ret;
@@ -999,14 +983,11 @@ int ObTextStringIter::get_char_len(int64_t &char_length)
     }
     char_length = ObCharset::strlen_char(cs_type_, data_str.ptr(), static_cast<int64_t>(data_str.length()));
   } else { // outrow lob
-    ObILobReadService *lob_read_service = share::g_mp->lob_read_service();
     if (OB_ISNULL(ctx_)) {
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow_), KP(ctx_));
-    } else if (OB_ISNULL(lob_read_service)) {
-      ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "Lob: get lob read service failed.", K(ret));
-    } else if (OB_FAIL(lob_read_service->get_outrow_char_len(*ctx_, cs_type_, tmp_alloc_, char_length))) {
+    } else if (OB_FAIL(ctx_->read_service_.get_outrow_char_len(
+                   *ctx_, cs_type_, tmp_alloc_, char_length))) {
       COMMON_LOG(WARN, "Lob: get_outrow_char_len via port failed", K(ret));
     }
   }
@@ -1021,14 +1002,13 @@ int64_t ObDeltaLob::get_header_serialize_size() const
   // ObLobCommon;
   size += sizeof(ObLobCommon);
   // ObLobDiffHeader
-  size += sizeof(storage::ObLobDiffHeader);
+  size += sizeof(ObLobDiffHeader);
   return size;
 }
 
 }
 }
 
-// ── moved down from sql ob_expr_lob_utils.cpp ──
 namespace oceanbase
 {
 namespace common
@@ -1040,7 +1020,8 @@ int read_real_string_data(
     ObObjType type,
     ObCollationType cs_type,
     bool has_lob_header,
-    ObString &str)
+    ObString &str,
+    const ObLobReadOptions *options)
 {
   int ret = OB_SUCCESS;
   if (is_lob_storage(type)) {
@@ -1050,7 +1031,7 @@ int read_real_string_data(
       tmp_alloc_ptr = &tmp_allocator;
     }
     ObTextStringIter str_iter(type, cs_type, str, has_lob_header);
-    if (OB_FAIL(str_iter.init(0/*buffer_len*/, nullptr/*session*/, allocator, tmp_alloc_ptr, nullptr/*lob_access_ctx*/))) {
+    if (OB_FAIL(str_iter.init(0/*buffer_len*/, options, allocator, tmp_alloc_ptr))) {
       LOG_WARN("Lob: init lob str iter failed ", K(ret), K(str_iter));
     } else if (OB_FAIL(str_iter.get_full_data(str))) {
       COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(str_iter));
@@ -1062,7 +1043,8 @@ int read_real_string_data(
 int read_real_string_data(
     ObIAllocator *allocator,
     const common::ObObj &obj,
-    ObString &str)
+    ObString &str,
+    const ObLobReadOptions *options)
 {
   int ret = OB_SUCCESS;
   const ObObjMeta& meta = obj.get_meta();
@@ -1075,18 +1057,15 @@ int read_real_string_data(
     const ObLobCommon* lob = obj.get_lob_value();
     str.assign_ptr(lob->get_inrow_data_ptr(), static_cast<int32_t>(lob->get_byte_size(obj.get_string_len())));
   } else if (OB_FAIL(read_real_string_data(
-      allocator,
-      meta.get_type(),
-      meta.get_collation_type(),
-      obj.has_lob_header(),
-      str))) {
+      allocator, meta.get_type(), meta.get_collation_type(),
+      obj.has_lob_header(), str, options))) {
     COMMON_LOG(WARN, "read_real_string_data fail", K(ret));
   }
   return ret;
 }
 }  // namespace lob_helper
 }  // namespace common
-namespace sql
+namespace common
 {
 int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
 {
@@ -1127,5 +1106,5 @@ void ObTextStringObObjResult::set_result()
     res_obj_->set_has_lob_header();
   }
 }
-}  // namespace sql
+}  // namespace common
 }  // namespace oceanbase

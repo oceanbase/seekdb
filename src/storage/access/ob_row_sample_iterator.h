@@ -17,7 +17,7 @@
 #ifndef OCEANBAES_STORAGE_OB_ROW_SAMPLE_ITERATOR_H
 #define OCEANBAES_STORAGE_OB_ROW_SAMPLE_ITERATOR_H
 
-#include "share/ob_i_tablet_scan.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "storage/ob_i_store.h"
 #include "ob_i_sample_iterator.h"
 

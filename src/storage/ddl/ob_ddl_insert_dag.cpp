@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "storage/ddl/ob_ddl_insert_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
 #include "storage/ddl/ob_ddl_macro_block_write_task.h"
-#include "rootserver/ddl_task/ob_ddl_task.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
@@ -27,7 +27,6 @@
 
 using namespace oceanbase;
 using namespace oceanbase::storage;
-using namespace oceanbase::sql;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 
@@ -94,33 +93,23 @@ int ObDDLInsertDag::update_tablet_range_count()
     if (is_range_count_ready_) {
       // do nothing
     } else {
-      ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-      bool use_idempotent_mode = false;
-      ObArenaAllocator arena(ObMemAttr("ddl_slice_info"));
-      rootserver::ObDDLSliceInfo ddl_slice_info;
-      if (OB_ISNULL(sql_proxy)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sql proxy is null", K(ret));
-      } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
-                     *sql_proxy, ddl_task_param_.ddl_task_id_, arena, false/*is_for_update*/, ddl_slice_info, use_idempotent_mode))) {
+      ObArray<data_plane::ObDDLTabletSliceCount> tablet_slice_counts;
+      if (OB_FAIL(data_plane::load_idempotent_ddl_tablet_slice_counts(
+              ddl_task_param_.ddl_task_id_, tablet_slice_counts))) {
         LOG_WARN("fail to get schedule info", K(ret), K(ddl_task_param_));
-      } else if (!use_idempotent_mode) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl dag always use idempotent mode", K(ret), K(use_idempotent_mode), K(ddl_task_param_));
       } else {
         total_slice_count_ = 0;
-        const common::Ob2DArray<sql::ObPxTabletRange> &part_ranges = ddl_slice_info.part_ranges_;
-        if (0 == part_ranges.count()) {
+        if (0 == tablet_slice_counts.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("no partition range", K(ret), K(ddl_slice_info));
-        } else if (1 == part_ranges.count() && 0 == part_ranges.at(0).tablet_id_) {
+          LOG_WARN("no partition range", K(ret), K(ddl_task_param_));
+        } else if (1 == tablet_slice_counts.count() && 0 == tablet_slice_counts.at(0).tablet_id_) {
           // for unpartitioned table, there is only one tablet and its tablet id is 0
           if (tablet_ids_.count() != 1) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tablet count not match", K(ret), K(part_ranges), K(tablet_ids_));
+            LOG_WARN("tablet count not match", K(ret), K(tablet_slice_counts.count()), K(tablet_ids_));
           } else {
             const ObTabletID &tablet_id = tablet_ids_.at(0);
-            total_slice_count_ = part_ranges.at(0).range_cut_.count() + 1;
+            total_slice_count_ = tablet_slice_counts.at(0).slice_count_;
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
               LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
@@ -130,10 +119,10 @@ int ObDDLInsertDag::update_tablet_range_count()
             }
           }
         } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < part_ranges.count(); ++i) {
-            const ObPxTabletRange &cur_part_range = part_ranges.at(i);
-            const int64_t tablet_slice_count = cur_part_range.range_cut_.count() + 1;
-            ObTabletID tablet_id(cur_part_range.tablet_id_);
+          for (int64_t i = 0; OB_SUCC(ret) && i < tablet_slice_counts.count(); ++i) {
+            const data_plane::ObDDLTabletSliceCount &slice_count = tablet_slice_counts.at(i);
+            const int64_t tablet_slice_count = slice_count.slice_count_;
+            ObTabletID tablet_id(slice_count.tablet_id_);
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
               if (OB_HASH_NOT_EXIST != ret) {

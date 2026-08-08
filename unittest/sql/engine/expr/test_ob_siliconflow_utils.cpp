@@ -161,9 +161,3 @@ TEST_F(ObSiliconflowUtilsTest, test_parse_output)
     ASSERT_EQ(document, document_buf.string());
 }
 
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc,argv);
-    return RUN_ALL_TESTS();
-}
-  

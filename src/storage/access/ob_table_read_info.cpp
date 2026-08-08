@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_table_read_info.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 #include "share/truncate_info/ob_truncate_info_util.h"
 namespace oceanbase

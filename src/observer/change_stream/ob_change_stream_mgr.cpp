@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include <unistd.h>
 
@@ -45,26 +45,35 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
   destroy();
 }
 
-int ObChangeStreamMgr::server_module_init(ObChangeStreamMgr *&mgr)
+int ObChangeStreamMgr::server_module_init(
+    ObChangeStreamMgr *&mgr,
+    logservice::ObILogStorage &log_storage,
+    schema::ObSchemaPublishSignal &schema_publish_signal,
+    lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(mgr)) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObChangeStreamMgr: mgr is null", K(ret));
-  } else if (OB_FAIL(mgr->init())) {
+  } else if (OB_FAIL(
+      mgr->init(log_storage, schema_publish_signal, run_wrapper))) {
     LOG_WARN("ObChangeStreamMgr init failed", KR(ret));
   } else {
-    LOG_INFO("ObChangeStreamMgr server_module_init success",  KP(share::server_runtime()));
+    LOG_INFO("ObChangeStreamMgr server_module_init success");
   }
   return ret;
 }
 
-int ObChangeStreamMgr::init()
+int ObChangeStreamMgr::init(
+    logservice::ObILogStorage &log_storage,
+    schema::ObSchemaPublishSignal &schema_publish_signal,
+    lib::IRunWrapper *run_wrapper)
 {
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(fetcher_.init(&dispatcher_))) {
+  } else if (OB_FAIL(fetcher_.init(
+      &dispatcher_, log_storage, schema_publish_signal, run_wrapper))) {
     LOG_WARN("ObChangeStreamMgr: fetcher init failed", K(ret));
   } else if (OB_FAIL(dispatcher_.init())) {
     LOG_WARN("ObChangeStreamMgr: dispatcher init failed", K(ret));
@@ -142,7 +151,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
                                     safe_visible_scn))) {
     LOG_WARN("get gts for safe visible scn failed", KR(ret));
   } else {
-    ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
+    ObChangeStreamMgr *mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
     bool is_satisfied = false;
     while (OB_SUCC(ret) && !is_satisfied) {
       SCN current_refresh_scn;

@@ -24,7 +24,6 @@
 #include "storage/blocksstable/ob_macro_block_writer.h"
 #include "share/ob_force_print_log.h"
 #include "storage/tx/ob_trans_ctx_mgr.h"
-#include "sql/session/ob_sql_session_info.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tx_table/ob_tx_table.h"
 #include "storage/tx_table/ob_tx_table_define.h"

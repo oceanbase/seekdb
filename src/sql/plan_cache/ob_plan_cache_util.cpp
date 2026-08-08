@@ -18,7 +18,6 @@
 
 #include "ob_plan_cache_util.h"
 #include "sql/optimizer/ob_log_plan.h"
-#include "share/config/ob_config_helper.h"  // relocated-definition owner
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::omt;

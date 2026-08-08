@@ -18,9 +18,12 @@
 #define protected public
 #define private public
 #include "storage/truncate_info/ob_truncate_info.h"
-#include "storage/ob_truncate_info_helper.h"
+#include "unittest/storage/ob_truncate_info_helper.h"
 #include "storage/compaction/ob_mds_filter_info.h"
 #include "lib/allocator/ob_fifo_allocator.h"
+#undef protected
+#undef private
+
 namespace oceanbase
 {
 using namespace common;
@@ -299,12 +302,3 @@ TEST_F(TestTruncateInfo, test_null_list_val)
 
 }//end namespace unittest
 }//end namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_truncate_info.log*");
-  OB_LOGGER.set_file_name("test_truncate_info.log");
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

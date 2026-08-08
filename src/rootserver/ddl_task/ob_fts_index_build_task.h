@@ -167,7 +167,7 @@ private:
   int refresh_task_depend_map_context(const ObFtsIndexBuildTask &task);
 
 private:
-  typedef share::ObDomainDependTaskStatus DependTaskStatus;
+  typedef rootserver::ObDomainDependTaskStatus DependTaskStatus;
 
   struct ColumnChecksumInfo final
   {
@@ -220,7 +220,7 @@ private:
   bool fts_index_aux_is_trans_end_;
   bool fts_doc_word_aux_is_trans_end_;
   obcall::ObCreateIndexArg create_index_arg_;
-  common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> dependent_task_result_map_;
+  common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> dependent_task_result_map_;
   bool is_retryable_ddl_;
   bool use_doc_id_;
   int64_t rowkey_doc_schema_version_;

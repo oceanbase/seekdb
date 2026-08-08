@@ -22,6 +22,8 @@
 #include "lib/ob_errno.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
 #include "storage/tx/ob_trans_define.h"
+#undef protected
+#undef private
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -64,12 +66,3 @@ TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
 }
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tablet_create_mds_ctx.log*");
-  OB_LOGGER.set_file_name("test_tablet_create_mds_ctx.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

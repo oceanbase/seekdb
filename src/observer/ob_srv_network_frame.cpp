@@ -26,7 +26,7 @@ using namespace oceanbase::observer;
 using namespace oceanbase::share;
 using namespace oceanbase::obmysql;
 
-ObSrvNetworkFrame::ObSrvNetworkFrame(ObGlobalContext &gctx)
+ObSrvNetworkFrame::ObSrvNetworkFrame(oceanbase::share::ObGlobalContext &gctx)
     : gctx_(gctx),
       xlator_(gctx),
       request_qhandler_(xlator_),

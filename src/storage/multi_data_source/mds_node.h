@@ -225,7 +225,7 @@ public:
                      const char *function_name = __builtin_FUNCTION()) const;
   virtual int fill_virtual_info(MdsNodeInfoForVirtualTable &mds_node_indo) const override;
   template <int N>
-  int fill_event_(observer::MdsEvent &mds_event, const char (&event)[N], char *buffer, const int64_t len) const;
+  int fill_event_(MdsEvent &mds_event, const char (&event)[N], char *buffer, const int64_t len) const;
   MdsNodeType get_node_type() const;
   int assign(const UserMdsNode<K, V> &rhs);
 public:// do user action if there has define, in transaction phase point

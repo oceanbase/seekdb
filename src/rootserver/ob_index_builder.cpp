@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_index_builder.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -1508,7 +1509,7 @@ int ObIndexBuilder::do_create_local_index(
       }
 
       if (OB_SUCC(ret) && (is_generate_rowkey_doc || is_generate_rowkey_vid)) {
-        if (OB_FAIL(ObDDLUtil::write_defensive_and_obtain_snapshot(trans,
+        if (OB_FAIL(ObDDLTaskUtil::write_defensive_and_obtain_snapshot(trans,
                                                                    new_table_schema,
                                                                    index_schema,
                                                                    ddl_service_.get_schema_service().get_schema_service(),

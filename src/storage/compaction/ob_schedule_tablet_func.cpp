@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_schedule_tablet_func.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 namespace oceanbase
 {
@@ -86,7 +86,7 @@ int ObScheduleTabletFunc::schedule_tablet(
     }
   }
   if (need_diagnose
-      && OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(tablet_id,
+      && OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObDiagnoseTabletMgr>()->add_diagnose_tablet(tablet_id,
                           share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE))) {
     LOG_WARN("failed to add diagnose tablet", K(tmp_ret), K_(ls_status), K(tablet_id));
   }
@@ -245,7 +245,7 @@ void ObScheduleTabletFunc::schedule_freeze_dag(const bool force)
   int tmp_ret = OB_SUCCESS;
   IGNORE_RETURN ObBasicScheduleTabletFunc::schedule_freeze_dag(force);
   if (force || clear_stat_tablets_.count() > SCHEDULE_DAG_THREHOLD) {
-    if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->batch_clear_tablet_stat(clear_stat_tablets_))) {
+    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->batch_clear_tablet_stat(clear_stat_tablets_))) {
       LOG_WARN_RET(tmp_ret, "failed to batch clear tablet stats");
     }
     clear_stat_tablets_.reset();

@@ -21,6 +21,7 @@ namespace oceanbase
 {
 namespace storage
 {
+using common::ObLobDiffHeader;
 /*************ObLobQueryIter*****************/
 int ObLobQueryIter::fill_buffer(ObString& buffer, const ObString &data, ObString &remain_data)
 {

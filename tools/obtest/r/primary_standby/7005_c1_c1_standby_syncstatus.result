@@ -1,0 +1,84 @@
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	switchover_status	switchover_info
+1	PRIMARY	TO STANDBY	SYNCED STANDBY CLUSTERS: 2,3
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	OK
+3	VALID	OK
+ob1.mysql  CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql  CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql  CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 800;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	switchover_status
+1	PRIMARY	TO STANDBY
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	OK
+3	VALID	OK
+ob2.z1.obs0.force_stop;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'NOT AVAILABLE', 1, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 400;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	NOT AVAILABLE
+3	VALID	OK
+ob2.z1.obs0.start;
+ob3.z1.obs0.force_stop;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	switchover_status	switchover_info
+1	PRIMARY	TO STANDBY	SYNCED STANDBY CLUSTERS: 2,3
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	OK
+3	VALID	OK
+ob3.z1.obs0.start;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	switchover_status	switchover_info
+1	PRIMARY	TO STANDBY	SYNCED STANDBY CLUSTERS: 2,3
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	OK
+3	VALID	OK
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+create table t(c1 int primary key, c2 int);
+alter system major freeze;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'SYS SCHEMA NOT SYNC', 1, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 400;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	SYS SCHEMA NOT SYNC
+3	VALID	OK
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 2, 400;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+cluster_id	cluster_role	switchover_status	switchover_info
+1	PRIMARY	TO STANDBY	SYNCED STANDBY CLUSTERS: 2,3
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+2	VALID	OK
+3	VALID	OK

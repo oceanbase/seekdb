@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_PL_GET_ASSOCIATIVE_INDEX_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "pl/ob_pl_user_type.h"
+#include "sql/pl/ob_pl_user_type.h"
 
 namespace oceanbase
 {

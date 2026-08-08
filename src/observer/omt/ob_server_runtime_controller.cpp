@@ -20,8 +20,11 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
+#include "storage/tx_storage/ob_log_storage_adapter.h"
+#include "storage/ob_file_system_router.h"
 #include "logservice/ob_log_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "data_plane/report/ob_i_disk_report.h"
 #include "observer/ob_server.h"
 #include "ob_server_runtime.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
@@ -38,6 +41,8 @@
 #include "storage/tx/ob_unique_id_service.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
+#include "storage/tmp_file/ob_tmp_file_manager.h"
+#include "storage/ddl/ob_direct_insert_sstable_ctx.h"
 #include "storage/tx_storage/ob_memory_printer.h"
 #include "storage/compaction/ob_compaction_progress.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
@@ -46,7 +51,7 @@
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObSSTableMergeInfoMgr
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
@@ -58,6 +63,7 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "storage/access/ob_empty_read_bucket.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -66,11 +72,13 @@
 #include "observer/omt/ob_ai_service.h"
 #include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
 #include "share/io/ob_io_manager.h"  // relocated-definition owner
+#include "share/ob_io_device_helper.h"
+#include "share/rc/ob_server_module_init_ctx.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 // Single-runtime resource bring-up and refresh dependencies.
 #include "share/resource/ob_server_resource_config.h"
 #include "logservice/ob_log_allocator_mgr.h"        // LOG_ALLOCATOR_MGR_INSTANCE
-#include "logservice/ob_server_log_block_mgr.h"              // GCTX.log_block_mgr_
+#include "logservice/ob_server_log_block_mgr.h"
 
 using namespace oceanbase;
 using namespace oceanbase::lib;
@@ -101,8 +109,8 @@ ObServerRuntimeController::ObServerRuntimeController()
       runtime_active_(false),
       timer_(),
       memory_printer_timer_(),
-      timer_stopped_(true)
-
+      timer_stopped_(true),
+      log_block_mgr_(nullptr)
 {
   if (lib::is_mini_mode()) {
     refresh_interval_ /= 2;
@@ -131,7 +139,51 @@ static void server_obj_pool_destroy(common::ObServerObjectPool<T> *&pool)
   pool = nullptr;
 }
 
-int ObServerRuntimeController::init()
+static ObLogRuntimeConfig current_log_runtime_config()
+{
+  return {
+      GCONF.log_disk_utilization_threshold,
+      GCONF.log_disk_utilization_limit_threshold,
+      GCONF.log_disk_throttling_percentage,
+      GCONF.log_disk_throttling_maximum_duration,
+      GCONF.log_storage_warning_tolerance_time,
+      GCONF._enable_log_cache,
+  };
+}
+
+static int init_log_service(
+    ObLogService *&log_service,
+    storage::ObLogStorageAdapter *log_storage_adapter)
+{
+  int ret = OB_SUCCESS;
+  const auto *runtime = share::server_runtime();
+  const share::ObServerModuleInitCtx *module_init_ctx =
+      OB_ISNULL(runtime) ? nullptr : runtime->get_module_init_ctx();
+  if (OB_ISNULL(module_init_ctx) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>())) {
+    ret = OB_ERR_UNEXPECTED;
+    SERVER_LOG(WARN, "log service composition is incomplete", KR(ret),
+        KP(module_init_ctx), KP(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()));
+  } else if (OB_FAIL(ObLogService::server_module_init(
+      log_service,
+      module_init_ctx->palf_options_,
+      module_init_ctx->clog_dir_,
+      OB_FILE_SYSTEM_ROUTER.get_clog_dir(),
+      GCTX.self_addr(),
+      log_storage_adapter,
+      ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>(),
+      &LOCAL_DEVICE_INSTANCE,
+      &OB_IO_MANAGER,
+      false,
+      GCONF.cpu_quota_concurrency,
+      current_log_runtime_config()))) {
+    SERVER_LOG(WARN, "failed to initialize log service", KR(ret));
+  } else {
+    ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->bind_log_service(*log_service);
+  }
+  return ret;
+}
+
+int ObServerRuntimeController::init(logservice::ObServerLogBlockMgr &log_block_mgr)
 {
   int ret = OB_SUCCESS;
 
@@ -141,6 +193,7 @@ int ObServerRuntimeController::init()
   }
 
   if (OB_SUCC(ret)) {
+    log_block_mgr_ = &log_block_mgr;
     is_inited_ = true;
     LOG_INFO("succ to init multi runtime");
   }
@@ -224,14 +277,15 @@ void ObServerRuntimeController::destroy()
     runtime_ = nullptr;
   }
   int tmp_ret = OB_SUCCESS;
-  if (OB_NOT_NULL(GCTX.disk_reporter_)) {
-    tmp_ret = GCTX.disk_reporter_->delete_usage_stat();
+  if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIDiskReport>())) {
+    tmp_ret = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDiskReport>()->delete_usage_stat();
     if (OB_SUCCESS != tmp_ret) {
       LOG_WARN_RET(tmp_ret, "fail to delete runtime disk usage during shutdown", K(tmp_ret));
     }
   }
   timer_.destroy();
   memory_printer_timer_.destroy();
+  log_block_mgr_ = nullptr;
   is_inited_ = false;
 }
 
@@ -244,7 +298,10 @@ int ObServerRuntimeController::construct_bootstrap_meta(ObServerRuntimeMeta &met
   share::ObServerRuntimeConfig runtime_config;
   const bool has_memstore = true;
   share::ObServerResourceConfig resource_config;
-  if (OB_FAIL(resource_config.generate_default(GCTX.log_block_mgr_->get_log_disk_size()))) {
+  if (OB_ISNULL(log_block_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("log block manager is not initialized", KR(ret));
+  } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
     LOG_WARN("failed to generate bootstrap resource config", KR(ret));
   } else if (OB_FAIL(runtime_config.init(resource_config,
                         lib::Worker::CompatMode::MYSQL,
@@ -381,7 +438,8 @@ int ObServerRuntimeController::create_runtime(const ObServerRuntimeMeta &meta, b
     // do nothing
   } else {
     const int64_t memory_budget = lib::get_memory_budget();
-    if (OB_FAIL(share::g_mp->memstore_freezer()->set_memory_limit(memory_budget, memory_budget))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()
+                    ->set_memory_limit(memory_budget, memory_budget))) {
       LOG_WARN("fail to set_memory_limit", K(ret));
     }
   }
@@ -459,7 +517,7 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   ObServerRuntime *runtime = nullptr;
   const double min_cpu = GCONF.get_server_default_min_cpu();
   const double max_cpu = GCONF.get_server_default_max_cpu();
-  const int64_t log_disk_size =  GCTX.log_block_mgr_->get_log_disk_size();
+  int64_t log_disk_size = 0;
 
   ObServerRuntimeConfig allowed_runtime_config;
   ObServerRuntimeConfig old_runtime_config;
@@ -468,6 +526,10 @@ int ObServerRuntimeController::update_server_resources_no_lock(const ObServerRun
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (OB_ISNULL(log_block_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("log block manager is not initialized", KR(ret));
+  } else if (FALSE_IT(log_disk_size = log_block_mgr_->get_log_disk_size())) {
   } else if (OB_FAIL(get_runtime_unsafe(runtime))) {
     LOG_WARN("fail to get runtime", K(ret));
   } else if (OB_ISNULL(runtime)) {
@@ -580,12 +642,18 @@ int ObServerRuntimeController::update_server_log_disk_size(const int64_t old_log
                                                int64_t &allowed_new_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  ObLogService *log_service = share::g_mp->log_service();
-  if (OB_ISNULL(log_service)) {
+  ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
+  if (OB_ISNULL(log_block_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("log block manager is not initialized", K(ret));
+  } else if (OB_ISNULL(log_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get log_service failed", K(ret));
-  } else if (OB_FAIL(GCTX.log_block_mgr_->update_log_disk_size(old_log_disk_size, new_log_disk_size,
-                                                        allowed_new_log_disk_size, log_service))) {
+  } else if (OB_FAIL(log_block_mgr_->update_log_disk_size(
+                 old_log_disk_size,
+                 new_log_disk_size,
+                 allowed_new_log_disk_size,
+                 log_service))) {
     LOG_WARN("fail to update_log_disk_size", K(old_log_disk_size), K(new_log_disk_size),
              K(allowed_new_log_disk_size));
   } else {
@@ -619,11 +687,12 @@ int ObServerRuntimeController::update_server_config()
 int ObServerRuntimeController::update_palf_config()
 {
   int ret = OB_SUCCESS;
-  ObLogService *log_service = share::g_mp->log_service();
+  ObLogService *log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>();
   if (NULL == log_service) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ret = log_service->update_palf_options_except_disk_usage_limit_size();
+    ret = log_service->update_palf_options_except_disk_usage_limit_size(
+        current_log_runtime_config());
   }
   return ret;
 }
@@ -631,7 +700,7 @@ int ObServerRuntimeController::update_palf_config()
 int ObServerRuntimeController::update_dag_scheduler_config()
 {
   int ret = OB_SUCCESS;
-  ObDagScheduler *dag_scheduler = share::g_mp->dag_scheduler();
+  ObDagScheduler *dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>();
   if (OB_ISNULL(dag_scheduler)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag scheduler should not be null", K(ret));
@@ -644,7 +713,7 @@ int ObServerRuntimeController::update_dag_scheduler_config()
 int ObServerRuntimeController::update_freezer_config_()
 {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
   if (NULL == freezer) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("runtime freezer should not be null", K(ret));
@@ -659,7 +728,7 @@ int ObServerRuntimeController::update_throttle_config_()
   int ret = OB_SUCCESS;
   {
     SERVER_MODULE_SCOPE {
-      ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+      ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
 
       if (OB_ISNULL(share_mem_alloc_mgr)) {
         ret = OB_ERR_UNEXPECTED;
@@ -678,7 +747,7 @@ int ObServerRuntimeController::update_freezer_mem_limit(const int64_t server_min
   int ret = OB_SUCCESS;
 
   ObMemstoreFreezer *freezer = nullptr;
-  if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+  if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
   } else if (freezer->is_memory_limit_changed(server_min_mem, server_max_mem)) {
     if (OB_FAIL(freezer->set_memory_limit(server_min_mem, server_max_mem))) {
       LOG_WARN("set runtime mem limit failed", K(ret));
@@ -700,6 +769,18 @@ int ObServerRuntimeController::get_server_resources(ObServerRuntimeConfig &runti
   return ret;
 }
 
+int ObServerRuntimeController::get_server_log_disk_size(int64_t &log_disk_size)
+{
+  int ret = OB_SUCCESS;
+  ObServerRuntimeConfig runtime_config;
+  if (OB_FAIL(get_server_resources(runtime_config))) {
+    LOG_WARN("get server resources failed", K(ret));
+  } else {
+    log_disk_size = runtime_config.resource_config_.log_disk_size();
+  }
+  return ret;
+}
+
 int ObServerRuntimeController::get_runtime_meta_for_ckpt(ObServerRuntimeMeta &meta, bool &exist)
 {
   int ret = OB_SUCCESS;
@@ -712,6 +793,22 @@ int ObServerRuntimeController::get_runtime_meta_for_ckpt(ObServerRuntimeMeta &me
   }
 
   return ret;
+}
+
+storage::ObServerRuntimeSuperBlock ObServerRuntimeController::get_super_block()
+{
+  return runtime_->get_super_block();
+}
+
+void ObServerRuntimeController::set_server_super_block(
+    const storage::ObServerRuntimeSuperBlock &super_block)
+{
+  runtime_->set_server_super_block(super_block);
+}
+
+bool ObServerRuntimeController::is_hidden()
+{
+  return runtime_->is_hidden();
 }
 
 int ObServerRuntimeController::modify_server_io(const ObServerResourceConfig &resource_config)
@@ -752,13 +849,13 @@ void ObServerRuntimeController::stop_runtime_()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(runtime_) || !runtime_active_) {
-  } else if (OB_ISNULL(GCTX.session_mgr_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("unexpected condition", K(ret));
   } else {
     runtime_->stop();
     runtime_active_ = false;
-    if (OB_FAIL(GCTX.session_mgr_->kill_all_sessions(true))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->kill_all_sessions(true))) {
       LOG_WARN("fail to kill runtime session", K(ret));
     }
   }
@@ -805,7 +902,7 @@ int ObServerRuntimeController::get_runtime_unsafe(ObServerRuntime *&runtime) con
   return ret;
 }
 
-int ObServerRuntimeController::recv_request(ObRequest &req)
+int ObServerRuntimeController::recv_request(ObRequest &req) const
 {
   int ret = OB_SUCCESS;
   ObServerRuntime *runtime = NULL;
@@ -844,10 +941,10 @@ int ObServerRuntimeController::build_server_resource_config_(ObServerRuntimeConf
 {
   int ret = OB_SUCCESS;
   ObServerResourceConfig resource_config;
-  if (OB_ISNULL(GCTX.log_block_mgr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.log_block_mgr_));
-  } else if (OB_FAIL(resource_config.generate_default(GCTX.log_block_mgr_->get_log_disk_size()))) {
+  if (OB_ISNULL(log_block_mgr_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("log block manager is not initialized", KR(ret));
+  } else if (OB_FAIL(resource_config.generate_default(log_block_mgr_->get_log_disk_size()))) {
     LOG_WARN("failed to generate server resource config", KR(ret));
   } else if (OB_FAIL(runtime_config.init(resource_config,
                                lib::Worker::CompatMode::MYSQL/*compat_mode*/,
@@ -1118,54 +1215,14 @@ int ObServerRuntimeController::dec_ddl_count()
   return ret;
 }
 
-// ===== calc_nway file-local helper moved together =====
-namespace oceanbase { namespace share {
-namespace {
-static int64_t calc_nway(int64_t cpu, int64_t mem)
-{
-  return std::min(cpu, mem/20/ObFifoArena::ALLOC_PAGE_SIZE);
-}
-
-}
-} }
-// ===== definition moved from share memstore_allocator(omt real user) =====
 namespace oceanbase
 {
-namespace share
-{
-
-int64_t ObMemstoreAllocator::nway_per_group()
-{
-  int ret = OB_SUCCESS;
-
-  double min_cpu = 0;
-  double max_cpu = 0;
-  int64_t max_memory = 0;
-  int64_t min_memory = 0;
-  omt::ObServerRuntimeController *runtime_controller = GCTX.server_runtime_controller_;
-
-  SERVER_MODULE_SCOPE {
-    storage::ObMemstoreFreezer *freezer = nullptr;
-    if (NULL == runtime_controller) {
-      ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "server runtime controller should not be null", K(ret));
-    } else if (OB_FAIL(runtime_controller->get_server_cpu(min_cpu, max_cpu))) {
-      COMMON_LOG(WARN, "get runtime cpu failed", K(ret));
-    } else if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
-    } else if (OB_FAIL(freezer->get_server_mem_limit(min_memory, max_memory))) {
-      COMMON_LOG(WARN, "get runtime mem limit failed", K(ret));
-    }
-  }
-  return OB_SUCCESS == ret? calc_nway((int64_t)max_cpu, min_memory): 0;
-}
-
-}  // namespace share
 namespace common
 {
 void ObIOManager::print_service_status()
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(GCTX.server_runtime_controller_)) {
+  if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
     {
       ObRefHolder<ObIOService> service_holder;
       if (OB_FAIL(get_io_service(service_holder))) {
@@ -1212,6 +1269,28 @@ namespace oceanbase
 {
 namespace observer
 {
+int ObServer::get_memstore_limit_percentage(int64_t &limit_percent)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(mods_memstore_freezer_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    limit_percent = mods_memstore_freezer_->get_memstore_limit_percentage();
+  }
+  return ret;
+}
+
+int ObServer::set_memstore_threshold()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(mods_shared_mem_alloc_mgr_)) {
+    ret = OB_NOT_INIT;
+  } else {
+    ret = mods_shared_mem_alloc_mgr_->memstore_allocator().set_memstore_threshold();
+  }
+  return ret;
+}
+
 int ObServer::obs_construct_modules()
 {
   int ret = OB_SUCCESS;
@@ -1223,6 +1302,7 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_log_storage_adapter_))) { SERVER_LOG(WARN, "mods_log_storage_adapter_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
@@ -1280,6 +1360,118 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret)) {
+#define BIND_SERVICE(getter, type) \
+    ::oceanbase::share::bind_server_service<type>(getter())
+    ::oceanbase::share::bind_server_service<share::ObIMemstoreRuntime>(this);
+    ::oceanbase::share::bind_server_service<query::ObILocalCommandService>(
+        &ob_service_);
+    ::oceanbase::share::bind_server_service<rootserver::ObLocalManagementService>(
+        &local_management_service_);
+    ::oceanbase::share::bind_server_service<observer::ObService>(&ob_service_);
+    ::oceanbase::share::bind_server_service<sql::ObSQLSessionMgr>(&session_mgr_);
+    ::oceanbase::share::bind_server_service<omt::ObServerRuntimeController>(
+        &server_runtime_controller_);
+    ::oceanbase::share::bind_server_service<observer::ObVTIterCreator>(
+        &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator());
+    ::oceanbase::share::bind_server_service<common::ObIVirtualTableScan>(
+        &vt_data_service_);
+    ::oceanbase::share::bind_server_service<observer::ObSrvNetworkFrame>(&net_frame_);
+    ::oceanbase::share::bind_server_service<data_plane::ObIDiskReport>(
+        &disk_usage_report_task_);
+    ::oceanbase::share::bind_server_service<logservice::ObServerLogBlockMgr>(
+        &log_block_mgr_);
+    ::oceanbase::share::bind_server_service<sql::ObConnectResourceMgr>(
+        &conn_res_mgr_);
+    ::oceanbase::share::bind_server_service<storage::ObStartupAccelTaskHandler>(
+        &startup_accel_handler_);
+    BIND_SERVICE(ls_service, storage::ObLSService);
+    BIND_SERVICE(storage_meta_mem_mgr, storage::ObStorageMetaMemMgr);
+    BIND_SERVICE(trans_service, transaction::ObTransService);
+    BIND_SERVICE(dead_lock_detector_mgr, share::detector::ObDeadLockDetectorMgr);
+    BIND_SERVICE(shared_mem_alloc_mgr, share::ObSharedMemAllocMgr);
+    BIND_SERVICE(access_service, storage::ObAccessService);
+    BIND_SERVICE(dag_scheduler, share::ObDagScheduler);
+    BIND_SERVICE(memstore_freezer, storage::ObMemstoreFreezer);
+    BIND_SERVICE(plugin_vector_index_service, share::ObPluginVectorIndexService);
+    BIND_SERVICE(lock_wait_mgr, memtable::ObLockWaitMgr);
+    BIND_SERVICE(lob_manager, storage::ObLobManager);
+    BIND_SERVICE(log_service, logservice::ObLogService);
+    BIND_SERVICE(local_storage_meta_service, storage::ObLocalStorageMetaService);
+    BIND_SERVICE(freeze_info_mgr, storage::ObFreezeInfoMgr);
+    BIND_SERVICE(schema_runtime_service, share::schema::ObSchemaRuntimeService);
+    BIND_SERVICE(tmp_file_manager, tmp_file::ObTmpFileManager);
+    BIND_SERVICE(vector_index_runtime, storage::ObIVectorIndexRuntime);
+    BIND_SERVICE(tablet_scheduler, compaction::ObTabletScheduler);
+    BIND_SERVICE(tablet_stat_mgr, storage::ObTabletStatMgr);
+    BIND_SERVICE(plan_cache, sql::ObPlanCache);
+    BIND_SERVICE(dtl_interm_result_manager, sql::dtl::ObDTLIntermResultManager);
+    BIND_SERVICE(direct_load_mgr, storage::ObDirectLoadMgr);
+    BIND_SERVICE(shared_macro_block_mgr, blocksstable::ObSharedMacroBlockMgr);
+    BIND_SERVICE(server_runtime_service, storage::ObIServerRuntime);
+    BIND_SERVICE(table_lock_service, transaction::tablelock::ObTableLockService);
+    BIND_SERVICE(shared_timer, share::ObISharedTimer);
+    BIND_SERVICE(schedule_suspect_info_mgr, compaction::ObScheduleSuspectInfoMgr);
+    BIND_SERVICE(mds_service, storage::mds::ObMdsService);
+    BIND_SERVICE(lob_read_service, common::ObILobReadService);
+    BIND_SERVICE(global_iterator_pool, storage::ObGlobalIteratorPool);
+    BIND_SERVICE(diagnose_tablet_mgr, compaction::ObDiagnoseTabletMgr);
+    BIND_SERVICE(change_stream_mgr, share::ObChangeStreamMgr);
+    BIND_SERVICE(vector_index_service, query::ObIVectorIndexService);
+    BIND_SERVICE(data_access_service, sql::ObDataAccessService);
+    BIND_SERVICE(dag_warning_history_manager, share::ObDagWarningHistoryManager);
+    BIND_SERVICE(sql_memory_manager, sql::ObSqlMemoryManager);
+    BIND_SERVICE(dml_service, data_plane::ObIDmlService);
+    BIND_SERVICE(compaction_progress_mgr, compaction::ObCompactionProgressMgr);
+    BIND_SERVICE(timestamp_service, transaction::ObTimestampService);
+    BIND_SERVICE(tablet_autoincrement_admin, share::ObITabletAutoincrementAdmin);
+    BIND_SERVICE(sql_proxy, common::ObMySQLProxy);
+    BIND_SERVICE(trans_id_service, transaction::ObTransIDService);
+    BIND_SERVICE(tablet_runtime_meta_updater, observer::ObTabletRuntimeMetaUpdater);
+    BIND_SERVICE(sstable_merge_info_mgr, storage::ObSSTableMergeInfoMgr);
+    BIND_SERVICE(scheduler_service, query::ObISchedulerService);
+    BIND_SERVICE(rb_mem_mgr, common::ObRbMemMgr);
+    BIND_SERVICE(opt_stat_monitor_manager, common::ObOptStatMonitorManager);
+    BIND_SERVICE(compaction_mem_pool, storage::ObCompactionMemPool);
+    BIND_SERVICE(write_context_service, data_plane::ObIWriteContextService);
+    BIND_SERVICE(major_freeze_coordinator, data_plane::ObIMajorFreezeCoordinator);
+    BIND_SERVICE(dfc_manager, sql::dtl::ObDfc);
+    BIND_SERVICE(compaction_suggestion_mgr, compaction::ObCompactionSuggestionMgr);
+    BIND_SERVICE(ai_endpoint_resolver, query::ObIAiEndpointResolver);
+    BIND_SERVICE(tablet_autoincrement_service, share::ObITabletAutoincrementService);
+    BIND_SERVICE(server_compaction_event_history, compaction::ObServerCompactionEventHistory);
+    BIND_SERVICE(resource_limit_calculator, share::ObResourceLimitCalculator);
+    BIND_SERVICE(ps_cache, sql::ObPsCache);
+    BIND_SERVICE(multi_version_garbage_collector, concurrency_control::ObMultiVersionGarbageCollector);
+    BIND_SERVICE(medium_checker, compaction::ObMediumChecker);
+    BIND_SERVICE(ls_runtime_adapter, storage::ObILSRuntimeAdapter);
+    BIND_SERVICE(check_point_service, storage::checkpoint::ObCheckPointService);
+    BIND_SERVICE(timestamp_access, transaction::ObTimestampAccess);
+    BIND_SERVICE(tablet_scan_service, common::ObITabletScan);
+    BIND_SERVICE(tablet_memtable_mgr_pool, storage::ObTabletMemtableMgrPool);
+    BIND_SERVICE(storage_estimator, data_plane::ObIStorageEstimator);
+    BIND_SERVICE(restore_major_freeze_service, rootserver::ObRestoreMajorFreezeService);
+    BIND_SERVICE(range_service, data_plane::ObIRangeService);
+    BIND_SERVICE(primary_major_freeze_service, rootserver::ObPrimaryMajorFreezeService);
+    BIND_SERVICE(optimizer_storage_service, data_plane::ObIOptimizerStorageService);
+    BIND_SERVICE(memory_pressure_service, data_plane::ObIMemoryPressureService);
+    BIND_SERVICE(empty_read_bucket, storage::ObEmptyReadBucket);
+    BIND_SERVICE(ddl_scheduler, rootserver::ObDDLScheduler);
+    BIND_SERVICE(ai_service, omt::ObAiService);
+    BIND_SERVICE(unique_id_service, transaction::ObUniqueIDService);
+    BIND_SERVICE(table_scan_iterator_obj_pool, share::ObTableScanIteratorObjPool);
+    BIND_SERVICE(srs_service, omt::ObSrsService);
+    BIND_SERVICE(rootserver_local_runtime, rootserver::ObIRootserverLocalRuntime);
+    BIND_SERVICE(read_timestamp_service, data_plane::ObIReadTimestampService);
+    BIND_SERVICE(px_pools, omt::ObPxPools);
+    BIND_SERVICE(lock_wait_service, data_plane::ObILockWaitService);
+    BIND_SERVICE(internal_table_refresh_handler, logservice::ObILocalLogHandler);
+    BIND_SERVICE(inner_connection_lock_runtime, transaction::tablelock::ObIInnerConnectionLockRuntime);
+    BIND_SERVICE(ddl_service_launcher, rootserver::ObDDLServiceLauncher);
+    BIND_SERVICE(dbms_sched_service, rootserver::ObDBMSSchedService);
+    BIND_SERVICE(active_snapshot_service, query::ObIActiveSnapshotService);
+#undef BIND_SERVICE
+  }
   return ret;
 }
 
@@ -1293,17 +1485,40 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(storage::mds::ObMdsService::server_module_init(mods_mds_service_))) { SERVER_LOG(WARN, "mods_mds_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(share::ObSharedMemAllocMgr::server_module_init(mods_shared_mem_alloc_mgr_))) { SERVER_LOG(WARN, "mods_shared_mem_alloc_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransService::server_module_init(mods_trans_service_))) { SERVER_LOG(WARN, "mods_trans_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObLogService::server_module_init(mods_log_service_))) { SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(mods_log_storage_adapter_->init(
+      mods_ls_service_, mods_memstore_freezer_))) {
+    SERVER_LOG(WARN, "mods_log_storage_adapter_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(init_log_service(
+      mods_log_service_, mods_log_storage_adapter_))) {
+    SERVER_LOG(WARN, "mods_log_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObLSService::server_module_init(mods_ls_service_))) { SERVER_LOG(WARN, "mods_ls_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObLocalStorageMetaService::server_module_init(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(tmp_file::ObTmpFileManager::server_module_init(mods_tmp_file_manager_))) { SERVER_LOG(WARN, "mods_tmp_file_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObCompactionProgressMgr::server_module_init(mods_compaction_progress_mgr_))) { SERVER_LOG(WARN, "mods_compaction_progress_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObServerCompactionEventHistory::server_module_init(mods_server_compaction_event_history_))) { SERVER_LOG(WARN, "mods_server_compaction_event_history_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObTabletStatMgr::server_module_init(mods_tablet_stat_mgr_))) { SERVER_LOG(WARN, "mods_tablet_stat_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(memtable::ObLockWaitMgr::server_module_init(mods_lock_wait_mgr_))) { SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObTableLockService::server_module_init(mods_table_lock_service_))) { SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(memtable::ObLockWaitMgr::server_module_init(
+      mods_lock_wait_mgr_, session_mgr_, *this))) {
+    SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret) &&
+      (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()) ||
+       OB_FAIL(ObTableLockService::server_module_init(
+           mods_table_lock_service_, *::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())))) {
+    if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
+  }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObPrimaryMajorFreezeService::server_module_init(mods_primary_major_freeze_service_))) { SERVER_LOG(WARN, "mods_primary_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObRestoreMajorFreezeService::server_module_init(mods_restore_major_freeze_service_))) { SERVER_LOG(WARN, "mods_restore_major_freeze_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(major_freeze_coordinator_adapter_.init(
+      *mods_primary_major_freeze_service_,
+      *mods_restore_major_freeze_service_))) {
+    SERVER_LOG(WARN, "major_freeze_coordinator_adapter_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObTabletRuntimeMetaUpdater::server_module_init(mods_tablet_runtime_meta_updater_))) { SERVER_LOG(WARN, "mods_tablet_runtime_meta_updater_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObSSTableMergeInfoMgr::server_module_init(mods_sstable_merge_info_mgr_))) { SERVER_LOG(WARN, "mods_sstable_merge_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(share::ObDagWarningHistoryManager::server_module_init(mods_dag_warning_history_manager_))) { SERVER_LOG(WARN, "mods_dag_warning_history_manager_ fail", KR(ret)); }
@@ -1317,12 +1532,18 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTransIDService::server_module_init(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObUniqueIDService::server_module_init(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(mods_ps_cache_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObPlanCache::server_module_init(mods_plan_cache_))) { SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret)); }
+  if (OB_SUCC(ret) &&
+      OB_FAIL(ObPlanCache::server_module_init(mods_plan_cache_, OBSERVER))) {
+    SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObDfc::server_module_init(mods_dfc_))) { SERVER_LOG(WARN, "mods_dfc_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPxPools::server_module_init(mods_px_pools_))) { SERVER_LOG(WARN, "mods_px_pools_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSqlMemoryManager::server_module_init(mods_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_sql_memory_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::server_module_init(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(mods_schema_runtime_service_))) { SERVER_LOG(WARN, "mods_schema_runtime_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(
+      mods_schema_runtime_service_, schema_service_))) {
+    SERVER_LOG(WARN, "mods_schema_runtime_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObMemstoreFreezer::server_module_init(mods_memstore_freezer_))) { SERVER_LOG(WARN, "mods_memstore_freezer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObCheckPointService::server_module_init(mods_check_point_service_))) { SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTabletGCService::server_module_init(mods_tablet_gc_service_))) { SERVER_LOG(WARN, "mods_tablet_gc_service_ fail", KR(ret)); }
@@ -1339,15 +1560,68 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObResourceLimitCalculator::server_module_init(mods_resource_limit_calculator_))) { SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
+      &ObOptStatManager::get_instance(),
+      &vt_data_service_,
+      self_addr_,
+      *mods_plan_cache_,
+      *mods_ps_cache_,
+      pl_engine_,
+      *this,
+      *this,
+      local_management_service_,
+      ob_service_,
+      *this,
+      *this,
+      *this,
+      *mods_srs_service_,
+      *mods_lob_manager_))) {
+    SERVER_LOG(WARN, "sql_engine_ init failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(internal_table_refresh_adapter_.init(
+      timezone_mgr_, *mods_srs_service_))) {
+    SERVER_LOG(WARN, "internal_table_refresh_adapter_ init failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(mods_resource_limit_calculator_->init(
+      mods_storage_meta_mem_mgr_->get_t3m_limit_calculator()))) {
+    SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(pl_engine_.init(
+      sql_proxy_, *this, *mods_resource_limit_calculator_))) {
+    SERVER_LOG(WARN, "pl_engine_ init failed", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::server_module_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(common::ObRbMemMgr::server_module_init(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::server_module_init(
+      mods_plugin_vector_index_service_, mods_lob_manager_))) {
+    SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::server_module_init(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObSystemPackageLoadService::server_module_init(mods_system_package_load_service_))) { SERVER_LOG(WARN, "mods_system_package_load_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(mods_change_stream_mgr_))) { SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
+      mods_change_stream_mgr_,
+      *mods_log_storage_adapter_,
+      schema_publish_signal_,
+      share::server_runtime()))) {
+    SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(ls_runtime_adapter_.init(
+      *mods_primary_major_freeze_service_,
+      *mods_dbms_sched_service_,
+      *mods_ddl_scheduler_,
+      *mods_ddl_service_launcher_,
+      *mods_system_package_load_service_,
+      *mods_plugin_vector_index_service_))) {
+    SERVER_LOG(WARN, "ls_runtime_adapter_ init failed", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    session_mgr_.bind_lifecycle_services(
+        *mods_ps_cache_,
+        debug_sync_broadcaster_,
+        conn_res_mgr_);
+  }
   return ret;
 }
 
@@ -1470,8 +1744,8 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_shared_mem_alloc_mgr_);
   storage::mds::ObMdsService::server_module_wait(mods_mds_service_);
   server_module_wait_default(mods_storage_meta_mem_mgr_);
-  if (OB_NOT_NULL(GCTX.session_mgr_)) {
-    GCTX.session_mgr_->wait_sessions_drained();
+  if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->wait_sessions_drained();
   }
   ObSharedTimer::server_module_wait(mods_shared_timer_);
 }
@@ -1525,6 +1799,7 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_dag_warning_history_manager_);
   server_module_destroy_default(mods_sstable_merge_info_mgr_);
   server_module_destroy_default(mods_tablet_runtime_meta_updater_);
+  major_freeze_coordinator_adapter_.reset();
   server_module_destroy_default(mods_restore_major_freeze_service_);
   server_module_destroy_default(mods_primary_major_freeze_service_);
   server_module_destroy_default(mods_table_lock_service_);
@@ -1535,7 +1810,11 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_tmp_file_manager_);
   server_module_destroy_default(mods_local_storage_meta_service_);
   server_module_destroy_default(mods_ls_service_);
+  if (OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()) && OB_NOT_NULL(mods_log_service_)) {
+    ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()->unbind_log_service(*mods_log_service_);
+  }
   ObLogService::server_module_destroy(mods_log_service_);
+  server_module_destroy_default(mods_log_storage_adapter_);
   server_module_destroy_default(mods_trans_service_);
   server_module_destroy_default(mods_shared_mem_alloc_mgr_);
   server_module_destroy_default(mods_mds_service_);
@@ -1543,6 +1822,109 @@ void ObServer::obs_destroy_modules()
   server_obj_pool_destroy<ObTableScanIterator>(mods_table_scan_iterator_obj_pool_);
   server_module_destroy_default(mods_storage_meta_mem_mgr_);
   server_module_destroy_default(mods_shared_timer_);
+
+  // Keep the slots alive while module destructors run, then invalidate every
+  // process-owned service before any later teardown or test reinitialization.
+#define UNBIND_SERVICE(type) ::oceanbase::share::unbind_server_service<type>()
+  UNBIND_SERVICE(share::ObIMemstoreRuntime);
+  UNBIND_SERVICE(query::ObILocalCommandService);
+  UNBIND_SERVICE(rootserver::ObLocalManagementService);
+  UNBIND_SERVICE(observer::ObService);
+  UNBIND_SERVICE(sql::ObSQLSessionMgr);
+  UNBIND_SERVICE(omt::ObServerRuntimeController);
+  UNBIND_SERVICE(observer::ObVTIterCreator);
+  UNBIND_SERVICE(observer::ObSrvNetworkFrame);
+  UNBIND_SERVICE(data_plane::ObIDiskReport);
+  UNBIND_SERVICE(logservice::ObServerLogBlockMgr);
+  UNBIND_SERVICE(sql::ObConnectResourceMgr);
+  UNBIND_SERVICE(storage::ObStartupAccelTaskHandler);
+  UNBIND_SERVICE(storage::ObLSService);
+  UNBIND_SERVICE(storage::ObStorageMetaMemMgr);
+  UNBIND_SERVICE(transaction::ObTransService);
+  UNBIND_SERVICE(share::detector::ObDeadLockDetectorMgr);
+  UNBIND_SERVICE(share::ObSharedMemAllocMgr);
+  UNBIND_SERVICE(storage::ObAccessService);
+  UNBIND_SERVICE(share::ObDagScheduler);
+  UNBIND_SERVICE(storage::ObMemstoreFreezer);
+  UNBIND_SERVICE(share::ObPluginVectorIndexService);
+  UNBIND_SERVICE(memtable::ObLockWaitMgr);
+  UNBIND_SERVICE(storage::ObLobManager);
+  UNBIND_SERVICE(logservice::ObLogService);
+  UNBIND_SERVICE(storage::ObLocalStorageMetaService);
+  UNBIND_SERVICE(storage::ObFreezeInfoMgr);
+  UNBIND_SERVICE(share::schema::ObSchemaRuntimeService);
+  UNBIND_SERVICE(tmp_file::ObTmpFileManager);
+  UNBIND_SERVICE(storage::ObIVectorIndexRuntime);
+  UNBIND_SERVICE(compaction::ObTabletScheduler);
+  UNBIND_SERVICE(storage::ObTabletStatMgr);
+  UNBIND_SERVICE(sql::ObPlanCache);
+  UNBIND_SERVICE(sql::dtl::ObDTLIntermResultManager);
+  UNBIND_SERVICE(storage::ObDirectLoadMgr);
+  UNBIND_SERVICE(blocksstable::ObSharedMacroBlockMgr);
+  UNBIND_SERVICE(storage::ObIServerRuntime);
+  UNBIND_SERVICE(transaction::tablelock::ObTableLockService);
+  UNBIND_SERVICE(share::ObISharedTimer);
+  UNBIND_SERVICE(compaction::ObScheduleSuspectInfoMgr);
+  UNBIND_SERVICE(storage::mds::ObMdsService);
+  UNBIND_SERVICE(common::ObILobReadService);
+  UNBIND_SERVICE(storage::ObGlobalIteratorPool);
+  UNBIND_SERVICE(compaction::ObDiagnoseTabletMgr);
+  UNBIND_SERVICE(share::ObChangeStreamMgr);
+  UNBIND_SERVICE(query::ObIVectorIndexService);
+  UNBIND_SERVICE(sql::ObDataAccessService);
+  UNBIND_SERVICE(share::ObDagWarningHistoryManager);
+  UNBIND_SERVICE(sql::ObSqlMemoryManager);
+  UNBIND_SERVICE(data_plane::ObIDmlService);
+  UNBIND_SERVICE(compaction::ObCompactionProgressMgr);
+  UNBIND_SERVICE(transaction::ObTimestampService);
+  UNBIND_SERVICE(share::ObITabletAutoincrementAdmin);
+  UNBIND_SERVICE(common::ObMySQLProxy);
+  UNBIND_SERVICE(transaction::ObTransIDService);
+  UNBIND_SERVICE(observer::ObTabletRuntimeMetaUpdater);
+  UNBIND_SERVICE(storage::ObSSTableMergeInfoMgr);
+  UNBIND_SERVICE(query::ObISchedulerService);
+  UNBIND_SERVICE(common::ObRbMemMgr);
+  UNBIND_SERVICE(common::ObOptStatMonitorManager);
+  UNBIND_SERVICE(storage::ObCompactionMemPool);
+  UNBIND_SERVICE(data_plane::ObIWriteContextService);
+  UNBIND_SERVICE(data_plane::ObIMajorFreezeCoordinator);
+  UNBIND_SERVICE(sql::dtl::ObDfc);
+  UNBIND_SERVICE(compaction::ObCompactionSuggestionMgr);
+  UNBIND_SERVICE(query::ObIAiEndpointResolver);
+  UNBIND_SERVICE(share::ObITabletAutoincrementService);
+  UNBIND_SERVICE(compaction::ObServerCompactionEventHistory);
+  UNBIND_SERVICE(share::ObResourceLimitCalculator);
+  UNBIND_SERVICE(sql::ObPsCache);
+  UNBIND_SERVICE(concurrency_control::ObMultiVersionGarbageCollector);
+  UNBIND_SERVICE(compaction::ObMediumChecker);
+  UNBIND_SERVICE(storage::ObILSRuntimeAdapter);
+  UNBIND_SERVICE(storage::checkpoint::ObCheckPointService);
+  UNBIND_SERVICE(transaction::ObTimestampAccess);
+  UNBIND_SERVICE(common::ObITabletScan);
+  UNBIND_SERVICE(common::ObIVirtualTableScan);
+  UNBIND_SERVICE(storage::ObTabletMemtableMgrPool);
+  UNBIND_SERVICE(data_plane::ObIStorageEstimator);
+  UNBIND_SERVICE(rootserver::ObRestoreMajorFreezeService);
+  UNBIND_SERVICE(data_plane::ObIRangeService);
+  UNBIND_SERVICE(rootserver::ObPrimaryMajorFreezeService);
+  UNBIND_SERVICE(data_plane::ObIOptimizerStorageService);
+  UNBIND_SERVICE(data_plane::ObIMemoryPressureService);
+  UNBIND_SERVICE(storage::ObEmptyReadBucket);
+  UNBIND_SERVICE(rootserver::ObDDLScheduler);
+  UNBIND_SERVICE(omt::ObAiService);
+  UNBIND_SERVICE(transaction::ObUniqueIDService);
+  UNBIND_SERVICE(share::ObTableScanIteratorObjPool);
+  UNBIND_SERVICE(omt::ObSrsService);
+  UNBIND_SERVICE(rootserver::ObIRootserverLocalRuntime);
+  UNBIND_SERVICE(data_plane::ObIReadTimestampService);
+  UNBIND_SERVICE(omt::ObPxPools);
+  UNBIND_SERVICE(data_plane::ObILockWaitService);
+  UNBIND_SERVICE(logservice::ObILocalLogHandler);
+  UNBIND_SERVICE(transaction::tablelock::ObIInnerConnectionLockRuntime);
+  UNBIND_SERVICE(rootserver::ObDDLServiceLauncher);
+  UNBIND_SERVICE(rootserver::ObDBMSSchedService);
+  UNBIND_SERVICE(query::ObIActiveSnapshotService);
+#undef UNBIND_SERVICE
 }
 
 } // namespace observer

@@ -165,7 +165,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
         sort_item.column_name_.assign_ptr(const_cast<char *>(col_node->children_[0]->str_value_),
                                           static_cast<int32_t>(col_node->children_[0]->str_len_));
         bool is_multi_value_index = false;
-        if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
+        if (OB_FAIL(share::ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
                                                                   is_multi_value_index,
                                                                   reinterpret_cast<int*>(&index_keyname_)))) {
           LOG_WARN("failed to adjust index type", K(ret));
@@ -190,7 +190,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
                 ret = OB_NOT_SUPPORTED;
                 LOG_WARN("not support index type create on vector or array column yet", K(ret), K(index_keyname_));
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "create index on vector or array column is");
-              } else if (OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema->get_extended_type_info(), is_sparse_vec_col))) {
+              } else if (OB_FAIL(share::ObVectorIndexUtil::is_sparse_vec_col(column_schema->get_extended_type_info(), is_sparse_vec_col))) {
                 LOG_WARN("fail to check is sparse vec col", K(ret));
               }
             }
@@ -217,7 +217,7 @@ int ObCreateIndexResolver::resolve_index_column_node(
         if (OB_ISNULL(session_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null", K(ret));
-        } else if (OB_FAIL(ObVectorIndexUtil::check_table_has_vector_of_fts_index(
+        } else if (OB_FAIL(share::ObVectorIndexUtil::check_table_has_vector_of_fts_index(
             *tbl_schema, *(schema_checker_->get_schema_guard()), has_fts_index, has_vec_index))) {
           LOG_WARN("fail to check table has vec of fts index", K(ret));
         }
@@ -539,7 +539,7 @@ int ObCreateIndexResolver::resolve(const ParseNode &parse_tree)
 
 
 if (OB_SUCC(ret) &&
-      OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(
+      OB_FAIL(share::ObFtsIndexBuilderUtil::check_supportability_for_building_index(
           data_tbl_schema, &crt_idx_stmt->get_create_index_arg()))) {
     LOG_WARN("fail to check supportability for building index",
         K(data_tbl_schema), K(crt_idx_stmt->get_create_index_arg()));
@@ -676,10 +676,10 @@ int ObCreateIndexResolver::set_table_option_to_stmt(
     create_index_stmt->set_comment(comment_);
     if (OB_FAIL(ret)) {
     } else if (INDEX_KEYNAME::VEC_KEY == index_keyname_ &&
-               OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, index_arg.index_type_, index_arg.index_name_, index_arg.index_name_))) {
+               OB_FAIL(share::ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, index_arg.index_type_, index_arg.index_name_, index_arg.index_name_))) {
       LOG_WARN("generate vec parser name failed", K(ret), K(index_arg));
     } else if (FTS_KEY == index_keyname_ &&
-               OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(tbl_schema, index_arg,
+               OB_FAIL(share::ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(tbl_schema, index_arg,
                                                                        allocator_))) {
       LOG_WARN("generate fts parser name failed", K(ret), K(index_arg));
     }

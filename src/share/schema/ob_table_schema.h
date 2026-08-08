@@ -43,7 +43,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_trigger_info.h"
 #include "lib/compress/ob_compress_util.h"
-#include "storage/ob_micro_block_format_version_helper.h"
 namespace oceanbase
 {
 
@@ -55,7 +54,6 @@ namespace storage
 
 namespace blocksstable
 {
-  struct ObSSTableColumnMeta;
   struct ObDatumRow;
 }
 
@@ -435,6 +433,23 @@ struct ObBackUpTableModeOp
   }
 };
 
+// A schema-owned value consumed by storage writers. Keeping this value in
+// Share avoids exposing a Storage implementation type from ObMergeSchema.
+struct ObColumnDefaultChecksum
+{
+  ObColumnDefaultChecksum()
+      : column_id_(common::OB_INVALID_ID), default_checksum_(0)
+  {}
+  ObColumnDefaultChecksum(const uint64_t column_id, const int64_t default_checksum)
+      : column_id_(column_id), default_checksum_(default_checksum)
+  {}
+
+  TO_STRING_KV(K_(column_id), K_(default_checksum));
+
+  uint64_t column_id_;
+  int64_t default_checksum_;
+};
+
 // add virtual function in ObMergeSchema, should edit ObStorageSchema & ObTableSchema
 class ObMergeSchema
 {
@@ -512,10 +527,10 @@ public:
     UNUSED(col_encodings);
     return common::OB_NOT_SUPPORTED;
   }
-  virtual int init_column_meta_array(
-      common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const
+  virtual int get_column_default_checksums(
+      common::ObIArray<ObColumnDefaultChecksum> &checksums) const
   {
-    UNUSED(meta_array);
+    UNUSED(checksums);
     return common::OB_NOT_SUPPORTED;
   }
   virtual int get_multi_version_column_descs(common::ObIArray<share::schema::ObColDesc> &column_descs) const
@@ -1303,7 +1318,6 @@ public:
 
   virtual int alloc_partition(const ObPartition *&partition);
   virtual int alloc_partition(const ObSubPartition *&subpartition);
-  int get_partition_keys_by_part_func_expr(const common::ObString &part_func_expr_str, common::ObIArray<uint64_t> &partition_key_ids) const;
   int extract_actual_index_rowkey_columns_name(ObIArray<ObString> &rowkey_columns_name) const;
   int check_primary_key_cover_partition_column();
   int check_rowkey_cover_partition_keys(const common::ObPartitionKeyInfo &part_key);
@@ -1374,8 +1388,8 @@ public:
   virtual int get_column_encodings(common::ObIArray<int64_t> &col_encodings) const override;
 
   int get_all_column_ids(ObIArray<uint64_t> &column_ids) const;
-  virtual int init_column_meta_array(
-      common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const override;
+  virtual int get_column_default_checksums(
+      common::ObIArray<ObColumnDefaultChecksum> &checksums) const override;
   int check_column_can_be_altered_online(const ObColumnSchemaV2 *src_schema,
                                          ObColumnSchemaV2 *dst_schema) const;
   int check_column_can_be_altered_offline(const ObColumnSchemaV2 *src_schema,

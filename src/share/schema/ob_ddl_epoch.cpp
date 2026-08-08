@@ -31,12 +31,6 @@
 #include "share/ob_errno.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
-namespace oceanbase {
-namespace observer {
-class ObInnerSQLConnection;
-}  // namespace observer
-}  // namespace oceanbase
-
 namespace oceanbase
 {
 namespace share
@@ -210,9 +204,7 @@ int ObDDLEpochMgr::promote_ddl_epoch_inner_(int64_t &new_ddl_epoch)
   lib::ObMutexGuard mutex_guard(mutex_for_promote_);
   ObMySQLTransaction trans;
   int64_t ddl_epoch_tmp = 0;
-  observer::ObInnerSQLConnection *conn = NULL;
   ObGlobalStatProxy proxy(trans);
-  int64_t timeout = 1 * 1000 * 1000;
   if (OB_FAIL(trans.start(sql_proxy_))) {
     LOG_WARN("trans start fail", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::select_ddl_epoch_for_update(trans, ddl_epoch_tmp))) {

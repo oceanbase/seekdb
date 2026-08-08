@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_vec_index_build_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -92,7 +93,7 @@ int ObVecIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -179,7 +180,7 @@ int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -938,7 +939,7 @@ int ObVecIndexBuildTask::construct_hybrid_vector_embedded_vec_arg(obcall::ObCrea
   return ret;
 }
 
-int ObVecIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry)
+int ObVecIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry)
 {
   int ret = OB_SUCCESS;
   if (child_task_failed_ || state_finished_) {
@@ -1071,7 +1072,7 @@ int ObVecIndexBuildTask::on_child_task_finish(
   } else {
     TCWLockGuard guard(lock_);
     int64_t org_ret = INT64_MAX;
-    share::ObDomainDependTaskStatus status;
+    rootserver::ObDomainDependTaskStatus status;
     if (OB_FAIL(dependent_task_result_map_.get_refactored(child_task_key,
                                                           status))) {
       if (OB_HASH_NOT_EXIST == ret) {
@@ -1423,7 +1424,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
       is_post_create_hybrid_vector_ = is_post_create_hybrid_vector;
       is_retryable_ddl_ = is_retryable_ddl;
       if (rowkey_vid_task_id_ > 0) {
-        share::ObDomainDependTaskStatus rowkey_vid_status;
+        rootserver::ObDomainDependTaskStatus rowkey_vid_status;
         rowkey_vid_status.task_id_ = rowkey_vid_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(rowkey_vid_aux_table_id_,
                                                               rowkey_vid_status))) {
@@ -1432,7 +1433,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
         }
       }
       if (OB_SUCC(ret) && vid_rowkey_task_id_ > 0) {
-        share::ObDomainDependTaskStatus vid_rowkey_status;
+        rootserver::ObDomainDependTaskStatus vid_rowkey_status;
         vid_rowkey_status.task_id_ = vid_rowkey_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(vid_rowkey_aux_table_id_,
                                                               vid_rowkey_status))) {
@@ -1441,7 +1442,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
         }
       }
       if (OB_SUCC(ret) && delta_buffer_task_id_ > 0) {
-        share::ObDomainDependTaskStatus delta_buf_aux_status;
+        rootserver::ObDomainDependTaskStatus delta_buf_aux_status;
         delta_buf_aux_status.task_id_ = delta_buffer_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(delta_buffer_table_id_,
                                                               delta_buf_aux_status))) {
@@ -1450,7 +1451,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
         }
       }
       if (OB_SUCC(ret) && index_id_task_id_ > 0) {
-        share::ObDomainDependTaskStatus index_id_aux_status;
+        rootserver::ObDomainDependTaskStatus index_id_aux_status;
         index_id_aux_status.task_id_ = index_id_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(index_id_table_id_,
                                                               index_id_aux_status))) {
@@ -1459,7 +1460,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
         }
       }
       if (OB_SUCC(ret) && index_snapshot_task_id_ > 0) {
-        share::ObDomainDependTaskStatus index_snapshot_aux_status;
+        rootserver::ObDomainDependTaskStatus index_snapshot_aux_status;
         index_snapshot_aux_status.task_id_ = index_snapshot_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(index_snapshot_data_table_id_,
                                                               index_snapshot_aux_status))) {
@@ -1468,7 +1469,7 @@ int ObVecIndexBuildTask::deserialize_params_from_message(
         }
       }
       if (OB_SUCC(ret) && hybrid_vector_embedded_vec_task_id_ > 0) {
-        share::ObDomainDependTaskStatus hybrid_vector_embedded_vec_aux_status;
+        rootserver::ObDomainDependTaskStatus hybrid_vector_embedded_vec_aux_status;
         hybrid_vector_embedded_vec_aux_status.task_id_ = hybrid_vector_embedded_vec_task_id_;
         if (OB_FAIL(dependent_task_result_map_.set_refactored(hybrid_vector_embedded_vec_table_id_,
                                                               hybrid_vector_embedded_vec_aux_status))) {
@@ -1534,7 +1535,7 @@ int ObVecIndexBuildTask::print_child_task_ids(char *buf, int64_t len)
     int64_t pos = 0;
     MEMSET(buf, 0, len);
     TCRLockGuard guard(lock_);
-    common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus> ::const_iterator iter =
+    common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> ::const_iterator iter =
       dependent_task_result_map_.begin();
     if (OB_FAIL(databuff_printf(buf, len, pos, "[ "))) {
       LOG_WARN("failed to print", K(ret));
@@ -1731,7 +1732,7 @@ int ObVecIndexBuildTask::collect_longops_stat(ObLongopsValue &value)
   return ret;
 }
 
-int ObVecIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, share::ObDomainDependTaskStatus> &entry)
+int ObVecIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry)
 {
   int ret = OB_SUCCESS;
   const uint64_t task_key = entry.first;
@@ -1899,7 +1900,7 @@ int ObVecIndexBuildTask::submit_drop_vec_index_task()
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", KR(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       drop_index_task_submitted_ = true;

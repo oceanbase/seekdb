@@ -15,13 +15,12 @@
  */
 
 #include <gtest/gtest.h>
-#include "logservice/palf/lsn.h"
 #include "lib/file/file_directory_utils.h"
+#include "lib/ob_errno.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace palf;
 
 namespace unittest
 {
@@ -67,12 +66,3 @@ TEST(TestClearUpTmpFiles, clear_up_tmp_fils)
 
 } // end of unittest
 } // end of oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_clear_up_tmp_files.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_clear_up_tmp_files");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

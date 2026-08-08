@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_px_sqc_proxy.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/px/ob_sqc_ctx.h"
 #include "sql/engine/px/ob_px_util.h"
@@ -363,9 +364,9 @@ int ObPxSQCProxy::report(int end_ret) const
       transaction::ObTxExecResult &task_tx_result = tasks.at(i).get_tx_result();
       if (OB_NOT_NULL(task_tx_desc)) {
         if (OB_NOT_NULL(sqc_tx_desc)) {
-          OZ(share::g_mp->trans_service()->merge_tx_state(*sqc_tx_desc, *task_tx_desc));
+          OZ(data_plane::query_transaction_service()->merge_tx_state(*sqc_tx_desc, *task_tx_desc));
           OZ(finish_msg.get_trans_result().merge_result(task_tx_result));
-          OZ(share::g_mp->trans_service()->release_tx(*task_tx_desc));
+          OZ(data_plane::query_transaction_service()->release_tx(*task_tx_desc));
         } else {
           sql::ObSQLSessionInfo::LockGuard guard(session->get_thread_data_lock());
           sqc_tx_desc = task_tx_desc;
@@ -394,17 +395,17 @@ int ObPxSQCProxy::report(int end_ret) const
   // If session is null, rc will not be SUCCESS, it's fine not to set trans_result
   if (OB_NOT_NULL(session) && OB_NOT_NULL(session->get_tx_desc())) {
     // overwrite ret
-    if (OB_FAIL(share::g_mp->trans_service()
+    if (OB_FAIL(data_plane::query_transaction_service()
                 ->get_tx_exec_result(*session->get_tx_desc(),
                                      finish_msg.get_trans_result()))) {
       LOG_WARN("fail get tx result", K(ret),
                "msg_trans_result", finish_msg.get_trans_result(),
-               "tx_desc", *session->get_tx_desc());
+               "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
       finish_msg.rc_ = (OB_SUCCESS != sqc_ret) ? sqc_ret : ret;
     } else {
       LOG_TRACE("report trans_result",
                 "msg_trans_result", finish_msg.get_trans_result(),
-                "tx_desc", *session->get_tx_desc());
+                "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
     }
   }
 

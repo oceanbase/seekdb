@@ -18,8 +18,6 @@
 #define OCEANBASE_DAS_DML_VEC_ITER_H
 
 #include "src/sql/das/ob_das_domain_utils.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/vector_index/ob_vector_embedding_handler.h"
 
 namespace oceanbase
 {
@@ -36,8 +34,11 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options),
       is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE)
   {}
   virtual ~ObVecIndexDMLIterator() = default;
@@ -78,8 +79,11 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef) {}
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options) {}
 
   virtual ~ObSparseVecIndexDMLIterator() = default;
 private:
@@ -119,8 +123,11 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options),
       is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE)
   {}
   virtual ~ObHybridVecLogDMLIterator() = default;
@@ -151,8 +158,11 @@ public:
       const IntFixedArray *row_projector,
       ObDASWriteBuffer::Iterator &write_iter,
       const ObDASDMLBaseCtDef *das_ctdef,
-      const ObDASDMLBaseCtDef *main_ctdef)
-    : ObDomainDMLIterator(allocator, row_projector, write_iter, das_ctdef, main_ctdef),
+      const ObDASDMLBaseCtDef *main_ctdef,
+      const common::ObLobReadOptions *lob_read_options)
+    : ObDomainDMLIterator(
+          allocator, row_projector, write_iter, das_ctdef, main_ctdef,
+          lob_read_options),
       is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE || das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE)
     {}
   virtual ~ObEmbeddedVecDMLIterator() = default;

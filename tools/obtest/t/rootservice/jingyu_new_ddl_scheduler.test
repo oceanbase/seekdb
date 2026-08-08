@@ -1,0 +1,77 @@
+###############################################################################
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test create database without RS
+#    Old RS may not revoked completly and new RS may not started completly.
+#
+###############################################################################
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'true';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn1;
+
+--echo =========================================
+--echo      construct initial parameters
+--echo =========================================
+# get servers' addr in z1, z2, z3
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z2_dst_ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port0 = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst0 = $z2_dst_ip0:$z2_dst_port0;
+let $z3_dst_ip0 = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_dst_port0 = deploy_get_value(ob1.z3.obs0.port);
+let $z3_dst0 = $z3_dst_ip0:$z3_dst_port0;
+
+--echo =========================================
+--echo           create mysql tenant
+--echo =========================================
+# create mysql tenant with FFF
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL mysql_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('mysql_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z1" SET ob_tcp_invited_nodes='%';
+let $sys_tenant_id = 1;
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "mysql", tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql", meta_tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $tenant_id, resource_pool_id, 1);
+
+--echo =========================================
+--echo              create database
+--echo =========================================
+connect(mysql_conn1, $proxy_ip, root@mysql,,test, $proxy_port);
+connection mysql_conn1;
+create database mysql_db1;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_DATABASES where tenant_id = $tenant_id and database_name = "mysql_db1", 1, 10;
+
+--echo =========================================
+--echo       switch RS to z2 and hang RS
+--echo =========================================
+connect(sys_conn1, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+connection sys_conn1;
+# make sure RS on z1 on begining
+eval alter tenant sys primary_zone = "z1";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = 1 and ls_id = 1 and role = "LEADER" and zone = "z1", 1, 30;
+# errsim when RS start_service() and stop()
+# switch rs to z2
+eval alter tenant sys primary_zone = "z2";
+ob1.check_until_timeout select count(*) as cnt from oceanbase.GV\$OB_LOG_STAT where tenant_id = 1 and ls_id = 1 and role = "LEADER" and svr_ip = "$z2_dst_ip0" and svr_port = $z2_dst_port0, 1, 30;
+
+--echo =========================================
+--echo          create database again
+--echo =========================================
+connect(mysql_conn1, $proxy_ip, root@mysql,,test, $proxy_port);
+connection mysql_conn1;
+create database mysql_db2;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_DATABASES where tenant_id = $tenant_id and database_name = "mysql_db2", 1, 10;

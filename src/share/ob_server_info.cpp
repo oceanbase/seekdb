@@ -17,11 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_server_info.h"
-#include "share/ob_server_struct.h"  // GCTX
 #include "lib/oblog/ob_log_module.h"
-#include "share/config/ob_server_config.h"  // GCONF
-#include "share/config/ob_config_manager.h"  // GCTX.config_mgr_
-#include "share/rc/ob_server_runtime.h"
+#include "share/config/ob_config_manager.h"
 #include "lib/utility/ob_mod_define.h"  // ObModIds
 #include "lib/string/ob_string.h"  // ObString
 #include <string.h>  // strlen, MEMCPY
@@ -113,19 +110,22 @@ static int deserialize_server_info_from_string(const common::ObString &str, ObSe
 // Helper function to load server_info from config parameter using config manager interface
 // Query config table via config storage interface using load_all_configs, not from memory
 // Format: "server_role:switchover_status"
-static int load_server_info_from_config(ObServerInfo &server_info)
+static int load_server_info_from_config(
+    common::ObConfigManager *config_mgr,
+    ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
   server_info.reset();
 
-  if (OB_ISNULL(GCTX.config_mgr_)) {
+  if (OB_ISNULL(config_mgr)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("config_mgr_ is not initialized", KR(ret));
+    LOG_WARN("config manager is not initialized", KR(ret));
   } else {
     // Query config table via config storage interface using load_all_configs
     common::ObString config_value;
     common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
-    if (OB_FAIL(GCTX.config_mgr_->get_storage().get_config_value("server_role_info", config_value, allocator))) {
+    if (OB_FAIL(config_mgr->get_storage().get_config_value(
+        "server_role_info", config_value, allocator))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         LOG_WARN("server_role_info config not found in table", KR(ret));
       } else {
@@ -144,16 +144,18 @@ static int load_server_info_from_config(ObServerInfo &server_info)
 // Helper function to update server_info config parameter via internal table
 // Only persists to table, reload is handled by caller
 // Format: "server_role:switchover_status"
-static int update_server_info_config(const ObServerInfo &server_info)
+static int update_server_info_config(
+    common::ObConfigManager *config_mgr,
+    const ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
 
-  if (!server_info.is_valid()) {
+  if (OB_ISNULL(config_mgr)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("config manager is not initialized", KR(ret));
+  } else if (!server_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server_info", KR(ret), K(server_info));
-  } else if (OB_ISNULL(GCTX.config_mgr_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("config_mgr_ is not initialized", KR(ret));
   } else {
     // Serialize server_info to string
     common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
@@ -171,7 +173,7 @@ static int update_server_info_config(const ObServerInfo &server_info)
         MEMCPY(buf, config_value.ptr(), config_value.length());
         buf[config_value.length()] = '\0';
 
-        if (OB_FAIL(GCTX.config_mgr_->save_config("server_role_info", buf))) {
+        if (OB_FAIL(config_mgr->save_config("server_role_info", buf))) {
           LOG_WARN("failed to save config server_role_info", KR(ret), K(config_value));
         } else {
           LOG_INFO("persisted server_role_info config to internal table", K(config_value), K(server_info));
@@ -183,26 +185,30 @@ static int update_server_info_config(const ObServerInfo &server_info)
 }
 
 
-int ObServerInfoProxy::load_server_info(ObServerInfo &server_info)
+int ObServerInfoProxy::load_server_info(
+    common::ObConfigManager *config_mgr,
+    const ObServerRole::Role fallback_role,
+    ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
   server_info.reset();
 
   // Load server_info from config parameter (using config manager interface)
   // Format: "server_role:switchover_status"
-  if (OB_FAIL(load_server_info_from_config(server_info))) {
+  if (OB_FAIL(load_server_info_from_config(config_mgr, server_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      // If config is empty, try to infer from GCTX.server_role_
-      if (ObServerRole::PRIMARY_ROLE == GCTX.server_role_) {
+      // A fresh data directory has no persisted role yet.
+      if (ObServerRole::PRIMARY_ROLE == fallback_role) {
         server_info.server_role_ = PRIMARY_SERVER_ROLE;
         server_info.switchover_status_ = NORMAL_SWITCHOVER_STATUS;
         ret = OB_SUCCESS;
-      } else if (ObServerRole::STANDBY_ROLE == GCTX.server_role_) {
+      } else if (ObServerRole::STANDBY_ROLE == fallback_role) {
         server_info.server_role_ = STANDBY_SERVER_ROLE;
         server_info.switchover_status_ = NORMAL_SWITCHOVER_STATUS;
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("cannot infer server_info from server_role", KR(ret), K(GCTX.server_role_));
+        LOG_WARN("cannot infer server_info from server_role",
+            KR(ret), K(fallback_role));
       }
     } else {
       LOG_WARN("failed to load server_info from config", KR(ret));
@@ -212,6 +218,7 @@ int ObServerInfoProxy::load_server_info(ObServerInfo &server_info)
 }
 
 int ObServerInfoProxy::init_server_info_from_role(
+    common::ObConfigManager *config_mgr,
     const ObServerRole::Role server_role)
 {
   int ret = OB_SUCCESS;
@@ -231,7 +238,7 @@ int ObServerInfoProxy::init_server_info_from_role(
 
   if (OB_SUCC(ret)) {
     // Update server_info via config parameter
-    if (OB_FAIL(update_server_info_config(server_info))) {
+    if (OB_FAIL(update_server_info_config(config_mgr, server_info))) {
       LOG_WARN("failed to update server_info config", KR(ret), K(server_info));
     } else {
       LOG_INFO("initialized server_info from server role", K(server_role), K(server_info));

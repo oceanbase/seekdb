@@ -23,6 +23,8 @@
 #include "storage/ob_partition_range_spliter.h"
 #include "storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -54,35 +56,35 @@ static int get_number(const char *str, const char *&endpos, int64_t &num)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class ObMockSSTableV2;
+class ObMockMajorSSTable;
 
-class ObMockSSTableSecMetaIterator : public ObSSTableSecMetaIterator
+class ObMockMajorSSTableSecMetaIterator : public ObSSTableSecMetaIterator
 {
 public:
-  ObMockSSTableSecMetaIterator() : sstable_(nullptr), macro_block_idx_(0) {}
-  virtual ~ObMockSSTableSecMetaIterator() = default;
+  ObMockMajorSSTableSecMetaIterator() : sstable_(nullptr), macro_block_idx_(0) {}
+  virtual ~ObMockMajorSSTableSecMetaIterator() = default;
 
   int get_next(ObDataMacroBlockMeta &macro_meta) override;
 
-private:
-  ObMockSSTableV2 *sstable_;
+public:
+  ObMockMajorSSTable *sstable_;
   int macro_block_idx_;
 };
 
-class ObMockSSTableV2 : public ObSSTable
+class ObMockMajorSSTable : public ObSSTable
 {
 public:
-  ObMockSSTableV2() = default;
-  virtual ~ObMockSSTableV2() = default;
+  ObMockMajorSSTable() = default;
+  virtual ~ObMockMajorSSTable() = default;
   int scan_secondary_meta(ObIAllocator &allocator, ObSSTableSecMetaIterator *&meta_iter);
   int add_macro_block_meta(const int64_t endkey);
   int from(const ObString &str);
   void reset() { endkeys_.reset(); }
-private:
+public:
   ObSEArray<ObStorageDatum, 64> endkeys_;
 };
 
-int ObMockSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
+int ObMockMajorSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -111,7 +113,7 @@ int ObMockSSTableSecMetaIterator::get_next(ObDataMacroBlockMeta &macro_meta)
   return ret;
 }
 
-int ObMockSSTableV2::add_macro_block_meta(const int64_t endkey)
+int ObMockMajorSSTable::add_macro_block_meta(const int64_t endkey)
 {
   int ret = OB_SUCCESS;
   if (!endkeys_.empty()) {
@@ -131,7 +133,7 @@ int ObMockSSTableV2::add_macro_block_meta(const int64_t endkey)
   return ret;
 }
 
-int ObMockSSTableV2::from(const ObString &str)
+int ObMockMajorSSTable::from(const ObString &str)
 {
   int ret = OB_SUCCESS;
   if (str.empty()) {
@@ -157,15 +159,15 @@ int ObMockSSTableV2::from(const ObString &str)
   return ret;
 }
 
-int ObMockSSTableV2::scan_secondary_meta(ObIAllocator &allocator, ObSSTableSecMetaIterator *&meta_iter)
+int ObMockMajorSSTable::scan_secondary_meta(ObIAllocator &allocator, ObSSTableSecMetaIterator *&meta_iter)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  ObMockSSTableSecMetaIterator *iter = nullptr;
-  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObMockSSTableSecMetaIterator)))) {
+  ObMockMajorSSTableSecMetaIterator *iter = nullptr;
+  if (OB_ISNULL(buf = allocator.alloc(sizeof(ObMockMajorSSTableSecMetaIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Fail to allocate memory", KR(ret));
-  } else if (OB_ISNULL(iter = new (buf) ObMockSSTableSecMetaIterator())) {
+  } else if (OB_ISNULL(iter = new (buf) ObMockMajorSSTableSecMetaIterator())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null pointer of secondary meta iterator", KR(ret));
   } else {
@@ -175,7 +177,7 @@ int ObMockSSTableV2::scan_secondary_meta(ObIAllocator &allocator, ObSSTableSecMe
   }
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(iter)) {
-      iter->~ObMockSSTableSecMetaIterator();
+      iter->~ObMockMajorSSTableSecMetaIterator();
     }
     if (OB_NOT_NULL(buf)) {
       allocator.free(buf);
@@ -198,7 +200,7 @@ int ObMockPartitionMajorSSTableRangeSpliter::scan_major_sstable_secondary_meta(
 {
   UNUSED(scan_range);
   int ret = OB_SUCCESS;
-  ObMockSSTableV2 *sstable = dynamic_cast<ObMockSSTableV2 *>(major_sstable_);
+  ObMockMajorSSTable *sstable = dynamic_cast<ObMockMajorSSTable *>(major_sstable_);
   if (OB_ISNULL(sstable)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null sstable", KR(ret));
@@ -226,7 +228,7 @@ public:
   virtual void SetUp();
   virtual void TearDown();
 
-private:
+public:
   void set_major_sstable_meta(int64_t macro_block_count, int64_t occupy_size, int64_t row_count)
   {
     major_sstable_.meta_->basic_meta_.data_macro_block_count_ = macro_block_count;
@@ -243,14 +245,14 @@ private:
     major_sstable_.reset();
   }
 
-private:
+public:
   int check_ranges_result(const ObIArray<ObStoreRange> &ranges, const ObString &result, bool &equal);
   void inner_test_split_ranges(int64_t tablet_size, int64_t macro_block_count, int64_t row_count,
                                const ObString &ranges_str, const ObString &split_ranges);
 
-private:
+public:
   common::ObArenaAllocator allocator_;
-  ObMockSSTableV2 major_sstable_;
+  ObMockMajorSSTable major_sstable_;
   ObSSTableMeta sstable_meta_;
   char *buf_;
   ObSEArray<ObColDesc, 3> col_descs_;
@@ -427,12 +429,3 @@ TEST_F(TestPartitionMajorSSTableRangeSliter, test_split_ranges)
 
 }  // namespace storage
 }  // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_partition_major_sstable_range_spliter.log*");
-  oceanbase::common::ObLogger::get_logger().set_file_name("test_partition_major_sstable_range_spliter.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

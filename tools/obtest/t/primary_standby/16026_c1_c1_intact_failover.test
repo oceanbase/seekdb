@@ -1,0 +1,90 @@
+#rs
+#msy
+#验证无损failover后，保护级别的正确性
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#设置restore为强同步
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ob1.force_stop;
+ob2.mysql alter system failover to '$cluster_name' cluster_id $cluster_id;
+#failover后需要修改为最大性能；
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql alter system convert to physical standby;
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob_connect(conn4, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn4;
+--disable_query_log
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+
+
+#case 2 验证无损failover中restore状态的副本不会阻塞
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob1.mysql alter system commit to switchover to primary;
+
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PROTECTION, 100;
+connection conn2;
+alter system set server_data_copy_out_concurrency = 2;
+alter system set server_data_copy_in_concurrency = 2;
+alter system set data_copy_concurrency = 4;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+use test;
+create table t1(c1 int primary key, c2 int) partition by hash(c1) partitions 60;
+ob2.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_meta_table where is_restore = 0, 1, 20;
+ob1.force_stop;
+
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob2.mysql alter system failover to '$cluster_name' cluster_id $cluster_id;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql alter system convert to physical standby;
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob_connect(conn4, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn4;
+--disable_query_log
+eval alter system enable cluster synchronization '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+#达不到同步的状态
+ob2.mysql_p select count(*) > 0 from oceanbase.__all_virtual_meta_table where is_restore = 100;
+#删除t1后，需要等延迟删除等，不测试了

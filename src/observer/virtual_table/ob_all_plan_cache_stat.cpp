@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 
 #include "observer/ob_server_utils.h"
@@ -136,7 +136,8 @@ int ObAllPlanCacheStat::get_row()
     ret = OB_ITER_END;
   } else {
     SERVER_MODULE_SCOPE {
-      ObPlanCache *plan_cache = share::g_mp->plan_cache(); 
+      ObPlanCache *plan_cache =
+          ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_FAIL(fill_cells(*plan_cache))) {
         SERVER_LOG(WARN, "fail to fill cells", K(ret), K(cur_row_));
       } else {

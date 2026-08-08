@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=4);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ERROR HY000: Add index failed
+ob1.mysql alter system minor freeze;
+pk1	pk2
+1	1
+2	1
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+test01	0	PRIMARY	1	pk1	A	NULL	NULL	NULL		BTREE	available		YES

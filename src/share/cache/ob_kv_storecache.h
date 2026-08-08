@@ -25,15 +25,10 @@
 #include "share/cache/ob_kvcache_inst_map.h"
 #include "share/cache/ob_kvcache_map.h"
 #include "share/cache/ob_kvcache_hazard_domain.h"
-#include "sql/optimizer/ob_opt_default_stat.h"
 
 
 namespace oceanbase
 {
-namespace observer
-{
-class ObServer;
-}
 namespace blocksstable
 {
 class ObMicroBlockBufferHandle;
@@ -95,21 +90,39 @@ private:
 };
 
 class ObKVCacheHandle;
+struct ObKVCacheRuntimeOptions
+{
+  static const int64_t DEFAULT_WASH_INTERVAL_US = 200 * 1000;
+
+  explicit ObKVCacheRuntimeOptions(
+      const int64_t wash_interval_us = DEFAULT_WASH_INTERVAL_US)
+      : wash_interval_us_(wash_interval_us)
+  {}
+
+  bool is_valid() const { return wash_interval_us_ > 0; }
+
+  int64_t wash_interval_us_;
+};
+
 class ObKVGlobalCache : public lib::ObICacheWasher
 {
-  friend class observer::ObServer;
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
   static ObKVGlobalCache &get_instance();
+  static int64_t default_max_cache_size() { return DEFAULT_MAX_CACHE_SIZE; }
   int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
            const int64_t max_cache_size = DEFAULT_MAX_CACHE_SIZE,
            const int64_t block_size = lib::ACHUNK_SIZE,
-           const int64_t cache_wash_interval = 0);
+           const int64_t cache_wash_interval = 0,
+           const ObKVCacheRuntimeOptions &runtime_options = ObKVCacheRuntimeOptions());
   void stop();
   void wait();
   void destroy();
-  int reload_wash_interval();
-  int get_suitable_bucket_num(int64_t& bucket_num);
+  int reload_config(const ObKVCacheRuntimeOptions &runtime_options);
+  int get_suitable_bucket_num(
+      int64_t &bucket_num,
+      const int64_t memory_limit,
+      const int64_t reserved_memory);
   int get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
@@ -122,9 +135,6 @@ public:
   virtual int sync_wash_mbs(const int64_t wash_size,
                             lib::ObICacheWasher::ObCacheMemBlock *&wash_blocks);
   int get_cache_name(const int64_t cache_id, char *cache_name);
-  int get_batch_data_block_cache_key(ObIArray<blocksstable::ObMicroBlockCacheKey> &keys) {
-    return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
-  }
   OB_INLINE int64_t get_bucket_num() const { return map_.get_bucket_num(); }
   int64_t get_managed_used() const
   {
@@ -451,7 +461,7 @@ int64_t ObKVCache<Key, Value>::get_miss_cnt() const
 template <class Key, class Value>
 double ObKVCache<Key, Value>::get_hit_rate() const
 {
-  return DEFAULT_CACHE_HIT_RATE;
+  return 0.8;
 }
 
 template <class Key, class Value>

@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_TABLET_TABLE_OPERATOR
 
 #include "lib/container/ob_iarray.h" //ObIArray
-#include "storage/compaction/ob_tablet_check_info.h"
+#include "share/compaction/ob_tablet_check_info.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "share/compaction/ob_array_with_map.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"

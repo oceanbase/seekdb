@@ -14,55 +14,5 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SHARE_VECTOR_OB_CONTINUOUS_BASE_H_
-#define OCEANBASE_SHARE_VECTOR_OB_CONTINUOUS_BASE_H_
-
-#include "sql/engine/vector/ob_bitmap_null_vector_base.h"
-
-namespace oceanbase
-{
-namespace common
-{
-
-class ObContinuousBase: public ObBitmapNullVectorBase
-{
-public:
-  ObContinuousBase(uint32_t *offsets, char *data, sql::ObBitVector *nulls)
-    : ObBitmapNullVectorBase(nulls), offsets_(offsets), data_(data)
-  {}
-  inline uint32_t *get_offsets() { return offsets_; };
-  inline const uint32_t *get_offsets() const { return offsets_; };
-  OB_INLINE void set_offsets(uint32_t *offsets) { offsets_ = offsets; }
-  inline char *get_data() { return data_; }
-  inline const char *get_data() const { return data_; }
-  inline void set_data(char *ptr) { data_ = ptr; }
-  inline void from_continuous_vector(const bool has_null, const sql::ObBitVector &nulls,
-                                     uint32_t *offsets, const int64_t start_idx, 
-                                     const int64_t read_rows, char *data)
-  {
-    UNUSED(has_null);
-    has_null_ = false;
-    nulls_->reset(read_rows);
-    for (int64_t i = 0; i < read_rows; ++i) {
-      if (nulls.at(start_idx + i)) {
-        nulls_->set(i);
-        has_null_ = true;
-      }
-    }
-    offsets_ = offsets + start_idx;
-    data_ = data;
-  }
-  inline void from(uint32_t *offsets, char *data)
-  {
-    offsets_ = offsets;
-    data_ = data;
-  }
-
-protected:
-  uint32_t *offsets_;
-  char *data_;
-};
-
-}
-}
-#endif // OCEANBASE_SHARE_VECTOR_OB_CONTINUOUS_BASE_H_
+#pragma once
+#include "query/engine/vector/ob_continuous_base.h"

@@ -13,8 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// moved down from sql ObExprEnumToStr/ObExprSetToStr::inner_to_str:pure data conversion
-// (enum/set internal values -> string),depends only on lib;sql-side original methods forward here。
+// Enum/set internal values to strings.
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/charset/ob_charset.h"

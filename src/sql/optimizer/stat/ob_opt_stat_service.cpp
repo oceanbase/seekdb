@@ -15,8 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "data_plane/ob_i_optimizer_storage_service.h"
 #include "share/interrupt/ob_interrupt_message.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_opt_stat_service.h"
 
 namespace oceanbase {
@@ -388,8 +389,6 @@ int ObOptStatService::get_table_rowcnt(const uint64_t table_id,
     LOG_WARN("tablet ids is empty", K(ret), K(all_tablet_ids));
   } else {
     ObSEArray<ObTabletID, 16> reload_tablet_ids;
-    storage::ObTabletStat unused_tablet_stat;
-    share::schema::ObTableModeFlag unused_mode;
     for (int64_t i = 0; OB_SUCC(ret) && i < all_tablet_ids.count(); ++i) {
       ObOptTableStat::Key key(table_id, all_tablet_ids.at(i).id());
       ObOptTableStatHandle handle;
@@ -409,20 +408,22 @@ int ObOptStatService::get_table_rowcnt(const uint64_t table_id,
           LOG_WARN("failed to push back", K(ret));
         } else {/*do nothing*/}
       } else {
-        storage::ObTabletStatMgr *stat_mgr = share::g_mp->tablet_stat_mgr();
-        storage::ObTabletStat tablet_stat;
-        //try check the latest tablet stat from stroage
-        if (stat_mgr != NULL) {
-          if (OB_FAIL(stat_mgr->get_latest_tablet_stat(all_tablet_ids.at(i), tablet_stat, unused_tablet_stat, unused_mode))) {
+        int64_t latest_row_count_delta = 0;
+        data_plane::ObIOptimizerStorageService *storage_service =
+            ::oceanbase::share::server_service<::oceanbase::data_plane::ObIOptimizerStorageService>();
+        if (storage_service != NULL) {
+          if (OB_FAIL(storage_service->get_latest_tablet_row_count_delta(
+                  all_tablet_ids.at(i), latest_row_count_delta))) {
             if (OB_HASH_NOT_EXIST != ret) {
-              LOG_WARN("failed to get latest tablet stat", K(ret), K(all_tablet_ids.at(i)));
+              LOG_WARN("failed to get latest tablet row count",
+                       K(ret), K(all_tablet_ids.at(i)));
             } else {
               ret = OB_SUCCESS;
             }
           }
         }
-        LOG_TRACE("cache stat compare", KPC(handle.stat_), K(tablet_stat));
-        if (handle.stat_->get_row_count() < tablet_stat.insert_row_cnt_ - tablet_stat.delete_row_cnt_) {
+        LOG_TRACE("cache stat compare", KPC(handle.stat_), K(latest_row_count_delta));
+        if (handle.stat_->get_row_count() < latest_row_count_delta) {
           if (OB_FAIL(reload_tablet_ids.push_back(all_tablet_ids.at(i)))) {
             LOG_WARN("failed to push back", K(ret));
           } else {/*do nothing*/}

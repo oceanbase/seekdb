@@ -15,7 +15,7 @@
  */
 
 #include "ob_protected_memtable_mgr_handle.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
 
 using namespace oceanbase::share;
@@ -30,7 +30,7 @@ int ObProtectedMemtableMgrHandle::create_tablet_memtable_mgr_(const ObTabletID &
 {
   int ret = OB_SUCCESS;
   ObTabletMemtableMgr *mgr = NULL;
-  ObTabletMemtableMgrPool *pool = share::g_mp->tablet_memtable_mgr_pool();
+  ObTabletMemtableMgrPool *pool = ::oceanbase::share::server_service<::oceanbase::storage::ObTabletMemtableMgrPool>();
   if (memtable_mgr_handle_.is_valid()) {
   } else if (OB_ISNULL(mgr = pool->acquire())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;

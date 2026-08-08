@@ -21,23 +21,30 @@
 #include "common/object/ob_object.h"
 #include "common/object/ob_obj_type.h"
 #include "common/datum/ob_datum.h"
-#include "share/ob_version_parser.h"
-#include "share/ob_i_lob_read_service.h"  // lob-read domain port(dependency inversion, replaces the direct dependency on storage::ObLobManager)
 
 namespace oceanbase
 {
-namespace sql
-{
-class ObBasicSessionInfo;
-} // namespace sql
-namespace storage
-{
-  class ObLobQueryIter;
-  class ObLobDiffHeader;
-  struct ObLobAccessCtx;
-} // namespace storage
 namespace common
 {
+class ObILobAccessContext;
+class ObILobReadService;
+struct ObLobDiffHeader;
+struct ObLobTextIterCtx;
+
+// Share-owned read request. Query translates its session into a deadline and
+// may attach an opaque data-plane cache context; neither upper-layer type
+// crosses this Interface.
+struct ObLobReadOptions
+{
+  ObLobReadOptions(ObILobReadService &read_service,
+                   int64_t timeout_ts = 0,
+                   ObILobAccessContext *access_context = nullptr)
+    : read_service_(&read_service), timeout_ts_(timeout_ts), access_context_(access_context)
+  {}
+  ObILobReadService *read_service_;
+  int64_t timeout_ts_;
+  ObILobAccessContext *access_context_;
+};
 
 // Notice: cannot support obobj funcs/compare (in lib dir)
 // fixed underlying type (: int): so the ObILobReadService port header can forward-declare this enum(dependency inversion)。
@@ -47,65 +54,6 @@ enum ObTextStringIterState : int
   TEXTSTRING_ITER_INIT = 1,
   TEXTSTRING_ITER_NEXT = 2,
   TEXTSTRING_ITER_END = 3
-};
-
-// iterator context for lob type access
-struct ObLobTextIterCtx
-{
-  static const uint32_t OB_LOB_ITER_DEFAULT_BUFFER_LEN = 2 * 1024 * 1024; // 2M bytes
-
-  ObLobTextIterCtx(ObLobLocatorV2 &locator, const sql::ObBasicSessionInfo *session, 
-                   ObIAllocator *allocator = NULL, uint32_t buffer_len = OB_LOB_ITER_DEFAULT_BUFFER_LEN) :
-    alloc_(allocator), session_(session), buff_(NULL), buff_byte_len_(buffer_len), start_offset_(0),
-    total_access_len_(0), total_byte_len_(0), content_byte_len_(0), content_len_(0),
-    reserved_byte_len_(0), reserved_len_(0), accessed_byte_len_(0), accessed_len_(0),
-    last_accessed_byte_len_(0), last_accessed_len_(0), iter_count_(0), is_cloned_temporary_(false),
-    is_backward_(false), locator_(locator), lob_query_iter_(NULL), lob_access_ctx_(nullptr)
-  {}
-
-  TO_STRING_KV(KP_(alloc), KP_(session), KP_(buff), K_(buff_byte_len), K_(start_offset), K_(total_access_len),
-               K_(content_byte_len), K_(content_len), K_(reserved_byte_len), K_(reserved_len), 
-               K_(accessed_byte_len), K_(accessed_len),
-               K_(last_accessed_byte_len), K_(last_accessed_len), K_(iter_count),
-               K_(is_cloned_temporary), K_(is_backward), K_(locator), KP_(lob_query_iter));
-
-  void init(bool is_clone = false);
-  void reuse(); // reuse this ctx for access the same lob again
-  OB_INLINE void unset_clone() { is_cloned_temporary_ = false; }
-
-  // member variables
-  ObIAllocator *alloc_;
-  const sql::ObBasicSessionInfo *session_;
-  char *buff_;        // buffer for reading next block;
-  uint32_t buff_byte_len_; // buffer byte length, set to default size if user input is too small
-  uint64_t start_offset_; // lob start access offset only used when first calling get next block
-  int64_t total_access_len_; // total char length for reading, will access full lob if it is 0
-  int64_t total_byte_len_;
-
-  // avaliable content length start from buff_;
-  uint32_t content_byte_len_; // content byte length
-  uint32_t content_len_; // content char length
-  
-  // reserved len from buff_, when calling get next block, tail of last content will be reserved
-  // in buff to reserved_byte_len, new content will be put from buff + reserved_byte_len_ to end of buffer
-  uint32_t reserved_byte_len_; // reserved byte length from header
-  uint32_t reserved_len_; // reserved char length from header
-
-  // accessed total len by get next row
-  uint32_t accessed_byte_len_; // total accessed byte_len_
-  uint32_t accessed_len_; // total accessed char_len_
-
-  // accessed total len by get next row last time
-  uint32_t last_accessed_byte_len_; // total accessed byte length before current get next block
-  uint32_t last_accessed_len_; // total accessed char length before current get next block
-  uint32_t iter_count_;
-
-  bool is_cloned_temporary_; // locator_ is a cloned local temporary lob
-  bool is_backward_;
-
-  ObLobLocatorV2 locator_;
-  storage::ObLobQueryIter *lob_query_iter_;
-  storage::ObLobAccessCtx *lob_access_ctx_;
 };
 
 // wrapper class to handle string/text type input
@@ -142,10 +90,9 @@ public:
     K_(state), K(datum_str_), KP_(ctx), K_(err_ret));
 
   int init(uint32_t buffer_len,
-           const sql::ObBasicSessionInfo *session = NULL, 
+           const ObLobReadOptions *options = NULL,
            ObIAllocator *res_allocator = NULL,
-           ObIAllocator *tmp_allocator = NULL,
-           storage::ObLobAccessCtx *lob_access_ctx = NULL);
+           ObIAllocator *tmp_allocator = NULL);
 
   ObTextStringIterState get_next_block(ObString &str);
 
@@ -174,7 +121,7 @@ public:
   uint32_t get_reserved_char_len();
   static int convert_outrow_lob_to_inrow_templob(const ObObj &in_obj,
                                                  ObObj &out_obj,
-                                                 const sql::ObBasicSessionInfo *session,
+                                                 const ObLobReadOptions *options,
                                                  ObIAllocator *allocator,
                                                  bool allow_persist_inrow = false,
                                                  bool need_deep_copy = false);
@@ -329,19 +276,18 @@ public:
   virtual uint32_t get_lob_diff_cnt() const = 0;
 
   int serialize(char* buf, const int64_t buf_len, int64_t& pos) const;
-  int serialize_header(char* buf, const int64_t buf_len, int64_t& pos, storage::ObLobDiffHeader *&diff_header) const;
+  int serialize_header(char* buf, const int64_t buf_len, int64_t& pos, ObLobDiffHeader *&diff_header) const;
   virtual int serialize_partial_data(char* buf, const int64_t buf_len, int64_t& pos) const = 0;
-  virtual int serialize_lob_diffs(char* buf, const int64_t buf_len, storage::ObLobDiffHeader *diff_header) const = 0;
+  virtual int serialize_lob_diffs(char* buf, const int64_t buf_len, ObLobDiffHeader *diff_header) const = 0;
 
   int deserialize(const ObLobLocatorV2 &delta_lob);
-  virtual int deserialize_partial_data(storage::ObLobDiffHeader *diff_header) = 0;  
-  virtual int deserialize_lob_diffs(char* buf, const int64_t buf_len, storage::ObLobDiffHeader *diff_header) = 0;
+  virtual int deserialize_partial_data(ObLobDiffHeader *diff_header) = 0;
+  virtual int deserialize_lob_diffs(char* buf, const int64_t buf_len, ObLobDiffHeader *diff_header) = 0;
 };
 
 } // end namespace common
 } // end namespace oceanbase
 
-// ── moved down from sql ob_expr_lob_utils(ObObj-level callers such as obj_cast;paths where exec_ctx is always null)──
 namespace oceanbase
 {
 namespace common
@@ -349,9 +295,11 @@ namespace common
 struct ObObjCastParams;
 namespace lob_helper
 {
-int read_real_string_data(ObIAllocator *allocator, const ObObj &obj, ObString &str);
+int read_real_string_data(ObIAllocator *allocator, const ObObj &obj, ObString &str,
+                          const ObLobReadOptions *options);
 int read_real_string_data(ObIAllocator *allocator, ObObjType type, ObCollationType cs_type,
-                          bool has_lob_header, ObString &str);
+                          bool has_lob_header, ObString &str,
+                          const ObLobReadOptions *options);
 template <typename Allocator>
 int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, ObString &result)
 {
@@ -387,14 +335,14 @@ int pack_to_disk_inrow_lob(Allocator &allocator, const ObString data, const ObOb
 }  // namespace lob_helper
 }  // namespace common
 
-// moved down from sql:ObObj-level text/lob result writer(keeps namespace sql so sql consumers do not change)
-namespace sql
+// ObObj-level text/lob result writer owned by the Share runtime.
+namespace common
 {
-class ObTextStringObObjResult : public common::ObTextStringResult
+class ObTextStringObObjResult : public ObTextStringResult
 {
 public:
-  ObTextStringObObjResult(const common::ObObjType type, common::ObObjCastParams *params, common::ObObj *res_obj, bool has_header) :
-    common::ObTextStringResult(type, has_header, NULL), params_(params), res_obj_(res_obj)
+  ObTextStringObObjResult(const ObObjType type, ObObjCastParams *params, ObObj *res_obj, bool has_header) :
+    ObTextStringResult(type, has_header, NULL), params_(params), res_obj_(res_obj)
   {}
 
   ~ObTextStringObObjResult(){};
@@ -407,10 +355,10 @@ private:
   char * buff_alloc (const int64_t size);
 
 private:
-  common::ObObjCastParams *params_;
-  common::ObObj *res_obj_;
+  ObObjCastParams *params_;
+  ObObj *res_obj_;
 };
-}  // namespace sql
+}  // namespace common
 }  // namespace oceanbase
 
 #endif // OCEANBASE_SHARE_OB_LOB_ACCESS_UTILS_

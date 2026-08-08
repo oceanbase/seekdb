@@ -1,0 +1,42 @@
+# owner: yongle.xh
+# owner group: storage
+# description: 修复转储过多卡主合并的问题
+# bug链接: 
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5, init_unit_num=1);
+ob1.reboot;
+
+#设置灰度切主的时间为0, 关闭自动切主, 关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+use test;
+create table test01(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.port);
+
+let $cnt=1;
+while ($cnt < 8)
+{
+  eval insert into test01 values($cnt, $cnt);
+  inc $cnt;
+}
+ob1.mysql alter system minor freeze tenant = sys;
+ob1.mysql alter system minor freeze tenant = all_user;
+ob1.mysql alter system minor freeze tenant = all_meta;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr a, oceanbase.__all_virtual_table b where a.table_id=b.table_id and b.table_name='test01' and a.base_version !=0 and a.table_type = 4, 3, 120;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;

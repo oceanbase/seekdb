@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_dbms_sched_table_operator.h"
-
-#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
+#include "ob_dbms_sched_job_utils.h"
+#include "query/scheduler/ob_scheduler_job.h"
+#include "share/ob_dml_sql_splicer.h"
 
 namespace oceanbase
 {
@@ -458,6 +459,9 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           OZ (extract_info(*(result.get_result()), allocator, job_info));
           if (OB_SUCC(ret)) {
+            ObDBMSSchedJobUtils::upgrade_legacy_func_type(*sql_proxy_, job_info);
+          }
+          if (OB_SUCC(ret)) {
             int tmp_ret = result.get_result()->next();
             if (OB_SUCCESS == tmp_ret) {
               ret = OB_ERR_UNEXPECTED;
@@ -506,6 +510,9 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_runtime(
           } else {
             ObDBMSSchedJobInfo job_info;
             OZ (extract_info(*(result.get_result()), allocator, job_info));
+            if (OB_SUCC(ret)) {
+              ObDBMSSchedJobUtils::upgrade_legacy_func_type(*sql_proxy_, job_info);
+            }
             OZ (job_infos.push_back(job_info));
           }
         } while (OB_SUCC(ret));

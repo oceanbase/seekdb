@@ -105,7 +105,7 @@ int ObExprSTBufferStrategy::eval_st_buffer_strategy(const ObExpr &expr, ObEvalCt
   } else if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, strategy_datum))) {
     LOG_WARN("failed to eval first argument", K(ret));
   } else if (FALSE_IT(strategy_str = strategy_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *strategy_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *strategy_datum,
              expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), strategy_str))) {
     LOG_WARN("fail to get real string data", K(ret), K(strategy_str));
   } else {
@@ -285,7 +285,7 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
       } else {
         ObString pg_text_strategy = strat_datum->get_string();
         ObString pg_strategy_clone;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator, *strat_datum,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator, *strat_datum,
                   first_strategy_arg->datum_meta_, first_strategy_arg->obj_meta_.has_lob_header(), pg_text_strategy))) {
           LOG_WARN("fail to get real string data", K(ret), K(pg_text_strategy));
         } else {
@@ -311,7 +311,7 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
         if (OB_FAIL(allocator.eval_arg(expr.args_[i], ctx, strat_datum))) {
           LOG_WARN("eval buffer strategy arg failed", K(ret));
         } else if (FALSE_IT(strat_str = strat_datum->get_string())) {
-        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator, *strat_datum,
+        } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator, *strat_datum,
                   expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), strat_str))) {
           LOG_WARN("fail to get real string data", K(ret), K(strat_str));
         } else if (OB_FAIL(parse_binary_strategy(strat_str, buf_strat))) {
@@ -325,7 +325,7 @@ int ObExprSTBuffer::init_buffer_strategy(const ObExpr &expr,
 }
 
 int ObExprSTBuffer::fill_proj4_params(lib::MemoryContext &mem_ctx,
-                                      omt::ObSrsCacheGuard &srs_guard,
+                                      common::ObSrsCacheGuard &srs_guard,
                                       uint32 srid,
                                       ObGeometry *geo,
                                       const ObSrsItem *srs,
@@ -385,7 +385,7 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   bool is_empty = false;
   uint32_t srid = 0;
   const ObSrsItem *srs = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObString proj4_param;
 
   // check null
@@ -411,7 +411,7 @@ int ObExprSTBuffer::eval_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ret = OB_INVALID_ARGUMENT;
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
       LOG_WARN("nan distance argument", K(ret), K(distance));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *geo_datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *geo_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), geo_str))) {
       LOG_WARN("fail to get real string data", K(ret), K(geo_str));
     } else if (std::abs(distance) < ST_BUFFER_DISTANCE_MIN
@@ -756,7 +756,7 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   bool is_empty = false;
   uint32_t srid = 0;
   const ObSrsItem *srs = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
 
   // check null
   for (int i = 0; i < num_args && !is_null_result; i++) {
@@ -773,7 +773,7 @@ int ObExprPrivSTBuffer::eval_priv_st_buffer(const ObExpr &expr, ObEvalCtx &ctx, 
   } else if (geo_datum->is_null() || geo_datum->is_null() || is_null_result) {
     res.set_null();
   } else if (FALSE_IT(geo_str = geo_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *geo_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *geo_datum,
             expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), geo_str))) {
     LOG_WARN("fail to get real string data", K(ret), K(geo_str));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, geo_str, srs, true))) {

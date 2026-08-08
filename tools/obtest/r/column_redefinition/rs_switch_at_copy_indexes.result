@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+$leader_obs.mysql set ob_global_debug_sync = 'COLUMN_REDEFINITION_COPY_TABLE_INDEXES wait_for signal execute 10000';
+$leader_obs.force_stop;
+$leader_obs.mysql set ob_global_debug_sync = 'COLUMN_REDEFINITION_COPY_TABLE_INDEXES clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal';
+Field	Type	Null	Key	Default	Extra
+c0	char(20)	YES		c0_value	
+c1	int(11)	YES	MUL	NULL	
+c2	int(11)	YES	MUL	NULL	
+c4	char(20)	YES		NULL	
+c0	c1	c2	c4
+c0_value	1	1	add_drop_col

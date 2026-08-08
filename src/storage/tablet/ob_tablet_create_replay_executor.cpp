@@ -23,7 +23,7 @@ namespace oceanbase
 namespace storage
 {
 ObTabletCreateReplayExecutor::ObTabletCreateReplayExecutor()
-  : logservice::ObTabletReplayExecutor(),
+  : ObTabletReplayExecutor(),
     user_ctx_(nullptr), user_data_(nullptr)
 {
 }

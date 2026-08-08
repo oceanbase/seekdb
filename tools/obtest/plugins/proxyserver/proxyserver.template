@@ -1,0 +1,13 @@
+[public]
+task_queue_size=10000
+task_thread_count=8
+io_thread_count=8
+network_timeout=30
+task_left_time=300
+java_home= $java_home
+
+[hadoop]
+hdfs_conf_dir= $hdfs_conf_dir
+hadoop_home= $hadoop_home
+mem_limit=10000000
+buf_size=64000000

@@ -13,12 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// this file was  share/ob_ddl_common.cpp created by function-level splitting from:these ObDDLUtil static methods
-// implementation depends on this module,callers are all in upper layers;declaration remains in share/ob_ddl_common.h。
 #define USING_LOG_PREFIX SHARE
-#include "share/rc/ob_module_provider.h"
 
-#include "observer/ob_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 #include "share/ob_ddl_common.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/ob_rpc_struct.h"
@@ -29,14 +30,14 @@
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_tablet_local_checksum_table_storage.h"
 #include "rootserver/ddl_task/ob_index_build_task.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_management_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 
 #include "sql/ob_sql_utils.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
-#include "observer/vector_index/ob_plugin_vector_index_utils.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
@@ -48,8 +49,14 @@ using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::sql;
+using oceanbase::rootserver::rootserver_local_runtime;
 
-int ObDDLUtil::hold_snapshot(
+namespace oceanbase
+{
+namespace rootserver
+{
+
+int ObDDLTaskUtil::hold_snapshot(
     common::ObMySQLTransaction &trans,
     rootserver::ObDDLTask* task,
     const uint64_t table_id,
@@ -89,21 +96,21 @@ int ObDDLUtil::hold_snapshot(
     } else if (OB_ISNULL(data_table_schema) || OB_ISNULL(dest_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", K(ret), K(table_id), K(target_table_id), KP(data_table_schema), KP(dest_table_schema));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, tablet_ids))) {
       LOG_WARN("failed to get data table snapshot", K(ret), K(table_id));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(target_table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, target_table_id, tablet_ids))) {
       LOG_WARN("failed to get dest table snapshot", K(ret), K(target_table_id));
     } else if (data_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob meta table snapshot", K(ret));
     } else if (data_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
     } else if (dest_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(dest_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get dest lob meta table snapshot", K(ret));
     } else if (dest_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(dest_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get dest lob piece table snapshot", K(ret));
     } else {
       rootserver::ObDDLService &ddl_service = local_management_service->get_ddl_service();
@@ -113,12 +120,12 @@ int ObDDLUtil::hold_snapshot(
       }
     }
     task->add_event_info("hold snapshot finish");
-    LOG_INFO("hold snapshot finished", K(ret), K(task->get_snapshot_version()), K(table_id), K(target_table_id), K(schema_version), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("hold snapshot finished", K(ret), K(task->get_snapshot_version()), K(table_id), K(target_table_id), K(schema_version), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   }
   return ret;
 }
 
-int ObDDLUtil::hold_snapshot(
+int ObDDLTaskUtil::hold_snapshot(
     common::ObMySQLTransaction &trans,
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
@@ -136,20 +143,21 @@ int ObDDLUtil::hold_snapshot(
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot))) {
     LOG_WARN("failed to convert", K(snapshot), K(ret));
   } else {
-    rootserver::ObDDLService &ddl_service = GCTX.local_management_service_->get_ddl_service();
+    rootserver::ObDDLService &ddl_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service();
     ObSEArray<ObTabletID, 2> tablet_ids;
     bool need_acquire_lob = false;
     if (OB_FAIL(data_table_schema.get_tablet_ids(tablet_ids))) {
       LOG_WARN("failed to get data table snapshot", K(ret));
     } else if (OB_FAIL(index_table_schema.get_tablet_ids(tablet_ids))) {
       LOG_WARN("failed to get data table snapshot", K(ret));
-    } else if (OB_FAIL(check_need_acquire_lob_snapshot(&data_table_schema, &index_table_schema, need_acquire_lob))) {
+    } else if (OB_FAIL(ObDDLUtil::check_need_acquire_lob_snapshot(
+        &data_table_schema, &index_table_schema, need_acquire_lob))) {
       LOG_WARN("failed to check if need to acquire lob snapshot", K(ret));
     } else if (need_acquire_lob && data_table_schema.get_aux_lob_meta_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(data_table_schema.get_aux_lob_meta_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema.get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob meta table snapshot", K(ret));
     } else if (need_acquire_lob && data_table_schema.get_aux_lob_piece_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(data_table_schema.get_aux_lob_piece_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema.get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
     } else if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
             trans, SNAPSHOT_FOR_DDL, schema_version, snapshot_scn, nullptr, tablet_ids))) {
@@ -160,7 +168,7 @@ int ObDDLUtil::hold_snapshot(
   return ret;
 }
 
-int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
+int ObDDLTaskUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *table_schema,
     const ObTableSchema *&index_schema,
     rootserver::ObDDLTask &task,
@@ -168,7 +176,7 @@ int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
     ObDDLType &ddl_type)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service must not be nullptr", K(ret));
@@ -200,7 +208,7 @@ int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
   if (OB_FAIL(ret)) {
   } else if (index_schema->is_vec_index_snapshot_data_type()) {
     ObString domain_index_name;
-    if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*index_schema, domain_index_name))) {
+    if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(*index_schema, domain_index_name))) {
       LOG_WARN("failed to get domain index name", K(ret), KP(index_schema));
     } else if (OB_FAIL(schema_guard.get_table_schema( index_schema->get_database_id(), domain_index_name, true, index_schema, create_index_arg.is_offline_rebuild_, false))) {
       LOG_WARN("failed to get domain index schema", K(ret), K(domain_index_name));
@@ -263,7 +271,7 @@ int ObDDLUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
   return ret;
 }
 
-int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_schema,
+int ObDDLTaskUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_schema,
     const ObTableSchema *index_schema,
     const int64_t task_id,
     const obcall::ObCreateIndexArg &create_index_arg,
@@ -271,13 +279,13 @@ int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard new_schema_guard;
-  rootserver::ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
 
   bool need_update_snapshot = false;
   if (OB_ISNULL(local_management_service) || OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service, table schema, index schema must not be nullptr", K(ret), K(local_management_service), K(table_schema), K(index_schema));
-  } else if (OB_FAIL(ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
+  } else if (OB_FAIL(ObDDLTaskUtil::check_need_update_domain_index_share_table_snapshot(
                  table_schema, index_schema, task_id, create_index_arg, need_update_snapshot))) {
     LOG_WARN("fail to check need update domain index share table snapshot", K(ret));
   } else if (!need_update_snapshot) {
@@ -300,7 +308,7 @@ int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_
       LOG_WARN("error unexpected, rowkey doc/vid index schema must not be nullptr", K(ret));
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
       LOG_WARN("fail to start trans", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::obtain_snapshot(trans, *table_schema, *domain_index_share_schema, fts_snapshot_version))) {
+    } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(trans, *table_schema, *domain_index_share_schema, fts_snapshot_version))) {
       if (OB_SNAPSHOT_DISCARDED == ret) {
         LOG_INFO("snapshot discarded, need retry waiting trans", K(ret), K(fts_snapshot_version));
       } else {
@@ -318,81 +326,26 @@ int ObDDLUtil::get_domain_index_share_table_snapshot(const ObTableSchema *table_
   return ret;
 }
 
-int ObDDLUtil::get_data_information(const uint64_t task_id,
-    uint64_t &data_format_version,
-    int64_t &snapshot_version,
-    share::ObDDLTaskStatus &task_status,
-    uint64_t &target_object_id,
-    int64_t &schema_version,
-    bool &is_offline_index_rebuild)
+int ObDDLTaskUtil::generate_order_by_str(
+    const ObIArray<int64_t> &select_column_ids,
+    const ObIArray<int64_t> &order_column_ids,
+    ObSqlString &sql_string)
 {
   int ret = OB_SUCCESS;
-  data_format_version = 0;
-  snapshot_version = 0;
-  task_status = share::ObDDLTaskStatus::PREPARE;
-  target_object_id = 0;
-  data_format_version = 0;
-  is_offline_index_rebuild = false;
-  if (OB_UNLIKELY(task_id <= 0
-      || nullptr == GCTX.sql_proxy_)) {
+  if (OB_UNLIKELY(select_column_ids.count() <= 0 || order_column_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(DDL_SIM(task_id, GET_DATA_FORMAT_VERISON_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(task_id));
+    LOG_WARN("invalid arguments", K(ret), K(select_column_ids), K(order_column_ids));
+  } else if (OB_FAIL(sql_string.append("order by "))) {
+    LOG_WARN("append failed", K(ret));
   } else {
-    SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      ObSqlString query_string;
-      sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(query_string.assign_fmt(" SELECT snapshot_version, ddl_type, UNHEX(message) as message_unhex, status, schema_version, target_object_id FROM %s WHERE task_id = %lu",
-          OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
-        LOG_WARN("assign sql string failed", K(ret));
-      } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
-        LOG_WARN("read record failed", K(ret), K(query_string));
-      } else if (OB_UNLIKELY(nullptr == (result = res.get_result()))) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", K(ret), KP(result));
-      } else if (OB_FAIL(result->next())) {
-        LOG_WARN("get next row failed", K(ret));
-      } else {
-        int64_t pos = 0;
-        int cur_task_status = 0;
-        ObDDLType ddl_type = ObDDLType::DDL_INVALID;
-        ObString task_message;
-        EXTRACT_UINT_FIELD_MYSQL(*result, "snapshot_version", snapshot_version, uint64_t);
-        EXTRACT_INT_FIELD_MYSQL(*result, "ddl_type", ddl_type, ObDDLType);
-        EXTRACT_VARCHAR_FIELD_MYSQL(*result, "message_unhex", task_message);
-        EXTRACT_INT_FIELD_MYSQL(*result, "status", cur_task_status, int);
-        EXTRACT_INT_FIELD_MYSQL(*result, "target_object_id", target_object_id, int64_t);
-        EXTRACT_INT_FIELD_MYSQL(*result, "schema_version", schema_version, int64_t);
-
-        task_status = static_cast<share::ObDDLTaskStatus>(cur_task_status);
-        if (OB_SUCC(ret)) {
-          switch (ddl_type) {
-            case ObDDLType::DDL_CREATE_INDEX:
-            case ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX:
-            {
-              SMART_VAR(rootserver::ObIndexBuildTask, task) {
-                if (OB_FAIL(task.deserialize_params_from_message(task_message.ptr(), task_message.length(), pos))) {
-                  LOG_WARN("deserialize from msg failed", K(ret));
-                } else {
-                  data_format_version = task.get_data_format_version();
-                  is_offline_index_rebuild = task.is_offline_rebuild();
-                }
-              }
-              break;
-            }
-            default:
-            {
-              SMART_VAR(rootserver::ObDDLTask, task) {
-                if (OB_FAIL(task.deserialize_params_from_message(task_message.ptr(), task_message.length(), pos))) {
-                  LOG_WARN("deserialize from msg failed", K(ret));
-                } else {
-                  data_format_version = task.get_data_format_version();
-                  is_offline_index_rebuild = false;
-                }
-              }
-              break;
-            }
+    bool append_comma = false;
+    for (int64_t i = 0; OB_SUCC(ret) && i < order_column_ids.count(); ++i) {
+      for (int64_t j = 0; OB_SUCC(ret) && j < select_column_ids.count(); ++j) {
+        if (select_column_ids.at(j) == order_column_ids.at(i)) {
+          if (OB_FAIL(sql_string.append_fmt("%s %ld", append_comma ? "," : "", j + 1))) {
+            LOG_WARN("append fmt failed", K(ret));
+          } else if (!append_comma) {
+            append_comma = true;
           }
         }
       }
@@ -401,7 +354,7 @@ int ObDDLUtil::get_data_information(const uint64_t task_id,
   return ret;
 }
 
-int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
+int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
     const int64_t dest_table_id,
     const int64_t schema_version,
     const int64_t snapshot_version,
@@ -445,7 +398,7 @@ int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
     ObArray<int64_t> select_column_ids;
     ObArray<int64_t> order_column_ids;
     bool is_shadow_column = false;
-    const int64_t real_parallelism = ObDDLUtil::get_real_parallelism(parallelism);
+    const int64_t real_parallelism = ObDDLTaskUtil::get_real_parallelism(parallelism);
     const bool is_rowkey_doc_aux_table = dest_table_schema->is_rowkey_doc_id();
     uint64_t doc_id_col_id = OB_INVALID_ID;
     uint64_t ft_id_col_id = OB_INVALID_ID;
@@ -621,11 +574,12 @@ int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
         }
 
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(generate_column_name_str(column_names, true/*with origin name*/, true/*with alias name*/, use_heap_table_ddl_plan, query_column_sql_string))) {
+        } else if (OB_FAIL(ObDDLUtil::generate_column_name_str(column_names, true/*with origin name*/, true/*with alias name*/, use_heap_table_ddl_plan, query_column_sql_string))) {
           LOG_WARN("fail to generate column name str", K(ret));
-        } else if (OB_FAIL(generate_column_name_str(insert_column_names, true/*with origin name*/, false/*with alias name*/, use_heap_table_ddl_plan, insert_column_sql_string))) {
+        } else if (OB_FAIL(ObDDLUtil::generate_column_name_str(insert_column_names, true/*with origin name*/, false/*with alias name*/, use_heap_table_ddl_plan, insert_column_sql_string))) {
           LOG_WARN("generate column name str failed", K(ret));
-        } else if (!use_heap_table_ddl_plan && OB_FAIL(generate_order_by_str(select_column_ids, order_column_ids, rowkey_column_sql_string))) {
+        } else if (!use_heap_table_ddl_plan && OB_FAIL(ObDDLTaskUtil::generate_order_by_str(
+            select_column_ids, order_column_ids, rowkey_column_sql_string))) {
           LOG_WARN("generate order by string failed", K(ret));
         }
       }
@@ -662,7 +616,8 @@ int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
           LOG_WARN("fail to generate new name with escape character",
                     K(ret), K(source_table_name));
         } else if (use_schema_version_hint_for_src_table) {
-          if (OB_FAIL(generate_ddl_schema_hint_str(new_source_table_name, schema_version, src_table_schema_version_hint_sql_string))) {
+          if (OB_FAIL(ObDDLUtil::generate_ddl_schema_hint_str(
+              new_source_table_name, schema_version, src_table_schema_version_hint_sql_string))) {
             LOG_WARN("failed to generated ddl schema hint", K(ret));
           }
         }
@@ -694,7 +649,7 @@ int ObDDLUtil::generate_local_build_sql(const int64_t data_table_id,
   return ret;
 }
 
-int ObDDLUtil::obtain_snapshot(
+int ObDDLTaskUtil::obtain_snapshot(
     const share::ObDDLTaskStatus next_task_status,
     const uint64_t table_id,
     const uint64_t target_table_id,
@@ -751,7 +706,7 @@ int ObDDLUtil::obtain_snapshot(
           // found a persisted snapshot, do not hold it again.
           FLOG_INFO("found a persisted snapshot in inner table", "task_id", task->get_task_id(), K(persisted_snapshot), K(new_fetched_snapshot));
         } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id,
-                                         GCTX.local_management_service_, new_fetched_snapshot))) {
+                                         ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>(), new_fetched_snapshot))) {
           if (OB_SNAPSHOT_DISCARDED == ret) {
             wait_trans_ctx->reset();
           } else {
@@ -787,13 +742,13 @@ int ObDDLUtil::obtain_snapshot(
       }
     }
     task->add_event_info("obtain snapshot finish");
-    LOG_INFO("obtain snapshot", K(ret), K(task->get_snapshot_version()), K(table_id), K(target_table_id), K(task->get_src_schema_version()), "ddl_event_info", ObDDLEventInfo(),
+    LOG_INFO("obtain snapshot", K(ret), K(task->get_snapshot_version()), K(table_id), K(target_table_id), K(task->get_src_schema_version()), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()),
         K(persisted_snapshot), K(new_fetched_snapshot));
   }
   return ret;
 }
 
-int ObDDLUtil::release_snapshot(
+int ObDDLTaskUtil::release_snapshot(
     rootserver::ObDDLTask* task,
     const uint64_t table_id,
     const uint64_t target_table_id,
@@ -812,7 +767,7 @@ int ObDDLUtil::release_snapshot(
     int64_t schema_version = task->get_src_schema_version();
     if (OB_FAIL(DDL_SIM(task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
       LOG_WARN("ddl sim failure", K(ret), K(task->get_task_id()));
-    } else if (OB_FAIL(ObDDLUtil::get_tablet_ids(table_id, target_table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablet_ids(*GCTX.schema_service_, table_id, target_table_id, tablet_ids))) {
       LOG_WARN("failed to get tablet ids", K(ret), K(table_id), K(target_table_id));
     }
     if (OB_FAIL(ret)) {
@@ -821,12 +776,12 @@ int ObDDLUtil::release_snapshot(
       LOG_WARN("failed to release snapshot", K(ret));
     }
     task->add_event_info("release snapshot finish");
-    LOG_INFO("release snapshot finished", K(ret), K(snapshot_version), K(table_id), K(target_table_id), K(tablet_ids), K(schema_version), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("release snapshot finished", K(ret), K(snapshot_version), K(table_id), K(target_table_id), K(tablet_ids), K(schema_version), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   }
   return ret;
 }
 
-int ObDDLUtil::obtain_snapshot(
+int ObDDLTaskUtil::obtain_snapshot(
     common::ObMySQLTransaction &trans,
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
@@ -843,7 +798,7 @@ int ObDDLUtil::obtain_snapshot(
     LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLUtil::hold_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
+  } else if (OB_FAIL(ObDDLTaskUtil::hold_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
     if (OB_SNAPSHOT_DISCARDED == ret) {
       LOG_INFO("snapshot discarded, need retry waiting trans", K(ret), K(new_fetched_snapshot));
     } else {
@@ -853,7 +808,7 @@ int ObDDLUtil::obtain_snapshot(
   return ret;
 }
 
-int ObDDLUtil::calc_snapshot_with_gts(
+int ObDDLTaskUtil::calc_snapshot_with_gts(
     int64_t &snapshot,
     const int64_t ddl_task_id,
     const int64_t trans_end_snapshot,
@@ -893,7 +848,7 @@ int ObDDLUtil::calc_snapshot_with_gts(
   return ret;
 }
 
-int ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
+int ObDDLTaskUtil::check_need_update_domain_index_share_table_snapshot(
   const ObTableSchema *table_schema,
   const ObTableSchema *index_schema,
   const int64_t task_id,
@@ -947,7 +902,7 @@ int ObDDLUtil::check_need_update_domain_index_share_table_snapshot(
   return ret;
 }
 
-int ObDDLUtil::write_defensive_and_obtain_snapshot(
+int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
     common::ObMySQLTransaction &trans,
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
@@ -978,7 +933,7 @@ int ObDDLUtil::write_defensive_and_obtain_snapshot(
                                                                                              abs_timeout_us,
                                                                                              trans))) {
         LOG_WARN("fail to modify tablet binding for write defensive", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::obtain_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
+      } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
         LOG_WARN("fail to obtain snapshot",
             K(ret), K(data_table_schema), K(index_table_schema), K(new_fetched_snapshot));
       }
@@ -987,7 +942,7 @@ int ObDDLUtil::write_defensive_and_obtain_snapshot(
   return ret;
 }
 
-int ObDDLUtil::load_ddl_task(
+int ObDDLTaskUtil::load_ddl_task(
     const int64_t task_id,
     ObIAllocator &allocator,
     rootserver::ObDDLTask &task)
@@ -1010,7 +965,7 @@ int ObDDLUtil::load_ddl_task(
   return ret;
 }
 
-int ObDDLUtil::check_and_cancel_local_build_dag(
+int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
     rootserver::ObDDLTask* task,
     const uint64_t table_id,
     const uint64_t target_table_id,
@@ -1034,9 +989,9 @@ int ObDDLUtil::check_and_cancel_local_build_dag(
     common::ObArray<common::ObTabletID> dst_tablet_ids;
 
 
-    if (OB_FAIL(ObDDLUtil::get_tablets(table_id, src_tablet_ids))) {
+    if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, src_tablet_ids))) {
       LOG_WARN("fail to get tablets", K(ret), K(table_id));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(target_table_id, dst_tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, target_table_id, dst_tablet_ids))) {
       LOG_WARN("fail to get tablets", K(ret), K(target_table_id));
     } else if (OB_FAIL(check_dag_exit_tablets_map.create(CHECK_DAG_EXIT_BUCKET_NUM, lib::ObLabel("DDLChkDagMap")))) {
       LOG_WARN("create hashset set failed", K(ret));
@@ -1060,36 +1015,36 @@ int ObDDLUtil::check_and_cancel_local_build_dag(
       const common::ObTabletID &dst_tablet_id = iter->second;
       bool is_tablet_dag_exist = false;
       obcall::ObDDLLocalBuildArg arg;
-      arg.source_tablet_id_ = src_tablet_id;
-      arg.dest_tablet_id_ = dst_tablet_id;
-      arg.source_table_id_ = table_id;
-      arg.dest_schema_id_ = target_table_id;
-      arg.schema_version_ = task->get_src_schema_version();
-      arg.dest_schema_version_ = task->get_schema_version();
-      arg.snapshot_version_ = 1; // to ensure arg valid only.
-      arg.ddl_type_ = task->get_task_type();
-      arg.task_id_ = task->get_task_id();
-      arg.parallelism_ = 1; // to ensure arg valid only.
-      arg.execution_id_ = 1; // to ensure arg valid only.
-      arg.data_format_version_ = data_format_version; // to ensure arg valid only.
-      arg.tablet_task_id_ = 1; // to ensure arg valid only.
-      int tmp_ret = OB_SUCCESS;
-      bool is_dag_exist = true;
-      if (is_complement_data_dag
-          && OB_TMP_FAIL(GCTX.ob_service_->check_and_cancel_ddl_complement_data_dag(arg, is_dag_exist))) {
-        saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-        is_tablet_dag_exist = true;
-        LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
-      } else if (!is_complement_data_dag
-                 && OB_TMP_FAIL(GCTX.ob_service_->check_and_cancel_delete_lob_meta_row_dag(arg, is_dag_exist))) {
-        saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
-        is_tablet_dag_exist = true;
-        LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));
-      } else if (is_dag_exist) {
-        is_tablet_dag_exist = true;
-        if (REACH_COUNT_INTERVAL(1000L)) {
-          LOG_INFO("wait local dag exist", K(arg));
-        }
+        arg.source_tablet_id_ = src_tablet_id;
+        arg.dest_tablet_id_ = dst_tablet_id;
+        arg.source_table_id_ = table_id;
+        arg.dest_schema_id_ = target_table_id;
+        arg.schema_version_ = task->get_src_schema_version();
+        arg.dest_schema_version_ = task->get_schema_version();
+        arg.snapshot_version_ = 1; // to ensure arg valid only.
+        arg.ddl_type_ = task->get_task_type();
+        arg.task_id_ = task->get_task_id();
+        arg.parallelism_ = 1; // to ensure arg valid only.
+        arg.execution_id_ = 1; // to ensure arg valid only.
+        arg.data_format_version_ = data_format_version; // to ensure arg valid only.
+        arg.tablet_task_id_ = 1; // to ensure arg valid only.
+        int tmp_ret = OB_SUCCESS;
+        bool is_dag_exist = true;
+        if (is_complement_data_dag && OB_TMP_FAIL(
+            rootserver_local_runtime()->check_and_cancel_ddl_complement_data_dag(arg, is_dag_exist))) {
+          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+          is_tablet_dag_exist = true;
+          LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
+        } else if (!is_complement_data_dag && OB_TMP_FAIL(
+            rootserver_local_runtime()->check_and_cancel_delete_lob_meta_row_dag(arg, is_dag_exist))) {
+          saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
+          is_tablet_dag_exist = true;
+          LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));
+        } else if (is_dag_exist) {
+          is_tablet_dag_exist = true;
+          if (REACH_COUNT_INTERVAL(1000L)) {
+            LOG_INFO("wait local dag exit", K(arg));
+          }
       }
       if (OB_SUCC(ret) && !is_tablet_dag_exist) {
         if (OB_FAIL(dag_not_exist_tablets.push_back(src_tablet_id))) {
@@ -1118,7 +1073,7 @@ int ObDDLUtil::check_and_cancel_local_build_dag(
   return ret;
 }
 
-int ObDDLUtil::generate_partition_names(const common::ObIArray<ObString> &partition_names_array, common::ObIAllocator &allocator, ObString &partition_names)
+int ObDDLTaskUtil::generate_partition_names(const common::ObIArray<ObString> &partition_names_array, common::ObIAllocator &allocator, ObString &partition_names)
 {
   int ret = OB_SUCCESS;
   const char quote = '`';
@@ -1160,7 +1115,7 @@ int ObDDLUtil::generate_partition_names(const common::ObIArray<ObString> &partit
   return ret;
 }
 
-int ObDDLUtil::check_target_partition_is_running(const ObString &running_sql_info, const ObString &partition_name, common::ObIAllocator &allocator, bool &is_running_status)
+int ObDDLTaskUtil::check_target_partition_is_running(const ObString &running_sql_info, const ObString &partition_name, common::ObIAllocator &allocator, bool &is_running_status)
 {
   int ret = OB_SUCCESS;
   const char quote = '`';
@@ -1197,7 +1152,7 @@ int ObDDLUtil::check_target_partition_is_running(const ObString &running_sql_inf
   return ret;
 }
 
-int ObDDLUtil::get_task_tablet_slice_count(const int64_t ddl_task_id, bool &is_partitioned_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_cnt_map)
+int ObDDLTaskUtil::get_task_tablet_slice_count(const int64_t ddl_task_id, bool &is_partitioned_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_cnt_map)
 {
   int ret = OB_SUCCESS;
 
@@ -1242,7 +1197,7 @@ int ObDDLUtil::get_task_tablet_slice_count(const int64_t ddl_task_id, bool &is_p
   return ret;
 }
 
-int ObDDLUtil::check_table_empty(
+int ObDDLTaskUtil::check_table_empty(
     const share::schema::ObSysVariableSchema &sys_var_schema,
     const ObString &database_name,
     const share::schema::ObTableSchema &table_schema,
@@ -1347,42 +1302,11 @@ int ObDDLUtil::check_table_empty(
   return ret;
 }
 
-int64_t ObDDLUtil::get_real_parallelism(const int64_t parallelism)
+int64_t ObDDLTaskUtil::get_real_parallelism(const int64_t parallelism)
 {
   return std::min(oceanbase::ObMacroDataSeq::MAX_PARALLEL_IDX + 1,
                   std::max(static_cast<int64_t>(1), parallelism));
 }
 
-int ObCheckTabletDataComplementOp::do_check_tablets_merge_status(const int64_t snapshot_version,
-  const ObIArray<ObTabletID> &tablet_ids,
-  int64_t &tablet_build_succ_count)
-{
-  int ret = OB_SUCCESS;
-  tablet_build_succ_count = 0;
-
-  if (OB_UNLIKELY(tablet_ids.count() <= 0 || OB_INVALID_TIMESTAMP == snapshot_version)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids.count()), K(snapshot_version));
-  } else {
-    obcall::ObDDLCheckTabletMergeStatusArg arg;
-    arg.snapshot_version_ = snapshot_version;
-    obcall::ObDDLCheckTabletMergeStatusResult result;
-    if (OB_FAIL(arg.tablet_ids_.assign(tablet_ids))) {
-      LOG_WARN("fail to assign tablet ids", K(ret), K(tablet_ids));
-    } else {
-      const int check_ret = GCTX.ob_service_->check_ddl_tablet_merge_status(arg, result);
-      if (OB_SUCCESS != check_ret) {
-        LOG_WARN("check ddl tablet merge status failed", K(check_ret));
-      } else if (result.merge_status_.count() != tablet_ids.count()) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet request and response counts differ", K(ret), K(tablet_ids), K(result));
-      } else {
-        for (int64_t i = 0; i < result.merge_status_.count(); ++i) {
-          tablet_build_succ_count += result.merge_status_.at(i) ? 1 : 0;
-        }
-        DEBUG_SYNC(DDL_CHECK_TABLET_MERGE_STATUS);
-      }
-    }
-  }
-  return ret;
-}
+} // namespace rootserver
+} // namespace oceanbase

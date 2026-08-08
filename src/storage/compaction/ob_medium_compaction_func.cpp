@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_medium_compaction_func.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -111,7 +111,7 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
   ObSSTable *last_major = nullptr;
   int64_t last_sstable_schema_version = 0;
   ObMultiVersionSchemaService *schema_service = nullptr;
-  if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+  if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema service from server module provider", K(ret));
   } else if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
@@ -261,7 +261,8 @@ int ObMediumCompactionScheduleFunc::get_status_from_inner_table(
   ObTabletCompactionScnInfo snapshot_info(
       tablet_id,
       ObTabletRuntimeInfo::SCN_STATUS_IDLE);
-  if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_status(snapshot_info, ret_info))) {
+  if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_status(
+          GCTX.meta_db_pool_, snapshot_info, ret_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS; // first schedule medium snapshot
       ret_info.status_ = ObTabletRuntimeInfo::SCN_STATUS_IDLE;
@@ -310,7 +311,7 @@ int ObMediumCompactionScheduleFunc::get_adaptive_reason(
     merge_reason_ = ObAdaptiveMergePolicy::AdaptiveMergeReason::DATABASE_MAJOR;
   } else if (ObAdaptiveMergePolicy::is_valid_merge_reason(merge_reason_)) {
     // is valid merge reason when init func, no need to use policy
-  } else if ((share::g_mp->tablet_scheduler()->enable_adaptive_compaction()) && OB_FAIL(ObAdaptiveMergePolicy::get_adaptive_merge_reason(*tablet, merge_reason_, least_medium_snapshot_))) {
+  } else if ((::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->enable_adaptive_compaction()) && OB_FAIL(ObAdaptiveMergePolicy::get_adaptive_merge_reason(*tablet, merge_reason_, least_medium_snapshot_))) {
     if (OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("failed to get meta merge priority", K(ret), KPC(this));
     } else {
@@ -409,7 +410,7 @@ int ObMediumCompactionScheduleFunc::choose_scn_for_user_request(
   // check exist not finish freeze info
   schema_version = 0;
   int64_t max_reserved_snapshot = 0;
-  const int64_t latest_frozen_version = share::g_mp->freeze_info_mgr()->get_latest_frozen_version();
+  const int64_t latest_frozen_version = ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_latest_frozen_version();
   const int64_t last_major_snapshot_version = tablet_handle_.get_obj()->get_last_major_snapshot_version();
   ObTablet *tablet = nullptr;
 
@@ -468,7 +469,7 @@ int ObMediumCompactionScheduleFunc::check_frequency(
     } else if (last_major_snapshot_version + time_interval > medium_snapshot) {
       // TODO(chengkong): for better performance, here should take meta major merge in the future.
       ObTableQueuingModeCfg queuing_cfg;
-      if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()->get_queuing_cfg(tablet_id, queuing_cfg))) {
+      if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->get_queuing_cfg(tablet_id, queuing_cfg))) {
         LOG_WARN_RET(tmp_ret, "failed to get table queuing mode, treat it as normal table", K(tablet_id));
         ret = OB_NO_NEED_MERGE;
         LOG_TRACE("schedule medium frequently", K(ret), K(last_major_snapshot_version), K(medium_snapshot), K(time_interval));
@@ -509,7 +510,7 @@ int ObMediumCompactionScheduleFunc::get_max_reserved_snapshot(int64_t &max_reser
   } else if (0 == ls_.get_min_reserved_snapshot()) {
     ret = OB_NO_NEED_MERGE;
     // not sync reserved snapshot yet, should not schedule now
-  } else if (OB_FAIL(share::g_mp->freeze_info_mgr()->get_min_reserved_snapshot(
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_reserved_snapshot(
       tablet->get_tablet_meta().tablet_id_, last_major_snapshot_version, snapshot_info))) {
     LOG_WARN("failed to get reserved snapshot from freeze info mgr", K(ret), "tablet_id", tablet->get_tablet_meta().tablet_id_);
   } else {
@@ -530,7 +531,7 @@ int ObMediumCompactionScheduleFunc::choose_new_medium_snapshot(
   int64_t snapshot_gc_ts = 0;
   if (medium_info.medium_snapshot_ == tablet->get_snapshot_version() //  no uncommitted sstable
       && weak_read_ts_ + DEFAULT_SCHEDULE_MEDIUM_INTERVAL < ObTimeUtility::current_time_ns()) {
-    snapshot_gc_ts = share::g_mp->freeze_info_mgr()->get_snapshot_gc_ts();
+    snapshot_gc_ts = ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_snapshot_gc_ts();
     // data before weak_read_ts & latest storage schema on memtable is match for schedule medium
     medium_info.medium_snapshot_ = MAX(max_reserved_snapshot, MIN(weak_read_ts_, snapshot_gc_ts));
   }
@@ -660,7 +661,7 @@ int ObMediumCompactionScheduleFunc::errsim_choose_medium_snapshot(
   if (OB_FAIL(ret)) {
     LOG_INFO("ERRSIM EN_SCHEDULE_MEDIUM_COMPACTION", K(ret), KPC(this));
     const int64_t snapshot_gc_ts =
-        share::g_mp->freeze_info_mgr()->get_snapshot_gc_ts();
+        ::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_snapshot_gc_ts();
     medium_info.medium_snapshot_ = MIN(weak_read_ts_, snapshot_gc_ts);
     medium_info.compaction_type_ = ObMediumCompactionInfo::MEDIUM_COMPACTION;
     int64_t max_reserved_snapshot = 0;
@@ -914,7 +915,7 @@ int ObMediumCompactionScheduleFunc::prepare_medium_info(
     ObTablet *tablet = tablet_handle_.get_obj();
     bool is_skip_merge_index = false; // placeholder
 
-    if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+    if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema service from server module provider", K(ret));
     } else if (FALSE_IT(medium_info.storage_schema_.reset())) {
@@ -1146,7 +1147,7 @@ int ObMediumCompactionScheduleFunc::process_local_checksum_items(
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is null", K(ret));

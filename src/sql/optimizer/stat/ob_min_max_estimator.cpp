@@ -57,13 +57,17 @@ int ObStatMinMaxSubquery::gen_expr(char *buf, const int64_t buf_len, int64_t &po
   return ret;
 }
 
-int ObStatMinMaxSubquery::decode(ObObj &obj, ObIAllocator &allocator)
+int ObStatMinMaxSubquery::decode(
+    ObObj &obj,
+    ObIAllocator &allocator,
+    const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(col_stat_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
-  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(obj, allocator))) {
+  } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
+                 obj, allocator, datum_access_ctx))) {
     LOG_WARN("fail to truncate string", K(ret));
   } else if (is_min_) {
     col_stat_->set_min_value(obj);

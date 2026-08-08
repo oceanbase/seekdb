@@ -20,7 +20,6 @@
 #include "lib/hash_func/ob_hash_func.h"
 #include "lib/container/ob_se_array.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
-#include "sql/optimizer/ob_log_operator_factory.h"
 #include "sql/resolver/dml/ob_hint.h"
 
 namespace oceanbase

@@ -27,7 +27,9 @@ class ObMultiVersionSchemaService;
 class ObSchemaRuntimeService
 {
 public:
-  static int server_module_init(ObSchemaRuntimeService *&schema_runtime_service);
+  static int server_module_init(
+      ObSchemaRuntimeService *&schema_runtime_service,
+      ObMultiVersionSchemaService &schema_service);
 
   ObSchemaRuntimeService()
     : schema_service_(nullptr)

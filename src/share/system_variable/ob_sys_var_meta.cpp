@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/system_variable/ob_sys_var_meta.h"
 #include "share/system_variable/ob_system_variable_init.h"
+#include "share/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 using namespace oceanbase::common;
 

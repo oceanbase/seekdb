@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_trigger_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
-#include "pl/ob_pl_package.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
+#include "sql/pl/ob_pl_package.h"
 #include "sql/resolver/ddl/ob_trigger_resolver.h"
 
 namespace oceanbase
@@ -41,7 +41,9 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
+  OZ (query::serialize_root_service_call(
+      [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
+      GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
   OZ (ObSPIService::force_refresh_schema());
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
@@ -53,6 +55,9 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
       get_runtime_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
   OZ (analyze_dependencies(*ctx.get_sql_ctx()->schema_guard_,
                            ctx.get_my_session(),
+                           *ctx.get_plan_cache(),
+                           ctx.get_pl_sql_runtime(),
+                           ctx.get_pl_engine(),
                            ctx.get_sql_proxy(),
                            ctx.get_allocator(),
                            arg));
@@ -66,7 +71,9 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
     OZ (arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(arg.trigger_info_.get_trigger_id(),
                                                                           TRIGGER_SCHEMA,
                                                                           res.trigger_schema_version_)));
-    OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_trigger_with_res(arg, res); }), GCTX.self_addr());
+    OZ (query::serialize_root_service_call(
+        [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
+        GCTX.self_addr());
     if (OB_ERR_PARALLEL_DDL_CONFLICT == ret) {
       LOG_WARN("trigger or base table maybe changed by other session, ignore the error", K(ret), K(res));
       ret = OB_SUCCESS;
@@ -90,7 +97,9 @@ int ObDropTriggerExecutor::execute(ObExecContext &ctx, ObDropTriggerStmt &stmt)
   OZ (stmt.get_first_stmt(first_stmt));
   arg.ddl_stmt_str_ = first_stmt;
   OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
-  OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_trigger(arg); }), GCTX.self_addr());
+  OZ (query::serialize_root_service_call(
+      [&]{ return ctx.root_command_service().drop_trigger(arg); }),
+      GCTX.self_addr());
   return ret;
 }
 
@@ -106,7 +115,9 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
     OV (OB_NOT_NULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx)), OB_NOT_INIT);
     if (OB_FAIL(ret)) {
     } else {
-      OZ (rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_trigger(arg); }), GCTX.self_addr());
+      OZ (query::serialize_root_service_call(
+          [&]{ return ctx.root_command_service().alter_trigger(arg); }),
+          GCTX.self_addr());
     }
   }
   return ret;
@@ -114,6 +125,9 @@ int ObAlterTriggerExecutor::execute(ObExecContext &ctx, ObAlterTriggerStmt &stmt
 
 int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_guard,
                                                   ObSQLSessionInfo *session_info,
+                                                  ObPlanCache &plan_cache,
+                                                  ObIPLSqlRuntime *pl_sql_runtime,
+                                                  pl::ObPL *pl_engine,
                                                   ObMySQLProxy *sql_proxy,
                                                   ObIAllocator &allocator,
                                                   ObCreateTriggerArg &arg)
@@ -130,7 +144,8 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
     ret = OB_ERR_TRIGGER_NOT_EXIST;
     LOG_WARN("trigger not exist", K(db_name), K(trigger_name), K(ret));
   } else {
-    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, sql_proxy,
+    if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, plan_cache,
+                                                   pl_sql_runtime, pl_engine, sql_proxy,
                                                    allocator, *trigger_info, db_name, arg.dependency_infos_))) {
       LOG_WARN("analyze trigger failed", K(trigger_info), K(db_name), K(ret));
     }

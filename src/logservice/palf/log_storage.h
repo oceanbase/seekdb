@@ -25,7 +25,7 @@
 #include "log_reader.h"            // LogReader
 #include "log_storage_interface.h" // ILogStorage
 #include "log_writer_utils.h"      // LogWriteBuf
-#include "lsn.h"                   // LSN
+#include "share/log/palf/lsn.h"                   // LSN
 #include "palf_iterator.h"         // PalfIteraor
 #include "palf_callback_wrapper.h"
 #include "log_cache.h"

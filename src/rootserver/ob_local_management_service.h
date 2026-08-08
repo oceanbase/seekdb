@@ -33,9 +33,15 @@
 #include "share/ob_structured_event_logger.h"
 #include "rootserver/ob_snapshot_info_manager.h"
 #include "rootserver/ob_objpriv_mysql_ddl_service.h"
+#include "query/command/ob_root_command_service.h"
 
 namespace oceanbase
 {
+
+namespace query
+{
+class ObILocalCommandService;
+}
 
 namespace common
 {
@@ -70,7 +76,7 @@ namespace obcall
 namespace rootserver
 {
 // Process-local management entry point for schema, DDL, jobs, freeze and recycle-bin work.
-class ObLocalManagementService
+class ObLocalManagementService : public query::ObIRootCommandService
 {
 public:
   friend class TestLocalManagementServiceCreateTable_check_rs_capacity_Test;
@@ -88,8 +94,14 @@ public:
   class ObDeadlockEventClearTask : public common::ObTimerTask
   {
   public:
+    explicit ObDeadlockEventClearTask(
+        ObLocalManagementService &local_management_service)
+        : local_management_service_(local_management_service)
+    {}
     virtual ~ObDeadlockEventClearTask() = default;
     virtual void runTimerTask() override;
+  private:
+    ObLocalManagementService &local_management_service_;
   };
 
 
@@ -121,6 +133,10 @@ public:
   common::ObServerConfig *get_server_config() { return config_; }
   int64_t get_core_meta_table_version() { return core_meta_table_version_; }
   ObRootMinorFreeze &get_root_minor_freeze() { return root_minor_freeze_; }
+  void set_local_command_service(query::ObILocalCommandService &service)
+  {
+    local_command_service_ = &service;
+  }
 
   int execute_bootstrap();
 
@@ -170,7 +186,12 @@ public:
   int purge_index(const obcall::ObPurgeIndexArg &arg);
   int create_table_like(const obcall::ObCreateTableLikeArg &arg);
   int parallel_create_table_like(const obcall::ObCreateTableLikeArg &arg, obcall::ObCreateTableRes &res);
-  int root_minor_freeze(const obcall::ObMinorFreezeArg &arg);
+  int root_minor_freeze(const obcall::ObMinorFreezeArg &arg) override;
+  int tablet_major_freeze(const common::ObTabletID &tablet_id) override;
+  int major_freeze() override;
+  int suspend_merge() override;
+  int resume_merge() override;
+  int clear_merge_error() override;
   int update_index_status(const obcall::ObUpdateIndexStatusArg &arg);
   int parallel_update_index_status(const obcall::ObUpdateIndexStatusArg &arg, obcall::ObParallelDDLRes &res);
   int purge_table(const obcall::ObPurgeTableArg &arg);
@@ -193,6 +214,7 @@ public:
                 common::ObSArray<int64_t> &failed_index);
   int rename_user(const obcall::ObRenameUserArg &arg,
                   common::ObSArray<int64_t> &failed_index);
+  int alter_user_default_role(const obcall::ObAlterUserRoleArg &arg);
   int set_passwd(const obcall::ObSetPasswdArg &arg);
   int grant(const obcall::ObGrantArg &arg);
   int revoke_user(const obcall::ObRevokeUserArg &arg);
@@ -243,7 +265,12 @@ public:
   //----End of functions for managing ai model----
 
   // system admin command (alter system ...)
-  int admin_set_config(obcall::ObAdminSetConfigArg &arg);
+  int admin_set_config(obcall::ObAdminSetConfigArg &arg) override;
+  int check_partition_exchange_schema_for_user(
+      const share::schema::ObTableSchema &base_table_schema,
+      const share::schema::ObTableSchema &inc_table_schema,
+      const common::ObString &partition_name,
+      share::schema::ObPartitionLevel exchange_part_level) override;
   int request_time_zone_info(const common::ObRequestTZInfoArg &arg, common::ObRequestTZInfoResult &result);
   // async tasks and callbacks
   int submit_ddl_local_build_task(share::ObAsyncTask &task);
@@ -306,6 +333,7 @@ private:
 private:
   bool inited_;
   bool need_bootstrap_;
+  bool service_started_;
   bool local_services_ready_;
   // use mysql server backend for debug.
   bool debug_;
@@ -316,6 +344,7 @@ private:
 
   common::ObMySQLProxy sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  query::ObILocalCommandService *local_command_service_;
 
   // minor freeze
   ObRootMinorFreeze root_minor_freeze_;

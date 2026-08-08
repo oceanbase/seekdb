@@ -21,6 +21,7 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -95,6 +96,12 @@ int ObEvalCtx::init_datum_caster()
     }
   }
   return ret;
+}
+
+int ObEvalCtx::get_datum_access_ctx(
+    const common::ObDatumAccessContext *&datum_access_ctx)
+{
+  return exec_ctx_.get_datum_access_ctx(datum_access_ctx);
 }
 
 DEF_TO_STRING(ObEvalInfo)
@@ -794,7 +801,8 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
       } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
         LOG_WARN("set obj to datum failed", K(ret));
       } else if (is_lob_storage(v.get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(v, expr.obj_meta_, expr.obj_datum_map_,
+                 OB_FAIL(ob_adjust_lob_datum(ctx.exec_ctx_, v, expr.obj_meta_,
+                                             expr.obj_datum_map_,
                                              ctx.exec_ctx_.get_allocator(), expr_datum))) {
         LOG_WARN("adjust lob datum failed", K(ret), K(v.get_meta()), K(expr.obj_meta_));
       }
@@ -843,7 +851,12 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       if (dst_meta.is_collection_sql_type()) {
         dst_obj.meta_.set_meta(dst_meta);
       }
-      cast_ctx.exec_ctx_ = &ctx.exec_ctx_;
+      ObSqlObjCastRuntime cast_runtime(&ctx.exec_ctx_);
+      cast_ctx.runtime_ = &cast_runtime;
+      session->configure_obj_cast(
+          cast_ctx,
+          ctx.exec_ctx_.get_srs_provider(),
+          ctx.exec_ctx_.get_lob_read_service());
       if (OB_FAIL(ObObjCaster::to_type(dst_meta.get_type(), cast_ctx, v, dst_obj))) {
         LOG_WARN("failed to cast obj to dst type", K(ret), K(v), K(dst_meta));
       } else if (OB_FAIL(datum_param.alloc_datum_reserved_buff(

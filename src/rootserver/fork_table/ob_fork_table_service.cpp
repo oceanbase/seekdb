@@ -20,9 +20,9 @@
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_service.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
@@ -399,8 +399,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
           LOG_WARN("fail to check async vector index", KR(ret),
                    "table_id", src_table_schema->get_table_id());
         } else if (has_async_vec_index) {
-          observer::ObInnerSQLConnection *iconn =
-              static_cast<observer::ObInnerSQLConnection *>(trans.get_connection());
+          common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
           const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
           if (OB_ISNULL(iconn)) {
             ret = OB_ERR_UNEXPECTED;
@@ -410,7 +409,10 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
                          transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
             LOG_WARN("fail to lock source table for async index sync", KR(ret),
                      "table_id", src_table_schema->get_table_id());
-          } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
+          } else if (OB_ISNULL(rootserver_local_runtime())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("rootserver local runtime is null", KR(ret));
+          } else if (OB_FAIL(rootserver_local_runtime()->wait_until_change_stream_refreshed(
                          get_sql_proxy(), lock_timeout_us))) {
             LOG_WARN("fail to wait change stream refresh", KR(ret));
           } else {

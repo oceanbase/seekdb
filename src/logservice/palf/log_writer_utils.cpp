@@ -15,7 +15,7 @@
  */
 
 #include "log_writer_utils.h"
-#include "logservice/palf/log_define.h"
+#include "share/log/palf/log_define.h"
 namespace oceanbase
 {
 using namespace common;

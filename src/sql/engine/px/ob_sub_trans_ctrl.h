@@ -18,7 +18,7 @@
 #define __SQL_ENGINE_PX_SUB_TRANS_UTIL_H__
 
 #include "sql/ob_sql_trans_control.h"
-#include "storage/ddl/ob_direct_load_type.h"
+#include "data_plane/ddl/ob_direct_load_control.h"
 
 namespace oceanbase
 {
@@ -37,20 +37,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSubTransCtrl);
 };
 
-class ObDDLCtrl final
-{
-public:
-  ObDDLCtrl() : direct_load_type_(storage::ObDirectLoadType::DIRECT_LOAD_INVALID), context_id_(0), in_progress_(false) {}
-  ~ObDDLCtrl() = default;
-
-  bool is_in_progress() const { return in_progress_; }
-  TO_STRING_KV(K_(direct_load_type), K_(context_id), K_(in_progress));
-public:
-  storage::ObDirectLoadType direct_load_type_;
-  int64_t context_id_;
-  // to tag whether the ddl is in progress (between start_ddl and end_ddl).
-  bool in_progress_;
-};
 }
 }
 #endif /* __SQL_ENGINE_PX_SUB_TRANS_UTIL_H__ */

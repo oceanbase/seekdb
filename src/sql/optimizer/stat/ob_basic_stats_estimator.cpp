@@ -19,7 +19,6 @@
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/optimizer/stat/ob_topk_hist_estimator.h"
-#include "observer/ob_service.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 namespace oceanbase
 {
@@ -387,8 +386,8 @@ int ObBasicStatsEstimator::get_tablet_locations(ObExecContext &ctx,
     if (OB_FAIL(candi_tablet_locs.prepare_allocate(tablet_ids.count()))) {
       LOG_WARN("partition location list prepare error", K(ret));
     } else {
-      ObLSLocation local_location;
-      if (OB_FAIL(local_location.init(SYS_LS, GCTX.self_addr(), 1))) {
+      share::ObLSLocation local_location;
+      if (OB_FAIL(local_location.init(share::SYS_LS, GCTX.self_addr(), 1))) {
         LOG_WARN("failed to initialize local LS location", K(ret), K(GCTX.self_addr()));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {

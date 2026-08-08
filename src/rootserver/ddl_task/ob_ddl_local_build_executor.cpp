@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX RS
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_local_build_executor.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 #include "storage/ob_storage_rpc_arg.h"
-#include "observer/ob_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_ddl_task_executor.h"
 
@@ -132,14 +132,14 @@ int ObDDLLocalBuildExecutor::build(const ObDDLLocalBuildExecutorParam &param)
   }
 
   if (OB_SUCC(ret)) {
-    LOG_INFO("start to schedule task", K(build_ctxs_.count()), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("start to schedule task", K(build_ctxs_.count()), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     if (OB_FAIL(schedule_task())) {
       LOG_WARN("fail to schedule tasks", K(ret));
     } else {
       LOG_INFO("start to schedule task", K(param.source_tablet_ids_));
     }
   } else {
-    LOG_INFO("fail to start local build task", K(ret), "ddl_event_info", ObDDLEventInfo());
+    LOG_INFO("fail to start local build task", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   }
   return ret;
 }
@@ -152,9 +152,9 @@ int ObDDLLocalBuildExecutor::schedule_task()
     LOG_WARN("build executor not init", K(ret));
   } else if (OB_FAIL(DDL_SIM(ddl_task_id_, LOCAL_BUILD_EXECUTOR_SCHEDULE_TASK_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(ddl_task_id_));
-  } else if (OB_ISNULL(GCTX.ob_service_)) {
+  } else if (OB_ISNULL(rootserver_local_runtime())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local observer service is null", K(ret));
+    LOG_WARN("rootserver local runtime is null", K(ret));
   } else {
     ObArray<obcall::ObDDLLocalBuildArg> args;
     ObArray<ObTabletID> tablet_ids;
@@ -179,7 +179,7 @@ int ObDDLLocalBuildExecutor::schedule_task()
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
       obcall::ObDDLLocalBuildResult result;
-      const int call_ret = GCTX.ob_service_->build_ddl_local(args.at(i), result);
+      const int call_ret = rootserver_local_runtime()->build_ddl_local(args.at(i), result);
       ObSpinLockGuard guard(lock_);
       bool is_found = false;
       ObDDLBuildCtx *build_ctx = nullptr;
@@ -256,7 +256,9 @@ int ObDDLLocalBuildExecutor::check_build_end(const bool need_checksum, bool &is_
     ret_code = ret;
     LOG_INFO("all local builds finished", K(succ_cnt), K(total_cnt));
     if (need_checksum) {
-      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id, execution_id_, ddl_task_id_))) {
+      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
+          *GCTX.schema_service_, *GCTX.sql_proxy_,
+          dest_table_id, execution_id_, ddl_task_id_))) {
         LOG_WARN("fail to check sstable checksum_report_finish",
             K(ret), K(dest_table_id), K(execution_id_), K(ddl_task_id_));
       }

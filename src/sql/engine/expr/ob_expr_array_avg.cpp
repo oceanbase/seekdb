@@ -108,17 +108,17 @@ int ObExprArrayAvg::eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     uint8_t *null_bitmaps = nullptr;
     const char *data = nullptr;
 
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                         ObLongTextType,
                                         CS_TYPE_BINARY,
                                         true,
                                         data_str))) {
       LOG_WARN("fail to get real data", K(ret), K(data_str));
-    } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
-                                            arr_type, 
-                                            len, 
+    } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str,
+                                            arr_type,
+                                            len,
                                             null_bitmaps,
-                                            data, 
+                                            data,
                                             data_len))) {
       LOG_WARN("failed to get array data", K(ret));
     } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
@@ -184,17 +184,17 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
         uint8_t *null_bitmaps = nullptr;
         const char *data = nullptr;
 
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, 
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,
                                             ObLongTextType,
-                                            CS_TYPE_BINARY, 
-                                            true, 
+                                            CS_TYPE_BINARY,
+                                            true,
                                             data_str))) {
           LOG_WARN("fail to get real data.", K(ret), K(data_str));
-        } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
-                                                arr_type, 
-                                                len, 
+        } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str,
+                                                arr_type,
+                                                len,
                                                 null_bitmaps,
-                                                data, 
+                                                data,
                                                 data_len))) {
           LOG_WARN("failed to get array data", K(ret));
         } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
@@ -216,11 +216,11 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
           }
         } else {
           double res_sum = 0;
-          if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, 
-                                            null_bitmaps, 
-                                            data, 
-                                            data_len, 
-                                            arr_type, 
+          if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len,
+                                            null_bitmaps,
+                                            data,
+                                            data_len,
+                                            arr_type,
                                             res_sum))) {
             LOG_WARN("failed to calc sum", K(ret));
           } else {

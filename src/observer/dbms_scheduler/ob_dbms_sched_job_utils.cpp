@@ -19,9 +19,12 @@
 
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_service.h"
+#include "query/scheduler/ob_scheduler_job.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
+#include "observer/ob_server.h"
 #include "storage/ob_common_id_utils.h"
 #include "sql/session/ob_sql_session_mgr.h"
+#include "share/ob_dml_sql_splicer.h"
 #include "share/ob_ex_rpc.h"
 
 namespace oceanbase
@@ -35,8 +38,6 @@ using namespace sql;
 
 namespace dbms_scheduler
 {
-ObDBMSSchedFuncSet ObDBMSSchedFuncSet::instance_;
-
 int ObDBMSSchedJobUtils::check_is_valid_name(const ObString &name) 
 {
   int ret = OB_SUCCESS;
@@ -206,69 +207,27 @@ int ObDBMSSchedJobUtils::get_max_failures_value(const ObString &src_str, int64_t
   return ret;
 }
 
-int ObDBMSSchedJobInfo::deep_copy(ObIAllocator &allocator, const ObDBMSSchedJobInfo &other)
+void ObDBMSSchedJobUtils::upgrade_legacy_func_type(
+    ObISQLClient &sql_client, ObDBMSSchedJobInfo &job_info)
 {
-  int ret = OB_SUCCESS;
-  user_id_ = other.user_id_;
-  database_id_ = other.database_id_;
-  job_ = other.job_;
-  last_modify_ = other.last_modify_;
-  last_date_ = other.last_date_;
-  this_date_ = other.this_date_;
-  next_date_ = other.next_date_;
-  total_ = other.total_;
-  failures_ = other.failures_;
-  flag_ = other.flag_;
-  scheduler_flags_ = other.scheduler_flags_;
-  start_date_ = other.start_date_;
-  end_date_ = other.end_date_;
-  enabled_ = other.enabled_;
-  auto_drop_ = other.auto_drop_;
-  interval_ts_ = other.interval_ts_;
-  max_run_duration_ = other.max_run_duration_;
-  max_failures_ = other.max_failures_;
-  func_type_ = other.func_type_;
-  this_exec_date_ = other.this_exec_date_;
-
-  OZ (ob_write_string(allocator, other.lowner_, lowner_));
-  OZ (ob_write_string(allocator, other.powner_, powner_));
-  OZ (ob_write_string(allocator, other.cowner_, cowner_));
-
-  OZ (ob_write_string(allocator, other.interval_, interval_));
-  OZ (ob_write_string(allocator, other.repeat_interval_, repeat_interval_));
-
-  OZ (ob_write_string(allocator, other.what_, what_));
-  OZ (ob_write_string(allocator, other.nlsenv_, nlsenv_));
-  OZ (ob_write_string(allocator, other.charenv_, charenv_));
-  OZ (ob_write_string(allocator, other.exec_env_, exec_env_));
-  OZ (ob_write_string(allocator, other.job_name_, job_name_));
-  OZ (ob_write_string(allocator, other.job_class_, job_class_));
-  OZ (ob_write_string(allocator, other.program_name_, program_name_));
-  OZ (ob_write_string(allocator, other.state_, state_));
-  OZ (ob_write_string(allocator, other.job_action_, job_action_));
-  OZ (ob_write_string(allocator, other.job_type_, job_type_));
-  OZ (ob_write_string(allocator, other.this_exec_trace_id_, this_exec_trace_id_));
-  //Handle columns with compatibility issues
-  //job style 
-  OZ (ob_write_string(allocator, "REGULAR", job_style_));
-
-  return ret;
-}
-
-ObDBMSSchedFuncType ObDBMSSchedJobInfo::get_func_type() const
-{
-  return func_type_;
-}
-
-int ObDBMSSchedJobClassInfo::deep_copy(common::ObIAllocator &allocator, const ObDBMSSchedJobClassInfo &other)
-{
-  int ret = OB_SUCCESS;
-  OZ (log_history_.from(other.log_history_, allocator));
-  OZ (ob_write_string(allocator, other.job_class_name_, job_class_name_));
-  OZ (ob_write_string(allocator, other.service_, service_));
-  OZ (ob_write_string(allocator, other.logging_level_, logging_level_));
-  OZ (ob_write_string(allocator, other.comments_, comments_));
-  return ret;
+  const ObDBMSSchedFuncType inferred_type = job_info.get_func_type();
+  if (ObDBMSSchedFuncType::USER_JOB == job_info.func_type_
+      && ObDBMSSchedFuncType::USER_JOB != inferred_type) {
+    int ret = OB_SUCCESS;
+    ObDMLSqlSplicer dml;
+    ObSqlString sql;
+    int64_t affected_rows = 0;
+    OZ (dml.add_pk_column("job", job_info.job_));
+    OZ (dml.add_pk_column("job_name", job_info.job_name_));
+    OZ (dml.add_column("func_type", static_cast<uint64_t>(inferred_type)));
+    OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
+    OZ (sql_client.write(sql.ptr(), affected_rows));
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to persist legacy scheduler function type",
+               KR(ret), K(job_info), K(inferred_type));
+    }
+    job_info.func_type_ = inferred_type;
+  }
 }
 
 int ObDBMSSchedJobUtils::generate_job_id(int64_t &max_job_id)
@@ -333,11 +292,11 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                   OZ (ex_rpc::sync_call([&stop_job_name, session_id, stop_rpc_send_time]() -> int {
                     int ret = OB_SUCCESS;
                     ObSQLSessionInfo *kill_session = NULL;
-                    if (OB_ISNULL(GCTX.session_mgr_)) {
-                      ret = OB_ERR_UNEXPECTED;
-                      LOG_WARN("session_mgr_ is null", K(ret));
-                    } else {
-                      sql::ObSessionGetterGuard sess_guard(*GCTX.session_mgr_, session_id);
+                    ObSQLSessionMgr &session_mgr =
+                        OBSERVER.get_sql_session_mgr();
+                    {
+                      sql::ObSessionGetterGuard sess_guard(
+                          session_mgr, session_id);
                       if (OB_FAIL(sess_guard.get_session(kill_session))) {
                         LOG_WARN("failed to get session", K(session_id), K(stop_job_name));
                       } else if (OB_ISNULL(kill_session)) {
@@ -360,7 +319,7 @@ int ObDBMSSchedJobUtils::stop_dbms_sched_job(
                             ret = OB_ERR_UNEXPECTED;
                             LOG_WARN("session maybe reused by later round", K(ret), K(stop_job_name),
                                 K(session_id), K(kill_session->get_sess_create_time()), KPC(kill_session));
-                          } else if (OB_FAIL(GCTX.session_mgr_->kill_session(*kill_session))) {
+                          } else if (OB_FAIL(session_mgr.kill_session(*kill_session))) {
                             LOG_WARN("failed to kill session", K(ret), K(stop_job_name), KPC(kill_session));
                           } else {
                             LOG_INFO("stop job finish", K(stop_job_name), K(session_id));
@@ -687,6 +646,9 @@ int ObDBMSSchedJobUtils::get_dbms_sched_job_info(common::ObISQLClient &sql_clien
           if (res.get_result() != NULL && OB_SUCCESS == (ret = res.get_result()->next())) {
             ObDBMSSchedTableOperator table_operator;
             OZ (table_operator.extract_info(*(res.get_result()), allocator, job_info));
+            if (OB_SUCC(ret)) {
+              upgrade_legacy_func_type(sql_client, job_info);
+            }
           }
           if (OB_FAIL(ret)) {
             if (OB_ITER_END == ret) {

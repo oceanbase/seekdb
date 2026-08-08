@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
@@ -442,7 +442,7 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
   }
   if (OB_SUCC(ret)) {
     SERVER_MODULE_SCOPE {
-      sql::ObPlanCache *pc = share::g_mp->plan_cache();
+      sql::ObPlanCache *pc = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_FAIL(pc->flush_plan_cache())) {
         LOG_WARN("failed to evict plan", K(ret));
         // use OB_SQL_PC_NOT_EXIST represent evict plan failed
@@ -457,7 +457,7 @@ int ObOptStatManager::invalidate_plan(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    sql::ObPlanCache *pc = share::g_mp->plan_cache();
+    sql::ObPlanCache *pc = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
 
     if (OB_FAIL(pc->evict_plan(table_id))) {
       LOG_WARN("failed to evict plan", K(ret));

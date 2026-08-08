@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "ob_block_manager.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/ob_server_utils.h"
+#include "ob_io_bench_controller.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
@@ -37,6 +37,53 @@ using namespace oceanbase::share;
 
 namespace oceanbase {
 namespace blocksstable {
+namespace
+{
+int calc_auto_extend_size(int64_t &cur_datafile_size,
+                          int64_t &actual_extend_size)
+{
+  int ret = OB_SUCCESS;
+  const int64_t datafile_maxsize = GCONF.datafile_maxsize;
+  const int64_t datafile_next = GCONF.datafile_next;
+  const int64_t datafile_size =
+      OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
+      * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+
+  if (OB_UNLIKELY(datafile_maxsize <= 0) || OB_UNLIKELY(datafile_size <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid datafile auto-extend argument",
+             K(ret), K(datafile_maxsize), K(datafile_size));
+  } else {
+    int64_t extend_size = 0;
+    const int64_t max_extend_file = datafile_maxsize - datafile_size;
+    if (0 == datafile_next) {
+      const int64_t datafile_next_scale_limit = 1L * 1024 * 1024 * 1024;
+      extend_size = MIN(datafile_size, datafile_next_scale_limit);
+    } else {
+      const int64_t datafile_next_minsize = 32 * 1024 * 1024;
+      if (datafile_next < datafile_next_minsize) {
+        const int64_t min_extend_size = datafile_maxsize * 10 / 100;
+        extend_size = MIN(min_extend_size, datafile_next_minsize);
+      } else {
+        extend_size = datafile_next;
+      }
+    }
+    actual_extend_size = MIN(extend_size, max_extend_file);
+    if (actual_extend_size <= 0) {
+      ret = OB_SERVER_OUTOF_DISK_SPACE;
+      if (REACH_TIME_INTERVAL(300 * 1000 * 1000L)) {
+        LOG_INFO("no more disk space to extend",
+                 K(ret), K(datafile_maxsize), K(datafile_size));
+      }
+    } else {
+      actual_extend_size += datafile_size;
+      cur_datafile_size = datafile_size;
+    }
+  }
+  return ret;
+}
+} // namespace
+
 /**
  * --------------------------------ObSuperBlockPreadChecker------------------------------------
  */
@@ -1041,14 +1088,14 @@ int ObBlockManager::mark_macro_blocks(
     if (OB_FAIL(mark_local_storage_blocks(mark_info, macro_id_set, tmp_status))) {
       LOG_WARN("fail to mark local storage blocks", K(ret));
     } else if (OB_FALSE_IT(
-                   share::g_mp->shared_macro_block_mgr()->get_cur_shared_block(
+                   ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>()->get_cur_shared_block(
                        macro_id))) {
     } else if (OB_FAIL(
                    mark_held_block(
                        macro_id, mark_info, macro_id_set, tmp_status))) {
       LOG_WARN("fail to mark block held by shared macro block manager",
                K(ret), K(macro_id));
-    } else if (OB_FALSE_IT(share::g_mp->local_storage_meta_service()
+    } else if (OB_FALSE_IT(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()
                                ->get_object_reader_writer()
                                .get_cur_block(macro_id))) {
     } else if (OB_FAIL(mark_held_block(macro_id, mark_info, macro_id_set, tmp_status))) {
@@ -1092,8 +1139,8 @@ int ObBlockManager::mark_local_storage_blocks(
         &macro_id_set,
     ObMacroBlockMarkerStatus &tmp_status) {
   int ret = OB_SUCCESS;
-  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObLocalStorageMetaService *meta_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_ISNULL(t3m) || OB_ISNULL(meta_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null storage metadata service", K(ret),
@@ -1241,7 +1288,7 @@ int ObBlockManager::mark_tmp_file_blocks(
   int ret = OB_SUCCESS;
 
   ObArray<MacroBlockId> macro_block_list;
-  if (OB_FAIL(share::g_mp->tmp_file_manager()->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->get_sn_file_manager().get_macro_block_list(macro_block_list))) {
     LOG_WARN("fail to get macro block list", K(ret));
   } else if (OB_FAIL(update_mark_info(macro_block_list, macro_id_set, mark_info))){
     LOG_WARN("fail to update mark info", K(ret), K(macro_block_list.count()));
@@ -1495,7 +1542,7 @@ int ObBlockManager::extend_file_size_if_need() {
       int64_t datafile_disk_percentage = 0;
       int64_t cur_datafile_size = 0;
 
-      if (OB_FAIL(observer::ObServerUtils::calc_auto_extend_size(
+      if (OB_FAIL(calc_auto_extend_size(
               cur_datafile_size, suggest_extend_size))) {
         LOG_DEBUG("calc auto extend size error, maybe ssblock file has reach "
                   "it's max size",
@@ -1640,11 +1687,55 @@ ObServerBlockManager &ObServerBlockManager::get_instance() {
 } // namespace blocksstable
 } // namespace oceanbase
 
-// ===== definition moved from share/io/ob_io_calibration.cpp(IO benchmark family) =====
 namespace oceanbase
 {
-namespace common
+namespace storage
 {
+
+// Storage owns the macro blocks used by the benchmark. Keep this runner
+// private so the lower Share IO interface does not depend back on Storage.
+class ObIOBenchRunner : public lib::Threads
+{
+public:
+  ObIOBenchRunner();
+  ~ObIOBenchRunner();
+  int init(const int64_t block_count);
+  int do_benchmark(const ObIOBenchLoad &load,
+                   const int64_t thread_count,
+                   ObIOBenchResult &result);
+  void destroy();
+  void run1() override;
+
+private:
+  bool is_inited_;
+  bool thread_inited_;
+  ObArray<blocksstable::ObMacroBlockHandle> block_handles_;
+  ObIOBenchLoad load_;
+  int64_t io_count_;
+  int64_t rt_us_;
+  char *write_buf_;
+  char *read_buf_;
+  int64_t block_count_;
+};
+
+ObIOBenchRunner::ObIOBenchRunner()
+  : lib::Threads(1),
+    is_inited_(false),
+    thread_inited_(false),
+    block_handles_(),
+    load_(),
+    io_count_(0),
+    rt_us_(0),
+    write_buf_(nullptr),
+    read_buf_(nullptr),
+    block_count_(0)
+{
+}
+
+ObIOBenchRunner::~ObIOBenchRunner()
+{
+  destroy();
+}
 
 int ObIOBenchRunner::init(const int64_t block_count)
 {
@@ -1684,6 +1775,89 @@ int ObIOBenchRunner::init(const int64_t block_count)
   return ret;
 }
 
+int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load,
+                                  const int64_t thread_count,
+                                  ObIOBenchResult &result)
+{
+  int ret = OB_SUCCESS;
+  result.reset();
+  const int64_t BENCHMARK_TIMEOUT_S = 5L;
+  if (OB_UNLIKELY(!is_inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret), K(is_inited_));
+  } else if (OB_UNLIKELY(!load.is_valid() || thread_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(load), K(thread_count));
+  } else {
+    load_ = load;
+    io_count_ = 0;
+    rt_us_ = 0;
+    if (thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
+    if (OB_FAIL(lib::Threads::set_thread_count(thread_count))) {
+      LOG_WARN("set thread count failed", K(ret), K(thread_count));
+    } else if (OB_FAIL(lib::Threads::init())) {
+      LOG_WARN("init benchmark threads failed", K(ret), K(thread_count));
+    } else if (OB_FAIL(lib::Threads::start())) {
+      LOG_WARN("start thread failed", K(ret));
+    } else {
+      thread_inited_ = true;
+#ifdef _WIN32
+      Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
+#else
+      sleep(BENCHMARK_TIMEOUT_S);
+#endif
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+      if (io_count_ <= 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid io count", K(ret), K(io_count_));
+      } else {
+        result.mode_ = load_.mode_;
+        result.size_ = load_.size_;
+        result.iops_ = io_count_ / BENCHMARK_TIMEOUT_S;
+        result.rt_us_ = rt_us_ / io_count_;
+      }
+      LOG_INFO("IO BENCHMARK finished", K(ret), K_(load), K(result));
+    }
+    if (OB_FAIL(ret) && thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
+  }
+  return ret;
+}
+
+void ObIOBenchRunner::destroy()
+{
+  if (thread_inited_) {
+    lib::Threads::stop();
+    lib::Threads::wait();
+    lib::Threads::destroy();
+    thread_inited_ = false;
+  }
+  if (nullptr != write_buf_) {
+    ob_free(write_buf_);
+    write_buf_ = nullptr;
+  }
+  if (nullptr != read_buf_) {
+    ob_free(read_buf_);
+    read_buf_ = nullptr;
+  }
+  is_inited_ = false;
+  block_handles_.reset();
+  load_.reset();
+  io_count_ = 0;
+  rt_us_ = 0;
+}
 
 void ObIOBenchRunner::run1()
 {
@@ -1737,6 +1911,73 @@ void ObIOBenchRunner::run1()
   }
 }
 
+ObIOBenchController::ObIOBenchController()
+  : lib::Threads(1),
+    thread_inited_(false),
+    running_mutex_(),
+    start_ts_(0),
+    finish_ts_(0),
+    ret_code_(OB_SUCCESS)
+{
+}
+
+ObIOBenchController::~ObIOBenchController()
+{
+  if (thread_inited_) {
+    lib::Threads::stop();
+    lib::Threads::wait();
+    lib::Threads::destroy();
+    thread_inited_ = false;
+  }
+}
+
+int ObIOBenchController::start_io_bench()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(running_mutex_.trylock())) {
+    if (OB_UNLIKELY(OB_EAGAIN != ret)) {
+      LOG_WARN("try lock failed", K(ret));
+    } else {
+      ret = OB_SUCCESS;
+    }
+  } else {
+    if (thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
+    if (OB_FAIL(lib::Threads::init())) {
+      LOG_WARN("init thread failed", K(ret));
+    } else if (OB_FAIL(lib::Threads::start())) {
+      LOG_WARN("start thread failed", K(ret));
+    } else {
+      thread_inited_ = true;
+    }
+    if (OB_FAIL(ret) && thread_inited_) {
+      lib::Threads::stop();
+      lib::Threads::wait();
+      lib::Threads::destroy();
+      thread_inited_ = false;
+    }
+    const int tmp_ret = running_mutex_.unlock();
+    if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
+      LOG_WARN("unlock running mutex failed", K(tmp_ret));
+    }
+  }
+  return ret;
+}
+
+int ObIOBenchController::get_benchmark_status(
+    int64_t &start_ts,
+    int64_t &finish_ts,
+    int &ret_code) const
+{
+  start_ts = start_ts_;
+  finish_ts = finish_ts_;
+  ret_code = ret_code_;
+  return OB_SUCCESS;
+}
 
 void ObIOBenchController::run1()
 {
@@ -1809,37 +2050,5 @@ void ObIOBenchController::run1()
 }
 
 
-}  // namespace common
-}  // namespace oceanbase
-
-// ===== definition moved from share/io/ob_io_struct.cpp(IO probe task) =====
-namespace oceanbase
-{
-namespace common
-{
-
-int ObIOTuner::send_detect_task()
-{
-  int ret = OB_SUCCESS;
-  ObArray<blocksstable::MacroBlockId> macro_ids;
-  macro_ids.set_attr(ObMemAttr("back_io_detect"));
-  if (!OB_SERVER_BLOCK_MGR.is_started() || 0 == OB_SERVER_BLOCK_MGR.get_used_macro_block_count()) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("block manager not init", K(ret));
-  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.get_limited_iter_macro_ids(macro_ids, 128))) {
-    LOG_WARN("fail to get macro ids", K(ret), K(macro_ids));
-  } else if (OB_UNLIKELY(0 == macro_ids.count())) {
-    // skip
-  } else {
-    MacroBlockId &rand_id = macro_ids.at(ObRandom::rand(0, macro_ids.count() - 1));
-    if (OB_FAIL(
-            OB_IO_MANAGER.get_device_health_detector().record_timing_task(rand_id.first_id(), rand_id.second_id()))) {
-      LOG_WARN("fail to record timing task", K(ret), K(rand_id));
-    }
-  }
-  return ret;
-}
-
-
-}  // namespace common
+}  // namespace storage
 }  // namespace oceanbase

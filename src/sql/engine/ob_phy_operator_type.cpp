@@ -16,6 +16,17 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/ob_operator_reg.h"
+#include "sql/engine/ob_phy_operator_type.h"
+
+enum
+{
+  PHY_OP_XMACRO_ENTRY_COUNT = 0
+#define PHY_OP_DEF(type) + 1
+#include "sql/engine/ob_phy_operator_type.h"
+#undef PHY_OP_DEF
+};
+static_assert(PHY_OP_XMACRO_ENTRY_COUNT == oceanbase::sql::PHY_END + 1,
+              "physical operator X-macro header must support repeated inclusion");
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

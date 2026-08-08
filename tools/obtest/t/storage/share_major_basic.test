@@ -1,0 +1,90 @@
+# owner: yunshan.tys
+# owner group: storage
+# description: share major basic test
+
+--disable_query_log
+ob1=OBI(cluster=5,proxy_num=1);
+
+source include/mini_ob_config.inc;
+ob1.z1.obs0.set extra_config=$mini_ob_config;
+ob1.z1.obs1.set extra_config=$mini_ob_config;
+ob1.z1.obs2.set extra_config=$mini_ob_config;
+ob1.z1.obs3.set extra_config=$mini_ob_config;
+ob1.z1.obs4.set extra_config=$mini_ob_config;
+
+ob1.reboot;
+
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_stat where start_service_time = 0, 0, 60;
+
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = true;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter system set merge_thread_count = 64;
+ob1.mysql alter system set minor_merge_concurrency = 64;
+ob1.mysql alter system set _mini_merge_concurrency = 64;
+ob1.mysql alter system set data_copy_concurrency = 1000;
+ob1.mysql alter system set server_data_copy_in_concurrency = 1000;
+ob1.mysql alter system set server_data_copy_out_concurrency = 1000;
+ob1.mysql alter system set migrate_concurrency = 64;
+ob1.mysql alter system set partition_table_check_interval = '1m';
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(sys_conn, $ip, root@sys,,test, $port);
+
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_stat where start_service_time = 0, 0, 60;
+
+ob1.mysql create resource unit box1 max_cpu 2, max_memory = '2G' , max_iops 100000, max_disk_size '5G', max_session_num 64, MIN_CPU=1, MIN_MEMORY='768M', MIN_IOPS=128;
+ob1.mysql create resource pool pool1 unit = 'box1', unit_num = 2;
+ob1.mysql create tenant tt1 replica_num = 2, resource_pool_list=('pool1'), primary_zone="z1", locality = "F,R@z1" set ob_tcp_invited_nodes='%';
+
+sleep 2;
+
+let $proxy_ip = deploy_get_value(ob1.proxy0.ip);
+let $proxy_port = deploy_get_value(ob1.proxy0.port);
+
+connect(tt1_conn, $proxy_ip, root@tt1,,test, $proxy_port);
+connection tt1_conn;
+
+use test;
+create table t_1(c1 int primary key) partition by hash(c1) partitions 10;
+
+let $cnt = 1;
+
+while ($cnt <= 100) 
+{
+  eval insert into test.t_1 values($cnt);
+  inc $cnt;
+}
+
+connection sys_conn;
+
+ob1.mysql alter system major freeze;
+
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_meta_table where data_version != 2, 0, 60000;
+
+ob1.check_version 2;
+
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=0 and is_active=0, 0, 90;
+
+connection tt1_conn;
+
+use test;
+
+while ($cnt <= 200) 
+{
+  eval insert into test.t_1 values($cnt);
+  inc $cnt;
+}
+
+connection sys_conn;
+
+ob1.mysql alter system major freeze;
+
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_meta_table where data_version != 3, 0, 60000;
+
+ob1.check_version 3

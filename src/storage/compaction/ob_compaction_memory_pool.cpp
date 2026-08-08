@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_compaction_memory_pool.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_force_print_log.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 
@@ -517,7 +517,7 @@ void ObCompactionMemPool::MemPoolShrinkTask::runTimerTask()
   int ret = OB_SUCCESS;
   int64_t compaction_dag_cnt = 0;
 
-  if (OB_FAIL(share::g_mp->dag_scheduler()->get_compaction_dag_count(compaction_dag_cnt))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_compaction_dag_count(compaction_dag_cnt))) {
     LOG_WARN("failed to get compaction dag count", K(ret));
   } else if (0 == compaction_dag_cnt && 0 == last_check_dag_cnt_) {
     if (OB_FAIL(mem_pool_.try_shrink())) {
@@ -657,7 +657,7 @@ int ObCompactionBufferWriter::alloc_block(
 {
   int ret = OB_SUCCESS;
 
-  if (use_mem_pool_ && OB_FAIL(share::g_mp->compaction_mem_pool()->alloc(size, block))) {
+  if (use_mem_pool_ && OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObCompactionMemPool>()->alloc(size, block))) {
     LOG_WARN("failed to alloc mem for new block", K(ret), K(size));
   } else if (!use_mem_pool_) {
     void *buf = nullptr;
@@ -684,7 +684,7 @@ void ObCompactionBufferWriter::free_block()
     server_free(block_.get_buffer());
     block_.reset();
   } else {
-    ObCompactionMemPool * mem_pool = share::g_mp->compaction_mem_pool();
+    ObCompactionMemPool * mem_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObCompactionMemPool>();
     if (OB_NOT_NULL(mem_pool)) {
       mem_pool->free(block_);
     } else {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_writer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_reader.h"
@@ -98,7 +98,7 @@ int ObLocalStorageCheckpointWriter::record_ls_meta(MacroBlockId &ls_entry_block)
     LOG_WARN("failed to init log stream item writer", K(ret));
   } else {
     share::SCN unused_scn;
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
       LOG_WARN("failed to get log stream", K(ret));
     } else if (OB_FAIL(do_record_ls_meta(*tenant_ls, unused_scn))) {
       LOG_WARN("fail to do record storage meta", K(ret));
@@ -247,7 +247,7 @@ int ObLocalStorageCheckpointWriter::persist_and_copy_tablet(
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("SlogCkptWriter");
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletHandle old_tablet_handle;
   ObTabletHandle new_tablet_handle;
   ObTablet *old_tablet = nullptr;
@@ -322,7 +322,7 @@ int ObLocalStorageCheckpointWriter::copy_tablet(
   ObMetaDiskAddr old_addr;
   const ObTabletPersisterParam param(0, tablet_key.tablet_id_);
 
-  if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, tablet_handle))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_tablet_with_allocator(WashTabletPriority::WTP_LOW, tablet_key, allocator, tablet_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_INFO("skip writing snapshot for this tablet", K(tablet_key));
     } else {
@@ -409,7 +409,7 @@ int ObLocalStorageCheckpointWriter::batch_compare_and_swap_tablet()
     ret = OB_NOT_INIT;
     LOG_WARN("ObLocalStorageCheckpointWriter not init", K(ret));
   }
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletHandle new_tablet_handle;
   ObLS *tenant_ls = nullptr;
   ObLSService *ls_svr = nullptr;
@@ -425,7 +425,7 @@ int ObLocalStorageCheckpointWriter::batch_compare_and_swap_tablet()
         ret = OB_SUCCESS;
         LOG_INFO("this tablet has been deleted, skip the swap", K(addr_info));
       }
-    } else if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
+    } else if (OB_ISNULL(ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls service is null", K(ret));
     } else if (OB_FAIL(ls_svr->get_ls(tenant_ls))) {
@@ -492,7 +492,7 @@ int ObLocalStorageCheckpointWriter::rollback()
         rollback_cnt++;
         do {
           allocator.reuse();
-          if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(
               addr_info.new_addr_,
               allocator,
               buf,
@@ -535,7 +535,7 @@ int ObLocalStorageCheckpointWriter::get_tablet_with_addr(
     ObArenaAllocator allocator("SlogCkptWriter", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObObjectReadHandle object_read_handle(allocator);
     int64_t pos = 0;
-    if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->acquire_tablet_from_pool(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->acquire_tablet_from_pool(
         tablet_pool_type,
         WashTabletPriority::WTP_LOW,
         addr_info.tablet_key_,

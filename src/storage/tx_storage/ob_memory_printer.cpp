@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_memstore_freezer.h"          // ObMemstoreFreezer
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/tx_storage/ob_memory_printer.h"
 
 namespace oceanbase
@@ -57,7 +58,8 @@ int ObMemoryPrinter::print_memory_usage()
   static const int64_t BUF_LEN = 4LL << 10;
   char print_buf[BUF_LEN] = "";
   int64_t pos = 0;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(
+          ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>())) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(print_mutex_.trylock())) {
     ret = OB_SUCCESS;
@@ -95,7 +97,7 @@ int ObMemoryPrinter::print_memory_usage_(
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    storage::ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+    storage::ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
     if (OB_ISNULL(freezer)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("freezer is null", K(ret));

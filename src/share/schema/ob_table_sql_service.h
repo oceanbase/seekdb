@@ -31,14 +31,18 @@ class ObDMLSqlSplicer;
 namespace schema
 {
 struct ObSchemaOperation;
+class ObMultiVersionSchemaService;
 class ObTableSchema;
 class ObColumnSchemaV2;
 
 class ObTableSqlService : public ObDDLSqlService
 {
 public:
-  explicit ObTableSqlService(ObSchemaService &schema_service)
-    : ObDDLSqlService(schema_service), sql_proxy_(NULL)
+  ObTableSqlService(ObSchemaService &schema_service,
+                    ObMultiVersionSchemaService &multi_version_schema_service)
+    : ObDDLSqlService(schema_service),
+      sql_proxy_(NULL),
+      multi_version_schema_service_(multi_version_schema_service)
     {}
   virtual ~ObTableSqlService() {}
 
@@ -551,6 +555,7 @@ public:
   void init(common::ObMySQLProxy *sql_proxy) { sql_proxy_ = sql_proxy; }
 private:
   common::ObMySQLProxy *sql_proxy_;
+  ObMultiVersionSchemaService &multi_version_schema_service_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTableSqlService);
 };

@@ -230,7 +230,7 @@ int ObExprRepeat::calc(ObObj &result,
   } else if (!ob_is_text_tc(res_type)) {
     ret = repeat(output, is_null, text, count, *allocator, max_result_size);
   } else {
-    ret = repeat_text(res_type, has_lob_header, output, is_null, 
+    ret = repeat_text(res_type, has_lob_header, output, is_null,
                       text, count, *allocator, max_result_size);
   }
   if (OB_FAIL(ret)) {
@@ -272,7 +272,7 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
     LOG_WARN("get max length failed", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *text,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *text,
                      expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_str))) {
     LOG_WARN("fail to get real data.", K(ret), K(text_str));
   } else {
@@ -284,7 +284,7 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
       ret = repeat(output, is_null,
                    text_str, count->get_int(), expr_res_alloc, max_size);
     } else { // text tc
-      ret = repeat_text(expr.datum_meta_.type_, has_lob_header, output, is_null, 
+      ret = repeat_text(expr.datum_meta_.type_, has_lob_header, output, is_null,
                         text_str, count->get_int(), expr_res_alloc, max_size);
     }
     if (OB_FAIL(ret)) {

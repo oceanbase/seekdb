@@ -17,25 +17,21 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "data_plane/ob_i_memory_pressure_service.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "share/ob_timezone_mgr.h"
-#include "src/observer/mysql/ob_query_driver.h"
-#include "observer/ob_inner_sql_connection.h"
-#include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
-using namespace oceanbase::observer;
 
 namespace oceanbase
 {
@@ -137,8 +133,8 @@ int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
   int ret = OB_SUCCESS;
 
   SERVER_MODULE_SCOPE {
-    storage::ObMemstoreFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+    data_plane::ObIMemoryPressureService *memory_pressure = nullptr;
+    if (FALSE_IT(memory_pressure = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIMemoryPressureService>())) {
     } else {
       int64_t active_memstore_used = 0;
       int64_t total_memstore_used = 0;
@@ -146,11 +142,12 @@ int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
       int64_t memstore_limit = 0;
       int64_t freeze_cnt = 0;
 
-      if (OB_FAIL(freezer->get_memstore_condition(active_memstore_used,
-                                                    total_memstore_used,
-                                                    major_freeze_trigger,
-                                                    memstore_limit,
-                                                    freeze_cnt))) {
+      if (OB_FAIL(memory_pressure->get_memstore_condition(
+              active_memstore_used,
+              total_memstore_used,
+              major_freeze_trigger,
+              memstore_limit,
+              freeze_cnt))) {
         LOG_WARN("fail to get memstore used", K(ret));
       } else {
         if (total_memstore_used > (memstore_limit - major_freeze_trigger)/2 + major_freeze_trigger) {

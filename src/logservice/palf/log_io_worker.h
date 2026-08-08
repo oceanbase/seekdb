@@ -28,8 +28,8 @@
 #include "share/ob_thread_pool.h"                   // ObThreadPool
 #include "lib/time/ob_clock_generator.h"              // ObClockGenerator
 #include "log_io_task.h"                            // LogBatchIOFlushLogTask
-#include "log_define.h"                             // PALF_SLIDING_WINDOW_SIZE
-#include "palf_options.h"                           // PalfThrottleOptions
+#include "share/log/palf/log_define.h"                             // PALF_SLIDING_WINDOW_SIZE
+#include "share/log/palf/palf_options.h"                           // PalfThrottleOptions
 #include "log_throttle.h"                           // LogWritingThrottle
 namespace oceanbase
 {

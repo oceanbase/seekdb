@@ -16,9 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/mysql/obmp_change_user.h"
+#include "observer/ob_server_runtime_access.h"
 #include "sql/ob_sql.h"
 #include "rpc/obmysql/packet/ompk_auth_switch.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "sql/session/ob_piece_cache.h"
 
 
 using namespace oceanbase::common;
@@ -140,7 +141,8 @@ int ObMPChangeUser::process()
   // Releases prepared statements. (include ps stmt, ps cursor, piece)
   if (OB_SUCC(ret)) {
     // 1 ps stmt
-    if (OB_FAIL(session->close_all_ps_stmt())) {
+    if (OB_FAIL(session->close_all_ps_stmt(
+            get_observer_sql_engine()->get_ps_cache()))) {
       LOG_WARN("failed to close all stmt", K(ret));
     }
 
@@ -155,8 +157,8 @@ int ObMPChangeUser::process()
 
     // 3 piece
     if (OB_SUCC(ret) && NULL != session->get_piece_cache()) {
-      observer::ObPieceCache* piece_cache = 
-        static_cast<observer::ObPieceCache*>(session->get_piece_cache());
+      sql::ObPieceCache* piece_cache =
+        static_cast<sql::ObPieceCache*>(session->get_piece_cache());
       if (OB_FAIL(piece_cache->close_all(*session))) {
         LOG_WARN("failed to close all piece", K(ret));
       }

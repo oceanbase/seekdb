@@ -674,6 +674,7 @@ def make_sys_var_meta_cpp(pdir, filename, list_sorted_by_name, list_sorted_by_id
   wfile.write("#define USING_LOG_PREFIX SHARE\n")
   wfile.write("#include \"" + pdir + "/" + filename.replace(".cpp", ".h") + "\"\n")
   wfile.write("#include \"share/system_variable/ob_system_variable_init.h\"\n")
+  wfile.write("#include \"share/ob_errno.h\"\n")
   wfile.write("#include \"lib/oblog/ob_log_module.h\"\n")
   wfile.write("using namespace oceanbase::common;\n");
   wfile.write("""

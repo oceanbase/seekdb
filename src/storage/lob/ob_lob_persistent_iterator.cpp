@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_persistent_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_table_scan_iterator.h"
 
 namespace oceanbase
@@ -104,7 +104,7 @@ int ObLobMetaBaseIterator::revert_scan_iter()
   int ret = OB_SUCCESS;
   ObAccessService *oas = nullptr;
   if (OB_ISNULL(row_iter_)) { // skip when is null
-  } else if (OB_ISNULL(oas = share::g_mp->access_service())) {
+  } else if (OB_ISNULL(oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get access service fail", K(ret));
   } else if (OB_FALSE_IT(row_iter_->reset())) {
@@ -120,7 +120,7 @@ int ObLobMetaBaseIterator::revert_scan_iter()
 int ObLobMetaBaseIterator::scan(ObLobAccessParam &param, const bool is_get, ObIAllocator *stmt_allocator, ObIAllocator *scan_allocator)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(oas)) {
     ret = OB_ERR_INTERVAL_INVALID;
     LOG_ERROR("access service is null", K(ret), K(param), KPC(this));
@@ -146,7 +146,7 @@ int ObLobMetaBaseIterator::scan(ObLobAccessParam &param, const bool is_get, ObIA
 int ObLobMetaBaseIterator::rescan(ObLobAccessParam &param)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (param.tablet_id_ != main_tablet_id_ || param.lob_meta_tablet_id_ != lob_meta_tablet_id_ || param.lob_piece_tablet_id_ != lob_piece_tablet_id_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet_id not match", K(ret), K(param), KPC(this));

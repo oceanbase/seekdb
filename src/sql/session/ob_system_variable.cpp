@@ -15,9 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "data_plane/transaction/ob_transaction_isolation.h"
 #include "ob_system_variable.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
 #include "share/system_variable/ob_sys_var_meta.h"
-#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
 #include "share/ob_timezone_mgr.h"
@@ -2284,13 +2285,14 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
     session.get_query_timeout(query_timeout);
     int64_t stmt_expire_ts = session.get_query_start_time() + query_timeout;
     transaction::ObTxReadSnapshot snapshot;
-    if (OB_FAIL(share::g_mp->trans_service()
+    if (OB_FAIL(data_plane::query_transaction_service()
                 ->get_read_snapshot(*session.get_tx_desc(),
                                     isolation,
                                     stmt_expire_ts,
                                     snapshot))) {
       LOG_WARN("fail to get snapshot for serializable / repeatable read", K(ret),
-               KPC(session.get_tx_desc()), K(isolation), K(stmt_expire_ts));
+               "tx_desc", data_plane::ObTxDescLogView(session.get_tx_desc()),
+               K(isolation), K(stmt_expire_ts));
       // rollback tx because of prepare snapshot fail
       int save_ret = ret;
       if (OB_FAIL(ObSqlTransControl::end_trans(ctx.get_my_session(),
@@ -2299,17 +2301,20 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
                                                true,
                                                true,
                                                NULL))) {
-        LOG_WARN("rollback tx fail", K(ret), KPC(session.get_tx_desc()));
+        LOG_WARN("rollback tx fail", K(ret), "tx_desc",
+                 data_plane::ObTxDescLogView(session.get_tx_desc()));
       }
       // rollback tx fail, need report to user, because session is corrupt
       ret = COVER_SUCC(save_ret);
     } else {
       LOG_TRACE("succeed get snapshot for set transaction isolation stmt",
-                KPC(session.get_tx_desc()), K(isolation), K(snapshot));
+                "tx_desc", data_plane::ObTxDescLogView(session.get_tx_desc()),
+                K(isolation), K(snapshot));
     }
   } else {
     LOG_TRACE("set trans charactor done for RC isolation",
-              K(isolation), KPC(session.get_tx_desc()));
+              K(isolation), "tx_desc",
+              data_plane::ObTxDescLogView(session.get_tx_desc()));
   }
   return ret;
 }

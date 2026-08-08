@@ -19,7 +19,7 @@
 
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
 {

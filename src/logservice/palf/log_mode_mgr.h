@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_MODE_MGR_
 
 #include "lib/lock/ob_spin_lock.h"              // SpinRWLock
-#include "log_define.h"                         // utils
+#include "share/log/palf/log_define.h"                         // utils
 #include "log_meta_info.h"                      // LogMembershipMeta
 
 namespace oceanbase

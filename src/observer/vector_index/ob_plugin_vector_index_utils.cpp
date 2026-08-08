@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "storage/ls/ob_ls.h"
@@ -31,7 +31,7 @@ int ObPluginVectorIndexUtils::get_task_read_snapshot(SCN &read_version)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   // ObLSWRSHandler::get_ls_weak_read_ts
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
   } else {
     read_version = ls->get_ls_wrs_handler()->get_ls_weak_read_ts();
@@ -85,7 +85,7 @@ int ObPluginVectorIndexUtils::add_key_ranges(uint64_t table_id, ObRowkey& start_
 int ObPluginVectorIndexUtils::iter_table_rescan(storage::ObTableScanParam &scan_param, common::ObNewRowIterator *iter)
 {
   INIT_SUCC(ret);
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
 
   if (OB_FAIL(tsc_service->reuse_scan_iter(false, iter))) {
     LOG_WARN("failed to reuse scan iter.", K(ret));
@@ -356,7 +356,7 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
   
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   int64_t extra_info_actual_size = 0;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -394,7 +394,7 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   int64_t extra_info_actual_size = 0;
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -458,7 +458,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
   ObObj *output_vec_obj = nullptr;
   ObVecExtraInfoObj* output_extra_info_obj = nullptr;
   int extra_column_count = 0;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
 
   SMART_VARS_2((storage::ObTableScanParam, vid_id_scan_param), 
                (storage::ObTableScanParam, data_scan_param)) {
@@ -672,7 +672,7 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObPluginVectorIndexAdapto
 {
   int ret = OB_SUCCESS;
   schema::ObIndexType index_type = INDEX_TYPE_VEC_INDEX_ID_LOCAL;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   common::ObNewRowIterator *index_id_iter = nullptr;
   storage::ObTableScanParam vbitmap_scan_param;
   schema::ObTableParam vbitmap_table_param(allocator);
@@ -704,12 +704,13 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObPluginVectorIndexAdapto
 int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdaptor *&adapter,
                                                         const bool create_new_adp,
                                                         SCN &target_scn,
-                                                        ObIAllocator &allocator)
+                                                        ObIAllocator &allocator,
+                                                        const common::ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   schema::ObIndexType index_type = INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL;
-  ObAccessService *tsc_service = share::g_mp->access_service();
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   common::ObNewRowIterator *snapshot_idx_iter = nullptr;
   storage::ObTableScanParam snapshot_scan_param;
   schema::ObTableParam snapshot_table_param(allocator);
@@ -778,9 +779,8 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       } else {
   
         ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
-        ObHNSWDeserializeCallback::CbParam param;
-        param.iter_ = snapshot_idx_iter;
-        param.allocator_ = &tmp_allocator;
+        ObHNSWDeserializeCallback::CbParam param(
+            snapshot_idx_iter, &tmp_allocator, lob_read_options);
     
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
@@ -848,7 +848,8 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
     ObPluginVectorIndexAdaptor *&adapter,
     const bool create_new_adapter,
     SCN target_scn,
-    ObIAllocator &allocator)
+    ObIAllocator &allocator,
+    const common::ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(adapter)) {
@@ -858,12 +859,13 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
     // skip not complete adapter.
   } else {
     common::ObNewRowIterator *delta_buf_iter = nullptr; 
-    ObAccessService *tsc_service = share::g_mp->access_service();
+    ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
     storage::ObTableScanParam inc_scan_param;
     schema::ObTableParam inc_table_param(allocator);
     int64_t extra_info_actual_size = 0;
     schema::ObIndexType delta_type = adapter->is_hybrid_index()? INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL: INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
-    if (OB_FAIL(try_sync_snapshot_memdata(adapter, create_new_adapter, target_scn, allocator))) {
+    if (OB_FAIL(try_sync_snapshot_memdata(
+            adapter, create_new_adapter, target_scn, allocator, lob_read_options))) {
       LOG_WARN("failed to refresh mem snapshots without refresh incr", KR(ret));
     } else if (OB_FAIL(read_local_tablet(adapter,
                                   target_scn,
@@ -904,7 +906,9 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
   return ret;
 }
 
-int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdaptor *adapter)
+int ObPluginVectorIndexUtils::query_need_refresh_memdata(
+    ObPluginVectorIndexAdaptor *adapter,
+    const common::ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -919,7 +923,8 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdap
       need_retry = true;
     } else if (OB_FAIL(target_scn.convert_from_ts(ObTimeUtility::fast_current_time()))) {
       LOG_WARN("failed to convert ts to scn", K(ret));
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(adapter, target_scn, allocator))) {
+    } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(
+                   adapter, target_scn, allocator, lob_read_options))) {
       LOG_WARN("fail to refresh adapter", K(ret));
     } else if (OB_FALSE_IT(adapter->set_reload_finish(true))) {
     } else {
@@ -935,7 +940,8 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(ObPluginVectorIndexAdap
 
 int ObPluginVectorIndexUtils::refresh_memdata(ObPluginVectorIndexAdaptor *adapter,
                                               SCN target_scn,
-                                              ObIAllocator &allocator)
+                                              ObIAllocator &allocator,
+                                              const common::ObLobReadOptions &lob_read_options)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(adapter)) {
@@ -944,13 +950,14 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObPluginVectorIndexAdaptor *adapte
   } else {
     SERVER_MODULE_SCOPE {
       ObPluginVectorIndexAdaptor *new_adapter = adapter;
-      ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+      ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
       ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
       if (OB_ISNULL(vector_index_service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr", K(ret));
       } else if (FALSE_IT(vec_idx_mgr = &vector_index_service->get_index_mgr())) {
-      } else if (OB_FAIL(refresh_adp_from_table(new_adapter, true, target_scn, allocator))) {
+      } else if (OB_FAIL(refresh_adp_from_table(
+                     new_adapter, true, target_scn, allocator, lob_read_options))) {
         LOG_WARN("failed to refresh adapter from table", K(ret), KPC(adapter));
       }
       if (adapter != new_adapter && OB_NOT_NULL(new_adapter)) {
@@ -996,7 +1003,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
                                                 const SCN *min_scn)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   scan_iter = nullptr;
 
   // init scan param refer to ObLocalIndexLookupOp::init_scan_param()
@@ -1045,7 +1052,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
   } else if (OB_FAIL(ls->get_tablet_with_timeout(tablet_id,
                                                                  tablet_handle,
@@ -1138,7 +1145,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
       } else if (OB_FAIL(scan_param.key_ranges_.push_back(range))) {
         LOG_WARN("failed to push key range.", K(ret), K(scan_param), K(range));
       } else {
-        ObAccessService *oas = share::g_mp->access_service();
+        ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
         if (OB_ISNULL(oas)) {
           ret = OB_ERR_INTERVAL_INVALID;
           LOG_WARN("get access service failed.", K(ret));
@@ -1855,7 +1862,7 @@ int ObPluginVectorIndexUtils::get_vector_index_name_prefix(const ObTableSchema &
 int ObPluginVectorIndexUtils::erase_ivf_build_helper(const ObIvfHelperKey &key)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vec_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (OB_ISNULL(vec_index_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
@@ -1919,7 +1926,7 @@ int ObPluginVectorIndexUtils::split_snapshot_prefix(const ObString &src, const O
 void ObPluginVectorIndexUtils::set_leader_flag(const bool is_leader)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (OB_ISNULL(vector_index_service)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1935,7 +1942,7 @@ int ObPluginVectorIndexUtils::get_leader_flag(bool &is_leader)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexMgr *index_mgr = nullptr;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   index_mgr = &vector_index_service->get_index_mgr();
   is_leader = index_mgr->is_leader();
   LOG_TRACE("success to get leader", K(is_leader));
@@ -1943,7 +1950,7 @@ int ObPluginVectorIndexUtils::get_leader_flag(bool &is_leader)
 }
 
 
-int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
+int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<obcall::ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   hash::ObHashSet<int64_t> adaptor_ptr_set;
@@ -2004,9 +2011,9 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
 }
 
 int ObPluginVectorIndexUtils::get_mem_context_detail_info(ObPluginVectorIndexService *service,
-                                                          ObIArray<ObTabletPair> &complete_tablet_ids,
-                                                          ObIArray<ObTabletPair> &partial_tablet_ids,
-                                                          ObIArray<ObTabletPair> &cache_tablet_ids,
+                                                          ObIArray<obcall::ObTabletPair> &complete_tablet_ids,
+                                                          ObIArray<obcall::ObTabletPair> &partial_tablet_ids,
+                                                          ObIArray<obcall::ObTabletPair> &cache_tablet_ids,
                                                           char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
@@ -2021,7 +2028,7 @@ int ObPluginVectorIndexUtils::get_mem_context_detail_info(ObPluginVectorIndexSer
   return ret;
 }
 
-int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
+int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorIndexService *service, ObIArray<obcall::ObTabletPair> &tablet_ids, char *buf, int64_t buf_len, int64_t &pos)
 {
   int ret = OB_SUCCESS;
   hash::ObHashSet<int64_t> adaptor_ptr_set;

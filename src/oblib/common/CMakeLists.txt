@@ -1,0 +1,4 @@
+seekdb_apply_unity_inventory(oblib_common SEEKDB_OBLIB_COMMON_UNITY)
+seekdb_apply_standalone_inventory(
+  oblib_common SEEKDB_OBLIB_COMMON_STANDALONE)
+ob_lib_add_target(oblib_common)

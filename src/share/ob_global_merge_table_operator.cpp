@@ -33,13 +33,10 @@ using namespace oceanbase::common::sqlclient;
 // Static storage instance
 ObMergeInfoTableStorage ObGlobalMergeTableOperator::storage_;
 
-int ObGlobalMergeTableOperator::init()
+int ObGlobalMergeTableOperator::init(ObSQLiteConnectionPool &meta_db_pool)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.meta_db_pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ not initialized", K(ret));
-  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+  if (OB_FAIL(storage_.init(&meta_db_pool))) {
     LOG_WARN("failed to init storage", K(ret));
   }
   return ret;

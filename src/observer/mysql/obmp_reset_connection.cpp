@@ -15,10 +15,12 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "observer/ob_server_runtime_access.h"
 #include "observer/mysql/obmp_reset_connection.h"
+#include "data_plane/tablelock/ob_session_table_lock.h"
+#include "query/tablelock/ob_table_lock_runtime.h"
 #include "sql/ob_sql.h"
-#include "storage/tablelock/ob_table_lock_live_detector.h"
-#include "observer/mysql/obmp_stmt_send_piece_data.h"
+#include "sql/session/ob_piece_cache.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::rpc;
@@ -71,10 +73,10 @@ int ObMPResetConnection::process()
       LOG_WARN("fail to update charset sys vars", K(ret));
     } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
       LOG_WARN("failed to get query timeout", K(ret), K(query_timeout));
-    } else if (OB_ISNULL(gctx_.sql_engine_)) {
+    } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-    } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
+    } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
       //nothing to do
     } else if (OB_FAIL(set_session_active("reset connection.", *session, ObTimeUtil::current_time()))) {
       LOG_WARN("fail to set session active", K(ret));
@@ -128,7 +130,8 @@ int ObMPResetConnection::process()
     // 6. Releases prepared statements. (include ps stmt, ps cursor, piece)
     if (OB_SUCC(ret)) {
       // 6.1 ps stmt
-      if (OB_FAIL(session->close_all_ps_stmt())) {
+      if (OB_FAIL(session->close_all_ps_stmt(
+              get_observer_sql_engine()->get_ps_cache()))) {
         LOG_WARN("failed to close all stmt", K(ret));
       }
 
@@ -143,8 +146,8 @@ int ObMPResetConnection::process()
 
       // 6.3 piece
       if (OB_SUCC(ret) && NULL != session->get_piece_cache()) {
-        observer::ObPieceCache* piece_cache = 
-          static_cast<observer::ObPieceCache*>(session->get_piece_cache());
+        sql::ObPieceCache* piece_cache =
+          static_cast<sql::ObPieceCache*>(session->get_piece_cache());
         if (OB_FAIL(piece_cache->close_all(*session))) {
           LOG_WARN("failed to close all piece", K(ret));
         }
@@ -179,11 +182,14 @@ int ObMPResetConnection::process()
 
     // 9. Releases locks acquired with GET_LOCK().
     if (OB_SUCC(ret)) {
-      ObTableLockOwnerID owner_id;
-      if (OB_FAIL(owner_id.convert_from_session_id(session->get_server_sid(),
-                                                   session->get_sess_create_time()))) {
-        LOG_WARN("failed to convert from session id", K(ret));
-      } else if (OB_FAIL(ObTableLockDetector::remove_lock_by_owner_id(owner_id))) {
+      const data_plane::ObSessionLockOwner owner(
+          session->get_sid(), session->get_sess_create_time());
+      data_plane::ObPersistedLockOwner persisted_owner;
+      if (OB_FAIL(data_plane::persist_session_lock_owner(owner,
+                                                         persisted_owner))) {
+        LOG_WARN("failed to persist session lock owner", K(ret));
+      } else if (OB_FAIL(query::release_locks_for_dead_owner(
+                     persisted_owner.owner_type_, persisted_owner.owner_id_))) {
         LOG_WARN("failed to remove lock by owner id", K(ret));
       }
     }

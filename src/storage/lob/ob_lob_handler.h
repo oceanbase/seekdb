@@ -23,6 +23,11 @@
 
 namespace oceanbase
 {
+namespace common
+{
+struct ObLobDiffHeader;
+}
+
 namespace storage
 {
 
@@ -291,10 +296,12 @@ public:
 
   int init(ObLobMetaManager *lob_meta_mngr);
 
-  int execute(ObLobLocatorV2& delta_locator, ObLobDiffHeader *diff_header);
+  int execute(ObLobLocatorV2& delta_locator, common::ObLobDiffHeader *diff_header);
 
 private:
-  int get_extra_diff_data(ObLobLocatorV2 &lob_locator, ObLobDiffHeader *diff_header, ObString &extra_diff_data);
+  int get_extra_diff_data(ObLobLocatorV2 &lob_locator,
+                          common::ObLobDiffHeader *diff_header,
+                          ObString &extra_diff_data);
 
 public:
   TO_STRING_KV(K_(param), K_(store_chunk_size));

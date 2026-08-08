@@ -1,0 +1,6 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+$obs.force_stop;
+$rs_follower.switch_rs;
+cpu_total	cpu_assigned_percent	mem_total	mem_assigned_percent	disk_total	disk_assigned_percent
+NULL	NULL	NULL	NULL	NULL	NULL

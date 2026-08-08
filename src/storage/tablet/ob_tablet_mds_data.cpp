@@ -220,15 +220,15 @@ int ObTabletMdsData::init_single_complex_addr(
 
 int ObTabletMdsData::init_single_complex_addr(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &mds_table_data,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &base_data,
-    ObTabletComplexAddr<share::ObTabletAutoincSeq> &fused_data)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &mds_table_data,
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &base_data,
+    ObTabletComplexAddr<ObTabletAutoincSeq> &fused_data)
 {
   int ret = OB_SUCCESS;
   fused_data.reset();
-  share::ObTabletAutoincSeq *&fused_data_ptr = fused_data.ptr_;
-  share::ObTabletAutoincSeq *mds_table_ptr = nullptr;
-  share::ObTabletAutoincSeq *base_ptr = nullptr;
+  ObTabletAutoincSeq *&fused_data_ptr = fused_data.ptr_;
+  ObTabletAutoincSeq *mds_table_ptr = nullptr;
+  ObTabletAutoincSeq *base_ptr = nullptr;
 
   if (OB_FAIL(load_auto_inc_seq(allocator, mds_table_data, mds_table_ptr))) {
     LOG_WARN("failed to load auto inc seq", K(ret), K(mds_table_data));
@@ -239,13 +239,13 @@ int ObTabletMdsData::init_single_complex_addr(
     fused_data.addr_.set_none_addr();
   } else {
     if (nullptr == mds_table_ptr && nullptr != base_ptr) {
-      fused_data_ptr = const_cast<share::ObTabletAutoincSeq*>(base_ptr);
+      fused_data_ptr = const_cast<ObTabletAutoincSeq*>(base_ptr);
     } else if (nullptr != mds_table_ptr) {
       // data in mds table is not empty, ignore data in base, use data in mds table as fused data
-      fused_data_ptr = const_cast<share::ObTabletAutoincSeq*>(mds_table_ptr);
+      fused_data_ptr = const_cast<ObTabletAutoincSeq*>(mds_table_ptr);
       ObTabletObjLoadHelper::free(allocator, base_ptr);
     }
-    fused_data.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+    fused_data.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   }
 
   if (OB_FAIL(ret)) {
@@ -380,13 +380,13 @@ int ObTabletMdsData::init_single_complex_addr(
 
 int ObTabletMdsData::init_single_complex_addr(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &src_addr,
-    ObTabletComplexAddr<share::ObTabletAutoincSeq> &dst_addr)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &src_addr,
+    ObTabletComplexAddr<ObTabletAutoincSeq> &dst_addr)
 {
   int ret = OB_SUCCESS;
   dst_addr.reset();
-  share::ObTabletAutoincSeq *ptr = nullptr;
-  share::ObTabletAutoincSeq *&dst_data = dst_addr.ptr_;
+  ObTabletAutoincSeq *ptr = nullptr;
+  ObTabletAutoincSeq *&dst_data = dst_addr.ptr_;
 
   if (OB_FAIL(load_auto_inc_seq(allocator, src_addr, ptr))) {
     LOG_WARN("failed to load auto inc seq", K(ret), K(src_addr));
@@ -394,8 +394,8 @@ int ObTabletMdsData::init_single_complex_addr(
     // ptr is emtpy, no need to copy it, set dst addr to NONE
     dst_addr.addr_.set_none_addr();
   } else {
-    dst_addr.ptr_ = const_cast<share::ObTabletAutoincSeq*>(ptr);
-    dst_addr.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+    dst_addr.ptr_ = const_cast<ObTabletAutoincSeq*>(ptr);
+    dst_addr.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   }
 
   return ret;
@@ -519,7 +519,7 @@ int ObTabletMdsData::init_single_complex_addr_and_extra_info(
 
 void ObTabletMdsData::set_mem_addr()
 {
-  auto_inc_seq_.addr_.set_mem_addr(0, sizeof(share::ObTabletAutoincSeq));
+  auto_inc_seq_.addr_.set_mem_addr(0, sizeof(ObTabletAutoincSeq));
   medium_info_list_.addr_.set_mem_addr(0, sizeof(ObTabletDumpedMediumInfo));
   aux_tablet_info_.uncommitted_kv_.addr_.set_mem_addr(0, sizeof(mds::MdsDumpKV));
   aux_tablet_info_.committed_kv_.addr_.set_mem_addr(0, sizeof(mds::MdsDumpKV));
@@ -731,12 +731,12 @@ int ObTabletMdsData::load_array(
 
 int ObTabletMdsData::load_auto_inc_seq(
     common::ObIAllocator &allocator,
-    const ObTabletComplexAddr<share::ObTabletAutoincSeq> &complex_addr,
-    share::ObTabletAutoincSeq *&auto_inc_seq)
+    const ObTabletComplexAddr<ObTabletAutoincSeq> &complex_addr,
+    ObTabletAutoincSeq *&auto_inc_seq)
 {
   int ret = OB_SUCCESS;
   auto_inc_seq = nullptr;
-  share::ObTabletAutoincSeq *ptr = nullptr;
+  ObTabletAutoincSeq *ptr = nullptr;
 
   if (OB_UNLIKELY(!complex_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -746,7 +746,7 @@ int ObTabletMdsData::load_auto_inc_seq(
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, ptr))) {
     LOG_WARN("failed to alloc and new", K(ret));
   } else if (complex_addr.is_memory_object()) {
-    const share::ObTabletAutoincSeq *src_auto_inc_seq = complex_addr.ptr_;
+    const ObTabletAutoincSeq *src_auto_inc_seq = complex_addr.ptr_;
     if (!src_auto_inc_seq->is_valid()) {
       ObTabletObjLoadHelper::free(allocator, ptr);
       ptr = nullptr;
@@ -837,7 +837,7 @@ int ObTabletMdsData::read_items(
 
 int ObTabletMdsData::build_mds_data(
     common::ObArenaAllocator &allocator,
-    const share::ObTabletAutoincSeq &auto_inc_seq,
+    const ObTabletAutoincSeq &auto_inc_seq,
     const ObTabletTxMultiSourceDataUnit &tx_data,
     const share::SCN &create_commit_scn,
     const ObTabletBindingInfo &ddl_data,
@@ -1098,7 +1098,7 @@ int ObTabletMdsData::build_aux_tablet_info(
 
 int ObTabletMdsData::build_auto_inc_seq(
     common::ObArenaAllocator &allocator,
-    const share::ObTabletAutoincSeq &auto_inc_seq,
+    const ObTabletAutoincSeq &auto_inc_seq,
     ObTabletMdsData &mds_data)
 {
   int ret = OB_SUCCESS;

@@ -587,13 +587,13 @@ ObExprCalcPartitionTabletId::~ObExprCalcPartitionTabletId()
 bool PartValKey::operator==(const PartValKey &other) const
 {
   int res = true;
-  cmp_func_(datum_, other.datum_, res);
+  cmp_func_(datum_, other.datum_, res, datum_access_ctx_);
   return res == 0;
 }
 
 int PartValKey::hash(uint64_t &hash_val, uint64_t seed) const
 {
-  return hash_func_(datum_, seed, hash_val);
+  return hash_func_(datum_, seed, hash_val, datum_access_ctx_);
 }
 
 bool RangePartCmp::operator()(const ObDatum &l, const RangePartition &r) {
@@ -606,7 +606,7 @@ bool RangePartCmp::operator()(const ObDatum &l, const RangePartition &r) {
     // In part calc, MySQL treats null values as infinitely small.
     res = true;
   } else {
-    ret_ = cmp_func_(l, r.datum_, cmp_ret);
+    ret_ = cmp_func_(l, r.datum_, cmp_ret, datum_access_ctx_);
     res = cmp_ret < 0;
   }
   return res;
@@ -639,17 +639,20 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(part_cmp_.cmp_func_ = ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
-                                          part_expr.datum_meta_.type_,
-                                          part_expr.datum_meta_.type_,
-                                          part_expr.datum_meta_.scale_,
-                                          part_expr.datum_meta_.scale_,
-                                          part_expr.datum_meta_.precision_,
-                                          part_expr.datum_meta_.precision_,
-                                          part_expr.datum_meta_.cs_type_,
-                                          part_expr.obj_meta_.has_lob_header()))) {
+    if (OB_ISNULL(part_cmp_.cmp_func_ =
+                      ObExprCmpFuncsHelper::get_datum_expr_cmp_func(
+                          part_expr.datum_meta_.type_,
+                          part_expr.datum_meta_.type_,
+                          part_expr.datum_meta_.scale_,
+                          part_expr.datum_meta_.scale_,
+                          part_expr.datum_meta_.precision_,
+                          part_expr.datum_meta_.precision_,
+                          part_expr.datum_meta_.cs_type_,
+                          part_expr.obj_meta_.has_lob_header()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cmp_func is null", K(ret), K(part_expr.datum_meta_));
+    } else {
+      part_cmp_.datum_access_ctx_ = datum_access_ctx_;
     }
   }
   return ret;
@@ -702,6 +705,7 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
             } else {
               list_part_row.hash_func_ = part_expr.basic_funcs_->murmur_hash_v2_;
               list_part_row.cmp_func_ = part_expr.basic_funcs_->null_first_cmp_;
+              list_part_row.datum_access_ctx_ = datum_access_ctx_;
               if (OB_FAIL(list_part_map_.set_refactored(list_part_row, i))) {
                 LOG_WARN("Fail to set_refactored", K(ret), K(i), K(j));
               }

@@ -15,8 +15,8 @@
  */
 #ifndef OCEANBASE_STORAGE_OB_STORAGE_RPC_ARG_H_
 #define OCEANBASE_STORAGE_OB_STORAGE_RPC_ARG_H_
-// moved from share/ob_rpc_struct.h:RPC arguments that embed storage types by value
-// (owner=storage;ns obrpc unchanged;RPC declaration remains in share proxy,vertical split for task 5)
+// Storage-owned RPC values embedding Storage types by value. The obrpc
+// namespace is retained as part of the stable wire protocol.
 #include "share/ob_rpc_struct.h"
 #include "storage/tablet/ob_tablet_binding_mds_user_data.h"
 #include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"

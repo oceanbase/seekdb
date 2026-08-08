@@ -40,12 +40,3 @@ TEST(TestLogMeta, test_log_meta)
 
 }
 }
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_dir_match.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  PALF_LOG(INFO, "begin unittest::test_log_dir_match");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -31,7 +31,6 @@ bin_PROGRAMS = test_save_storage_info \
 							 test_split_version_range\
 							 test_handle_cache\
 							 test_sparse_sstable\
-							 test_hash_performance\
 							 test_partition_migrator_table_key_mgr
 
 test_save_storage_info_SOURCES=test_save_storage_info.cpp
@@ -61,7 +60,6 @@ test_join_mv_merge_SOURCES=test_join_mv_merge.cpp
 test_micro_block_row_scanner_SOURCES=test_micro_block_row_scanner.cpp
 test_split_version_range_SOURCES=test_split_version_range.cpp
 test_handle_cache_SOURCES=test_handle_cache.cpp
-test_hash_performance_SOURCES=test_hash_performance.cpp
 test_partition_migrator_table_key_mgr_SOURCES=test_partition_migrator_table_key_mgr.cpp
 #test_log_replay_engine_SOURCES=replayengine/test_log_replay_engine.cpp
 

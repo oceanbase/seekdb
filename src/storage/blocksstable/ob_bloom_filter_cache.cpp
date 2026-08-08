@@ -19,7 +19,7 @@
 #include <climits>
 #include <cmath>
 #include "ob_bloom_filter_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/access/ob_empty_read_bucket.h"
@@ -444,7 +444,7 @@ int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
 
   if (OB_SUCC(ret)) {
     storage::ObEmptyReadCell *cell = NULL;
-    if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(bf_key.hash(), cell))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(bf_key.hash(), cell))) {
       STORAGE_LOG(WARN, "get_bucket_cell fail, ", K(ret));
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
@@ -452,7 +452,7 @@ int ObBloomFilterCache::put_bloom_filter(const MacroBlockId& macro_block_id,
     } else {
       cell->reset();//ignore ret
     }
-    auto_bf_cache_miss_count_threshold(share::g_mp->tablet_scheduler()->get_bf_queue_size());
+    auto_bf_cache_miss_count_threshold(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->get_bf_queue_size());
   }
   return ret;
 }
@@ -625,7 +625,7 @@ int ObBloomFilterCache::inc_empty_read(
     if (OB_UNLIKELY(!bfc_key.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid argument", K(bfc_key), K(ret));
-    } else if (OB_FAIL(share::g_mp->empty_read_bucket()->get_cell(key_hash, cell))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(key_hash, cell))) {
       LOG_WARN("get_bucket_cell fail", K(ret));
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
@@ -635,7 +635,7 @@ int ObBloomFilterCache::inc_empty_read(
     } else if (cell->check_timeout()) {
       // do nothing
     } else if (cur_cnt > bf_cache_miss_count_threshold_) {
-      if (OB_FAIL(share::g_mp->tablet_scheduler()
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()
                       ->schedule_build_bloomfilter(table_id, macro_id, empty_read_prefix))) {
         LOG_WARN("fail to schedule build bf", K(ret), K(bfc_key), K(cur_cnt), K_(bf_cache_miss_count_threshold));
       } else {

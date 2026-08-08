@@ -15,7 +15,7 @@
  */
 
 #include "storage/ddl/ob_ddl_tablet_context.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ob_storage_schema_util.h"
@@ -155,6 +155,7 @@ int ObDDLSlice::pop_chunk(ObChunk *&chunk_data)
 ObDDLTabletContext::ObDDLTabletContext()
   : is_inited_(false), arena_(ObMemAttr("ddl_tblt_ctx")),
     slice_count_(0), table_slice_offset_(0), scan_task_(nullptr),
+    lob_read_service_(nullptr),
     last_lob_id_(0), last_autoinc_val_(0), bucket_count_(0),
     vector_index_ctx_(nullptr)
 {
@@ -189,7 +190,8 @@ int ObDDLTabletContext::init(
     const int64_t ddl_thread_count,
     const int64_t snapshot_version,
     const ObDirectLoadType direct_load_type,
-    const ObDDLTableSchema &ddl_table_schema)
+    const ObDDLTableSchema &ddl_table_schema,
+    common::ObILobReadService &lob_read_service)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -202,6 +204,7 @@ int ObDDLTabletContext::init(
              K(direct_load_type));
   } else {
     tablet_id_ = tablet_id;
+    lob_read_service_ = &lob_read_service;
     bucket_count_ = ddl_thread_count * 2;
     if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
       LOG_WARN("create slice map failed", K(ret), K(bucket_count_));
@@ -211,9 +214,9 @@ int ObDDLTabletContext::init(
       ObLS *ls = nullptr;
       ObTabletHandle tablet_handle;
       ObTabletBindingMdsUserData mds_data;
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
         LOG_WARN("get ls failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+      } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
         LOG_WARN("ddl get tablet failed", K(ret), K(ls), K(tablet_id));
       } else if (OB_FAIL(init_tablet_param(tablet_handle.get_obj(), ddl_table_schema.storage_schema_, direct_load_type, arena_, tablet_param_))) {
         LOG_WARN("init tablet param failed", K(ret));
@@ -227,7 +230,7 @@ int ObDDLTabletContext::init(
       } else if (mds_data.lob_meta_tablet_id_.is_valid()) {
         lob_meta_tablet_id_ = mds_data.lob_meta_tablet_id_;
         ObTabletHandle lob_meta_tablet_handle;
-        if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
+        if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
           LOG_WARN("ddl get tablet failed", K(ret), K(ls), KPC(this));
         } else if (OB_FAIL(init_tablet_param(lob_meta_tablet_handle.get_obj(), ddl_table_schema.lob_meta_storage_schema_, direct_load_type, arena_, lob_meta_tablet_param_))) {
           LOG_WARN("init lob meta tablet param failed", K(ret));

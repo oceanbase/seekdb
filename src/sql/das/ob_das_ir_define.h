@@ -17,12 +17,15 @@
 #ifndef OB_DAS_IR_DEFINE_H_
 #define OB_DAS_IR_DEFINE_H_
 
+#include "data_plane/blocksstable/ob_index_block_util.h"
+#include "query/das/ob_das_id_protocol.h"
 #include "ob_das_attach_define.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+using blocksstable::ObSkipIndexColType;
 
 struct ObTextBlockMaxSpec
 {
@@ -473,30 +476,6 @@ public:
     : ObDASAttachRtDef(DAS_OP_IR_ES_SCORE) {}
 
   virtual ~ObDASIREsScoreRtDef() {}
-};
-
-class ObDocIdExt final
-{
-public:
-  ObDocIdExt();
-  ObDocIdExt(const ObDocIdExt &other);
-  ~ObDocIdExt() = default;
-  void reset();
-
-  int hash(uint64_t &hash_val) const;
-  const ObDatum &get_datum() const;
-  int from_datum(const ObDatum &datum);
-  int from_obj(const ObObj &obj);
-
-  ObDocIdExt &operator=(const ObDocIdExt &other);
-  bool operator==(const ObDocIdExt &other) const;
-  bool operator!=(const ObDocIdExt &other) const;
-
-  TO_STRING_KV(KP_(buf), K_(datum));
-private:
-  static const int64_t OB_DOC_ID_EXT_SIZE = 40;
-  char buf_[OB_DOC_ID_EXT_SIZE];
-  ObDatum datum_;
 };
 
 } // namespace sql

@@ -531,7 +531,8 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
                                           int64_t num_distinct,
                                           int64_t pop_count,
                                           int64_t pop_freq,
-                                          const ObObjMeta &obj_meta)
+                                          const ObObjMeta &obj_meta,
+                                          const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   int64_t bucket_size = -1;
@@ -593,7 +594,8 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
             if (obj_meta.is_lob_storage() &&
                 OB_FAIL(build_prefix_str_datum_for_lob(tmp_alloctor,
                                                        obj_meta, row->cells()[0],
-                                                       new_datum))) {
+                                                       new_datum,
+                                                       datum_access_ctx))) {
               LOG_WARN("failed to build prefix str datum for lob", K(ret));
             } else if (OB_FAIL(new_datum.to_obj(ep_val, obj_meta))) {
               LOG_WARN("failed to obj", K(ret));
@@ -643,7 +645,8 @@ int ObHybridHistograms::build_hybrid_hist(ObAggregateProcessor::HybridHistExtraR
 int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
                                                        const ObObjMeta &obj_meta,
                                                        const ObDatum &old_datum,
-                                                       ObDatum &new_datum)
+                                                       ObDatum &new_datum,
+                                                       const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   if (!obj_meta.is_lob_storage()) {
@@ -659,7 +662,16 @@ int ObHybridHistograms::build_prefix_str_datum_for_lob(ObIAllocator &allocator,
       LOG_WARN("failed to check text obj can reuse", K(ret), K(obj));
     } else if (can_reuse) {
       new_datum = old_datum;
-    } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(&allocator, obj, str, OPT_STATS_MAX_VALUE_CHAR_LEN))) {
+    } else if (OB_ISNULL(datum_access_ctx) ||
+               OB_ISNULL(datum_access_ctx->lob_read_options_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("LOB datum access context is not initialized", K(ret));
+    } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
+                   *datum_access_ctx->lob_read_options_,
+                   &allocator,
+                   obj,
+                   str,
+                   OPT_STATS_MAX_VALUE_CHAR_LEN))) {
       LOG_WARN("failed to read prefix string data", K(ret));
     } else {
       ObTextStringDatumResult text_result(obj_meta.get_type(), obj_meta.has_lob_header(), &new_datum);

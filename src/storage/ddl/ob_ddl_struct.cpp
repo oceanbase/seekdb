@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_struct.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -176,7 +177,7 @@ void ObDDLKVHandle::reset()
     } else {
       const int64_t ref_cnt = ddl_kv_->dec_ref();
       if (0 == ref_cnt) {
-        share::g_mp->storage_meta_mem_mgr()->release_ddl_kv(ddl_kv_);
+        ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->release_ddl_kv(ddl_kv_);
       } else if (OB_UNLIKELY(ref_cnt < 0)) {
         LOG_ERROR_RET(OB_ERR_UNEXPECTED, "table ref cnt may be leaked", K(ref_cnt), KP(ddl_kv_));
       }
@@ -430,7 +431,7 @@ void ObTabletDirectLoadMgrHandle::reset()
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
       } else {
         tablet_mgr_->~ObBaseTabletDirectLoadMgr();
-        share::g_mp->direct_load_mgr()->get_allocator().free(tablet_mgr_);
+        ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_allocator().free(tablet_mgr_);
       }
     }
     tablet_mgr_ = nullptr;
@@ -516,7 +517,7 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
   } else {
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
-      if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*table_schema, index_prefix))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(*table_schema, index_prefix))) {
         LOG_WARN("failed to get index prefix", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(&schema_guard,
                                                                                    *data_table_schema,

@@ -17,9 +17,9 @@
 
 #include "ob_tx_data_table.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "observer/scheduler/ob_dag_scheduler.h"
+#include "data_plane/scheduler/ob_dag_scheduler.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -48,7 +48,7 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
   if (OB_ISNULL(ls) || OB_ISNULL(tx_ctx_table)) {
     ret = OB_ERR_NULL_VALUE;
     STORAGE_LOG(WARN, "ls tablet service or tx ctx table is nullptr", KR(ret));
-  } else if (OB_ISNULL(tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator())) {
+  } else if (OB_ISNULL(tx_data_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_allocator())) {
     ret = OB_ERR_UNEXPECTED;;
     STORAGE_LOG(WARN, "unexpected null runtime object", KR(ret), KP(tx_data_allocator_));
   } else if (FALSE_IT(ls_tablet_svr_ = ls->get_tablet_svr())) {
@@ -80,7 +80,8 @@ int ObTxDataTable::init_arena_allocator_()
   
   mem_attr.ctx_id_ = ObCtxIds::TX_DATA_TABLE;
   arena_allocator_.set_attr(mem_attr);
-  ObSharedMemAllocMgr *manager = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *manager =
+      share::server_service<share::ObSharedMemAllocMgr>();
   if (nullptr != manager) {
     arena_allocator_.set_memory_tracker(&manager->tx_data_metadata_tracker());
   }
@@ -261,7 +262,7 @@ int ObTxDataTable::alloc_tx_data(ObTxDataGuard &tx_data_guard,
   } else {
     ObTxData *tx_data = new (slice_ptr) ObTxData();
     tx_data->tx_data_allocator_ = tx_data_allocator_;
-    tx_data->op_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
+    tx_data->op_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
     tx_data_guard.init(tx_data);
   }
   return ret;
@@ -693,7 +694,7 @@ int ObTxDataTable::get_recycle_scn(SCN &recycle_scn)
   } else if (OB_FAIL(ls_tablet_svr_->get_ls_min_end_scn(min_end_scn_from_latest_tablets,
                                                         min_end_scn_from_old_tablets))) {
     STORAGE_LOG(WARN, "fail to get ls min end log ts", KR(ret));
-  } else if (OB_FAIL(share::g_mp->dag_scheduler()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_min_end_scn_from_major_dag(min_end_scn_from_major_dag))) {
     STORAGE_LOG(WARN, "fail to get min end log ts from major dag", KR(ret));
   } else if (FALSE_IT(tg.click("iterate tablets finish"))) {
   } else {
@@ -1140,8 +1141,8 @@ int ObTxDataTable::supplement_tx_op_if_exist(ObTxData *tx_data)
   } else if (OB_ISNULL(tx_data)) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(ERROR, "tx data is nullptr", KR(ret), KP(this));
-  } else if (FALSE_IT(tx_data_from_sstable.tx_data_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_allocator())) {
-  } else if (FALSE_IT(tx_data_from_sstable.op_allocator_ = &share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator())) {
+  } else if (FALSE_IT(tx_data_from_sstable.tx_data_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_allocator())) {
+  } else if (FALSE_IT(tx_data_from_sstable.op_allocator_ = &::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator())) {
   } else if (OB_FAIL(get_tx_data_in_sstable_(tx_data->tx_id_, tx_data_from_sstable, unused_scn))) {
     if (ret == OB_TRANS_CTX_NOT_EXIST) {
       // This transaction does not have undo actions

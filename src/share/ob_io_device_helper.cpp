@@ -49,6 +49,7 @@
 #include "lib/restore/ob_io_device.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
+#include "share/ob_local_device.h"
 #include "lib/utility/ob_smart_call.h"
 
 using namespace oceanbase::common;
@@ -162,6 +163,12 @@ ObSNIODeviceWrapper &ObSNIODeviceWrapper::get_instance()
   return instance;
 }
 
+ObIODevice &ObSNIODeviceWrapper::get_local_device()
+{
+  abort_unless(NULL != local_device_);
+  return *local_device_;
+}
+
 ObSNIODeviceWrapper::ObSNIODeviceWrapper()
   : local_device_(NULL), is_inited_(false)
 {
@@ -202,7 +209,8 @@ int ObSNIODeviceWrapper::init(
     const char *sstable_dir,
     const int64_t block_size,
     const int64_t data_disk_percentage,
-    const int64_t data_disk_size)
+    const int64_t data_disk_size,
+    const ObILocalDeviceSpaceProvider &space_provider)
 {
   int ret = OB_SUCCESS;
   const int64_t MAX_IOD_OPT_CNT = 5;
@@ -235,7 +243,7 @@ int ObSNIODeviceWrapper::init(
   }
 
   if (OB_SUCC(ret) && OB_NOT_NULL(local_device_)) {
-    if (OB_FAIL(local_device_->init(iod_opts))) {
+    if (OB_FAIL(local_device_->init(iod_opts, space_provider))) {
       LOG_WARN("fail to init io device", K(ret), K(data_dir), K(sstable_dir), K(block_size),
           K(data_disk_percentage), K(data_disk_size));
     } else {

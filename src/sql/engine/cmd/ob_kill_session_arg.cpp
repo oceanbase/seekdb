@@ -16,8 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_kill_session_arg.h"
+#include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/resolver/cmd/ob_kill_stmt.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {

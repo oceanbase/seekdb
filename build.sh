@@ -1,313 +1,409 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-TOPDIR=$(cd "$(dirname "$0")" && pwd)
-BUILD_SH=$TOPDIR/build.sh
+set -uo pipefail
 
-DEP_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/deps/devel
-TOOLS_DIR=${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools
+readonly TOPDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly DEP_INIT_DIR="${TOPDIR}/deps/init"
+readonly DEVTOOLS_DIR="${TOPDIR}/deps/3rd/usr/local/oceanbase/devtools"
+readonly -a ALL_ARGS=("$@")
 
-# Get CPU cores and CMAKE command, compatible with macOS and Linux
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  CMAKE_COMMAND="cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
-  CPU_CORES=$(sysctl -n hw.ncpu)
-  KERNEL_RELEASE=""
-else
-  CMAKE_COMMAND="${TOOLS_DIR}/bin/cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
-  CPU_CORES=$(grep -c ^processor /proc/cpuinfo)
-  KERNEL_RELEASE=$(grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null)
-fi
-
-ALL_ARGS=("$@")
-BUILD_ARGS=()
-MAKE_ARGS=(-j $CPU_CORES)
-NEED_MAKE=false
-NEED_INIT=false
-ANDROID_BUILD=false
-LLD_OPTION=ON
-STATIC_LINK_LGPL_DEPS_OPTION=ON
-ENABLE_BOLT_OPTION=ON
-WITH_COVERAGE=OFF
-
-echo "$0 ${ALL_ARGS[@]}"
-
-function echo_log() {
-  echo -e "[build.sh] $@"
+function echo_log
+{
+  echo "[build.sh] $*"
 }
 
-function echo_err() {
-  echo -e "[build.sh][ERROR] $@" 1>&2
+function echo_err
+{
+  echo "[build.sh][ERROR] $*" >&2
+}
+
+function fail
+{
+  echo_err "$*"
+  exit 2
 }
 
 function usage
 {
-    echo -e "Usage:"
-    echo -e "\t./build.sh -h"
-    echo -e "\t./build.sh init"
-    echo -e "\t./build.sh clean"
-    echo -e "\t./build.sh [BuildType] [--init] [--make [MakeOptions]]"
-    echo -e "\t./build.sh [BuildType] [--init] [--ob-make [MakeOptions]]"
+  cat <<'EOF'
+Usage:
+  ./build.sh -h
+  ./build.sh init [--android]
+  ./build.sh clean
+  ./build.sh release [--init] [--android] [-DName=Value ...]
+  ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh rpm [--init] [-DName=Value ...]
+  ./build.sh rpm [--init] [-DName=Value ...] --make [MakeOptions]
 
-    echo -e "\nOPTIONS:"
-    echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
-    echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
-    echo -e "\t--coverage => turn ON clang source-based coverage (WITH_COVERAGE); omitting it = OFF; also disables BOLT"
-    echo -e "\tMakeOptions => Options to make command, default: -j N"
+Supported compatibility build:
+  Release (RelWithDebInfo, -O2), Unity compilation, seekdb production binary,
+  and the Linux RPM packaging profile derived from that Release build.
+  Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
+  Windows x64 uses build.ps1.
 
-    echo -e "\nExamples:"
-    echo -e "\t# Build by debug mode and make with -j24."
-    echo -e "\t./build.sh debug --make -j24"
+Examples:
+  source ~/.bashrc && ./build.sh release --init
+  cd build_release && make -j80
+  source ~/.bashrc && ./build.sh release --make -j80
+  source ~/.bashrc && ./build.sh rpm --init
+  cd build_rpm && make -j80
+  source ~/.bashrc && ./build.sh rpm --make -j80 rpm
+  ./build.sh release --android --init --make -j16
 
-    echo -e "\n\t# Init and build with release mode but not compile."
-    echo -e "\t./build.sh release --init"
-
-    echo -e "\n\t# Build for Android with release mode."
-    echo -e "\t./build.sh release --android --init"
-
-    echo -e "\n\t# Build with rpm mode and make with default arguments."
-    echo -e "\t./build.sh rpm --make"
+Bazel remains the authoritative modular build graph. Use ./bazel.py directly
+for Bazel builds, tests, architecture checks, and non-release options.
+EOF
 }
 
-# parse arguments
-function parse_args
+function print_command
 {
-    for i in "${ALL_ARGS[@]}"; do
-        if [[ "$i" == "--init" ]]
-        then
-            NEED_INIT=true
-        elif [[ "$i" == "--android" ]]
-        then
-            ANDROID_BUILD=true
-        elif [[ "$i" == "--make" ]]
-        then
-            NEED_MAKE=make
-        elif [[ "$i" == "--ob-make" ]]
-        then
-            NEED_MAKE=ob-make
-            MAKE_ARGS=()
-        elif [[ "$i" == "--coverage" ]]
-        then
-            WITH_COVERAGE=ON
-        elif [[ $NEED_MAKE == false ]]
-        then
-            BUILD_ARGS+=("$i")
-        else
-            MAKE_ARGS+=("$i")
-        fi
-    done
-
-    if [[ "$KERNEL_RELEASE" == "release 6" ]]; then
-        echo_log '[NOTICE] lld is disabled in kernel release 6'
-        LLD_OPTION="OFF"
-    fi
-
-    BUILD_ARGS+=("-DWITH_COVERAGE=$WITH_COVERAGE")
-    [[ "$WITH_COVERAGE" == "ON" ]] && BUILD_ARGS+=("-DENABLE_BOLT=OFF")
+  printf '[build.sh] command: %q' "$0"
+  if (( ${#ALL_ARGS[@]} > 0 )); then
+    printf ' %q' "${ALL_ARGS[@]}"
+  fi
+  printf '\n'
 }
 
-# try call command make, if use give --make in command line.
-function try_make
+function require_host
 {
-    if [[ $NEED_MAKE != false ]]
-    then
-        $NEED_MAKE "${MAKE_ARGS[@]}"
-    fi
+  case "$(uname -s)" in
+    Linux|Darwin)
+      ;;
+    *)
+      fail "build.sh supports Linux and macOS; use build.ps1 on Windows"
+      ;;
+  esac
 }
 
-# try call init if --init given.
-function try_init
+function cpu_count
 {
-    if [[ $NEED_INIT == true ]]
-    then
-        do_init || exit $?
-    fi
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif [[ "$(uname -s)" == "Darwin" ]]; then
+    sysctl -n hw.ncpu
+  else
+    getconf _NPROCESSORS_ONLN
+  fi
 }
 
-# create build directory and cd it.
-function prepare_build_dir
+function find_cmake
 {
-    TYPE=$1
-    if [[ $ANDROID_BUILD == true ]]; then
-      TYPE="android_${TYPE}"
-    fi
-    mkdir -p $TOPDIR/build_$TYPE && cd $TOPDIR/build_$TYPE
+  if [[ "$(uname -s)" == "Linux" && -x "${DEVTOOLS_DIR}/bin/cmake" ]]; then
+    printf '%s\n' "${DEVTOOLS_DIR}/bin/cmake"
+  elif command -v cmake >/dev/null 2>&1; then
+    command -v cmake
+  else
+    return 1
+  fi
 }
 
-# Get millisecond timestamp, compatible with macOS and Linux
-function get_timestamp_ms
-{
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        # macOS: date doesn't support %N, use Python or just seconds
-        if command -v python3 &> /dev/null; then
-            python3 -c "import time; print(int(time.time() * 1000))"
-        else
-            echo $(($(date +%s) * 1000))
-        fi
-    else
-        # Linux: use date +%s%N
-        echo $(($(date +%s%N)/1000000))
-    fi
-}
-
-# dep_create
 function do_init
 {
-    time1_ms=$(get_timestamp_ms)
-    (cd $TOPDIR/deps/init && ANDROID_BUILD=$ANDROID_BUILD bash dep_create.sh)
-    if [ $? -ne 0 ]; then
-      exit $?
-    fi
-    time2_ms=$(get_timestamp_ms)
+  local android_build=$1
+  local start_time end_time elapsed
+  local status=0
 
-    cost_time_ms=$(($time2_ms - $time1_ms))
-    cost_time_s=`expr $cost_time_ms / 1000`
-    let min=cost_time_s/60
-    let sec=cost_time_s%60
-    echo_log "use dep_create.sh to create deps cost time: ${min}m${sec}s"
+  if [[ ! -f "${DEP_INIT_DIR}/dep_create.sh" ]]; then
+    echo_err "dependency initializer not found: ${DEP_INIT_DIR}/dep_create.sh"
+    return 1
+  fi
 
+  start_time="$(date +%s)"
+  (
+    cd "${DEP_INIT_DIR}" &&
+      ANDROID_BUILD="${android_build}" bash dep_create.sh
+  ) || status=$?
+  if (( status != 0 )); then
+    echo_err "dependency initialization failed with status ${status}"
+    return "${status}"
+  fi
+
+  end_time="$(date +%s)"
+  elapsed=$((end_time - start_time))
+  echo_log "dependency initialization completed in $((elapsed / 60))m$((elapsed % 60))s"
 }
 
-# make build directory && cmake && make (if need)
-function do_build
+function release_build_dir
 {
-    # Check if cmake exists, compatible with macOS and Linux
-    CMAKE_PATH=""
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-      # macOS: cmake may be at /opt/homebrew/bin/cmake or /usr/local/bin/cmake
-      if [ -f /opt/homebrew/bin/cmake ]; then
-        CMAKE_PATH="/opt/homebrew/bin/cmake"
-      elif [ -f /usr/local/bin/cmake ]; then
-        CMAKE_PATH="/usr/local/bin/cmake"
-      fi
-    else
-      # Linux
-      CMAKE_PATH="${TOOLS_DIR}/bin/cmake"
-    fi
-    
-    if [ -z "$CMAKE_PATH" ]; then
-      echo_log "[NOTICE] Your workspace has not initialized dependencies, please append '--init' args to initialize dependencies"
-      exit 1
-    fi
-
-    TYPE=$1; shift
-    prepare_build_dir $TYPE || return
-
-    ANDROID_CMAKE_ARGS=""
-    if [[ $ANDROID_BUILD == true ]]; then
-      ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Library/Android/sdk/ndk/27.3.13750724}"
-      if [ ! -d "$ANDROID_NDK_HOME" ]; then
-        echo_err "ANDROID_NDK_HOME not found: $ANDROID_NDK_HOME"
-        echo_err "Set ANDROID_NDK_HOME or install the NDK"
-        exit 1
-      fi
-      ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28"
-      echo_log "Android NDK: $ANDROID_NDK_HOME"
-    fi
-
-    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
-    if [ $? -ne 0 ]; then
-      echo_err "Failed to generate Makefile"
-      exit 1
-    fi
+  local android_build=$1
+  if [[ "${android_build}" == true ]]; then
+    printf '%s\n' "${TOPDIR}/build_android_release"
+  else
+    printf '%s\n' "${TOPDIR}/build_release"
+  fi
 }
 
-# clean build directories
-function do_clean
+function remove_managed_build_dir
 {
-    echo_log "cleaning..."
-    find . -maxdepth 1 -type d -name 'build_*' | grep -v 'build_ccls' | xargs rm -rf
+  local build_dir=$1
+
+  case "${build_dir}" in
+    "${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm")
+      ;;
+    *)
+      fail "refusing to clean unexpected path: ${build_dir}"
+      ;;
+  esac
+  if [[ -d "${build_dir}" ]]; then
+    "$(find_cmake)" -E remove_directory "${build_dir}"
+  fi
 }
 
-function build_package
+function configure_release
 {
-    STATIC_LINK_LGPL_DEPS_OPTION=ON
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
+  local android_build=$1
+  local build_dir=$2
+  shift 2
+  local cmake_command
+  local lld_option=ON
+  local -a cmake_args=(
+    -S "${TOPDIR}"
+    -B "${build_dir}"
+    -G "Unix Makefiles"
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    -DOB_ENABLE_UNITY=ON
+  )
+
+  cmake_command="$(find_cmake)" || fail "cmake not found; initialize dependencies or install CMake 3.20+"
+
+  # The bundled lld is unavailable on historical EL6 environments.
+  if [[ "$(uname -s)" == "Linux" ]] && grep -qE 'release 6([^0-9]|$)' /etc/issue 2>/dev/null; then
+    lld_option=OFF
+    echo_log "lld disabled on release 6 compatibility host"
+  fi
+  cmake_args+=("-DOB_USE_LLD=${lld_option}")
+
+  if [[ "${android_build}" == true ]]; then
+    local ndk_home="${ANDROID_NDK_HOME:-${HOME}/Library/Android/sdk/ndk/27.3.13750724}"
+    if [[ ! -f "${ndk_home}/build/cmake/android.toolchain.cmake" ]]; then
+      fail "Android NDK not found: ${ndk_home}; set ANDROID_NDK_HOME"
+    fi
+    cmake_args+=(
+      "-DCMAKE_TOOLCHAIN_FILE=${ndk_home}/build/cmake/android.toolchain.cmake"
+      -DANDROID_ABI=arm64-v8a
+      -DANDROID_PLATFORM=android-28
+    )
+  fi
+
+  # Replace the former Bazel-backed build_release entry point in place.  A
+  # normal CMake directory is incrementally reconfigured and kept intact.
+  if [[ -f "${build_dir}/.seekdb_bazel_release" ]]; then
+    echo_log "replacing legacy Bazel compatibility directory: ${build_dir}"
+    remove_managed_build_dir "${build_dir}"
+  fi
+
+  echo_log "configuring CMake release build: ${build_dir}"
+  "${cmake_command}" "${cmake_args[@]}" "$@"
 }
 
-function build_package_tgz
+function do_release
 {
-    STATIC_LINK_LGPL_DEPS_OPTION=ON
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
-}
+  local need_init=false
+  local need_make=false
+  local collecting_make_args=false
+  local android_build=false
+  local build_dir
+  local -a cmake_args=()
+  local -a make_args=()
 
-# build - configurate project and prepare to compile, by calling make
-function build
-{
-    set -- "${BUILD_ARGS[@]}"
-    case "x$1" in
-      xrelease)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION
+  while (( $# > 0 )); do
+    case "$1" in
+      --init)
+        need_init=true
         ;;
-      xrelease_no_unity)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
+      --android)
+        android_build=true
         ;;
-      xrelease_embedded)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION
+      --make)
+        if [[ "${need_make}" == true ]]; then
+          fail "--make may only be specified once"
+        fi
+        need_make=true
+        collecting_make_args=true
         ;;
-      xdebug)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION
+      --coverage|--ob-make)
+        fail "$1 is outside the CMake compatibility boundary"
         ;;
-      xdebug_no_unity)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
+      -D*)
+        if [[ "${collecting_make_args}" == true ]]; then
+          fail "CMake options must appear before --make: $1"
+        fi
+        cmake_args+=("$1")
         ;;
-      xccls)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_BUILD_CCLS=ON
-        # build soft link for ccls
-        ln -sf ${TOPDIR}/build_ccls/compile_commands.json ${TOPDIR}/compile_commands.json
-        ;;
-      xclangd)
-        do_build "$@" -DCMAKE_BUILD_TYPE=Debug -DOB_USE_LLD=$LLD_OPTION -DOB_ENABLE_UNITY=OFF
-        # build soft link for clangd
-        ln -sf ${TOPDIR}/build_clangd/compile_commands.json ${TOPDIR}/compile_commands.json
-        ;;
-      xperf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON
-        ;;
-      xmac_perf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF
-        ;;
-      xerrsim)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
-        ;;
-      xrpm)
-        build_package "$@" -DCMAKE_BUILD_RPM=ON
-        ;;
-      xtgz)
-        build_package_tgz "$@" -DCMAKE_BUILD_TGZ=ON
-        ;;
-      xdeb) 
-        build_package "$@" -DCMAKE_BUILD_DEB=ON
-        ;;
-      xpackage) 
-        # automatic determination of packaging type 
-        build_package "$@"
+      release)
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        fi
         ;;
       *)
-        BUILD_ARGS=(debug "${BUILD_ARGS[@]}")
-        build
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        else
+          fail "unexpected release argument: $1"
+        fi
         ;;
     esac
+    shift
+  done
+
+  require_host
+  if [[ "${need_init}" == true ]]; then
+    do_init "${android_build}" || exit $?
+  fi
+
+  build_dir="$(release_build_dir "${android_build}")"
+  if (( ${#cmake_args[@]} > 0 )); then
+    configure_release "${android_build}" "${build_dir}" "${cmake_args[@]}" || exit $?
+  else
+    configure_release "${android_build}" "${build_dir}" || exit $?
+  fi
+
+  if [[ "${need_make}" == true ]]; then
+    if (( ${#make_args[@]} == 0 )); then
+      make_args=(-j"$(cpu_count)")
+    fi
+    make -C "${build_dir}" "${make_args[@]}" seekdb
+  fi
+}
+
+function do_rpm
+{
+  local need_init=false
+  local need_make=false
+  local collecting_make_args=false
+  local build_dir="${TOPDIR}/build_rpm"
+  local -a cmake_args=()
+  local -a make_args=()
+  local -a rpm_cmake_args=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --init)
+        need_init=true
+        ;;
+      --make)
+        if [[ "${need_make}" == true ]]; then
+          fail "--make may only be specified once"
+        fi
+        need_make=true
+        collecting_make_args=true
+        ;;
+      --android|--coverage|--ob-make)
+        fail "$1 is outside the CMake RPM compatibility boundary"
+        ;;
+      -D*)
+        if [[ "${collecting_make_args}" == true ]]; then
+          fail "CMake options must appear before --make: $1"
+        fi
+        cmake_args+=("$1")
+        ;;
+      *)
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        else
+          fail "unexpected rpm argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  require_host
+  [[ "$(uname -s)" == "Linux" ]] || fail "RPM packaging is supported only on Linux"
+  if [[ "${need_init}" == true ]]; then
+    do_init false || exit $?
+  fi
+
+  rpm_cmake_args=(
+    -DOB_BUILD_PACKAGE=ON
+    -DOB_BUILD_RPM=ON
+    -DENABLE_AUTO_FDO=ON
+    -DENABLE_THIN_LTO=ON
+    -DENABLE_HOTFUNC=ON
+    -DOB_STATIC_LINK_LGPL_DEPS=ON
+    -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN
+    -DDEFAULT_LOG_FILE_SIZE_MB=16
+  )
+  if (( ${#cmake_args[@]} > 0 )); then
+    rpm_cmake_args=("${cmake_args[@]}" "${rpm_cmake_args[@]}")
+  fi
+  configure_release false "${build_dir}" "${rpm_cmake_args[@]}" || exit $?
+
+  if [[ "${need_make}" == true ]]; then
+    if (( ${#make_args[@]} > 0 )); then
+      make -C "${build_dir}" -j"$(cpu_count)" "${make_args[@]}"
+    else
+      make -C "${build_dir}" -j"$(cpu_count)"
+    fi
+  fi
+}
+
+function do_clean
+{
+  local build_dir
+  local found=false
+
+  for build_dir in \
+      "${TOPDIR}/build_release" \
+      "${TOPDIR}/build_android_release" \
+      "${TOPDIR}/build_rpm"; do
+    if [[ -d "${build_dir}" ]]; then
+      remove_managed_build_dir "${build_dir}"
+      echo_log "removed ${build_dir}"
+      found=true
+    fi
+  done
+  if [[ "${found}" == false ]]; then
+    echo_log "nothing to clean"
+  fi
+}
+
+function do_init_command
+{
+  local android_build=false
+  if (( $# > 1 )); then
+    fail "init accepts only --android"
+  fi
+  if (( $# == 1 )); then
+    [[ "$1" == "--android" ]] || fail "unexpected init argument: $1"
+    android_build=true
+  fi
+  require_host
+  do_init "${android_build}"
 }
 
 function main
 {
-    case "$1" in
-        -h)
-            usage
-            ;;
-        init)
-            parse_args
-            do_init
-            ;;
-        clean)
-            do_clean
-            ;;
-        *)
-            parse_args
-            try_init
-            build
-            try_make
-            ;;
-    esac
+  print_command
+
+  case "${1:-}" in
+    -h|--help)
+      (( $# == 1 )) || fail "$1 does not accept arguments"
+      usage
+      ;;
+    init)
+      do_init_command "${@:2}"
+      ;;
+    clean)
+      (( $# == 1 )) || fail "clean does not accept arguments"
+      require_host
+      do_clean
+      ;;
+    release)
+      do_release "${@:2}"
+      ;;
+    rpm)
+      do_rpm "${@:2}"
+      ;;
+    "")
+      usage
+      exit 2
+      ;;
+    *)
+      fail "unsupported build type or command: $1 (maintained modes: release, rpm)"
+      ;;
+  esac
 }
 
 main "$@"

@@ -261,7 +261,7 @@ int ObExprRegexpInstr::regexp_instr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
                                           pattern->get_string(), flags, reusable, expr.args_[1]->datum_meta_.cs_type_))) {
         LOG_WARN("fail to init regexp", K(pattern), K(flags), K(ret));
       } else if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-        if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, text_str))) {
+        if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, text_str))) {
           LOG_WARN("get text string failed", K(ret));
         }
       } else {

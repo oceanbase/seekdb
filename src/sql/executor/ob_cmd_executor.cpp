@@ -18,7 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
-#include "observer/scheduler/ob_ddl_count_guard.h"  // ObDDLCountGuard (relocated L9)
+#include "query/ddl/ob_ddl_execution_guard.h"
 #include "share/ob_version_parser.h"
 #include "sql/resolver/ddl/ob_alter_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
@@ -96,7 +96,6 @@
 #include "sql/engine/prepare/ob_execute_executor.h"
 #include "sql/engine/prepare/ob_deallocate_executor.h"
 #include "share/ob_structured_event_logger.h"
-#include "observer/omt/ob_server_runtime.h"
 #include "sql/resolver/dcl/ob_alter_role_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/cmd/ob_merge_table_executor.h"
@@ -176,11 +175,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
     LOG_WARN("session is null", KR(ret));
   } else {
   }
-  ObDDLCountGuard ddl_guard{};
+  query::ObDdlExecutionGuard ddl_guard(
+      ctx.get_ddl_execution_limiter());
   if (OB_SUCC(ret)) {
     if (true && GCONF._enable_ddl_worker_isolation
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {
-      if (OB_FAIL(ddl_guard.try_inc_ddl_count(GCONF.cpu_quota_concurrency))) {
+      if (OB_FAIL(ddl_guard.try_acquire(GCONF.cpu_quota_concurrency))) {
         LOG_WARN("fail to increment server DDL count", KR(ret));
       }
     }

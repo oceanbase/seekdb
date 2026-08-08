@@ -1005,7 +1005,7 @@ int ObAccessPathEstimation::process_storage_estimation_result(ObIArray<ObBatchEs
       const obcall::ObEstPartResElement &res = task->res_.index_param_res_.at(j);
       AccessPath *path = task->paths_.at(j);
       int64_t idx = -1;
-      const ObEstPartArgElement &index_param = task->arg_.index_params_.at(j);
+      const obcall::ObEstPartArgElement &index_param = task->arg_.index_params_.at(j);
       if (OB_ISNULL(path) || OB_UNLIKELY(j >= task->arg_.index_params_.count()) ||
           OB_UNLIKELY(j >= task->range_idx_.count())) {
         ret = OB_ERR_UNEXPECTED;

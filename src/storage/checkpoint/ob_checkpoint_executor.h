@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_CHECKPOINT_EXECUTOR_H_
 
 #include "lib/lock/ob_spin_rwlock.h"           // SpinRWLock
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "logservice/ob_log_handler.h"
 #include "share/scn.h"
 

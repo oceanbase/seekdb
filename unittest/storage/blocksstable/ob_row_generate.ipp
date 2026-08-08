@@ -15,7 +15,6 @@
  */
 
 #include "common/number/ob_number_v2.h"
-#include "share/schema/ob_column_schema.h"
 
 #define VARIABLE_BUF_LEN 128
 

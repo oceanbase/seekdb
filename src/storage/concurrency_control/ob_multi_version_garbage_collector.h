@@ -19,26 +19,11 @@
 
 #include "share/scn.h"
 #include "share/ob_occam_timer.h"
-#include "sql/session/ob_sql_session_info.h"
-#include "sql/session/ob_sql_session_mgr.h"
 
 namespace oceanbase
 {
 namespace concurrency_control
 {
-
-class GetMinActiveSnapshotVersionFunctor
-{
-public:
-  GetMinActiveSnapshotVersionFunctor()
-    : min_active_snapshot_version_(share::SCN::max_scn()) {}
-  virtual ~GetMinActiveSnapshotVersionFunctor() {}
-  bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
-  share::SCN get_min_active_snapshot_version()
-    { return min_active_snapshot_version_; }
-private:
-  share::SCN min_active_snapshot_version_;
-};
 
 // OceanBase 4.0 reclaims multi-version data through a globally incremented
 // timestamp. It's the multi-version data that is less than the specified
@@ -111,6 +96,8 @@ public:
 private:
   int study();
   int refresh_disk_status_();
+  share::SCN get_reserved_snapshot_for_active_txn_(
+      const bool config_enabled) const;
   void update_study_status_(const int study_ret, const int64_t study_timestamp);
   void update_disk_pressure_status_(const bool is_almost_full);
   int study_min_unallocated_GTS(share::SCN &min_unallocated_GTS);

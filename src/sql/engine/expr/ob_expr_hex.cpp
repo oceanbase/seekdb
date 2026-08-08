@@ -216,7 +216,7 @@ int ObExprHex::eval_hex(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
         }
       } else { // text tc
         ObString str;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(alloc_guard.get_allocator(),
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, alloc_guard.get_allocator(),
                                                               *arg,
                                                               expr.args_[0]->datum_meta_,
                                                               expr.args_[0]->obj_meta_.has_lob_header(),

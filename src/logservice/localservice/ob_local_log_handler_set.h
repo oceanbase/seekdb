@@ -20,8 +20,8 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/utility/ob_print_utils.h"
-#include "logservice/ob_log_base_header.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_header.h"
+#include "share/log/ob_log_base_type.h"
 #include "share/ob_errno.h"
 namespace oceanbase
 {

@@ -18,7 +18,6 @@
 #define OCEANBASE_ALLOCATOR_OB_SHARED_MEMORY_ALLOCATOR_MGR_H_
 
 #include "storage/allocator/ob_memstore_allocator.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_mds_allocator.h"
 #include "storage/allocator/ob_vector_allocator.h"

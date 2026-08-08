@@ -16,6 +16,7 @@
 
 #ifndef OCEABASE_STORAGE_OB_TABLET_GC_SERVICE_
 #define OCEABASE_STORAGE_OB_TABLET_GC_SERVICE_
+#include "lib/literals/ob_literals.h"
 #include "storage/tx_storage/ob_ls_freeze_thread.h"
 #include "lib/task/ob_timer.h"
 #include "lib/lock/ob_rwlock.h"
@@ -31,6 +32,7 @@ namespace oceanbase
 namespace storage
 {
 class ObLS;
+class ObLSService;
 namespace checkpoint
 {
 #define TABLET_PERSIST                  0x01  /* tablet persist trigger */

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "mds_table_base.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
@@ -164,7 +164,7 @@ int MdsTableBase::unregister_from_removed_recorder()
 int MdsTableBase::get_ls_max_consequent_callbacked_scn_(share::SCN &max_consequent_callbacked_scn) const
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *tenant_ls = nullptr;
   MDS_TG(1_ms);
   if (OB_ISNULL(ls_service)) {

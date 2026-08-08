@@ -16,7 +16,7 @@
 
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
 #include "observer/omt/ob_server_runtime_controller.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 
@@ -47,11 +47,11 @@ void ObAllDtlIntermResultMonitor::reset()
   owner_len = strlen(store->get_label());   \
   owner = store->get_label();
 
-int ObDTLIntermResultMonitorInfoGetter::operator() (common::hash::HashMapPair<ObDTLIntermResultKey, ObDTLIntermResultInfo *> &entry)
+int ObDTLIntermResultMonitorInfoGetter::consume(
+    const ObDTLIntermResultKey &key,
+    const ObDTLIntermResultInfo &info)
 {
   int ret = OB_SUCCESS;
-  const ObDTLIntermResultInfo &info = *entry.second;
-  const ObDTLIntermResultKey &key = entry.first;
   
   {
     int64_t hold_mem = 0;
@@ -220,7 +220,7 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
           ObDTLIntermResultMonitorInfoGetter monitor_getter(scanner_, *allocator_, output_column_ids_,
                                   cur_row_);
           SERVER_MODULE_SCOPE {
-            if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
+            if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->generate_monitor_info_rows(monitor_getter))) {
               SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {

@@ -1,0 +1,32 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1","z2");
+ob1.mysql create tenant t1 replica_num 1, primary_zone = "z1", locality = 'F@z1', resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+create table t1 (c1 int, c2 int, primary key (c1));
+create table t2 (c1 int, c2 int, primary key (c1));
+alter table t1 add column c3 int generated always as (sleep(0.02)) virtual;
+alter table t1 add column c4 varchar(1024) default 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
+select /*+ query_timeout(100000000) use_nl(t1 t2) leading(t1 t2) */* from t1 join t2 where t1.c2 = t2.c2;
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+command	state	info
+Query	ACTIVE	REMOTE/DISTRIBUTE PLAN EXECUTING
+Query	ACTIVE	select /*+ query_timeout(100000000) use_nl(t1 t2) leading(t1 t2) */* from t1 join t2 where t1.c2 = t2.c2;
+ob1.mysql kill query $sid;
+less_than_10s
+1
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+command	state	info
+Sleep	SLEEP	NULL
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+command	state	info
+Query	ACTIVE	DISTRIBUTE PLAN SCHEDULING
+Query	ACTIVE	REMOTE/DISTRIBUTE PLAN EXECUTING
+Query	ACTIVE	REMOTE/DISTRIBUTE PLAN EXECUTING
+Query	ACTIVE	select /*+ no_use_px query_timeout(100000000) parallel(10) */* from t3;
+ob1.mysql kill query $slave_sid;
+less_than_10s
+1
+ob1.mysql_p select command, state, info from oceanbase.__all_virtual_processlist where id = $sid or master_sessid = $sid order by 3;
+command	state	info
+Sleep	SLEEP	NULL

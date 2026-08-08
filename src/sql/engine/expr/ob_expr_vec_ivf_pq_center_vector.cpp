@@ -21,9 +21,8 @@
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -103,29 +102,29 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     common::ObArenaAllocator tmp_allocator("IVFPQExprPQCVec", OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObTableID table_id;
     ObTabletID tablet_id;
-    ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;
+    share::ObVectorIndexDistAlgorithm dis_algo = share::VIDA_MAX;
     ObSEArray<float*, 64> centers;
     bool contain_null = false;
     ObIArrayType *arr = NULL;
     uint64_t center_prefix = 0;
-    if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
+    if (OB_FAIL(share::ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
       LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
       expr_datum.set_null();
     } else {
-      ObVectorNormalizeInfo norm_info;
+      share::ObVectorNormalizeInfo norm_info;
       float *residual_vec = nullptr;
       int64_t center_idx = 0;
       if (centers.count() == 0) {
         residual_vec = reinterpret_cast<float*>(arr->get_data());
-      } else if (OB_FAIL(ObVectorIndexUtil::calc_residual_vector(
+      } else if (OB_FAIL(share::ObVectorIndexUtil::calc_residual_vector(
           tmp_allocator,
           arr->size(),
           centers,
           reinterpret_cast<float*>(arr->get_data()),
-          VIDA_COS != dis_algo ? nullptr: &norm_info, // cos need norm
+          share::VIDA_COS != dis_algo ? nullptr: &norm_info, // cos need norm
           residual_vec))) {
         LOG_WARN("failed to get nearest center", K(ret));
       }
@@ -154,4 +153,3 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
 
 }  // namespace sql
 }  // namespace oceanbase
-

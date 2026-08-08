@@ -21,7 +21,7 @@
 #include "common/sql_mode/ob_sql_mode.h"
 #include "common/ob_field.h"
 #include "lib/time/ob_clock_generator.h"
-#include "storage/tx/ob_trans_define.h"
+#include "data_plane/transaction/ob_tx_options.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
@@ -414,6 +414,9 @@ public:
   void set_ignore_stmt(bool is_ignore) { is_ignore_stmt_ = is_ignore; }
   bool is_ignore_stmt() const { return is_ignore_stmt_; }
   bool is_plain_select_stmt() const;
+  bool can_partition_retry() const;
+  bool has_for_update() const;
+  int64_t get_ddl_task_id() const;
   ObTableScanStat &get_table_scan_stat()
   {
     return table_scan_stat_;

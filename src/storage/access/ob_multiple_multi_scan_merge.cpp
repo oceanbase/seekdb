@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/access/ob_multiple_multi_scan_merge.h"
-#include "sql/engine/px/ob_granule_iterator_op.h"
 
 namespace oceanbase
 {

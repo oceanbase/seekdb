@@ -15,7 +15,8 @@
  */
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
 #define USING_LOG_PREFIX SERVER
 
@@ -29,6 +30,20 @@ namespace rootserver
 int ObDBMSSchedService::server_module_init(ObDBMSSchedService *&dbms_sched_service)
 {
   return dbms_sched_service->init();
+}
+
+int ObDBMSSchedService::allocate_job_id(int64_t &job_id)
+{
+  return dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id);
+}
+
+int ObDBMSSchedService::create_job(
+    common::ObISQLClient &sql_client,
+    int64_t job_id,
+    const dbms_scheduler::ObDBMSSchedJobInfo &job_info)
+{
+  return dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
+      sql_client, job_id, job_info);
 }
 
 int ObDBMSSchedService::init()
@@ -140,7 +155,7 @@ void ObDBMSSchedService::wakeup_scheduler()
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    rootserver::ObDBMSSchedService *svc = share::g_mp->dbms_sched_service();
+    rootserver::ObDBMSSchedService *svc = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDBMSSchedService>();
     if (OB_NOT_NULL(svc)) {
       svc->job_master_.wakeup();
     }

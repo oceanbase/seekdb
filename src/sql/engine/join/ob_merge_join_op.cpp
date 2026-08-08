@@ -829,7 +829,8 @@ int ObMergeJoinOp::calc_equal_conds(int64_t &cmp_res)
         cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
       } else {
         int cmp_ret = 0;
-        if (OB_FAIL(equal_cond.ns_cmp_func_(*l_datum, *r_datum, cmp_ret))) {
+        if (OB_FAIL(equal_cond.ns_cmp_func_(
+                *l_datum, *r_datum, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret != 0) {
           cmp_res = cmp_ret;
@@ -1271,7 +1272,8 @@ int ObMergeJoinOp::calc_equal_conds_with_batch_idx(int64_t &cmp_res)
       cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(equal_cond.ns_cmp_func_(*l_datum, *r_datum, cmp_ret))) {
+      if (OB_FAIL(equal_cond.ns_cmp_func_(
+              *l_datum, *r_datum, cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp_ret != 0) {
         cmp_res = cmp_ret;
@@ -1320,7 +1322,8 @@ int ObMergeJoinOp::calc_equal_conds_with_stored_row(const ObRADatumStore::Stored
       cmp_res = (T_OP_NSEQ == equal_cond.expr_->type_) ? 0 : -1;
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(equal_cond.ns_cmp_func_(*l_table_datum, *r_table_datum, cmp_ret))) {
+      if (OB_FAIL(equal_cond.ns_cmp_func_(
+              *l_table_datum, *r_table_datum, cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp_ret != 0) {
         cmp_res = cmp_ret;

@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 #include <functional>
 #include "ob_server_runtime.h"
-#include "share/rc/ob_module_provider.h"
-#include "share/roaringbitmap/ob_rb_memory_mgr.h"
 
 namespace oceanbase
 {
@@ -33,13 +31,6 @@ uint64_t server_runtime_id()
 
 namespace common
 {
-
-
-ObRbMemMgr *__attribute__((used)) get_rb_mem_mgr()
-{
-  return ::oceanbase::share::g_mp->rb_mem_mgr();
-}
-
 void __attribute__((used)) lib_server_runtime_dispatch(lib::IRunWrapper *run_wrapper,
                                                        std::function<void()> fn)
 {

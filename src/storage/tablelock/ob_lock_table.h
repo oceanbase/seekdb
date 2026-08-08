@@ -24,7 +24,7 @@
 #include "storage/ob_i_table.h"
 #include "storage/tablelock/ob_obj_lock.h"
 #include "storage/ob_i_memtable_mgr.h" // ObMemtableMgrHandle
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 
 namespace oceanbase
 {

@@ -64,13 +64,15 @@ DEF_PARAM(net_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,128]",
 DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
         "the size of the local server runtime task queue. Range: [1024,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
-        common::ObConfigMemoryLimitChecker, "[0M,)",
-        "the size of the memory reserved for internal use(for testing purpose), 0 means follow memory_limit_percentage. Range: 0, [1G,).",
+DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+        common::MemoryBudgetConfigChecker, "[0M,)",
+        "the logical memory budget used to size caches and buffers. "
+        "0 means max(1G, 40% of physical memory). Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memory_hard_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
-        common::ObConfigMemoryLimitChecker, "[0M,)",
-        "The max memory size can be used, 0 means use 90% of system memory. Range: 0, [1G,).",
+DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+        common::MemoryBudgetConfigChecker, "[0M,)",
+        "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
+        "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of CPU\\'s in the system. "
@@ -162,9 +164,6 @@ DEF_PARAM(syslog_file_uncompressed_count, INT_WITH_CHECKER, OB_CLUSTER_PARAMETER
                      "Each syslog file can occupy at most 256MB disk space. "
                      "When this value is set to 0, all syslog file may be compressed. Range: [0, +∞) in integer",
                      ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "80", "[10, 95]",
-        "the size of the memory reserved for internal use(for testing purpose). Range: [10, 95]",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cache_wash_threshold, CAP, OB_CLUSTER_PARAMETER, "64M", "[0B,]",
         "size of remaining memory at which cache eviction will be triggered. Range: [0,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -323,27 +322,10 @@ DEF_PARAM(_non_standard_comparison_level, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE),
         "none, equal, range");
 
-// memtable memory consumption
-DEF_PARAM(memstore_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "used in calculating the value of MEMSTORE_LIMIT parameter: "
-        "memstore_limit_percentage = memstore_limit / memory_size, "
-        "where MEMORY_SIZE is the server runtime memory limit. Range: [0, 100). "
-        "1. the system will use memstore_limit_percentage if only memstore_limit_percentage is set."
-        "2. the system will use _memstore_limit_percentage if both memstore_limit_percentage and "
-        "_memstore_limit_percentage is set."
-        "3. the system will adjust automatically if both memstore_limit_percentage and "
-        "_memstore_limit_percentage set to 0(by default).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
+// Kept only for compatibility with tools that still set this retired parameter.
 DEF_PARAM(_memstore_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "used in calculating the value of MEMSTORE_LIMIT parameter: "
-        "_memstore_limit_percentage = memstore_limit / memory_size, "
-        "where MEMORY_SIZE is the server runtime memory limit. Range: [0, 100). "
-        "1. the system will use memstore_limit_percentage if only memstore_limit_percentage is set."
-        "2. the system will use _memstore_limit_percentage if both memstore_limit_percentage and "
-        "_memstore_limit_percentage is set."
-        "3. the system will adjust automatically if both memstore_limit_percentage and "
-        "_memstore_limit_percentage set to 0(by default).",
+        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
+        "but is ignored by memstore sizing and memory control.",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(freeze_trigger_percentage, INT, OB_CLUSTER_PARAMETER, "20", "(0, 100)",
         "the threshold of the size of the mem store when freeze will be triggered. Rang:(0,100)",
@@ -356,22 +338,6 @@ DEF_PARAM(data_disk_write_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0,
         "When the user data disk reaches this watermark, SQL requests will report that the disk is full. "
         "The configuration should be greater than data_disk_usage_limit_percentage, "
         "with the recommended setting being: (1 - memstore_limit_size / data_disk_size) * 100%",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_tx_share_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "Used to control the percentage of server runtime memory that transaction modules can collectively use. "
-        "This primarily includes user data (MemTable), transaction data (TxData), etc. "
-        "When it is set to the default value of 0, it represents dynamic adaptive behavior, "
-        "which will be adjusted dynamically based on memstore_limit_percentage. The adjustment rule is: "
-        " _tx_share_memory_limit_percentage = max(memstore_limit_percentage, ob_vector_memory_limit_percentage + 5) + 10. "
-        "Range: [0, 100)",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_tx_data_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "20", "(0, 100)",
-        "used to control the upper limit percentage of memory resources that the TxData module can use. "
-        "Range:(0, 100)",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_mds_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "10", "(0, 100)",
-        "Used to control the upper limit percentage of memory resources that the Mds module can use. "
-        "Range:(0, 100)",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(writing_throttling_maximum_duration, TIME, OB_CLUSTER_PARAMETER, "2h", "[1s, 3d]",
           "maximum duration of writting throttling(in minutes), max value is 3 days",

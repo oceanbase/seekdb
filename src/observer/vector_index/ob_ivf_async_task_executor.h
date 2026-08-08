@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_IVF_ASYNC_TASK_EXECUTOR_H_
 
 #include "observer/vector_index/ob_vector_index_i_task_executor.h"
-#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
+#include "query/vector/ob_vector_index_cache.h"
 
 namespace oceanbase
 {

@@ -17,6 +17,9 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_table_replace_op.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "data_plane/blocksstable/ob_datum_row_iterator.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_insert_op.h"
 
@@ -524,11 +527,11 @@ int ObTableReplaceOp::get_next_conflict_rowkey(DASTaskIter &task_iter)
   int ret = OB_SUCCESS;
   bool got_row = false;
   while (OB_SUCC(ret) && !got_row) {
-    ObDatumRow *dup_row = nullptr;
+    blocksstable::ObDatumRow *dup_row = nullptr;
     ObChunkDatumStore::StoredRow *stored_row = nullptr;
     ObDASWriteBuffer::DmlShadowRow ssr;
     ObDASInsertOp *ins_op = static_cast<ObDASInsertOp*>(*task_iter);
-    ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
+    blocksstable::ObDatumRowIterator *conflict_result = ins_op->get_duplicated_result();
     const ObDASInsCtDef *ins_ctdef = static_cast<const ObDASInsCtDef*>(ins_op->get_ctdef());
     // Because all returned are primary keys of the main table, the primary keys of the main table must be stored in the storage layer, and there is no need for the upper layer to do further calculations,
     // So here there is no need to clear eval flag
@@ -995,6 +998,7 @@ int ObTableReplaceOp::check_values(bool &is_equal,
                                    const ObChunkDatumStore::StoredRow *delete_row)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *access_ctx = nullptr;
   is_equal = true;
   const ObIArray<ObExpr *> &new_row = get_primary_table_new_row();
   const ObIArray<ObExpr *> &old_row = get_primary_table_old_row();
@@ -1003,6 +1007,7 @@ int ObTableReplaceOp::check_values(bool &is_equal,
   CK(OB_NOT_NULL(delete_row));
   CK(OB_NOT_NULL(replace_row));
   CK(replace_row->cnt_ == new_row.count());
+  OZ(eval_ctx_.get_datum_access_ctx(access_ctx));
   for (int64_t i = 0; OB_SUCC(ret) && i < new_row.count(); ++i) {
     const UIntFixedArray &column_ids = MY_SPEC.replace_ctdefs_.at(0)->ins_ctdef_->column_ids_;
     CK(new_row.at(i)->basic_funcs_->null_first_cmp_ == old_row.at(i)->basic_funcs_->null_first_cmp_);
@@ -1015,7 +1020,8 @@ int ObTableReplaceOp::check_values(bool &is_equal,
       } else {
         const ObDatum &insert_datum = replace_row->cells()[i];
         const ObDatum &del_datum = delete_row->cells()[i];
-        if (OB_FAIL(new_row.at(i)->basic_funcs_->null_first_cmp_(insert_datum, del_datum, cmp_ret))) {
+        if (OB_FAIL(new_row.at(i)->basic_funcs_->null_first_cmp_(
+                insert_datum, del_datum, cmp_ret, access_ctx))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           is_equal = false;

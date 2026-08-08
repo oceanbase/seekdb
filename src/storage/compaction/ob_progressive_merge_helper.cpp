@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_progressive_merge_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_partition_merger.h"
 #include "share/ob_structured_event_logger.h"
 

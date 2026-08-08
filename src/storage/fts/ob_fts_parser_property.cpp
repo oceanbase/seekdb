@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "storage/fts/ob_fts_parser_property.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
 
 #include "common/json_type/ob_json_base.h"
 #include "common/json_type/ob_json_parse.h"
@@ -26,7 +26,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/fts/ob_fts_literal.h"
-#include "storage/fts/ob_fts_parser_helper.h"
+#include "data_plane/fts/ob_fts_parser_helper.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
 

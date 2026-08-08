@@ -14,39 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_LIMIT_CALCULATOR_H_
-#define OCEANBASE_SRC_PL_SYS_PACKAGE_DBMS_LIMIT_CALCULATOR_H_
+#pragma once
 
-#include "sql/engine/ob_exec_context.h"
-
-namespace oceanbase
-{
-namespace share
-{
-struct ObUserResourceCalculateArg;
-}
-namespace pl
-{
-
-class ObDBMSLimitCalculator
-{
-public:
-  static int phy_res_calculate_by_logic_res(
-      sql::ObExecContext &ctx,
-      sql::ParamStore &params,
-      common::ObObj &result);
-private:
-  static int parse_dict_like_args_(
-      const char* ptr,
-      share::ObUserResourceCalculateArg &arg);
-  static int get_json_result_(
-      const ObMinPhyResourceResult &res,
-      char *buf,
-      const int64_t buf_len,
-      int64_t &pos);
-};
-
-} // namespace pl
-} // namespace oceanbase
-
-#endif
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/sys_package/ob_dbms_limit_calculator_mysql.h"

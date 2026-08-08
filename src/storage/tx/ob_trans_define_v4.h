@@ -21,12 +21,17 @@
 #include <functional>
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/list/ob_list.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/trace/ob_trace_event.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/container/ob_tuple.h"
 #include "share/ob_light_hashmap.h"
+#include "data_plane/transaction/ob_i_tx_callback.h"
+#include "data_plane/transaction/ob_tx_read_snapshot.h"
+#include "data_plane/transaction/ob_tx_options.h"
+#include "data_plane/transaction/ob_tx_exec_result.h"
 #include "storage/tx/ob_trans_define.h"
 #include "common/ob_simple_iterator.h"
 #include "share/ob_common_id.h"
@@ -39,12 +44,6 @@ namespace transaction
 {
 
 class ObTxSchedulerStat;
-
-class ObITxCallback
-{
-public:
-  virtual void callback(int ret) = 0;
-};
 
 template<typename T, int N = 4>
 class ObRefList
@@ -107,59 +106,6 @@ struct ObTxAbortCauseNames {
 
 #undef OB_TX_ABORT_CAUSE_LIST
 
-enum class ObTxClass { USER, SYS };
-
-enum class ObTxConsistencyType
-{
-  INVALID = 0,
-  CURRENT_READ = 1,
-  BOUNDED_STALENESS_READ = 2, // AKA. WeakRead
-};
-
-enum class ObTxIsolationLevel
-{
-  INVALID = -1,
-  RU = 0,
-  RC = 1,
-  RR = 2,
-  SERIAL = 3,
-};
-
-extern ObTxIsolationLevel tx_isolation_from_str(const ObString &s);
-
-
-inline bool is_RR_or_SERIAL_isolevel(const ObTxIsolationLevel isolation)
-{
-  return (isolation == ObTxIsolationLevel::RR ||
-          isolation == ObTxIsolationLevel::SERIAL);
-}
-
-inline bool is_RC_isolevel(const ObTxIsolationLevel isolation)
-{
-  return isolation == ObTxIsolationLevel::RC;
-}
-
-enum class ObTxAccessMode
-{
-  INVL = -1, RW = 0, RD_ONLY = 1
-};
-
-struct ObTxParam
-{
-  ObTxParam();
-  bool is_valid() const;
-  ~ObTxParam();
-  int64_t timeout_us_;
-  int64_t lock_timeout_us_;
-  ObTxAccessMode access_mode_;
-  ObTxIsolationLevel isolation_;
-  TO_STRING_KV(K_(timeout_us),
-               K_(lock_timeout_us),
-               K_(access_mode),
-               K_(isolation));
-  OB_UNIS_VERSION(1);
-};
-
 union ObTxWriteStateFlag
 {
   int64_t flag_val_;
@@ -195,136 +141,6 @@ struct ObTxWriteState
   OB_UNIS_VERSION(1);
 };
 
-// internal core snapshot for read data
-class ObTxSnapshot
-{
-  friend class ObTxReadSnapshot;
-  friend class ObTransService;
-public:
-  share::SCN version_;
-  ObTransID tx_id_;
-  ObTxSEQ scn_;
-  bool elr_; // whether allowed read elr
-public:
-  TO_STRING_KV(K_(version), K_(tx_id), K_(scn));
-  ObTxSnapshot();
-  ObTxSnapshot(const share::SCN &version);
-  ~ObTxSnapshot();
-  void reset();
-  ObTxSnapshot &operator=(const ObTxSnapshot &r);
-  bool is_valid() const { return version_.is_valid(); }
-  const share::SCN &version() const { return version_; }
-  const ObTransID &tx_id() const { return tx_id_; }
-  void set_tx_id(const ObTransID &tx_id) { tx_id_ = tx_id; }
-  const ObTxSEQ &tx_seq() const { return scn_; }
-  void set_elr(const bool elr) { elr_ = elr; }
-  bool is_elr() const { return elr_; }
-  OB_UNIS_VERSION(1);
-};
-
-// snapshot used to consistency read
-class ObTxReadSnapshot
-{
-  friend class ObTransService;
-public:
-  bool valid_;              // used by cursor check snapshot state
-  bool committed_;          // used by cursor check snapshot state
-  ObTxSnapshot core_;
-  enum class SRC {
-    INVL = 0,
-    GLOBAL = 1,             // normal snapshot, external consistency complied
-    LS = 2,                 // only access one logstream
-    WEAK_READ_SERVICE = 3,  // do a bounded stale read, without linearizable consistency
-    SPECIAL = 4,            // user specify
-    NONE = 5,               // won't read, global snapshot not required
-  } source_;
-  int64_t uncertain_bound_; // for source_ GLOBAL
-  bool has_write_state_;
-public:
-  void init_weak_read(const share::SCN snapshot);
-  void init_none_read() { valid_ = true; source_ = SRC::NONE; }
-  void init_ls_read(const ObTxSnapshot &core);
-  void specify_snapshot_scn(const share::SCN snapshot);
-  void reset_write_state();
-  void mark_write_state() { has_write_state_ = true; }
-  bool has_write_state() const { return has_write_state_; }
-  const char* get_source_name() const;
-  const ObTxSnapshot &snapshot() const { return core_; }
-  const share::SCN &version() const { return core_.version(); }
-  const ObTransID &tx_id() const { return core_.tx_id(); }
-  void set_tx_id(const ObTransID &tx_id) { core_.set_tx_id(tx_id); }
-  const ObTxSEQ &tx_seq() const { return core_.tx_seq(); }
-  bool is_weak_read() const { return SRC::WEAK_READ_SERVICE == source_; };
-  bool is_none_read() const { return SRC::NONE == source_; }
-  bool is_special() const { return SRC::SPECIAL == source_; }
-  bool is_ls_snapshot() const { return SRC::LS == source_; }
-  bool is_valid() const { return valid_; }
-  void invalid() { valid_ = false; }
-  bool is_committed() const { return committed_; }
-  void reset();
-  int assign(const ObTxReadSnapshot &);
-  void try_set_read_elr();
-  bool read_elr() const { return core_.is_elr(); }
-  /**
-   * only used for lob, other situation DONOT use
-   *
-   * special serialize interface for lob to avoid lob locator too large
-   */
-  int serialize_for_lob(const share::SCN &fb_snapshot, SERIAL_PARAMS) const;
-  int deserialize_for_lob(share::SCN &fb_snapshot, DESERIAL_PARAMS);
-  int64_t get_serialize_size_for_lob(const share::SCN &fb_snapshot) const;
-  /**
-   * deprecated interface, DONOT use !
-   *
-   * only used for lob, other situation DONOT use
-   *
-   * offline ddl with lob can only get ObTxSnapshot
-   * so provide one interface to build ObTxReadSnapshot from ObTxSnapshot
-   * master no need use this
-   */
-  int build_snapshot_for_lob(const ObTxSnapshot &core);
-  /**
-   * deprecated interface, DONOT use !
-   *
-   * only used for lob, other situation DONOT use
-   *
-   * in upgarge, old lob locator will use ObMemLobTxInfo store tx info
-   * so provide one interface to build ObTxReadSnapshot from ObMemLobTxInfo
-   */
-  int build_snapshot_for_lob(
-      const int64_t snapshot_version,
-      const int64_t snapshot_tx_id,
-      const int64_t snapshot_seq);
-  /**
-   * only used for lob, other situation DONOT use
-   *
-   * determine whether the current snapshot is within a transaction
-   *
-   * Return:
-   * true  - not in tx
-   */
-  bool is_not_in_tx_snapshot() const
-  {
-    return ! core_.tx_id_.is_valid() && ! core_.scn_.is_valid() && core_.version_.is_valid();
-  }
-  /**
-   * refresh snapshot's tx_seq_no to current time
-   */
-  int refresh_seq_no(const int64_t tx_seq_base);
-
-  ObTxReadSnapshot();
-  ~ObTxReadSnapshot();
-  TO_STRING_KV(KP(this),
-               K_(valid),
-               K_(source),
-               K_(core),
-               K_(uncertain_bound),
-               K_(has_write_state),
-               K_(committed));
-  OB_UNIS_VERSION(1);
-  DISABLE_COPY_ASSIGN(ObTxReadSnapshot);
-};
-
 class ObTxSavePoint
 {
   friend class ObTransService;
@@ -356,40 +172,6 @@ public:
 };
 
 typedef ObSEArray<ObTxSavePoint, 4> ObTxSavePointList;
-
-class ObTxExecResult
-{
-  friend class ObTransService;
-  friend class ObTxDesc;
-  OB_UNIS_VERSION(1);
-  TransModulePageAllocator allocator_;
-  bool incomplete_;
-  bool touched_storage_;
-  bool has_write_state_;
-  ObTxWriteState write_state_;
-  ObSArray<ObTransID> conflict_txs_;
-  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
-public:
-  ObTxExecResult();
-  ~ObTxExecResult();
-  void reset();
-  TO_STRING_KV(K_(incomplete), K_(has_write_state), K_(write_state), K_(touched_storage), K_(conflict_txs));
-  void set_incomplete() {
-    TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
-    incomplete_ = true;
-  }
-  int merge_cflict_txs(const common::ObIArray<ObTransID> &txs);
-  bool is_incomplete() const { return incomplete_; }
-  bool touches_storage() const { return touched_storage_; }
-  void mark_touched_storage() { touched_storage_ = true; }
-  int set_write_state(const ObTxWriteState &part);
-  int merge_write_state(const ObTxWriteState &part, const bool has_write_state);
-  bool has_write_state() const { return has_write_state_; }
-  int merge_result(const ObTxExecResult &r);
-  int assign(const ObTxExecResult &r);
-  const ObSArray<ObTransID> &get_conflict_txs() const { return conflict_txs_; }
-  DISABLE_COPY_ASSIGN(ObTxExecResult);
-};
 
 class ObTxDesc final : public share::ObLightHashLink<ObTxDesc>
 {
@@ -906,10 +688,6 @@ inline int ObTxDesc::inc_and_get_tx_seq(const int16_t branch,
   }
   return ret;
 }
-
-enum ObTxCleanPolicy {
-  FAST_ROLLBACK = 1, ROLLBACK = 2, KEEP = 3
-};
 
 } // transaction
 } // oceanbase

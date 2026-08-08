@@ -22,6 +22,7 @@
 #include "lib/oblog/ob_log.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
+#undef private
 
 
 namespace oceanbase

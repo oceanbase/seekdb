@@ -175,7 +175,11 @@ int ObExprJsonSchemaValidInfo::init_json_schema_extra_info(ObIAllocator &alloc,
     LOG_WARN("failed to calc offset expr", K(ret));
   } else if (!got_data || const_data.is_null()) {
     got_data = false;
-  } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(const_data, N_JSON_SCHEMA_VALID, &alloc, j_schema))) {
+  } else if (OB_ISNULL(exec_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("execution context is null", K(ret));
+  } else if (OB_FAIL(ObJsonExprHelper::get_const_json_schema(
+                 const_data, N_JSON_SCHEMA_VALID, *exec_ctx, &alloc, j_schema))) {
     LOG_WARN("parse json schema failed", K(ret));
   } else if (OB_FAIL(j_schema->get_raw_binary(json_schema_, &alloc))){
     LOG_WARN("fail to get binary string", K(ret));

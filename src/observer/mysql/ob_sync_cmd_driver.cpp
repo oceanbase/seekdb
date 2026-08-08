@@ -18,7 +18,7 @@
 
 #include "ob_sync_cmd_driver.h"
 
-#include "obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 #include "obsm_row.h"
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
@@ -33,7 +33,7 @@ using namespace share;
 namespace observer
 {
 
-ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
+ObSyncCmdDriver::ObSyncCmdDriver(const share::ObGlobalContext &gctx,
                                  const ObSqlCtx &ctx,
                                  sql::ObSQLSessionInfo &session,
                                  ObQueryRetryCtrl &retry_ctrl,
@@ -44,6 +44,11 @@ ObSyncCmdDriver::ObSyncCmdDriver(const ObGlobalContext &gctx,
 
 ObSyncCmdDriver::~ObSyncCmdDriver()
 {
+}
+
+sql::ObIClientPacketChannel &ObSyncCmdDriver::get_packet_sender()
+{
+  return sender_;
 }
 
 int ObSyncCmdDriver::send_eof_packet(bool has_more_result)

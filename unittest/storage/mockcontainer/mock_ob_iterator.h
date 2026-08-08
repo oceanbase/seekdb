@@ -21,7 +21,6 @@
 #include "storage/ob_i_store.h"
 #include "common/row/ob_row_store.h"
 #include "lib/hash/ob_hashmap.h"
-#include "share/ob_time_utility2.h"
 #include "lib/string/ob_string.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_table_read_info.h"

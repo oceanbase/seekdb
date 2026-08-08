@@ -16,11 +16,11 @@
 
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_CONTEXT_H_
+#include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_tablet_mapper.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/das/ob_das_factory.h"
-#include "storage/tx/ob_trans_define.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
 namespace oceanbase
 {

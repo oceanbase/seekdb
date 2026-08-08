@@ -18,6 +18,7 @@
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDSDUMPNODE_H
 #include <cstdint>
 #include "lib/allocator/ob_allocator.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/ob_errno.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/utility/ob_unify_serialize.h"

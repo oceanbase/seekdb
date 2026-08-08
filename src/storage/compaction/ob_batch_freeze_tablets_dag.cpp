@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_batch_freeze_tablets_dag.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -125,7 +125,7 @@ int ObBatchFreezeTabletsTask::inner_process()
 
   ObLS *ls = nullptr;
   int64_t weak_read_ts = 0;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get single log stream", K(ret), K(param));
   } else {
     weak_read_ts = ls->get_ls_wrs_handler()->get_ls_weak_read_ts().get_val_for_tx();
@@ -147,7 +147,7 @@ int ObBatchFreezeTabletsTask::inner_process()
       LOG_WARN_RET(tmp_ret, "get invalid tablet pair", K(cur_pair));
     } else if (cur_pair.schedule_merge_scn_ > weak_read_ts) {
       // no need to force freeze
-    } else if (OB_TMP_FAIL(share::g_mp->memstore_freezer()->tablet_freeze(cur_pair.tablet_id_,
+    } else if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>()->tablet_freeze(cur_pair.tablet_id_,
                                                                  true/*is_sync*/,
                                                                  max_retry_time_us,
                                                                  true,/*need_rewrite_meta*/
@@ -183,7 +183,7 @@ int ObBatchFreezeTabletsTask::schedule_tablet_major_after_freeze(
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
   ObTablet *tablet = NULL;
-  if (!share::g_mp->tablet_scheduler()->could_major_merge_start()) {
+  if (!::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->could_major_merge_start()) {
     // merge is suspended
   } else if (OB_FAIL(ls.get_tablet_svr()->get_tablet(
                  cur_pair.tablet_id_, tablet_handle, 0 /*timeout_us*/,

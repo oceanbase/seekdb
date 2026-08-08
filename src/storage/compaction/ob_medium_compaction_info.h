@@ -20,13 +20,17 @@
 #include "lib/ob_errno.h"
 #include "storage/ob_storage_schema.h"
 #include "lib/container/ob_array_array.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "storage/compaction/ob_partition_merge_policy.h"
 #include "storage/multi_data_source/mds_key_serialize_util.h"
 #include "storage/compaction/ob_mds_filter_info.h"
 
 namespace oceanbase
 {
+namespace blocksstable
+{
+struct ObDatumRowkey;
+}
 namespace storage
 {
 class ObTablet;

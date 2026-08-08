@@ -806,7 +806,8 @@ int ObMergeGroupByOp::process_batch(const ObBatchRows &brs)
         ObExpr *expr = all_groupby_exprs_.at(i);
         // performance critical: use expr directly NO defensive check
         ObDatum &result = expr->locate_expr_datum(eval_ctx_);
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(last_datum, result, cmp_ret))) {
+        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                last_datum, result, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           found_new_group = true;
@@ -968,7 +969,8 @@ int ObMergeGroupByOp::check_same_group(
       if (OB_FAIL(expr->eval(eval_ctx_, result))) {
         LOG_WARN("eval failed", K(ret));
       } else {
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(last_datum, *result, cmp_ret))) {
+        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                last_datum, *result, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           found_new_group = true;
@@ -1015,7 +1017,8 @@ int ObMergeGroupByOp::check_unique_distinct_columns(
         if (OB_FAIL(expr->eval(eval_ctx_, cur_datum))) {
           LOG_WARN("eval failed", K(ret));
         } else {
-          if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(last_datum, *cur_datum, cmp_ret))) {
+          if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                  last_datum, *cur_datum, cmp_ret, datum_access_ctx_))) {
             LOG_WARN("compare failed", K(ret));
           } else if (0 != cmp_ret) {
             is_same_before_row = false;
@@ -1067,7 +1070,8 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
         ObDatumVector datums = expr->locate_expr_datumvector(eval_ctx_);
         if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(*datums.at(cur_group_last_row_idx_),
                                                         *datums.at(cur_row_idx),
-                                                        cmp_ret))) {
+                                                        cmp_ret,
+                                                        datum_access_ctx_))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           is_same_before_row = false;
@@ -1085,7 +1089,8 @@ int ObMergeGroupByOp::check_unique_distinct_columns_for_batch(
         const ObDatum &last_datum = prev_cells[distinct_col_idx_in_output_.at(i)];
         ObExpr *expr = MY_SPEC.distinct_exprs_.at(i);
         ObDatum &result = expr->locate_expr_datum(eval_ctx_);
-        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(last_datum, result, cmp_ret))){
+        if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
+                last_datum, result, cmp_ret, datum_access_ctx_))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           is_same_before_row = false;

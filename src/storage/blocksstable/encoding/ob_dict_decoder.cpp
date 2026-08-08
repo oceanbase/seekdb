@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/encoding/ob_cpu_features.h"
 #include "ob_dict_decoder.h"
 #include "ob_raw_decoder.h"
 #include "storage/access/ob_pushdown_aggregate.h"
@@ -181,7 +182,7 @@ bool init_dict_cmp_ref_funcs()
   res = ObNDArrayIniter<DictCmpRefArrayInit, 3, 6>::apply();
   // Dispatch simd version cmp funcs
 #if defined ( __x86_64__ )
-  if (is_avx512_valid()) {
+  if (data_plane::is_avx512_supported()) {
     res = init_dict_cmp_ref_simd_funcs();
   }
 #elif defined ( __aarch64__ ) && defined ( __ARM_NEON )
@@ -805,7 +806,7 @@ int ObDictDecoder::eq_ne_operator(
                                         -> bool {
                                           int cmp_res = 0;
                                           if (OB_FAIL(ret)) {
-                                          } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                          } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                             LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                           }
                                           return cmp_res < 0;});
@@ -814,7 +815,7 @@ int ObDictDecoder::eq_ne_operator(
       int cmp_res = 0;
       for (; OB_SUCC(ret) && traverse_it != end_it; ++traverse_it, ++dict_ref)
       {
-        if (OB_FAIL(cmp_func(*traverse_it, filter_datum, cmp_res))) {
+        if (OB_FAIL(cmp_func(*traverse_it, filter_datum, cmp_res, nullptr))) {
             LOG_WARN("Failed to compare datums", K(ret), K(*traverse_it), K(filter_datum));
         } else if (cmp_res == 0) {
           ++dict_ref_cnt;
@@ -929,7 +930,7 @@ int ObDictDecoder::comparison_operator(
                                                 -> bool {
                                                   int cmp_res = 0;
                                                   if (OB_FAIL(ret)) {
-                                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                                     LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                                   }
                                                   return cmp_res > 0;}) - begin_it;
@@ -953,7 +954,7 @@ int ObDictDecoder::comparison_operator(
                                                 -> bool {
                                                     int cmp_res = 0;
                                                     if (OB_FAIL(ret)) {
-                                                    } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                                    } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                                       LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                                     }
                                                     return cmp_res < 0;}) - begin_it;
@@ -977,7 +978,7 @@ int ObDictDecoder::comparison_operator(
                                                 -> bool {
                                                     int cmp_res = 0;
                                                     if (OB_FAIL(ret)) {
-                                                    } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                                    } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                                       LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                                     }
                                                     return cmp_res < 0;}) - begin_it;
@@ -1001,7 +1002,7 @@ int ObDictDecoder::comparison_operator(
                                                 -> bool {
                                                   int cmp_res = 0;
                                                   if (OB_FAIL(ret)) {
-                                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                                     LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                                   }
                                                   return cmp_res > 0;}) - begin_it;
@@ -1037,7 +1038,7 @@ int ObDictDecoder::comparison_operator(
         int64_t dict_ref = 0;
         int cmp_res = 0;
         while (OB_SUCC(ret) && traverse_it != end_it) {
-          if (OB_FAIL(cmp_func(*traverse_it, filter_datum, cmp_res))) {
+          if (OB_FAIL(cmp_func(*traverse_it, filter_datum, cmp_res, nullptr))) {
             LOG_WARN("Failed to compare datums", K(ret), K(*traverse_it), K(filter_datum), K(dict_ref));
           } else if (get_cmp_ret(cmp_res)) {
             found = true;
@@ -1087,7 +1088,7 @@ int ObDictDecoder::bt_operator(
                                 -> bool {
                                   int cmp_res = 0;
                                   if (OB_FAIL(ret)) {
-                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                     LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                   }
                                   return cmp_res < 0;});
@@ -1096,7 +1097,7 @@ int ObDictDecoder::bt_operator(
                                 -> bool {
                                   int cmp_res = 0;
                                   if (OB_FAIL(ret)) {
-                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res))) {
+                                  } else if (OB_FAIL(cmp_func(datum, filter_datum, cmp_res, nullptr))) {
                                     LOG_WARN("Failed to compare datums", K(ret), K(datum), K(filter_datum));
                                   }
                                   return cmp_res > 0;});
@@ -1130,10 +1131,10 @@ int ObDictDecoder::bt_operator(
         int left_cmp_res = 0;
         int right_cmp_res = 0;
         while (OB_SUCC(ret) && traverse_it != end_it) {
-          if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res))) {
+          if (OB_FAIL(cmp_func(*traverse_it, datums.at(0), left_cmp_res, nullptr))) {
             LOG_WARN("Failed to compare datums", K(ret), K(*traverse_it), K(datums.at(0)));
           } else if (left_cmp_res < 0) {
-          } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res))) {
+          } else if (OB_FAIL(cmp_func(*traverse_it, datums.at(1), right_cmp_res, nullptr))) {
             LOG_WARN("Failed to compare datums", K(ret), K(*traverse_it), K(datums.at(1)));
           } else if (right_cmp_res <= 0) {
             found = true;

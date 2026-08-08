@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_timestamp_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_timestamp_access.h"
 
 using namespace oceanbase::common;
@@ -43,7 +43,7 @@ int ObAllVirtualTimestampService::inner_get_next_row(ObNewRow *&row)
   } else {
     start_to_read_ = true;
     SERVER_MODULE_SCOPE {
-      share::g_mp->timestamp_access()->get_virtual_info(ts_value_);
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampAccess>()->get_virtual_info(ts_value_);
     }
   }
   if (OB_SUCC(ret)) {

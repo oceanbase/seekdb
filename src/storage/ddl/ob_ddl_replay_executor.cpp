@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_replay_executor.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
@@ -35,7 +35,7 @@ using namespace oceanbase::transaction;
 ERRSIM_POINT_DEF(EN_REPLAY_REDO_DDL_LOG_WAIT);
 
 ObDDLReplayExecutor::ObDDLReplayExecutor()
-  : logservice::ObTabletReplayExecutor(), ls_(nullptr), scn_()
+  : ObTabletReplayExecutor(), ls_(nullptr), scn_()
 {}
 
 int ObDDLReplayExecutor::check_need_replay_ddl_log_(
@@ -188,7 +188,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
 {
   int ret = OB_SUCCESS;
   ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   const int64_t unused_context_id = -1;
   bool need_replay = true;
   ObTabletID tablet_id;
@@ -259,7 +259,7 @@ int ObDDLStartReplayExecutor::replay_ddl_start(ObTabletHandle &tablet_handle, co
       LOG_INFO("succeed to replay ddl start log", K(ret), KPC_(log), K_(scn));
     }
   }
-  FLOG_INFO("[DDL_REPLAY] finish replay ddl start log", K(ret), K(need_replay), K(tablet_id), KPC_(log), K_(scn), "ddl_event_info", ObDDLEventInfo());
+  FLOG_INFO("[DDL_REPLAY] finish replay ddl start log", K(ret), K(need_replay), K(tablet_id), KPC_(log), K_(scn), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -467,7 +467,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       bool is_major_sstable_exist = false;
       uint64_t data_format_version = redo_info.data_format_version_;
       ObTabletDirectLoadMgrHandle direct_load_mgr_handle;
-      ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+      ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
       if (OB_ISNULL(direct_load_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected err", K(ret));
@@ -496,7 +496,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
       }
     }
   }
-  FLOG_INFO("[DDL_REPLAY] finish replay ddl full redo log", K(ret), K(need_replay), K(checksum), KPC_(log), K(macro_block), "ddl_event_info", ObDDLEventInfo());
+  FLOG_INFO("[DDL_REPLAY] finish replay ddl full redo log", K(ret), K(need_replay), K(checksum), KPC_(log), K(macro_block), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -611,10 +611,10 @@ int ObDDLCommitReplayExecutor::replay_ddl_commit(ObTabletHandle &tablet_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("need replay but tablet handle is invalid", K(ret), K(need_replay), K(tablet_handle), K_(log), K_(scn));
   } else if (OB_FALSE_IT(tablet_id = tablet_handle.get_obj()->get_tablet_id())) {
-  } else if (OB_ISNULL(share::g_mp->direct_load_mgr())) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
-  } else if (OB_FAIL(share::g_mp->direct_load_mgr()->get_tablet_mgr_and_check_major(
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>()->get_tablet_mgr_and_check_major(
           tablet_id,
           true/* is_full_direct_load */,
           direct_load_mgr_handle,
@@ -637,7 +637,7 @@ int ObDDLCommitReplayExecutor::replay_ddl_commit(ObTabletHandle &tablet_handle)
   } else {
     LOG_INFO("replay ddl commit log success", K(ret), K_(log), K_(scn));
   }
-  FLOG_INFO("[DDL_REPLAY] finish replay ddl commit log", K(ret), K(need_replay), K(tablet_id), KPC_(log), K_(scn), "ddl_event_info", ObDDLEventInfo());
+  FLOG_INFO("[DDL_REPLAY] finish replay ddl commit log", K(ret), K(need_replay), K(tablet_id), KPC_(log), K_(scn), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -830,7 +830,7 @@ int ObTabletForkFinishReplayExecutor::do_replay_(ObTabletHandle &handle)
 
 // ObSchemaChangeReplayExecutor
 ObSchemaChangeReplayExecutor::ObSchemaChangeReplayExecutor()
-  : logservice::ObTabletReplayExecutor(), log_(nullptr), scn_()
+  : ObTabletReplayExecutor(), log_(nullptr), scn_()
 {
 
 }

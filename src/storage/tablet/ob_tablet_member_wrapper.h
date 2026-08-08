@@ -22,7 +22,7 @@
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "storage/tablet/ob_tablet_table_store.h"
-#include "share/ob_tablet_autoincrement_param.h"
+#include "storage/tablet/ob_tablet_autoincrement_state.h"
 
 namespace oceanbase
 {
@@ -36,7 +36,7 @@ namespace storage
 // forbidden classes: ObStorageSchema, ObMediumCompactionInfoList
 template <typename T,
           typename U = typename std::enable_if<std::is_same<T, ObTabletTableStore>::value
-                                                   || std::is_same<T, share::ObTabletAutoincSeq>::value
+                                                   || std::is_same<T, ObTabletAutoincSeq>::value
                                                    || std::is_same<T, ObTabletBindingMdsUserData>::value,
                                                T>::type>
 class ObTabletMemberWrapper final

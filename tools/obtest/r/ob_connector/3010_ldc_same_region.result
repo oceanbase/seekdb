@@ -1,0 +1,101 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=8,locality=HZ:HZ:SH,app_idc_name=z2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time='0s';
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.set_ds_global_config serverStateRefreshInterval=1000,minKeepCongestionInterval=1000,preCreateConnectionEnable=false;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+1. use same idc unmerge
+select database();
+database()
+test
+select /*+READ_CONSISTENCY (weak)*/database();
+database()
+test
+2. same idc is merging, use same region unmerge
+ob1.mysql alter system suspend merge zone = 'z2';
+ob1.mysql alter system major freeze;
+ob1.mysql alter system start merge zone='z2';
+ob1.z2.check_state_in_congest MERGE;
+ob1.z2.obs0.check_state_in_congest ACTIVE;
+ob1.z2.obs1.check_state_in_congest ACTIVE;
+ob1.z2.obs0.check_not_exsit_in_congest;
+ob1.z2.obs1.check_not_exsit_in_congest;
+ob1.z2.obs0 alive_congested state : false
+ob1.z2.obs1 alive_congested state : false
+ob1.z2.obs0 dead_congested state : false
+ob1.z2.obs1 dead_congested state : false
+select database();
+database()
+test
+select /*+READ_CONSISTENCY (weak)*/database();
+database()
+test
+ob1.mysql alter system resume merge zone = 'z2';
+ob1.z2.check_version 2;
+ob1.z1.check_version 2;
+ob1.z3.check_version 2;
+select effective_tenant();
+effective_tenant()
+obtest
+select current_user();
+current_user()
+admin
+select user();
+user()
+admin
+select session_user();
+session_user()
+admin
+select system_user();
+system_user()
+admin
+ob1.mysql CREATE RESOURCE UNIT $unitname max_cpu 2, max_memory 1073741824, max_iops 100000, max_disk_size 536870912, max_session_num 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL $poolname UNIT = '$unitname', UNIT_NUM = 1, zone_list = ('$zone_name');
+ob1.mysql CREATE TENANT $ttname replica_num = 1, primary_zone='$zone_name', resource_pool_list=('$poolname');
+ob1.mysql alter tenant $ttname set variables ob_tcp_invited_nodes='%';
+ob1.mysql select * from oceanbase.__all_tenant where tenant_name='$ttname';
+ob1.mysql CREATE DATABASE $dbname;
+ob1.mysql_p select database();
+database()
+NULL
+ob1.mysql use $dbname;CREATE TABLE $dbname.$tbname (i1 int, i2 int, v1 varchar(1024),v2 varchar(1024), n1 numeric, n2 numeric, f1 float, d1 double, t1 timestamp,t2 timestamp, PRIMARY KEY(i1,v1,n1,f1,t1)) ;
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname; INSERT INTO  $dbname.$tbname VALUES($cnt,$cnt1,'$cntvarchar1','$cntvarchar2',$cnt.$cnt,$cnt1.$cnt1,$cnt,$cnt1,CURRENT_TIMESTAMP(),CURRENT_TIMESTAMP());
+ob1.mysql use $dbname;SELECT count(*) FROM $dbname.$tbname;
+ob1.mysql DROP TABLE $dbname.$tbname;
+ob1.mysql DROP DATABASE $dbname;
+ob1.mysql DROP TENANT $ttname;
+ob1.mysql DROP RESOURCE POOL $poolname;
+ob1.mysql DROP RESOURCE UNIT $unitname;
+3. same idc and same region are both merging, use same idc merging
+ob1.mysql alter system suspend merge zone = 'z1';
+ob1.mysql alter system suspend merge zone = 'z2';
+ob1.mysql alter system major freeze;
+ob1.mysql alter system start merge zone='z1';
+ob1.mysql alter system start merge zone='z2';
+ob1.z1.check_state_in_congest MERGE;
+ob1.z2.check_state_in_congest MERGE;
+ob1.z3.check_state_in_congest ACTIVE;
+ob1.z1.obs0.check_not_exsit_in_congest;
+ob1.z1.obs1.check_not_exsit_in_congest;
+ob1.z2.obs0.check_not_exsit_in_congest;
+ob1.z2.obs1.check_not_exsit_in_congest;
+select database();
+database()
+test
+select /*+READ_CONSISTENCY (weak)*/database();
+database()
+test
+ob1.mysql alter system resume merge zone = 'z1';
+ob1.mysql alter system resume merge zone = 'z2';
+ob1.z1.check_version 3;
+ob1.z2.check_version 3;
+ob1.z3.check_version 3;

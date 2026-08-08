@@ -23,6 +23,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObILobReadService;
+}
 namespace storage
 {
 class ObTabletSliceWriter;
@@ -113,7 +117,8 @@ public:
       const int64_t ddl_thread_count,
       const int64_t snapshot_version,
       const ObDirectLoadType direct_load_type,
-      const ObDDLTableSchema &ddl_table_schema);
+      const ObDDLTableSchema &ddl_table_schema,
+      common::ObILobReadService &lob_read_service);
   void reset();
   int update_max_lob_id(const int64_t lob_id);
   int64_t get_last_lob_id() const { return last_lob_id_; }
@@ -147,6 +152,7 @@ public:
   ObDDLWriteStat lob_write_stat_;
 
   ObDDLTabletScanTask *scan_task_;
+  common::ObILobReadService *lob_read_service_;
 
 private:
   // runtime context

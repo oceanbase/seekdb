@@ -18,9 +18,13 @@
 
 #include "ob_table_dml_param.h"
 
+#include "data_plane/access/ob_dml_table_plan.h"
+#include "data_plane/fts/ob_doc_id.h"
+#include "data_plane/vector/ob_vector_index_schema.h"
+#include "storage/access/ob_dml_table_plan_access.h"
+#include "storage/ob_i_store.h"
 #include "object/ob_object.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
@@ -185,7 +189,8 @@ int ObTableSchemaParam::convert(const ObTableSchema *schema)
         || schema->is_hybrid_vec_index_log_type()) {
         if (OB_FAIL(ob_write_string(allocator_, schema->get_index_params(), vec_index_param_))) {
           LOG_WARN("fail to copy vec index param", K(ret), K(schema->get_index_params()), K(schema->get_index_type()));
-        } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*schema, vec_dim_))) {
+        } else if (OB_FAIL(data_plane::resolve_vector_index_column_dimension(
+                       *schema, vec_dim_))) {
           LOG_WARN("fail to get vector col dim", K(ret), K(schema->get_index_type()));
         } else if (vec_dim_ == 0) {
           ret = OB_ERR_UNEXPECTED;
@@ -901,3 +906,397 @@ int ObTableDMLParam::set_data_table_rowkey_tags(share::schema::ObSchemaGetterGua
 }//namespace oceanbase
 }//namespace share
 }//namespace schema
+
+namespace oceanbase
+{
+namespace data_plane
+{
+
+class ObStorageDmlTablePlanState final : public ObIDmlTablePlanState
+{
+public:
+  explicit ObStorageDmlTablePlanState(common::ObIAllocator &allocator)
+    : allocator_(allocator), legacy_(allocator)
+  {}
+  virtual ~ObStorageDmlTablePlanState() {}
+
+  void destroy() override
+  {
+    common::ObIAllocator &allocator = allocator_;
+    this->~ObStorageDmlTablePlanState();
+    allocator.free(this);
+  }
+  void reset() override { legacy_.reset(); }
+  bool is_valid() const override { return legacy_.is_valid(); }
+  int build(const share::schema::ObTableSchema *table_schema,
+            const int64_t tenant_schema_version,
+            const common::ObIArray<uint64_t> &column_ids) override
+  {
+    return legacy_.convert(table_schema, tenant_schema_version, column_ids);
+  }
+  int set_data_table_rowkey_tags(share::schema::ObSchemaGetterGuard *guard,
+                                 const share::schema::ObTableSchema *index_schema) override
+  {
+    return legacy_.set_data_table_rowkey_tags(guard, index_schema);
+  }
+  int configure_multivalue_index(const int64_t data_table_rowkey_column_num) override
+  {
+    int ret = common::OB_SUCCESS;
+    share::schema::ObTableSchemaParam &table_param = legacy_.get_data_table_ref();
+    table_param.set_data_table_rowkey_column_num(data_table_rowkey_column_num);
+    const int64_t column_count = table_param.get_column_count();
+    for (int64_t i = column_count - 2; common::OB_SUCCESS == ret && i >= 0; --i) {
+      share::schema::ObColumnParam *column = table_param.get_column_by_idx(i);
+      if (nullptr == column) {
+        ret = common::OB_ERR_UNEXPECTED;
+      } else {
+        column->set_nullable_for_write(true);
+      }
+    }
+    return ret;
+  }
+  void set_has_async_index(const bool has_async_index) override
+  {
+    legacy_.get_data_table_ref().set_has_async_index(has_async_index);
+  }
+  const common::ObIArray<share::schema::ObColDesc> &get_col_descs() const override
+  {
+    return legacy_.get_col_descs();
+  }
+  int serialize(char *buf, const int64_t buf_len, int64_t &pos) const override
+  {
+    return legacy_.serialize(buf, buf_len, pos);
+  }
+  int deserialize(const char *buf, const int64_t data_len, int64_t &pos) override
+  {
+    return legacy_.deserialize(buf, data_len, pos);
+  }
+  int64_t get_serialize_size() const override { return legacy_.get_serialize_size(); }
+  int64_t to_string(char *buf, const int64_t buf_len) const override
+  {
+    return legacy_.to_string(buf, buf_len);
+  }
+
+  uint64_t get_table_id() const override { return legacy_.get_data_table().get_table_id(); }
+  int64_t get_schema_version() const override { return legacy_.get_data_table().get_schema_version(); }
+  share::schema::ObIndexType get_index_type() const override { return legacy_.get_data_table().get_index_type(); }
+  int64_t get_rowkey_column_num() const override { return legacy_.get_data_table().get_rowkey_column_num(); }
+  int64_t get_data_table_rowkey_column_num() const override
+  { return legacy_.get_data_table().get_data_table_rowkey_column_num(); }
+  int64_t get_fulltext_col_id() const override { return legacy_.get_data_table().get_fulltext_col_id(); }
+  int get_typed_doc_id_col_id(uint64_t &doc_id_col_id, ObDocIDType &type) const override
+  { return legacy_.get_data_table().get_typed_doc_id_col_id(doc_id_col_id, type); }
+  const common::ObString &get_fts_parser_name() const override
+  { return legacy_.get_data_table().get_fts_parser_name(); }
+  const common::ObString &get_fts_parser_property() const override
+  { return legacy_.get_data_table().get_fts_parser_property(); }
+  const common::ObString &get_index_name() const override
+  { return legacy_.get_data_table().get_index_name(); }
+  uint64_t get_spatial_geo_col_id() const override
+  { return legacy_.get_data_table().get_spatial_geo_col_id(); }
+  int64_t get_multivalue_col_id() const override
+  { return legacy_.get_data_table().get_multivalue_col_id(); }
+  int64_t get_multivalue_array_col_id() const override
+  { return legacy_.get_data_table().get_multivalue_array_col_id(); }
+  int64_t get_vec_id_col_id() const override { return legacy_.get_data_table().get_vec_id_col_id(); }
+  int64_t get_vec_chunk_col_id() const override { return legacy_.get_data_table().get_vec_chunk_col_id(); }
+  int64_t get_embedded_vec_col_id() const override { return legacy_.get_data_table().get_embedded_vec_col_id(); }
+  int64_t get_vec_vector_col_id() const override { return legacy_.get_data_table().get_vec_vector_col_id(); }
+  common::ObString get_vec_index_param() const override { return legacy_.get_data_table().get_vec_index_param(); }
+
+#define OB_STORAGE_DML_TABLE_BOOL_METHOD(METHOD) \
+  bool METHOD() const override { return legacy_.get_data_table().METHOD(); }
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(has_async_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(can_read_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_storage_index_table)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_unique_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_domain_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_spatial_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_fts_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_fts_index_aux)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_fts_doc_word_aux)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_multivalue_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_multivalue_index_aux)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_index_local_storage)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_vector_delta_buffer)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_vector_index_id)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_vector_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_sparse_vector_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_ivf_vector_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_hybrid_vector_index)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_hybrid_vector_index_log)
+  OB_STORAGE_DML_TABLE_BOOL_METHOD(is_no_need_update_vector_index)
+#undef OB_STORAGE_DML_TABLE_BOOL_METHOD
+
+  common::ObIAllocator &allocator_;
+  share::schema::ObTableDMLParam legacy_;
+};
+
+namespace
+{
+const ObIDmlTablePlanState *table_view(const ObIDmlTablePlanState *state)
+{
+  return state;
+}
+}
+
+ObDmlTablePlan::ObDmlTablePlan(common::ObIAllocator &allocator)
+  : allocator_(allocator), state_(nullptr)
+{
+  void *buf = allocator_.alloc(sizeof(ObStorageDmlTablePlanState));
+  if (nullptr != buf) {
+    state_ = new (buf) ObStorageDmlTablePlanState(allocator_);
+  }
+}
+
+ObDmlTablePlan::~ObDmlTablePlan()
+{
+  if (nullptr != state_) {
+    state_->destroy();
+    state_ = nullptr;
+  }
+}
+
+void ObDmlTablePlan::reset()
+{
+  if (nullptr != state_) {
+    state_->reset();
+  }
+}
+
+bool ObDmlTablePlan::is_valid() const
+{
+  return nullptr != state_ && state_->is_valid();
+}
+
+int ObDmlTablePlan::build(const share::schema::ObTableSchema *table_schema,
+                          const int64_t tenant_schema_version,
+                          const common::ObIArray<uint64_t> &column_ids)
+{
+  return nullptr == state_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : state_->build(table_schema, tenant_schema_version, column_ids);
+}
+
+int ObDmlTablePlan::set_data_table_rowkey_tags(
+    share::schema::ObSchemaGetterGuard *guard,
+    const share::schema::ObTableSchema *index_schema)
+{
+  return nullptr == state_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : state_->set_data_table_rowkey_tags(guard, index_schema);
+}
+
+int ObDmlTablePlan::configure_multivalue_index(const int64_t data_table_rowkey_column_num)
+{
+  return nullptr == state_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : state_->configure_multivalue_index(data_table_rowkey_column_num);
+}
+
+void ObDmlTablePlan::set_has_async_index(const bool has_async_index)
+{
+  if (nullptr != state_) {
+    state_->set_has_async_index(has_async_index);
+  }
+}
+
+ObDmlTableView ObDmlTablePlan::get_data_table() const
+{
+  return ObDmlTableView(state_);
+}
+
+const common::ObIArray<share::schema::ObColDesc> &ObDmlTablePlan::get_col_descs() const
+{
+  if (nullptr == state_) {
+    static const common::ObSEArray<share::schema::ObColDesc, 1> EMPTY_COLUMN_DESCRIPTORS;
+    return EMPTY_COLUMN_DESCRIPTORS;
+  }
+  return state_->get_col_descs();
+}
+
+int ObDmlTablePlan::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
+{
+  return nullptr == state_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : state_->serialize(buf, buf_len, pos);
+}
+
+int ObDmlTablePlan::deserialize(const char *buf, const int64_t data_len, int64_t &pos)
+{
+  return nullptr == state_
+      ? common::OB_ALLOCATE_MEMORY_FAILED
+      : state_->deserialize(buf, data_len, pos);
+}
+
+int64_t ObDmlTablePlan::get_serialize_size() const
+{
+  return nullptr == state_ ? 0 : state_->get_serialize_size();
+}
+
+int64_t ObDmlTablePlan::to_string(char *buf, const int64_t buf_len) const
+{
+  return nullptr == state_ ? 0 : state_->to_string(buf, buf_len);
+}
+
+bool ObDmlTableView::is_valid() const
+{
+  return nullptr != table_view(state_) && table_view(state_)->is_valid();
+}
+
+uint64_t ObDmlTableView::get_table_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_table_id();
+}
+
+int64_t ObDmlTableView::get_schema_version() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_VERSION : table_view(state_)->get_schema_version();
+}
+
+share::schema::ObIndexType ObDmlTableView::get_index_type() const
+{
+  return nullptr == table_view(state_) ? share::schema::INDEX_TYPE_IS_NOT : table_view(state_)->get_index_type();
+}
+
+int64_t ObDmlTableView::get_rowkey_column_num() const
+{
+  return nullptr == table_view(state_) ? 0 : table_view(state_)->get_rowkey_column_num();
+}
+
+int64_t ObDmlTableView::get_data_table_rowkey_column_num() const
+{
+  return nullptr == table_view(state_) ? 0 : table_view(state_)->get_data_table_rowkey_column_num();
+}
+
+int64_t ObDmlTableView::get_fulltext_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_fulltext_col_id();
+}
+
+int ObDmlTableView::get_typed_doc_id_col_id(uint64_t &doc_id_col_id, ObDocIDType &type) const
+{
+  return nullptr == table_view(state_)
+      ? common::OB_INVALID_ARGUMENT
+      : table_view(state_)->get_typed_doc_id_col_id(doc_id_col_id, type);
+}
+
+const common::ObString &ObDmlTableView::get_fts_parser_name() const
+{
+  static const common::ObString EMPTY;
+  return nullptr == table_view(state_) ? EMPTY : table_view(state_)->get_fts_parser_name();
+}
+
+const common::ObString &ObDmlTableView::get_fts_parser_property() const
+{
+  static const common::ObString EMPTY;
+  return nullptr == table_view(state_) ? EMPTY : table_view(state_)->get_fts_parser_property();
+}
+
+const common::ObString &ObDmlTableView::get_index_name() const
+{
+  static const common::ObString EMPTY;
+  return nullptr == table_view(state_) ? EMPTY : table_view(state_)->get_index_name();
+}
+
+uint64_t ObDmlTableView::get_spatial_geo_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_spatial_geo_col_id();
+}
+
+int64_t ObDmlTableView::get_multivalue_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_multivalue_col_id();
+}
+
+int64_t ObDmlTableView::get_multivalue_array_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_multivalue_array_col_id();
+}
+
+int64_t ObDmlTableView::get_vec_id_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_vec_id_col_id();
+}
+
+int64_t ObDmlTableView::get_vec_chunk_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_vec_chunk_col_id();
+}
+
+int64_t ObDmlTableView::get_embedded_vec_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_embedded_vec_col_id();
+}
+
+int64_t ObDmlTableView::get_vec_vector_col_id() const
+{
+  return nullptr == table_view(state_) ? common::OB_INVALID_ID : table_view(state_)->get_vec_vector_col_id();
+}
+
+common::ObString ObDmlTableView::get_vec_index_param() const
+{
+  return nullptr == table_view(state_) ? common::ObString() : table_view(state_)->get_vec_index_param();
+}
+
+#define OB_DML_TABLE_VIEW_BOOL_METHOD(METHOD) \
+  bool ObDmlTableView::METHOD() const \
+  { \
+    return nullptr != table_view(state_) && table_view(state_)->METHOD(); \
+  }
+
+OB_DML_TABLE_VIEW_BOOL_METHOD(has_async_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(can_read_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_storage_index_table)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_unique_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_domain_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_spatial_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_fts_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_fts_index_aux)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_fts_doc_word_aux)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_multivalue_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_multivalue_index_aux)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_index_local_storage)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_vector_delta_buffer)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_vector_index_id)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_vector_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_sparse_vector_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_ivf_vector_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_hybrid_vector_index)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_hybrid_vector_index_log)
+OB_DML_TABLE_VIEW_BOOL_METHOD(is_no_need_update_vector_index)
+
+#undef OB_DML_TABLE_VIEW_BOOL_METHOD
+
+int64_t ObDmlTableView::to_string(char *buf, const int64_t buf_len) const
+{
+  return nullptr == table_view(state_) ? 0 : table_view(state_)->to_string(buf, buf_len);
+}
+
+} // namespace data_plane
+} // namespace oceanbase
+
+namespace oceanbase
+{
+namespace storage
+{
+
+share::schema::ObTableDMLParam *ObDmlTablePlanAccess::get(data_plane::ObDmlTablePlan &plan)
+{
+  data_plane::ObStorageDmlTablePlanState *state =
+      static_cast<data_plane::ObStorageDmlTablePlanState *>(
+          data_plane::ObDmlTablePlanAccess::state(plan));
+  return nullptr == state ? nullptr : &state->legacy_;
+}
+
+const share::schema::ObTableDMLParam *ObDmlTablePlanAccess::get(
+    const data_plane::ObDmlTablePlan &plan)
+{
+  const data_plane::ObStorageDmlTablePlanState *state =
+      static_cast<const data_plane::ObStorageDmlTablePlanState *>(
+          data_plane::ObDmlTablePlanAccess::state(plan));
+  return nullptr == state ? nullptr : &state->legacy_;
+}
+
+} // namespace storage
+} // namespace oceanbase

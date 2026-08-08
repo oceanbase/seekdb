@@ -15,8 +15,7 @@
  */
 
 #include "src/storage/tx/ob_tx_ctx.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/ob_server.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_id_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -1128,7 +1127,7 @@ int ObTransService::get_tx_state_from_tx_table_(const ObTransID &tx_id,
   int ret = OB_SUCCESS;
   ObTxTableGuard tx_table_guard;
   ObLS *tenant_ls = nullptr;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     TRANS_LOG(WARN, "get ls fail", K(ret));
   } else if (OB_FAIL(tenant_ls->get_tx_table()->get_tx_table_guard(tx_table_guard))) {
     TRANS_LOG(WARN, "get tx table guard failed", KR(ret), KPC(this));

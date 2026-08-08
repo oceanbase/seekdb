@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_ST_MAKEENVELOPE_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 
 using namespace oceanbase::common;
 
@@ -38,7 +38,7 @@ public:
       ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
 private:
-  static int read_args(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
+  static int read_args(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
       ObGeoSrid &srid, bool &is_null_result, const ObSrsItem *&srs_item);
   DISALLOW_COPY_AND_ASSIGN(ObExprPrivSTMakeEnvelope);
 };

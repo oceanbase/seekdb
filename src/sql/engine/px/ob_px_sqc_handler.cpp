@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/px/ob_px_sqc_handler.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_admission.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 using namespace oceanbase::sql;
@@ -157,13 +158,15 @@ void ObPxSqcHandler::check_rf_leak()
   IGNORE_RETURN sub_coord_->destroy_shared_rf_msgs();
 }
 
-int ObPxSqcHandler::init()
+int ObPxSqcHandler::init(
+    const ObExecContext::RuntimeServices &runtime_services)
 {
   int ret = OB_SUCCESS;
   reserved_px_thread_count_ = 0;
   request_level_ = THIS_WORKER.get_curr_request_level();
+  runtime_services_ = runtime_services;
   void *buf = nullptr;
-  observer::ObGlobalContext &gctx = GCTX;
+  share::ObGlobalContext &gctx = GCTX;
   lib::ContextParam param;
   param.set_mem_attr("SqcHandlerParam")
     .set_parallel(4)
@@ -186,7 +189,8 @@ int ObPxSqcHandler::init()
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObDesExecContext)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc des execontext", K(ret));
-  } else if (FALSE_IT(exec_ctx_ = new(buf) ObDesExecContext(*allocator, gctx.session_mgr_))) {
+  } else if (FALSE_IT(exec_ctx_ = new(buf) ObDesExecContext(
+      *allocator, share::server_service<ObSQLSessionMgr>()))) {
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObPhysicalPlan)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc physical plan", K(ret));
@@ -247,6 +251,8 @@ int ObPxSqcHandler::copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_
       sqc_init_args_->set_deserialize_param(*exec_ctx_, *des_phy_plan_, allocator);
       if (OB_FAIL(sqc_init_args_->do_deserialize(pos, data_buf, data_len))) {
         LOG_WARN("Failed to deserialize", K(ret));
+      } else {
+        exec_ctx_->set_runtime_services(runtime_services_);
       }
       sqc_init_args_->sqc_handler_ = this;
     }

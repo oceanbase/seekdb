@@ -47,10 +47,3 @@ TEST_F(TestPhysicalPlan,  test_get_view_table)
 }
 } //namespace sql
 } //namespace oceanbase
-
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

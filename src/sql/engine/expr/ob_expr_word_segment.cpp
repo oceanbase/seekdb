@@ -110,7 +110,9 @@ int ObExprWordSegment::cg_expr(
       } else if (datum->is_null()) {
         LOG_TRACE("the column value is null", K(i), KPC(datum));
       } else if (FALSE_IT(res = datum->get_string())) {
-      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(alloc_guard.get_allocator(), *datum, raw_ctx.args_[i]->datum_meta_,
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                     eval_ctx.exec_ctx_, alloc_guard.get_allocator(), *datum,
+                     raw_ctx.args_[i]->datum_meta_,
               raw_ctx.args_[i]->obj_meta_.has_lob_header(), res))) {
         LOG_WARN("fail to get real data.", K(ret), K(res));
       } else if (OB_FAIL(ft_parts.push_back(res))) {

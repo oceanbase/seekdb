@@ -2687,14 +2687,14 @@ int ObGeoTypeUtil::has_dimension(ObGeometry& geo, ObGeoDimension dim, bool& res)
   return ret;
 }
 
-bool ObGeoTypeUtil::use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObItemType func_type)
+bool ObGeoTypeUtil::use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObGeoPredicate predicate)
 {
   bool ret_bool = false;
-  if (func_type == ObItemType::T_FUN_SYS_ST_INTERSECTS) {
+  if (predicate == ObGeoPredicate::INTERSECTS) {
     ret_bool = (is_point(geo1) && is_polygon(geo2)) || (is_point(geo2) && is_polygon(geo1));
-  } else if (func_type == ObItemType::T_FUN_SYS_ST_COVERS || func_type == ObItemType::T_FUN_SYS_ST_CONTAINS){
+  } else if (predicate == ObGeoPredicate::COVERS || predicate == ObGeoPredicate::CONTAINS){
     ret_bool = is_polygon(geo1) && is_point(geo2);
-  } else if (func_type == ObItemType::T_FUN_SYS_ST_WITHIN) {
+  } else if (predicate == ObGeoPredicate::WITHIN) {
     ret_bool = is_point(geo1) && is_polygon(geo2);
   }
   return ret_bool;
@@ -2752,7 +2752,7 @@ int ObGeoTypeUtil::point_polygon_short_circuit(ObGeometry *poly, ObGeometry *poi
   return ret;
 }
 
-int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObItemType func_type, bool& result)
+int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObGeoPredicate predicate, bool& result)
 {
   int ret = OB_SUCCESS;
   ObPointLocation loc = ObPointLocation::INVALID;
@@ -2764,7 +2764,7 @@ int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObI
   } else {
     point = is_point(*geo1) ? geo1 : geo2;
     poly = is_point(*geo1) ? geo2 : geo1;
-    bool get_fartest = (func_type != ObItemType::T_FUN_SYS_ST_INTERSECTS);
+    bool get_fartest = (predicate != ObGeoPredicate::INTERSECTS);
     bool has_internal = false;
     if (OB_FAIL(point_polygon_short_circuit(poly, point, loc, has_internal, get_fartest))) {
       LOG_WARN("fail to get point polygon position.", K(ret));
@@ -2776,7 +2776,7 @@ int ObGeoTypeUtil::get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObI
       } else if (loc == ObPointLocation::INTERIOR || (loc == ObPointLocation::BOUNDARY && has_internal)) {
         result = true;
       } else {
-        result = (func_type == ObItemType::T_FUN_SYS_ST_COVERS);
+        result = (predicate == ObGeoPredicate::COVERS);
       }
     }
   }

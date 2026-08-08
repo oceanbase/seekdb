@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
@@ -981,15 +981,21 @@ int ObDDLKV::set_macro_block(
     LOG_WARN("invalid argument", K(ret), K(macro_block), K(data_format_version), K(snapshot_version));
   } else if (can_freeze) {
     
-    ObServerRuntimeConfig runtime_config;
+    int64_t log_disk_size = 0;
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(GCTX.server_runtime_controller_->get_server_resources(runtime_config))) {
-      LOG_WARN("get server resources failed", K(tmp_ret));
+    ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
+    if (OB_ISNULL(runtime)) {
+      tmp_ret = OB_NOT_INIT;
+      LOG_WARN("server runtime is not initialized", K(tmp_ret));
+    } else if (OB_TMP_FAIL(runtime->get_server_log_disk_size(log_disk_size))) {
+      LOG_WARN("get server log disk size failed", K(tmp_ret));
     } else {
-      const int64_t log_allowed_block_count = runtime_config.resource_config_.log_disk_size() * 0.2 / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
+      const int64_t log_allowed_block_count =
+          log_disk_size * 0.2 / OB_STORAGE_OBJECT_MGR.get_macro_block_size();
       if (log_allowed_block_count <= 0) {
         tmp_ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret), K(runtime_config.resource_config_));
+        LOG_WARN("invalid macro block count by log disk size", K(tmp_ret),
+                 K(log_disk_size));
       } else {
         freeze_block_count = min(freeze_block_count, log_allowed_block_count);
       }
@@ -1211,7 +1217,7 @@ void ObDDLKV::dec_pending_cnt()
 int ObDDLKV::wait_pending()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;

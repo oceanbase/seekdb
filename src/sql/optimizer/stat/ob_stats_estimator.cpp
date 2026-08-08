@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_stats_estimator.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 
 namespace oceanbase
@@ -420,18 +421,19 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     }
   }
   if (OB_SUCC(ret)) {
-    observer::ObInnerSQLConnection *conn = NULL;
+    sqlclient::ObISQLConnection *conn = NULL;
     sqlclient::ObISQLConnectionGuard conn_guard;
     session->set_inner_session();
     //
     session->set_autocommit(true);
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
-      if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+      if (OB_FAIL(
+              query::ObInnerSQLConnectionAccess::
+                  create_connection_with_external_session(
                       session, conn_guard))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
-      } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
-                               conn_guard.get_ptr()))) {
+      } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret), K(conn));
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(), proxy_result))) {
@@ -470,8 +472,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
         }
       }
     }
-    conn = NULL;
-    conn_guard.reset();
     int tmp_ret = OB_SUCCESS;
     if (session_value != NULL && OB_SUCCESS != (tmp_ret = session->restore_session(*session_value))) {
       LOG_ERROR("failed to restore session", K(tmp_ret));
@@ -487,12 +487,19 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
 int ObStatsEstimator::decode(ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *datum_access_ctx = NULL;
   if (OB_UNLIKELY(stat_items_.count() != results_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("size does not match", K(ret), K(stat_items_.count()), K(results_.count()));
+  } else if (OB_FAIL(ctx_.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  } else if (OB_ISNULL(datum_access_ctx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null datum access context", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stat_items_.count(); ++i) {
-    if (OB_FAIL(stat_items_.at(i)->decode(results_.at(i), allocator))) {
+    if (OB_FAIL(stat_items_.at(i)->decode(
+            results_.at(i), allocator, datum_access_ctx))) {
       LOG_WARN("failed to decode statistic result", K(ret));
     }
   }

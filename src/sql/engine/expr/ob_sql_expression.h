@@ -19,7 +19,7 @@
 
 #include "common/object/ob_object.h"
 #include "common/row/ob_row.h"
-#include "share/ob_i_sql_expression.h"
+#include "query/engine/expr/ob_sql_expression.h"
 
 #include "sql/engine/expr/ob_postfix_expression.h"
 #include "sql/engine/expr/ob_infix_expression.h"

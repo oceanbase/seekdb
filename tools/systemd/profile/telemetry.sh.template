@@ -2,9 +2,9 @@
 CURRENT_DIR=$(dirname "$0")
 
 url="https://openwebapi.oceanbase.com/api/web/oceanbase/report"
-type=@CPACK_PACKAGE_NAME@
-version=@CPACK_PACKAGE_VERSION@
-release=@CPACK_RPM_PACKAGE_RELEASE@
+type="@SEEKDB_PACKAGE_NAME@"
+version="@SEEKDB_PACKAGE_VERSION@"
+release="@SEEKDB_PACKAGE_RELEASE@"
 ip=$(hostname -I | awk '/^[0-9]/ {print $1; exit}')
 hostHash=$(echo -n "$ip" | sha1sum | awk '{print $1}')
 osName=$(cat /etc/os-release | grep "^ID=" | cut -f2 -d= | tr -d '"')

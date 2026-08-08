@@ -56,9 +56,3 @@ TEST(TestStandbySourceUtil, reject_non_service_sources)
 
 } // namespace share
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

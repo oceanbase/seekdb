@@ -1,0 +1,121 @@
+# owner: rongxuan.lc
+# description: 本case是为了统一测试主库和备库部分容灾过程；
+#主库容灾：server 临时下线；永久下线；RS和OBS网络分区；网络阻塞；迁移：系统表或者用户表迁移；合并中迁移，主备库版本不同情况下的迁移；或者复制
+#备库容许，同上；
+ob1=OBI(cluster=1:2:1,proxy_num=1);
+ob2=OBI(cluster=1:2:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+ob1.mysql alter system set enable_rebalance = false;
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+alter system set __balance_controller='{"ENABLE_MIGRATE_TO_UNIT":"true"}';
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+set ob_query_timeout = 50000000;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+eval CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z2' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set enable_rebalance = false;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 100;
+alter system set server_data_copy_in_concurrency = 100;
+alter system set data_copy_concurrency = 600;
+alter system set __balance_controller='{"ENABLE_MIGRATE_TO_UNIT":"true"}';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 600;
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 5;
+##阻塞主库RS和OBS之间的网络；
+echo "case1: block net from RS to OBS";
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+$rs.block_net ob1.z2.obs0;
+sleep 5;
+$rs.clean_net ob1.z2.obs0;
+###永久下线
+$rs.block_net ob1.z3.obs0;
+sleep 25;
+$rs.clean_net ob1.z3.obs0;
+
+let $rs2 = deploy_get_value(ob2.get_leader sys:oceanbase:__all_core_table:0);
+$rs2.block_net ob2.z2.obs0;
+sleep 5;
+$rs2.clean_net ob2.z2.obs0;
+###永久下线
+$rs2.block_net ob2.z3.obs0;
+sleep 25;
+$rs2.clean_net ob2.z3.obs0;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 600;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 600;
+ob2.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 2, 600;
+###开始测试迁移 普通租户的unit迁移
+####主库
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where tenant_id = $tenant_id, resource_pool_id, 1);
+let $dest = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) svr from __all_server except (select concat(svr_ip, ":", svr_port) svr from __all_unit where resource_pool_id = $resource_pool_id), svr, 1);
+let $unit_id = deploy_get_value(ob1.select select unit_id from __all_unit where zone = 'z2' and resource_pool_id = $resource_pool_id, unit_id, 1);
+ob_connect(sys_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys_conn;
+--disable_query_log
+eval alter system migrate unit $unit_id destination '$dest';
+--enable_query_log
+###备库
+let $resource_pool_id = deploy_get_value(ob2.select select resource_pool_id from __all_resource_pool where tenant_id = $tenant_id, resource_pool_id, 1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip, ":", svr_port) svr from __all_server except (select concat(svr_ip, ":", svr_port) svr from __all_unit where resource_pool_id = $resource_pool_id), svr, 1);
+let $unit_id = deploy_get_value(ob2.select select unit_id from __all_unit where zone = 'z2' and resource_pool_id = $resource_pool_id, unit_id, 1);
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+--disable_query_log
+eval alter system migrate unit $unit_id destination '$dest';
+--enable_query_log
+
+###系统租户unit的迁移；迁移2号unit;
+##主库迁移
+let $dest = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) svr from __all_server where zone = 'z2' except (select concat(svr_ip, ":", svr_port) svr from __all_unit where unit_id = 2), svr, 1);
+connection sys_conn;
+--disable_query_log
+eval alter system migrate unit 2 destination '$dest';
+--enable_query_log
+##备库迁移
+let $dest = deploy_get_value(ob2.select select concat(svr_ip, ":", svr_port) svr from __all_server where zone = 'z2' except (select concat(svr_ip, ":", svr_port) svr from __all_unit where unit_id = 2), svr, 1);
+connection sys2_conn;
+--disable_query_log
+eval alter system migrate unit 2 destination '$dest';
+--enable_query_log
+
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_ip != '', 0, 900;
+ob2.check_until_timeout select count(*) from __all_unit where migrate_from_svr_ip != '', 0, 900;
+ob1.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 3, 600;
+ob2.check_until_timeout select value from __all_zone where zone = '' and name = 'last_merged_version', 3, 600;
+
+####开始测试复制, 永久下线后触发补副本操作；
+####主库
+let $svr = deploy_get_value(ob1.select select concat(svr_ip,":",svr_port) from __all_unit where resource_pool_id = 1 and zone = 'z2', svr, 1);
+let $obs = deploy_get_value(ob1.get_obs_by_addr $srv);
+$obs.force_stop;
+####备库
+let $svr2 = deploy_get_value(ob1.select select concat(svr_ip,":",svr_port) from __all_unit where resource_pool_id = 1 and zone = 'z2', svr, 1);
+let $obs2 = deploy_get_value(ob2.get_obs_by_addr $srv2);
+$obs2.force_stop;
+####等待拷贝完成；
+ob1.check_until_timeout select count(*) from __all_unit where resource_pool_id = 1 and concat(svr_ip,":",svr_port) = '$svr', 0, 100;
+ob2.check_until_timeout select count(*) from __all_unit where resource_pool_id = 1 and concat(svr_ip,":",svr_port) = '$svr2', 0, 100;
+ob1.check_until_timeout select count(*) from __all_unit where migrate_from_svr_ip != '', 0, 900;
+ob2.check_until_timeout select count(*) from __all_unit where migrate_from_svr_ip != '', 0, 900;
+

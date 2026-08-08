@@ -18,6 +18,9 @@
 #define private public
 #define protected public
 #include "storage/tx/ob_tx_redo_submitter.h"
+#undef protected
+#undef private
+
 #define USING_LOG_PREFIX TRANS
 
 
@@ -671,13 +674,3 @@ TEST_F(ObTestRedoSubmitter, submit_ROW_SIZE_TOO_LARGE)
 } // oceanbase
 
 using namespace oceanbase;
-int main(int argc, char **argv)
-{
-  const char *log_name = "test_redo_submitter.log";
-  system("rm -rf test_redo_submitter.log*");
-  ObLogger &logger = ObLogger::get_logger();
-  logger.set_file_name(log_name, true);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

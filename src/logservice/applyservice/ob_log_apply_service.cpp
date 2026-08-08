@@ -16,7 +16,7 @@
 
 #include "ob_log_apply_service.h"
 #include "logservice/ob_append_callback.h"
-#include "logservice/ob_ls_adapter.h"
+#include "logservice/ob_i_log_storage.h"
 #include "logservice/palf/palf_env.h"
 namespace oceanbase
 {
@@ -928,7 +928,7 @@ ObLogApplyService::ObLogApplyService()
     : is_inited_(false),
       is_running_(false),
       palf_env_(NULL),
-      ls_adapter_(NULL),
+      log_storage_(NULL),
       apply_status_(NULL),
       lock_()
   {}
@@ -939,16 +939,16 @@ ObLogApplyService::~ObLogApplyService()
 }
 
 int ObLogApplyService::init(PalfEnv *palf_env,
-                            ObLSAdapter *ls_adapter)
+                            ObILogStorage *log_storage)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogApplyService init twice", K(ret));
   } else if (OB_ISNULL(palf_env_= palf_env)
-             || OB_ISNULL(ls_adapter_ = ls_adapter)) {
+             || OB_ISNULL(log_storage_ = log_storage)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), K(ls_adapter));
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), KP(log_storage));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
       1,
       common::APPLY_TASK_QUEUE_SIZE + 1,
@@ -981,7 +981,7 @@ void ObLogApplyService::destroy()
   common::ObLinkQueueThreadPool::wait();
   common::ObLinkQueueThreadPool::destroy();
   palf_env_ = NULL;
-  ls_adapter_ = NULL;
+  log_storage_ = NULL;
   lock_.destroy();
 }
 
@@ -1327,7 +1327,7 @@ int ObLogApplyService::wait_append_sync()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "ObLogApplyService not init", K(ret));
-  } else if (OB_FAIL(ls_adapter_->wait_append_sync())) {
+  } else if (OB_FAIL(log_storage_->wait_append_sync())) {
     CLOG_LOG(WARN, "wait_append_sync failed", K(ret));
   // TODO:@keqing.llt Remove before release
   } else {

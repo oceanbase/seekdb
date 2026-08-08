@@ -16,12 +16,15 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "lib/oblog/ob_log_module.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/tx/ob_trans_service.h"
 #include "observer/change_stream/ob_cs_plugin_async_index.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
+#include "share/vector/ob_vector_index_mode.h"
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_column_schema.h"
 #include "observer/vector_index/ob_vector_index_util.h"
@@ -70,7 +73,9 @@ int ObCSAsyncIndexProcessor::init_schema_guard_()
 {
   int ret = common::OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service =
-      share::g_mp->schema_runtime_service() != nullptr ? share::g_mp->schema_runtime_service()->get_schema_service() : nullptr;
+      nullptr != ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()
+          ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
+          : nullptr;
   if (OB_ISNULL(schema_service)) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
@@ -310,7 +315,8 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
             // table are handled here. Semantic indexes use different aux tables and
             // should not enter the delta_buffer path below.
             ObString index_params_str = index_schema->get_index_params();
-            bool is_async_mode = ObVectorIndexUtil::is_sync_mode_async(index_params_str, true /* is_hnsw_heap_table */);
+            bool is_async_mode = is_vector_index_sync_mode_async(
+                index_params_str, true /*is_hnsw_heap_table*/);
             bool is_semantic_index = false;
             if (OB_SUCC(ret) && !index_params_str.empty()) {
               const ObColumnSchemaV2 *data_col_schema = data_table_schema->get_column_schema(vec_col_ids.at(0));
@@ -742,7 +748,7 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
         }
       }
 
-      if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->table_param_.convert(
+      if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->table_param_.build(
               index_id_schema, ctx_.schema_version_, ins_ctdef->column_ids_))) {
         LOG_WARN("Failed to convert table_param", K(ret), K(vec_info.index_id_table_id_));
       } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(column_count))) {
@@ -990,7 +996,8 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
         LOG_WARN("Failed to allocate ObTxReadSnapshot", K(ret));
       } else {
         transaction::ObTxReadSnapshot *snapshot = new(snapshot_buf) transaction::ObTxReadSnapshot();
-        transaction::ObTransService *txs = share::g_mp->trans_service();
+        transaction::ObTransService *txs =
+            ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
         if (OB_ISNULL(txs)) {
           ret = common::OB_ERR_UNEXPECTED;
           LOG_WARN("ObTransService is null", K(ret));
@@ -1117,7 +1124,8 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
   if (!need_vsag) {
   } else {
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
-    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+    ObPluginVectorIndexService *vec_index_service =
+        ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
     ObPluginVectorIndexAdapterGuard adapter_guard;
     ObPluginVectorIndexAdaptor *adaptor = nullptr;
     int64_t part_idx = 0;
@@ -1363,8 +1371,8 @@ int ObCSPluginAsyncIndex::commit()
     if (now - ATOMIC_LOAD(&last_gc_time) > GC_INTERVAL_US) {
       ATOMIC_STORE(&last_gc_time, now);
       schema::ObMultiVersionSchemaService *schema_service =
-          share::g_mp->schema_runtime_service() != nullptr
-              ? share::g_mp->schema_runtime_service()->get_schema_service()
+          ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>() != nullptr
+              ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
               : nullptr;
       if (OB_NOT_NULL(schema_service)) {
         int tmp_ret = OB_SUCCESS;

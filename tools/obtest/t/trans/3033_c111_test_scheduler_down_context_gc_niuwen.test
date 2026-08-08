@@ -1,0 +1,99 @@
+#owner: yixin.lyx
+#owner group: transaction
+# 测试点：测试scheduler宕机的情况下，参与者的垃圾回收机制能够自动把ctx清掉
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@sys,,oceanbase,$l_port);
+
+#在zone3上建立连接
+let $l_ip2=deploy_get_value(ob1.z3.obs0.ip);
+let $l_port2=deploy_get_value(ob1.z3.obs0.mysql_port);
+connect (conn3,$l_ip2,root@obtest,,test,$l_port2);
+
+connection conn1;
+
+create table t1 (x int, y int);
+create table t2 (x int, y int);
+
+insert into t1 values(1, 1);
+insert into t2 values(1, 1);
+
+select * from t1;
+select * from t2;
+
+
+###
+### case 1 : 测试一般参与者上下文的垃圾回收功能，通过force stop掉对应的scheduler，来模拟。
+###          参与者上下文在监测scheduler下线后，会释放上下文，解开行锁。
+###
+connection conn3;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+
+begin;
+insert into t1 values(2, 2);
+insert into t2 values(2, 2);
+update t1 set y = 120 where x = 1;
+
+##stop掉zone3
+ob1.z3.obs0.force_stop;
+
+connection conn1;
+## sleep 10s + 60s, 此时保证ctx一定会被垃圾回收
+sleep 70;
+begin;
+update t1 set y = 110 where x = 1;
+commit;
+
+select * from t1;
+select * from t2;
+
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+##重启z3
+ob1.z3.start;
+sleep 40;
+
+#在zone3上建立连接
+let $l_ip2=deploy_get_value(ob1.z3.obs0.ip);
+let $l_port2=deploy_get_value(ob1.z3.obs0.mysql_port);
+connect (conn3,$l_ip2,root@obtest,,test,$l_port2);
+
+###
+### case 2 : 测试备机读上下文的垃圾回功能
+###
+connection conn3;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+
+begin;
+select /*+read_consistency(weak)+*/ * from t1;
+select /*+read_consistency(weak)+*/ * from t2;
+
+sleep 5;
+##stop掉zone3
+ob1.z3.obs0.force_stop;
+
+connection conn2;
+## sleep 10s + 60s, 此时保证ctx一定会被垃圾回收
+sleep 70;
+select count(*) from __all_virtual_trans_stat;
+
+connection conn1;
+select * from t1;
+select * from t2;
+
+#发起合并
+ob1.mysql alter system major freeze;
+#check merge是否成功，同步操作
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;

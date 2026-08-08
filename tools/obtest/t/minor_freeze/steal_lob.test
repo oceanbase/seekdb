@@ -1,0 +1,103 @@
+# owner: yanyuan.cxf
+# owner group: transaction
+# description: 转储未提交事务lob功能测试
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+#ob1.mysql alter system set syslog_level='debug';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn_obtest,$ip0,root@obtest,,test,$sql_port0);
+
+connection conn_obtest;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+set global max_allowed_packet=1000000000;
+sleep 2;
+
+# 测试用连接
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+
+# 备机连接
+connect(conn1_slave,$ip1,root@obtest,,test,$sql_port1);
+
+connection conn1;
+create table t(id1 int primary key, id2 longtext, id3 longtext);
+insert into t values(2, 'aabb', 'ccdd');
+send insert into t values(3, repeat('a', 30000000), repeat('b', 30000000));
+
+ob1.mysql set ob_global_debug_sync = 'REPLAY_REDO_LOG wait_for continue_signal';
+
+# <----------------------- 事务执行 -------------------------->
+
+
+# <----------------------- 冻结并转储 -------------------------->
+
+sleep 5;
+
+connection conn0;
+alter system minor freeze;
+sleep 60;
+
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t', v, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+
+
+
+ob1.z2.obs0.force_stop;
+
+sleep 5;
+
+ob1.z2.obs0.nstart;
+
+sleep 60;
+
+alter system major freeze;
+ob1.check_version 2;
+
+connection conn0;
+alter system set _private_buffer_size = '64K';
+
+connection conn1;
+insert into t values(4, 'aabb', 'ccdd');
+begin;
+send insert into t values(5, repeat('a', 30000000), repeat('b', 30000000));
+
+ob1.mysql set ob_global_debug_sync = 'REPLAY_REDO_LOG wait_for continue_signal';
+
+# <----------------------- 事务执行 -------------------------->
+
+
+# <----------------------- 冻结并转储 -------------------------->
+
+sleep 5;
+
+connection conn0;
+alter system minor freeze;
+connection conn1;
+reap;
+rollback;
+
+sleep 60;
+
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t', v, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+
+connection conn0;
+alter system major freeze;
+ob1.check_version 3;

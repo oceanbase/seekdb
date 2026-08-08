@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "rootserver/ddl_task/ob_drop_vec_index_task.h"
+#include "share/rc/ob_server_runtime.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 
@@ -77,7 +79,7 @@ int ObDropVecIndexTask::init(
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("drop vector index task requires the current data format",
              K(ret), K(data_format_version), LITERAL_K(DATA_CURRENT_VERSION));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
@@ -139,7 +141,7 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
@@ -208,7 +210,7 @@ int ObDropVecIndexTask::obtain_snapshot(const share::ObDDLTaskStatus next_task_s
       } else {
         state_finished = true;
       }
-    } else if (OB_FAIL(ObDDLUtil::obtain_snapshot(next_task_status,
+    } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(next_task_status,
                                                   vec_index_snapshot_data_.table_id_,
                                                   vec_index_snapshot_data_.table_id_,
                                                   snapshot_version_,
@@ -863,7 +865,7 @@ int ObDropVecIndexTask::create_drop_index_task(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
       LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;
@@ -913,7 +915,7 @@ int ObDropVecIndexTask::check_and_cancel_del_dag(bool &all_dag_exit)
     LOG_WARN("not init", K(ret));
   } else if (!vec_index_snapshot_data_.is_valid() || !del_lob_meta_row_task_submitted_) {
     all_dag_exit = true;
-  } else if (OB_FAIL(ObDDLUtil::check_and_cancel_local_build_dag(this, vec_index_snapshot_data_.table_id_,
+  } else if (OB_FAIL(ObDDLTaskUtil::check_and_cancel_single_replica_dag(this, vec_index_snapshot_data_.table_id_,
             vec_index_snapshot_data_.table_id_, check_dag_exit_tablets_map_, data_format_version_, check_dag_exit_retry_cnt_, false/*is_complement_data_dag*/, all_dag_exit))) {
     LOG_WARN("fail to check and cancel delete lob mete row dag", K(ret), K(vec_index_snapshot_data_));
   }
@@ -928,7 +930,7 @@ int ObDropVecIndexTask::release_snapshot(const int64_t snapshot_version)
     LOG_WARN("not init", K(ret));
   } else if (!vec_index_snapshot_data_.is_valid()) {
     // do nothing
-  } else if (OB_FAIL(ObDDLUtil::release_snapshot(this, vec_index_snapshot_data_.table_id_, vec_index_snapshot_data_.table_id_, snapshot_version))) {
+  } else if (OB_FAIL(ObDDLTaskUtil::release_snapshot(this, vec_index_snapshot_data_.table_id_, vec_index_snapshot_data_.table_id_, snapshot_version))) {
     LOG_WARN("release snapshot failed", K(ret));
   }
   return ret;
@@ -1015,9 +1017,13 @@ int ObDropVecIndexTask::send_local_build_request()
     param.execution_id_ = execution_id_; // should >= 0
     param.data_format_version_ = data_format_version_; // should > 0
 
-    if (OB_FAIL(ObDDLUtil::get_tablets(vec_index_snapshot_data_.table_id_, param.source_tablet_ids_))) {
+    if (OB_FAIL(ObDDLUtil::get_tablets(
+            *GCTX.schema_service_, vec_index_snapshot_data_.table_id_,
+            param.source_tablet_ids_))) {
       LOG_WARN("fail to get tablets", K(ret), K(object_id_));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(vec_index_snapshot_data_.table_id_, param.dest_tablet_ids_))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, vec_index_snapshot_data_.table_id_,
+                   param.dest_tablet_ids_))) {
       LOG_WARN("fail to get tablets", K(ret), K(target_object_id_));
     }
 

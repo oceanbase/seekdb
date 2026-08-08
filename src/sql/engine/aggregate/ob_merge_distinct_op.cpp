@@ -274,6 +274,8 @@ int ObMergeDistinctOp::Compare::init(ObEvalCtx *eval_ctx, const ObIArray<ObCmpFu
   if (OB_ISNULL(eval_ctx) || OB_ISNULL(cmp_funcs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to init compare funcs", K(ret));
+  } else if (OB_FAIL(eval_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else {
     eval_ctx_ = eval_ctx;
     cmp_funcs_ = cmp_funcs;
@@ -311,7 +313,8 @@ int ObMergeDistinctOp::Compare::equal(
     for (int64_t i = 0; 0 == cmp && i < cmp_funcs_->count() && OB_SUCC(ret); i++) {
       if (OB_FAIL(l->at(i)->eval(*eval_ctx_, other_datum))) {
         LOG_WARN("failed to get expr value", K(ret), K(i));
-      } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*other_datum, rcells[i], cmp))) {
+      } else if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+                     *other_datum, rcells[i], cmp, datum_access_ctx_))) {
         LOG_WARN("do cmp failed", K(ret), K(i));
       }
     }
@@ -338,7 +341,8 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cmp_funcs_->count(); i++) {
       l_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, last_idx);
       r_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, curr_idx);
-      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
+      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+              *l_datum, *r_datum, cmp, datum_access_ctx_))) {
         LOG_WARN("do cmp failed", K(ret), K(i), KPC(l_datum), KPC(r_datum));
       }
     }
@@ -365,7 +369,8 @@ int ObMergeDistinctOp::Compare::equal_in_batch(const common::ObIArray<ObExpr*> *
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cmp_funcs_->count(); i++) {
       l_datum = &set_exprs->at(i)->locate_expr_datum(*eval_ctx_, curr_idx);
       r_datum = &r->cells()[i];
-      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(*l_datum, *r_datum, cmp))) {
+      if (OB_FAIL(cmp_funcs_->at(i).cmp_func_(
+              *l_datum, *r_datum, cmp, datum_access_ctx_))) {
         LOG_WARN("do cmp failed", K(ret), K(i), KPC(l_datum), KPC(r_datum));
       }
     }

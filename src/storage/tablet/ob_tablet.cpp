@@ -18,7 +18,7 @@
 
 #include "ob_tablet.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/ob_sync_tablet_seq_clog.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -2199,7 +2199,7 @@ int ObTablet::load_macro_info(
     int64_t buf_len = 0;
     int64_t pos = 0;
     void *macro_info_buf = nullptr;
-    if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(
         macro_info_addr_.addr_, allocator, buf, buf_len))) {
       LOG_WARN("fail to read shared block", K(ret), K_(macro_info_addr));
     } else if (OB_ISNULL(macro_info_buf = allocator.alloc(sizeof(ObTabletMacroInfo)))) {
@@ -2312,8 +2312,8 @@ int ObTablet::inc_ref_with_macro_iter(ObMacroInfoIterator &macro_iter, bool &inc
       LOG_ERROR("fail to increase macro block's ref cnt", K(ret), K(block_info));
     } else if (FALSE_IT(inc_other_ref_cnt++)) {
     } else if (ObTabletMacroType::SHARED_DATA_BLOCK == block_info.block_type_
-        && (OB_ISNULL(share::g_mp->shared_macro_block_mgr())
-            || OB_FAIL(share::g_mp->shared_macro_block_mgr()->add_block(
+        && (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>())
+            || OB_FAIL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>()->add_block(
                 block_info.macro_id_, block_info.occupy_size_)))) {
       if (OB_SUCC(ret)) {
         ret = OB_ERR_UNEXPECTED;
@@ -2354,8 +2354,8 @@ int ObTablet::inc_ref_with_macro_iter(ObMacroInfoIterator &macro_iter, bool &inc
         } else if (OB_TMP_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(block_info.macro_id_))) {
           LOG_ERROR("fail to increase macro block's ref cnt, macro block may leak", K(tmp_ret), K(block_info));
         } else if (ObTabletMacroType::SHARED_DATA_BLOCK == block_info.block_type_
-            && OB_NOT_NULL(share::g_mp->shared_macro_block_mgr())
-            && OB_TMP_FAIL(share::g_mp->shared_macro_block_mgr()->free_block(
+            && OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>())
+            && OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>()->free_block(
                 block_info.macro_id_, block_info.occupy_size_))) {
           LOG_WARN("fail to rollback shared macro block accounting", K(tmp_ret), K(block_info));
         }
@@ -2492,8 +2492,8 @@ void ObTablet::dec_ref_with_macro_iter(ObMacroInfoIterator &macro_iter) const
       if (OB_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(block_info.macro_id_))) {
         LOG_ERROR("fail to decrease macro block's ref cnt, macro block may leak", K(ret), K(block_info));
       } else if (ObTabletMacroType::SHARED_DATA_BLOCK == block_info.block_type_
-          && (OB_ISNULL(share::g_mp->shared_macro_block_mgr())
-              || OB_FAIL(share::g_mp->shared_macro_block_mgr()->free_block(
+          && (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>())
+              || OB_FAIL(::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>()->free_block(
                   block_info.macro_id_, block_info.occupy_size_)))) {
         if (OB_SUCC(ret)) {
           ret = OB_ERR_UNEXPECTED;
@@ -2925,7 +2925,7 @@ int ObTablet::check_schema_version_for_bounded_staleness_read(
     // To differentiate the above two cases, check with the help of local schema version
 
     
-    ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+    ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
     ObSchemaGetterGuard schema_guard;
     // get schema version of this table in schema service
     if (OB_ISNULL(schema_service)) {
@@ -3203,7 +3203,7 @@ int ObTablet::get_fork_src_read_tables_(
   ObLS *tenant_ls = nullptr;
   ObTabletHandle src_tablet_handle;
   ObTablet *src_tablet = nullptr;
-  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get ObLSService from server module provider", K(ret), KP(ls_service));
   } else if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
@@ -4047,7 +4047,7 @@ int ObTablet::init_shared_params(const common::ObTabletID &tablet_id)
                                                0 /* max_saved_medium_scn */,
                                                ls->get_log_handler(),
                                                ls->get_freezer(),
-                                               share::g_mp->storage_meta_mem_mgr()))) {
+                                               ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()))) {
       LOG_WARN("failed to init memtable mgr", K(ret), K(tablet_id));
     }
   }
@@ -4282,7 +4282,7 @@ int ObTablet::get_kept_snapshot_info(
   }
 
   ObStorageSnapshotInfo old_snapshot_info;
-  if (FAILEDx(share::g_mp->freeze_info_mgr()->get_min_reserved_snapshot(tablet_id, max_merged_snapshot, snapshot_info))) {
+  if (FAILEDx(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_min_reserved_snapshot(tablet_id, max_merged_snapshot, snapshot_info))) {
     LOG_WARN("failed to get multi version from freeze info mgr", K(ret), K(tablet_id));
   } else {
     old_snapshot_info = snapshot_info;
@@ -4474,7 +4474,7 @@ int ObTablet::start_direct_load_task_if_need()
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (is_empty_shell()) {
     LOG_DEBUG("this tablet is empty shell, skip", K(ret), K(tablet_meta_));
   } else if (OB_ISNULL(ls_service)) {
@@ -4499,7 +4499,7 @@ int ObTablet::check_schema_version_elapsed(
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID &tablet_id = tablet_meta_.tablet_id_;
-  ObMultiVersionSchemaService *schema_service = share::g_mp->schema_runtime_service()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   SCN scn;
   SCN max_commit_scn;
   int64_t runtime_refreshed_schema_version = 0;
@@ -4514,7 +4514,7 @@ int ObTablet::check_schema_version_elapsed(
     LOG_WARN("invalid arguments", K(ret), K(schema_version));
   } else if (!need_wait_trans_end) {
     // obtain_snapshot of offline ddl don't need to wait trans end.
-    transaction::ObTransService *txs = share::g_mp->trans_service();
+    transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     if (OB_FAIL(txs->get_max_commit_version(max_commit_scn))) {
       LOG_WARN("fail to get max commit version", K(ret));
     } else if (OB_UNLIKELY(!max_commit_scn.is_valid())) {
@@ -4545,8 +4545,8 @@ int ObTablet::check_schema_version_elapsed(
     }
 
     if (OB_SUCC(ret)) {
-      transaction::ObTransService *txs = share::g_mp->trans_service();
-      ObLSService *ls_service = share::g_mp->ls_service();
+      transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+      ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
       ObLS *tenant_ls = nullptr;
       if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
         LOG_WARN("failed to get ls", K(ret));
@@ -4680,7 +4680,7 @@ int ObTablet::replay_schema_version_change_log(const int64_t schema_version)
 }
 
 int ObTablet::get_tablet_runtime_info(
-      ObTabletRuntimeInfo &runtime_info,
+      share::ObTabletRuntimeInfo &runtime_info,
       share::ObTabletLocalChecksumItem &tablet_checksum) const
 {
   int ret = OB_SUCCESS;
@@ -4706,7 +4706,7 @@ int ObTablet::get_tablet_runtime_info(
 
 int ObTablet::get_tablet_runtime_info_by_sstable(
     const ObTabletTableStore &table_store,
-    ObTabletRuntimeInfo &runtime_info,
+    share::ObTabletRuntimeInfo &runtime_info,
     ObTabletLocalChecksumItem &tablet_checksum) const
 {
   int ret = OB_SUCCESS;
@@ -4750,7 +4750,7 @@ int ObTablet::get_tablet_runtime_info_by_sstable(
     LOG_WARN("fail to init report column meta with column_checksums", KR(ret), K(column_checksums));
   } else if (OB_FAIL(tablet_checksum.compaction_scn_.convert_for_tx(report_major_snapshot))) {
     LOG_WARN("failed to convert scn", KR(ret), K(report_major_snapshot));
-  } else if (OB_FAIL(share::g_mp->freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(report_major_snapshot, freeze_info))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObFreezeInfoMgr>()->get_lower_bound_freeze_info_before_snapshot_version(report_major_snapshot, freeze_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_EAGAIN;
     } else {
@@ -5660,7 +5660,7 @@ int ObTablet::assign_ddl_kvs(ObDDLKV * const *ddl_kvs, const int64_t ddl_kv_coun
 
 void ObTablet::reset_memtable()
 {
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   for(int i = 0; i < MAX_MEMSTORE_CNT; ++i) {
     if (OB_NOT_NULL(memtables_[i])) {
       const int64_t ref_cnt = memtables_[i]->dec_ref();
@@ -5790,7 +5790,7 @@ void ObTablet::reset_ddl_memtables()
     ObDDLKV *ddl_kv = ddl_kvs_[i];
     const int64_t ref_cnt = ddl_kv->dec_ref();
     if (0 == ref_cnt) {
-      share::g_mp->storage_meta_mem_mgr()->release_ddl_kv(ddl_kv);
+      ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->release_ddl_kv(ddl_kv);
     } else if (OB_UNLIKELY(ref_cnt < 0)) {
       LOG_ERROR_RET(OB_ERR_UNEXPECTED, "table ref cnt may be leaked", K(ref_cnt), KP(ddl_kv));
     }
@@ -5906,9 +5906,10 @@ int ObTablet::init_aggregated_info(
     ALLOC_AND_INIT(allocator, macro_info_addr_, info_set, linked_writer);
   }
   if (OB_SUCC(ret)) {
-    tablet_meta_.space_usage_.all_sstable_data_required_size_ = macro_info_addr_.ptr_->data_block_info_arr_.cnt_ * DEFAULT_MACRO_BLOCK_SIZE;
+    tablet_meta_.space_usage_.all_sstable_data_required_size_ =
+        macro_info_addr_.ptr_->data_block_info_arr_.cnt_ * OB_DEFAULT_MACRO_BLOCK_SIZE;
     tablet_meta_.space_usage_.all_sstable_data_required_size_
-        += macro_info_addr_.ptr_->shared_data_block_info_arr_.cnt_ * DEFAULT_MACRO_BLOCK_SIZE;
+        += macro_info_addr_.ptr_->shared_data_block_info_arr_.cnt_ * OB_DEFAULT_MACRO_BLOCK_SIZE;
   }
   return ret;
 }
@@ -6573,7 +6574,7 @@ int ObTablet::get_memtables(common::ObIArray<ObTableHandleV2> &memtables) const
   int ret = OB_SUCCESS;
   memtables.reset();
   ObTableHandleV2 memtable;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));

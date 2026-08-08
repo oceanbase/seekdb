@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "pl/parser/parse_stmt_item_type.h"
+#include "sql/pl/parser/parse_stmt_item_type.h"
 
 namespace oceanbase
 {
@@ -61,7 +61,7 @@ public:
                                              pl::ObProcType type)
   {
     bool is_trg_routine = false;
-    if (schema::ObTriggerInfo::is_trigger_body_package_id(package_id)
+    if (share::schema::ObTriggerInfo::is_trigger_body_package_id(package_id)
         && (pl::ObProcType::PACKAGE_PROCEDURE == type || pl::ObProcType::PACKAGE_FUNCTION == type)) {
       is_trg_routine = (routine_id >= ROUTINE_IDX_BEFORE_ROW && routine_id <= ROUTINE_IDX_AFTER_ROW);
     }

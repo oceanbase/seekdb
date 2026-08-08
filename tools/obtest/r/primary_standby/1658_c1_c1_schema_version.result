@@ -1,0 +1,16 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $schema_version, 1, 30;
+use test;
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key);
+'SUCCESS'
+0
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_ddl_operation where schema_version = $schema_version, 1, 30;
+use test;
+set ob_query_timeout = 30000000;
+create table t1 (c1 int primary key);
+'SUCCESS'
+1

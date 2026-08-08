@@ -24,7 +24,7 @@
 #include "sql/engine/basic/ob_sql_mem_callback.h"
 #include "lib/checksum/ob_crc64.h"
 #include "sql/engine/basic/chunk_store/ob_chunk_block_compressor.h"
-#include "storage/tmp_file/ob_tmp_file_manager.h"
+#include "data_plane/tmp_file/ob_tmp_file.h"
 
 namespace oceanbase
 {
@@ -296,16 +296,16 @@ public:
     inline int64_t get_block_cnt() const { return store_->get_block_cnt(); }
     void set_iteration_age(IterationAge *age) { age_ = age; }
     void set_blk_holder(BlockHolder *holder) { blk_holder_ptr_ = holder; }
-    int get_read_io_handler(tmp_file::ObTmpFileIOHandle *&read_io_handle)
+    int get_read_io_handler(data_plane::ObTmpFileIOHandle *&read_io_handle)
     {
       int ret = OB_SUCCESS;
       if (read_io_handle_ == NULL) {
-        if (OB_ISNULL(read_io_handle_ = static_cast<tmp_file::ObTmpFileIOHandle *>
-          (ob_malloc(sizeof(tmp_file::ObTmpFileIOHandle), "read_io_handle")))) {
+        if (OB_ISNULL(read_io_handle_ = static_cast<data_plane::ObTmpFileIOHandle *>
+          (ob_malloc(sizeof(data_plane::ObTmpFileIOHandle), "read_io_handle")))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SQL_ENG_LOG(WARN, "malloc memory for read_io_handle_ failed", K(ret));
         } else {
-          read_io_handle_ = new (read_io_handle_) tmp_file::ObTmpFileIOHandle();
+          read_io_handle_ = new (read_io_handle_) data_plane::ObTmpFileIOHandle();
         }
       }
       if (OB_SUCC(ret)) {
@@ -352,7 +352,7 @@ public:
     IterationAge inner_age_;
     // to optimize performance, record the last_extent_id to avoid do binary search every time
     // calling read.
-    tmp_file::ObTmpFileIOHandle *read_io_handle_;
+    data_plane::ObTmpFileIOHandle *read_io_handle_;
     int64_t cur_file_offset_;
     bool is_async_;
     int aio_buf_idx_;
@@ -539,7 +539,7 @@ private:
   int ensure_reader_buffer(BlockReader &reader, ShrinkBuffer &buf, const int64_t size);
   int write_file(BlockIndex &bi, void *buf, int64_t size);
   int read_file(void *buf, const int64_t size, const int64_t offset,
-                tmp_file::ObTmpFileIOHandle &handle, const bool is_async, const bool prefetch);
+                data_plane::ObTmpFileIOHandle &handle, const bool is_async, const bool prefetch);
   bool need_dump(const int64_t extra_size);
   int write_compressed_block(Block *blk, BlockIndex *bi);
   int dump_block(Block *blk, int64_t &dumped_size);
@@ -623,8 +623,8 @@ private:
   ObSqlMemoryCallback *mem_stat_;
   ObChunkBlockCompressor compressor_;
   ObIOEventObserver *io_observer_;
-  tmp_file::ObTmpFileIOHandle write_io_handle_;
-  tmp_file::ObTmpFileIOInfo io_;
+  data_plane::ObTmpFileIOHandle write_io_handle_;
+  data_plane::ObTmpFileIOInfo io_;
   bool last_block_on_disk_;
   int64_t cur_file_offset_;
 

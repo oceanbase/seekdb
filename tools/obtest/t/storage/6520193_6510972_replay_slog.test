@@ -1,0 +1,45 @@
+# owner: haipeng.zhp 孺牛
+# owner group: storage
+# description:this case is use for bug
+#   
+#   
+#
+
+# reboot cluster
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,root@obtest,,test,$port);
+connection conn1;
+
+# create table and insert data
+create table test01 (pk1 int, pk2 int, pk3 int, c1 int, c2 varchar(1024), c3 varchar(4096), primary key(pk1,pk2,pk3));
+let $cnt = 1;
+while ($cnt < 10)
+{
+	eval insert into test01 values($cnt, $cnt, $cnt, $cnt, 'abc', 'def');
+	inc $cnt;
+}
+
+# major freeze
+ob1.mysql alter system major freeze;
+
+sleep 120;
+ob1.check_version 2;
+
+# insert data agagin
+let $cnt = 1;
+while ($cnt < 10)
+{
+	eval replace into test01 values($cnt, $cnt, $cnt, $cnt, 'abc', 'def');
+	inc $cnt;
+}
+# drop table
+drop table test01;
+
+ob1.force_stop;
+ob1.restart;
+sleep 100;

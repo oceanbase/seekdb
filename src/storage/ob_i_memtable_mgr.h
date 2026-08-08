@@ -35,6 +35,7 @@ namespace storage
 class ObIMemtable;
 class ObFreezer;
 class CreateMemtableArg;
+class ObTabletMemtableMgrPool;
 
 
 using ObTableHdlArray = common::ObIArray<ObTableHandleV2>;

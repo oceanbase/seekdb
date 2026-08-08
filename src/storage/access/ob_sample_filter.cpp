@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sample_filter.h"
 #include "ob_index_tree_prefetcher.h"
+#include "data_plane/access/ob_sample_filter_factory.h"
 
 namespace oceanbase
 {
@@ -766,4 +767,91 @@ void ObRowSampleFilterFactory::destroy_sample_filter(ObRowSampleFilter *&sample_
   }
 }
 } // namespace storage
+
+namespace data_plane
+{
+int alloc_sample_filter_node(common::ObIAllocator &allocator,
+                             uint32_t child_count,
+                             sql::ObPushdownFilterNode *&filter_node)
+{
+  int ret = OB_SUCCESS;
+  void *buffer = allocator.alloc(sizeof(storage::ObPushdownSampleFilterNode));
+  if (OB_ISNULL(buffer)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("failed to allocate sample filter node", K(ret));
+  } else {
+    filter_node = new (buffer) storage::ObPushdownSampleFilterNode(allocator);
+    if (child_count > 0) {
+      void *children = allocator.alloc(child_count * sizeof(sql::ObPushdownFilterNode *));
+      if (OB_ISNULL(children)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("failed to allocate sample filter children", K(ret));
+      } else {
+        filter_node->childs_ = reinterpret_cast<sql::ObPushdownFilterNode **>(children);
+      }
+      filter_node->n_child_ = child_count;
+    } else {
+      filter_node->childs_ = nullptr;
+    }
+    filter_node->set_type(sql::PushdownFilterType::SAMPLE_FILTER);
+  }
+  return ret;
+}
+
+template <typename Executor>
+int alloc_sample_filter_executor(common::ObIAllocator &allocator,
+                                 uint32_t child_count,
+                                 sql::ObPushdownFilterNode &filter_node,
+                                 sql::ObPushdownFilterExecutor *&filter_executor,
+                                 sql::ObPushdownOperator &op,
+                                 sql::PushdownExecutorType type)
+{
+  int ret = OB_SUCCESS;
+  void *buffer = allocator.alloc(sizeof(Executor));
+  if (OB_ISNULL(buffer)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_ERROR("failed to allocate sample filter executor", K(ret), K(sizeof(Executor)));
+  } else {
+    storage::ObPushdownSampleFilterNode &sample_node =
+        static_cast<storage::ObPushdownSampleFilterNode &>(filter_node);
+    filter_executor = new (buffer) Executor(allocator, sample_node, op);
+    if (child_count > 0) {
+      void *children = allocator.alloc(child_count * sizeof(sql::ObPushdownFilterExecutor *));
+      if (OB_ISNULL(children)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("failed to allocate sample executor children", K(ret));
+      }
+      filter_executor->set_childs(
+          child_count, reinterpret_cast<sql::ObPushdownFilterExecutor **>(children));
+    }
+    filter_executor->set_type(type);
+  }
+  return ret;
+}
+
+int alloc_hybrid_sample_filter_executor(
+    common::ObIAllocator &allocator,
+    uint32_t child_count,
+    sql::ObPushdownFilterNode &filter_node,
+    sql::ObPushdownFilterExecutor *&filter_executor,
+    sql::ObPushdownOperator &op)
+{
+  return alloc_sample_filter_executor<storage::ObHybridSampleFilterExecutor>(
+      allocator, child_count, filter_node, filter_executor, op,
+      sql::PushdownExecutorType::HYBRID_SAMPLE_FILTER_EXECUTOR);
+}
+
+int alloc_trival_sample_filter_executor(
+    common::ObIAllocator &allocator,
+    uint32_t child_count,
+    sql::ObPushdownFilterNode &filter_node,
+    sql::ObPushdownFilterExecutor *&filter_executor,
+    sql::ObPushdownOperator &op)
+{
+  return alloc_sample_filter_executor<storage::ObTrivalSampleFilterExecutor>(
+      allocator, child_count, filter_node, filter_executor, op,
+      sql::PushdownExecutorType::TRIVAL_SAMPLE_FILTER_EXECUTOR);
+}
+
+} // namespace data_plane
 } // namespace oceanbase

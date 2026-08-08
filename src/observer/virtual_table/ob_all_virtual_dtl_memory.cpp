@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "observer/virtual_table/ob_all_virtual_dtl_memory.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -73,7 +73,7 @@ int ObAllVirtualDtlMemoryIterator::init()
 {
   int ret = OB_SUCCESS;
   mem_pool_infos_.set_block_allocator(ObWrapperAllocator(iter_allocator_));
-  if (OB_ISNULL(share::g_mp) || OB_ISNULL(share::g_mp->dfc_manager())) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDfc>())) {
     ret = OB_NOT_INIT;
     LOG_WARN("DFC manager is not initialized", K(ret));
   }
@@ -84,7 +84,7 @@ int ObAllVirtualDtlMemoryIterator::get_memory_pool_infos()
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    ObDfc *dfc_manager = share::g_mp->dfc_manager();
+    ObDfc *dfc_manager = ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDfc>();
     ObDtlMemManager *mem_mgr = dfc_manager->get_mem_manager();
     int64_t cnt = mem_mgr->get_channel_mgr_count();
     for (int64_t i = 0; i < cnt && OB_SUCC(ret); ++i) {

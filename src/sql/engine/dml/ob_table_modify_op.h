@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/dml/ob_dml_ctx_define.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/dml/ob_fk_checker.h"
 
@@ -300,8 +300,8 @@ protected:
 public:
   common::ObMySQLProxy *sql_proxy_;
   common::sqlclient::ObISQLConnectionGuard inner_conn_guard_;
-  observer::ObInnerSQLConnection *inner_conn_;
-  observer::ObInnerSQLConnection::SavedValue saved_conn_;
+  ObIInnerSQLConnection *inner_conn_;
+  ObIInnerSQLConnection::SavedValue saved_conn_;
   bool need_foreign_key_check_;
   bool need_close_conn_;
 

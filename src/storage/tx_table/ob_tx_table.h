@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TRANS_TABLE
 #define OCEANBASE_STORAGE_OB_TRANS_TABLE
 
+#include "lib/literals/ob_literals.h"
 #include "share/ob_rpc_struct.h"
 #include "lib/worker.h"
 #include "storage/ob_storage_struct.h"
@@ -27,9 +28,9 @@
 namespace oceanbase
 {
 
-namespace observer
+namespace data_plane
 {
-struct VirtualTxDataRow;
+struct ObVirtualTxDataRow;
 }
 
 namespace share
@@ -323,7 +324,9 @@ public:
    */
   bool tx_table_need_re_freeze() { return tx_data_table_.need_re_freeze(); }
 
-  int generate_virtual_tx_data_row(const transaction::ObTransID tx_id, observer::VirtualTxDataRow &row_data);
+  int generate_virtual_tx_data_row(
+      const transaction::ObTransID tx_id,
+      data_plane::ObVirtualTxDataRow &row_data);
   int dump_single_tx_data_2_text(const int64_t tx_id_int, const char *fname);
 
   const char* get_state_string(const int64_t state) const;

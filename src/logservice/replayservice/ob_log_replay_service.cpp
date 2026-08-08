@@ -15,11 +15,9 @@
  */
 
 #include "ob_log_replay_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "logservice/ob_i_log_storage.h"
 #include "share/config/ob_server_config.h"
-#include "logservice/ob_ls_adapter.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
 {
@@ -178,7 +176,7 @@ ObLogReplayService::ObLogReplayService()
     is_inited_(false),
     is_running_(false),
     replay_stat_(),
-    ls_adapter_(NULL),
+    log_storage_(NULL),
     palf_env_(NULL),
     allocator_(NULL),
     replayable_point_(),
@@ -195,20 +193,22 @@ ObLogReplayService::~ObLogReplayService()
 }
 
 int ObLogReplayService::init(PalfEnv *palf_env,
-                             ObLSAdapter *ls_adapter,
-                             ObILogAllocator *allocator)
+                             ObILogStorage *log_storage,
+                             ObILogAllocator *allocator,
+                             const int64_t replay_thread_quota)
 {
   int ret = OB_SUCCESS;
-  const int64_t thread_quota = 1;
+  const int64_t thread_quota = std::max<int64_t>(1, replay_thread_quota);
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogReplayService init twice", K(ret));
   } else if (OB_ISNULL(palf_env_= palf_env)
-             || OB_ISNULL(ls_adapter_ = ls_adapter)
+             || OB_ISNULL(log_storage_ = log_storage)
              || OB_ISNULL(allocator_ = allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env), KP(ls_adapter), KP(allocator));
+    CLOG_LOG(WARN, "invalid argument", K(ret), KP(palf_env),
+        KP(log_storage), KP(allocator), K(replay_thread_quota));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
       1,
       common::REPLAY_TASK_QUEUE_SIZE + 1,
@@ -303,7 +303,7 @@ void ObLogReplayService::destroy()
   replay_stat_.destroy();
   pending_replay_log_size_ = 0;
   allocator_ = NULL;
-  ls_adapter_ = NULL;
+  log_storage_ = NULL;
   palf_env_ = NULL;
   lock_.destroy();
 }
@@ -874,7 +874,7 @@ bool ObLogReplayService::is_tenant_out_of_memory_() const
 {
   bool bool_ret = true;
   int64_t pending_size = get_pending_task_size();
-  bool is_pending_too_large = share::g_mp->memstore_freezer()->is_replay_pending_log_too_large(pending_size);
+  bool is_pending_too_large = log_storage_->is_replay_pending_log_too_large(pending_size);
   bool_ret = (pending_size >= PENDING_TASK_MEMORY_LIMIT || is_pending_too_large);
   return bool_ret;
 }
@@ -952,7 +952,7 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
   if (OB_ISNULL(replay_status) || OB_ISNULL(replay_task)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "invalid argument", KPC(replay_task), KPC(replay_status), KR(ret));
-  } else if (OB_ISNULL(ls_adapter_)) {
+  } else if (OB_ISNULL(log_storage_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(replay_status->check_can_replay())) {
     if (REACH_TIME_INTERVAL(1000 * 1000)) {
@@ -967,7 +967,7 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
     //do nothing
   } else if (replay_task->is_pre_barrier_) {
     replay_task->read_log_buf_ = replay_log_buff->log_buf_;
-    if (OB_FAIL(ls_adapter_->replay(replay_task))) {
+    if (OB_FAIL(log_storage_->replay(replay_task))) {
       replay_log_buff->inc_replay_ref();
       replay_task->read_log_buf_ = replay_log_buff;
       CLOG_LOG(WARN, "ls do pre barrier replay failed", K(ret), K(replay_task), KPC(replay_task),
@@ -980,7 +980,7 @@ int ObLogReplayService::do_replay_task_(ObLogReplayTask *replay_task,
       free_replay_task_log_buf(replay_task);
       replay_status->dec_pending_task(replay_task->get_replay_payload_size());
     }
-  } else if (OB_FAIL(ls_adapter_->replay(replay_task))) {
+  } else if (OB_FAIL(log_storage_->replay(replay_task))) {
     CLOG_LOG(WARN, "ls do replay failed", K(ret), KPC(replay_task));
   }
   if (OB_SUCC(ret) && need_replay) {

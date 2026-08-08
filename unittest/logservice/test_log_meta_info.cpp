@@ -105,11 +105,3 @@ TEST(TestLogMetaInfos, log_snapshot_meta)
 
 } // namespace unittest
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_log_meta_infos.log", true);
-  OB_LOGGER.set_log_level("TRACE");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

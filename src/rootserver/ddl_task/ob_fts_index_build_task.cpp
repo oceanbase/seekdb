@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_error_message_table_operator.h"
@@ -93,7 +94,7 @@ int ObFtsIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -186,7 +187,7 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -499,7 +500,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
       OB_FAIL(dependent_task_result_map_.create(num_fts_child_task,
                                                 lib::ObLabel("DepTasMap")))) {
     LOG_WARN("create dependent task map failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(data_table_id,
+  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(*GCTX.schema_service_, data_table_id,
                                                     ddl_rpc_timeout))) {
     LOG_WARN("get ddl rpc timeout fail", K(ret));
   } else {
@@ -519,7 +520,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version_)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
         LOG_WARN("generate fts aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
         task_submitted = true;
@@ -935,7 +936,7 @@ int ObFtsIndexBuildTask::get_charset_type(ObCharsetType &charset_type)
 // wait data complement of aux index tables
 int ObFtsIndexBuildTask::wait_aux_table_complement()
 {
-  using task_iter = common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus>::const_iterator;
+  using task_iter = common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus>::const_iterator;
   int ret = OB_SUCCESS;
   bool child_task_failed = false;
   bool state_finished = false;
@@ -1038,7 +1039,7 @@ int ObFtsIndexBuildTask::on_child_task_finish(
   } else {
     TCWLockGuard guard(lock_);
     int64_t org_ret = INT64_MAX;
-    share::ObDomainDependTaskStatus status;
+    rootserver::ObDomainDependTaskStatus status;
     if (OB_FAIL(dependent_task_result_map_.get_refactored(child_task_key,
                                                           status))) {
       if (OB_HASH_NOT_EXIST == ret) {
@@ -1499,7 +1500,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
-          if (OB_FAIL(ObDDLUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
             LOG_WARN("fail to get fulltext task objection", K(ret));
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
             LOG_WARN("fail to refresh subtask execution status", K(ret), K(task));
@@ -1511,7 +1512,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
-          if (OB_FAIL(ObDDLUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
             LOG_WARN("fail to get fulltext task objection", K(ret));
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
             LOG_WARN("fail to refresh subtask execution status", K(ret), K(task));
@@ -1522,7 +1523,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           if (is_fts_task() &&
               (OB_INVALID_ID == domain_index_aux_table_id_ ||
               OB_INVALID_ID == fts_doc_word_aux_table_id_)) {
-            if (OB_FAIL(ObDDLUtil::load_ddl_task(task_id_, allocator_, task))) {
+            if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
               LOG_WARN("fail to get fulltext task objection", K(ret));
             } else {
               domain_index_aux_table_id_ = task.get_domain_index_aux_table_id();
@@ -1532,7 +1533,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::FAIL: {
-          if (OB_FAIL(ObDDLUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
             LOG_WARN("fail to get fulltext task objection", K(ret));
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
             LOG_WARN("fail to refresh subtask execution status", K(ret), K(task));
@@ -1608,7 +1609,7 @@ int ObFtsIndexBuildTask::get_task_status()
 
 int ObFtsIndexBuildTask::clean_on_failed()
 {
-  using task_iter = common::hash::ObHashMap<uint64_t, share::ObDomainDependTaskStatus>::const_iterator;
+  using task_iter = common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus>::const_iterator;
   int ret = OB_SUCCESS;
   bool state_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -1763,7 +1764,7 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
       LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
       LOG_WARN("ddl sim failure", KR(ret), K(task_id_));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
       LOG_WARN("drop index failed", KR(ret), K(ddl_rpc_timeout));
     } else {
       drop_index_task_submitted_ = true;
@@ -2143,19 +2144,20 @@ int ObFtsIndexBuildTask::try_release_snapshot(ObMySQLTransaction &trans)
   ObSEArray<ObTabletID, 2> tablet_ids;
   SCN snapshot_scn;
   if (snapshot_version_ > 0) {
-    if (OB_FAIL(ObDDLUtil::get_tablet_ids(object_id_, target_object_id_, tablet_ids))) {
+    if (OB_FAIL(ObDDLUtil::get_tablet_ids(
+            *GCTX.schema_service_, object_id_, target_object_id_, tablet_ids))) {
       LOG_WARN("fail to get tablet ids", K(ret), K(object_id_), K(target_object_id_));
     } else if (tablet_ids.count() <= 0) {
       snapshot_version_ = 0;
     } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version_))) {
       LOG_WARN("failed to convert scn", K(ret),K(snapshot_version_), K(snapshot_scn));
-    } else if (OB_ISNULL(GCTX.local_management_service_)) {
+    } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
-    } else if (OB_UNLIKELY(!GCTX.local_management_service_->get_ddl_service().is_inited())) {
+      LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
+    } else if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().is_inited())) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
             trans, SNAPSHOT_FOR_DDL, rowkey_doc_schema_version_, snapshot_scn, tablet_ids))) {
       LOG_WARN("batch release snapshot failed", K(ret), K(tablet_ids));
     } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version(trans,

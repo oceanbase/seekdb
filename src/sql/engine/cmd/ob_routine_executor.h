@@ -20,7 +20,7 @@
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_iarray.h"
 #include "sql/parser/parse_node.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "src/share/schema/ob_routine_info.h"
 
 #define DEF_SIMPLE_EXECUTOR(name)                          \

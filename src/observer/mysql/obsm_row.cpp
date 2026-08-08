@@ -16,7 +16,7 @@
 
 #include "obsm_row.h"
 
-#include "observer/mysql/obsm_utils.h"
+#include "query/protocol/ob_mysql_protocol_util.h"
 
 using namespace oceanbase::share::schema;
 using namespace oceanbase::common;

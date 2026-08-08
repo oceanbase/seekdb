@@ -21,7 +21,6 @@
 #include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::share;
-using namespace oceanbase::observer;
 namespace oceanbase
 {
 namespace common

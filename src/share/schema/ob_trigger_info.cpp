@@ -20,7 +20,6 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace sql;
 namespace share
 {
 namespace schema
@@ -183,51 +182,6 @@ int64_t ObTriggerInfo::get_convert_size() const
   return convert_size;
 }
 
-// trigger package source macro DSL moved together with the gen/fill function family to sql/resolver/ddl/ob_trigger_resolver.cpp
-
-
-
-
-// moved definition to sql/resolver/ddl/ob_trigger_resolver.cpp(parser vocabulary)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-void ObTriggerInfo::TriggerContext::dispatch_decalare_execute(const ObTriggerInfo &trigger_info,
-                                                              ObString *&simple_declare,
-                                                              ObString *&simple_execute,
-                                                              ObString *&tg_body)
-{
-  if (trigger_info.has_before_row_point()) {
-    simple_declare = &before_row_declare_;
-    simple_execute = &before_row_execute_;
-  } else if (trigger_info.has_after_row_point()) {
-    simple_declare = &after_row_declare_;
-    simple_execute = &after_row_execute_;
-  }
-  tg_body = &trigger_body_;
-}
-
-
-
 bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left, const ObTriggerInfo *right)
 {
   bool bool_ret = false;
@@ -241,10 +195,6 @@ bool ObTriggerInfo::ActionOrderComparator::operator()(const ObTriggerInfo *left,
   }
   return bool_ret;
 }
-
-
-// for rebuild trigger body due to rename table
-
 
 } // namespace schema
 } // namespace share

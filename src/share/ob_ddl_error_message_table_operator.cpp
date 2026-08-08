@@ -19,6 +19,7 @@
 #include "share/ob_dml_sql_splicer.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_ddl_sim_point.h"
+#include "share/ob_share_util.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;

@@ -15,7 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
 #include "storage/tablet/ob_tablet_create_replay_executor.h"
@@ -36,7 +36,7 @@ namespace storage
 ERRSIM_POINT_DEF(EN_CREATE_TABLET_FAILED);
 
 int ObTabletCreateMdsHelper::register_process(
-    const ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     mds::BufferCtx &ctx)
 {
   MDS_TG(1_s);
@@ -78,7 +78,7 @@ int ObTabletCreateMdsHelper::on_register(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObBatchCreateTabletArg arg;
+  obcall::ObBatchCreateTabletArg arg;
   int64_t pos = 0;
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
@@ -100,7 +100,7 @@ int ObTabletCreateMdsHelper::on_register(
 }
 
 int ObTabletCreateMdsHelper::replay_process(
-    const ObBatchCreateTabletArg &arg,
+    const obcall::ObBatchCreateTabletArg &arg,
     const share::SCN &scn,
     mds::BufferCtx &ctx)
 {
@@ -150,7 +150,7 @@ int ObTabletCreateMdsHelper::on_replay(
 {
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
-  ObBatchCreateTabletArg arg;
+  obcall::ObBatchCreateTabletArg arg;
   int64_t pos = 0;
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0) || OB_UNLIKELY(!scn.is_valid())) {
@@ -182,7 +182,7 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
 {
   int ret = OB_SUCCESS;
   
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   int64_t tablet_cnt_per_gb = 20000; // default value
 
   tablet_cnt_per_gb = GCONF._max_tablet_cnt_per_gb;
@@ -268,7 +268,7 @@ int ObTabletCreateMdsHelper::check_create_arg(
   ObSArray<int64_t> aux_info_idx_array;
 
   for (int64_t i = 0; OB_SUCC(ret) && valid && i < arg.tablets_.count(); ++i) {
-    const ObCreateTabletInfo &info = arg.tablets_.at(i);
+    const obcall::ObCreateTabletInfo &info = arg.tablets_.at(i);
     const ObTabletID &data_tablet_id = info.data_tablet_id_;
     if (is_contain(aux_info_idx_array, i)) {
       // do nothing
@@ -285,7 +285,7 @@ int ObTabletCreateMdsHelper::check_create_arg(
         const ObTabletID &tablet_id = info.tablet_ids_.at(i);
         bool has_related_aux_info = find_aux_info_for_hidden_tablets(arg, tablet_id, aux_info_idx);
         if (has_related_aux_info) {
-          const ObCreateTabletInfo &aux_info = arg.tablets_.at(aux_info_idx);
+          const obcall::ObCreateTabletInfo &aux_info = arg.tablets_.at(aux_info_idx);
           if (OB_FAIL(check_hidden_tablets_info(info, &aux_info, valid))) {
             LOG_WARN("failed to check create tablet info", K(ret), K(info), K(aux_info));
           } else if (OB_FAIL(aux_info_idx_array.push_back(aux_info_idx))) {
@@ -312,7 +312,7 @@ int ObTabletCreateMdsHelper::create_tablets(
   int ret = OB_SUCCESS;
 
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablets_.count(); ++i) {
-    const ObCreateTabletInfo &info = arg.tablets_.at(i);
+    const obcall::ObCreateTabletInfo &info = arg.tablets_.at(i);
     if (is_pure_data_tablets(info)) {
       if (CLICK_FAIL(build_pure_data_tablet(arg, info, for_replay, scn, ctx, tablet_id_array))) {
         LOG_ERROR("failed to build pure data tablet", K(ret), K(info));
@@ -401,7 +401,7 @@ int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletMapKey key;
 
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
@@ -428,7 +428,7 @@ int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletMapKey key;
 
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
@@ -466,7 +466,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletMapKey key;
 
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < hidden_info.tablet_ids_.count(); ++i) {
@@ -524,7 +524,7 @@ bool ObTabletCreateMdsHelper::find_aux_info_for_hidden_tablets(
   bool found = false;
 
   for (int64_t i = 0; !found && i < arg.tablets_.count(); ++i) {
-    const ObCreateTabletInfo &info = arg.tablets_.at(i);
+    const obcall::ObCreateTabletInfo &info = arg.tablets_.at(i);
     if (is_pure_aux_tablets(info) && tablet_id == info.data_tablet_id_) {
       aux_info_idx = i;
       found = true;
@@ -919,7 +919,7 @@ int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
         create_tablet_schema, need_create_empty_major_sstable, micro_index_clustered))) {
       LOG_WARN("check and get create tablet schema_info failed", K(ret));
     } else if (has_related_aux_info) {
-      const ObCreateTabletInfo &aux_info = arg.tablets_.at(aux_info_idx);
+      const obcall::ObCreateTabletInfo &aux_info = arg.tablets_.at(aux_info_idx);
       for (int64_t j = 0; j < aux_info.tablet_ids_.count(); ++j) {
         const int64_t table_schema_index = aux_info.table_schema_index_.at(j);
         const ObCreateTabletSchema *aux_table_schema = create_tablet_schemas[table_schema_index];
@@ -1007,7 +1007,7 @@ int ObTabletCreateMdsHelper::rollback_remove_tablets(
 int ObTabletCreateMdsHelper::get_ls(ObLS *&tenant_ls)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
 
   if (OB_FAIL(ls_service->get_ls(tenant_ls))) {
     LOG_WARN("failed to get ls", K(ret));

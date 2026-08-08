@@ -20,7 +20,6 @@
 #include "share/cache/ob_kv_storecache.h"
 #include "share/ob_task_define.h"
 #include "share/ob_debug_sync.h"             // DEBUG_SYNC
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
@@ -142,12 +141,13 @@ ObKVGlobalCache &ObKVGlobalCache::get_instance()
   return instance_;
 }
 
-int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
+int ObKVGlobalCache::get_suitable_bucket_num(
+    int64_t &bucket_num,
+    const int64_t memory_limit,
+    const int64_t reserved_memory)
 {
   INIT_SUCC(ret);
-  int64_t memory_budget = GMEMCONF.get_server_memory_budget();
-  int64_t server_memory_factor = upper_align(memory_budget, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
-  int64_t reserved_memory = GMEMCONF.get_reserved_server_memory();
+  int64_t server_memory_factor = upper_align(memory_limit, BASE_SERVER_MEMORY_FACTOR) / BASE_SERVER_MEMORY_FACTOR;
   bucket_num = -1;
   for (int64_t bucket_level = MAX_BUCKET_NUM_LEVEL -1; bucket_level >= 0; bucket_level--) {
     if ((1 << bucket_level) > server_memory_factor) {
@@ -161,7 +161,7 @@ int ObKVGlobalCache::get_suitable_bucket_num(int64_t& bucket_num)
   }
   if (-1 == bucket_num) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_budget), K(server_memory_factor), K(reserved_memory));
+    COMMON_LOG(ERROR, "reserved memory is not enough!", K(memory_limit), K(server_memory_factor), K(reserved_memory));
   } else {
     share::ObTaskController::get().allow_next_syslog();
     COMMON_LOG(INFO, "The ObKVGlobalCache set suitable kvcache buckets", K(bucket_num), K(server_memory_factor), K(reserved_memory));
@@ -174,17 +174,18 @@ int ObKVGlobalCache::init(
     const int64_t bucket_num,
     const int64_t max_cache_size,
     const int64_t block_size,
-    const int64_t cache_wash_interval)
+    const int64_t cache_wash_interval,
+    const ObKVCacheRuntimeOptions &runtime_options)
 {
   int ret = OB_SUCCESS;
-
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVGlobalCache has been inited, ", K(ret));
   } else if (bucket_num <= 0 ||
              max_cache_size <= 0 ||
              block_size <= 0 ||
-             cache_wash_interval < 0) {
+             cache_wash_interval < 0 ||
+             !runtime_options.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", K(ret), K(bucket_num),
                K(max_cache_size), K(block_size), K(cache_wash_interval));
@@ -201,7 +202,7 @@ int ObKVGlobalCache::init(
   } else if (OB_FAIL(replace_timer_.init("KVCacheRep", ObMemAttr("KVCacheRep")))) {
     COMMON_LOG(WARN, "Fail to init replace timer", K(ret));
   } else if (FALSE_IT(cache_wash_interval_ = cache_wash_interval)) {
-  } else if (OB_FAIL(reload_wash_interval())) {
+  } else if (OB_FAIL(reload_config(runtime_options))) {
     COMMON_LOG(WARN, "failed to reload wash interval", K(ret));
   } else {
     cache_num_ = 0;
@@ -556,11 +557,15 @@ void ObKVGlobalCache::revert(HazptrHolder& hazptr_holder)
   }
 }
 
-int ObKVGlobalCache::reload_wash_interval()
+int ObKVGlobalCache::reload_config(const ObKVCacheRuntimeOptions &runtime_options)
 {
   int ret = OB_SUCCESS;
-  if (0 == cache_wash_interval_) {
-    const int64_t wash_interval = GCONF._cache_wash_interval;
+  if (!runtime_options.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "invalid cache runtime options", K(ret),
+               K(runtime_options.wash_interval_us_));
+  } else if (0 == cache_wash_interval_) {
+    const int64_t wash_interval = runtime_options.wash_interval_us_;
     bool is_exist = wash_timer_.task_exist(wash_task_);
     if (is_exist && OB_FAIL(wash_timer_.cancel_task(wash_task_))) {
       COMMON_LOG(WARN, "failed to cancel wash task", K(ret));

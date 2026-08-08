@@ -466,6 +466,7 @@ int ObMajorMergeScheduler::update_all_tablets_report_scn(
   int ret = OB_SUCCESS;
   FREEZE_TIME_GUARD;
   if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
+          GCTX.meta_db_pool_,
           global_braodcast_scn_val,
           ObTabletRuntimeInfo::ScnStatus::SCN_STATUS_ERROR,
           stop_))) {

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/engine/ob_exec_context.h"
@@ -62,7 +62,10 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
         LOG_WARN("fail to cal purge time out", KR(ret));
       } else if (0 == cal_timeout) {
         is_finished = true;
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->purge_expire_recycle_objects(purge_recyclebin_arg, affected_rows); }))) {
+      } else if (OB_FAIL(query::serialize_root_service_call([&]{
+                   return ctx.root_command_service().purge_expire_recycle_objects(
+                       purge_recyclebin_arg, affected_rows);
+                 }))) {
         LOG_WARN("purge reyclebin objects failed", K(ret), K(affected_rows), K(purge_recyclebin_arg));
         // If failure occurs, there is no need to continue
         is_finished = false;

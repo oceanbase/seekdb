@@ -18,12 +18,11 @@
 
 #include "ob_direct_load_mgr_v3.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "observer/ob_tablet_runtime_meta_updater.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -250,7 +249,7 @@ int ObTabletDirectLoadMgrV3::init_v2(const ObTabletDirectLoadInsertParam &build_
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(build_param.runtime_only_param_.table_id_));
-  } else if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>()->alloc_dir(dir_id_))) {
     LOG_WARN("failed to get direct_load ");
   } else {
     /* prepare table key*/
@@ -561,14 +560,14 @@ int ObTabletDirectLoadMgrV3::close()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  } else if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls service should not be null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
   } else if (OB_FAIL(inner_close())) {
     LOG_WARN("failed to inner close", K(ret), KPC(this));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, tablet_id_, new_tablet_handle))) {
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id_, new_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id_));
   } else {
     ObSSTableMetaHandle sst_meta_hdl;
@@ -761,7 +760,7 @@ int ObSNTabletDirectLoadMgr::inner_close()
     } else if (OB_FAIL(ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(complete_arg, allocator))) {
       LOG_WARN("failed to record ddl complete arg to mds", KR(ret), K(complete_arg));
     } else {
-      LOG_INFO("ddl write commit log", K(ret), "ddl_event_info", ObDDLEventInfo());
+      LOG_INFO("ddl write commit log", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     }
   }
 

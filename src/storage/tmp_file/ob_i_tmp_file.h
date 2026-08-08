@@ -20,7 +20,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"
 #include "storage/tmp_file/ob_tmp_file_write_buffer_index_cache.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

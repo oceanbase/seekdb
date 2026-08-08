@@ -18,44 +18,28 @@
 #define OCEANBASE_OBSERVER_OB_PLUGIN_VECTOR_INDEX_SERVICE_DEFINE_H_
 #include <type_traits> // For std::invoke_result
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "observer/vector_index/ob_plugin_vector_index_scheduler.h"
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "query/vector/ob_vector_query_result.h"
 #include "storage/vector_type/ob_vector_common_util.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
-#include "ob_vector_kmeans_ctx.h"
-#include "observer/vector_index/ob_vector_index_ivf_cache_mgr.h"
+#include "query/vector/ob_vector_index_cache.h"
+#include "query/vector/ob_vector_index_service.h"
+#include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObLSService;
+}
 namespace share
 {
-struct ObIvfHelperKey final
-{
-public:
-  ObIvfHelperKey(): tablet_id_(), context_id_(OB_INVALID_ID)
-  {}
-  ObIvfHelperKey(const ObTabletID &tablet_id, const int64_t context_id)
-    : tablet_id_(tablet_id), context_id_(context_id) {}
-  ~ObIvfHelperKey() = default;
-  uint64_t hash() const {
-    return tablet_id_.hash() + murmurhash(&context_id_, sizeof(context_id_), 0);
-  }
-  int hash(uint64_t &hash_val) const {hash_val = hash(); return OB_SUCCESS;}
-  bool is_valid() const { return tablet_id_.is_valid() && context_id_ >= 0; }
-  bool operator == (const ObIvfHelperKey &other) const {
-        return tablet_id_ == other.tablet_id_ && context_id_ == other.context_id_; }
-  TO_STRING_KV(K_(tablet_id), K_(context_id));
-public:
-  common::ObTabletID tablet_id_;
-  int64_t context_id_;
-};
-
 class ObVectorIndexAdapterCandiate final
 {
 public:
@@ -228,7 +212,7 @@ public:
   void dump_all_inst();
   // for virtual table
   int get_snapshot_tablet_ids(ObIArray<obcall::ObTabletPair> &complete_tablet_ids,  ObIArray<obcall::ObTabletPair> &partial_tablet_ids);
-  int get_cache_tablet_ids(ObIArray<ObTabletPair> &cache_tablet_ids);
+  int get_cache_tablet_ids(ObIArray<obcall::ObTabletPair> &cache_tablet_ids);
 
   TO_STRING_KV(K_(is_inited), K_(need_check), K_(task_ctx));
 
@@ -316,7 +300,9 @@ struct ObPluginVectorIndexIdentity
 };
 
 // Manage all vector index adapters of a tenant
-class ObPluginVectorIndexService : public logservice::ObIReplaySubHandler,
+class ObPluginVectorIndexService : public ::oceanbase::query::ObIVectorIndexService,
+                                   public storage::ObIVectorIndexRuntime,
+                                   public logservice::ObIReplaySubHandler,
                                    public logservice::ObICheckpointSubHandler,
                                    public logservice::ObILocalLogHandler
 {
@@ -327,6 +313,7 @@ public:
     is_ls_or_tablet_changed_(false),
     schema_service_(NULL),
     ls_service_(NULL),
+    lob_read_service_(NULL),
     sql_proxy_(NULL),
     memory_context_(NULL),
     all_vsag_use_mem_(NULL),
@@ -335,10 +322,13 @@ public:
   {}
   virtual ~ObPluginVectorIndexService();
   int init(schema::ObMultiVersionSchemaService *schema_service,
-           ObLSService *ls_service);
+           storage::ObLSService *ls_service,
+           common::ObILobReadService *lob_read_service);
   bool is_inited() { return is_inited_; }
   // Server module interfaces.
-  static int server_module_init(ObPluginVectorIndexService *&service);
+  static int server_module_init(
+      ObPluginVectorIndexService *&service,
+      common::ObILobReadService *lob_read_service);
   int start();
   void stop();
   void wait();
@@ -409,7 +399,7 @@ public:
   int dump_all_inst();
   // for virtual table
   int get_snapshot_ids(ObIArray<obcall::ObTabletPair> &complete_tablet_ids,  ObIArray<obcall::ObTabletPair> &partial_tablet_ids);
-  int get_cache_ids(ObIArray<ObTabletPair> &cache_tablet_ids);
+  int get_cache_ids(ObIArray<obcall::ObTabletPair> &cache_tablet_ids);
   // for ivf
   // ivfflat index needs center ids
   // ivfsq index needs sq metas and center ids
@@ -435,6 +425,14 @@ public:
                                   int64_t table_id,
                                   ObIvfCacheMgrGuard &cache_mgr_guard);
   int acquire_ivf_cache_mgr_guard(const ObIvfCacheMgrKey &key, ObIvfCacheMgrGuard &cache_mgr_guard);
+  int get_leader_flag(bool &is_leader) override;
+  int query_need_refresh_memdata(
+      ObPluginVectorIndexAdaptor *adapter,
+      const common::ObLobReadOptions &lob_read_options) override;
+  common::ObILobReadService *get_lob_read_service() const
+  {
+    return lob_read_service_;
+  }
   lib::MemoryContext &get_memory_context() { return memory_context_; }
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
@@ -456,6 +454,7 @@ private:
 
   share::schema::ObMultiVersionSchemaService *schema_service_;
   storage::ObLSService *ls_service_;
+  common::ObILobReadService *lob_read_service_;
   common::ObMySQLProxy *sql_proxy_;
   ObFIFOAllocator allocator_;
   // do not use this memory context directly
@@ -488,9 +487,13 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "ObPluginVectorIndexService is not inited", KR(ret));
+  } else if (OB_ISNULL(lob_read_service_)) {
+    ret = OB_NOT_INIT;
+    OB_LOG(WARN, "LOB read service is not installed", KR(ret));
   } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
     OB_LOG(WARN, "failed to generate sql", K(ret), K(table_id));
   } else {
+    const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;
     session_param.sql_mode_ = nullptr;
     session_param.tz_info_wrap_ = nullptr;
@@ -516,11 +519,13 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
           } else if (OB_FAIL(result->get_obj(vec_col_idx, vec_obj))) {
             OB_LOG(WARN, "failed to get vid", K(ret));
           } else if (FALSE_IT(blob_data = vec_obj.get_string())) {
-          } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator,
-                                                                        ObLongTextType,
-                                                                        CS_TYPE_BINARY,
-                                                                        true,
-                                                                        blob_data))) {
+          } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
+              lob_read_options,
+              &allocator,
+              ObLongTextType,
+              CS_TYPE_BINARY,
+              true,
+              blob_data))) {
             OB_LOG(WARN, "fail to get real data.", K(ret), K(blob_data));
           } else {
             int64_t dim = blob_data.length() / sizeof(float);

@@ -15,7 +15,7 @@
  */
 
 #include "ob_compaction_suggestion.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -573,7 +573,7 @@ int ObCompactionSuggestionIterator::open()
   if (OB_SUCC(ret)) {
     {
       SERVER_MODULE_SCOPE {
-        if (OB_FAIL(share::g_mp->compaction_suggestion_mgr()->get_suggestion_list(suggestion_array_))) {
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionSuggestionMgr>()->get_suggestion_list(suggestion_array_))) {
           STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {

@@ -17,6 +17,7 @@
 #ifndef __OCEANBASE_SQL_ENGINE_PX_DFO_H__
 #define __OCEANBASE_SQL_ENGINE_PX_DFO_H__
 
+#include "data_plane/transaction/ob_tx_desc_access.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
 #include "lib/utility/ob_serialization_helper.h"
 #include "lib/queue/ob_lighty_queue.h"
@@ -852,7 +853,7 @@ public:
                K_(dml_row_info),
                K_(temp_table_id),
                K_(interm_result_ids),
-               K_(tx_desc),
+               "tx_desc", data_plane::ObTxDescLogView(tx_desc_),
                K_(is_use_local_thread),
                K_(fb_info),
                K_(memstore_read_row_count),
@@ -962,7 +963,7 @@ public:
                              ObIAllocator *des_allocator);
   int init_deserialize_param(const ObPxInitTaskArgs &arg,
                            lib::MemoryContext &mem_context,
-                           const observer::ObGlobalContext &gctx);
+                           const share::ObGlobalContext &gctx);
   int deep_copy_assign(ObPxInitTaskArgs &src,
                       common::ObIAllocator &alloc);
 
@@ -1080,14 +1081,14 @@ public :
   void set_log_level(const int8_t log_level) { log_level_ = log_level; }
   void set_enqueue_timestamp(int64_t v) { enqueue_timestamp_ = v; }
   int64_t get_enqueue_timestamp() const { return enqueue_timestamp_; }
-  void set_gctx(const observer::ObGlobalContext *ctx) { gctx_ = ctx; }
-  const observer::ObGlobalContext *get_gctx() { return gctx_; }
+  void set_gctx(const share::ObGlobalContext *ctx) { gctx_ = ctx; }
+  const share::ObGlobalContext *get_gctx() { return gctx_; }
 
 private:
   TraceId trace_id_;
   uint8_t log_level_;
   int64_t enqueue_timestamp_;
-  const observer::ObGlobalContext *gctx_;
+  const share::ObGlobalContext *gctx_;
 };
 
 }

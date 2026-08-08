@@ -87,7 +87,7 @@ int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr,
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
       ObString text_str;
-      if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc,
+      if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc,
                   0, arg, text_str))) {
         LOG_WARN("failed to read realdata", K(ret));
       } else if (OB_FAIL(extract_cert_expired_time(text_str.ptr(), text_str.length(), expired_time))) {

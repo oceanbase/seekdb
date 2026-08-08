@@ -1,0 +1,102 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：协调者同步prepare log到备机失败，事务回滚
+##
+ob1=OBI(cluster=3:3:3,proxy_num=0,init_unit_cpu=11,init_unit_num=2);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_monotonic_weak_read=false;
+
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+
+connection conn1;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 2) partitions 2;
+
+
+let $scheduler=deploy_get_value(ob1.get_leader obtest:obtest:t1:1);
+let $scheduler_ip=deploy_get_value($scheduler.ip);
+let $scheduler_port=deploy_get_value($scheduler.mysql_port);
+connect (conn2,$scheduler_ip,admin@obtest,admin,obtest,$scheduler_port);
+
+connection conn2;
+##commit
+set autocommit=0;
+insert into t1 values(0,0,'a');
+insert into t1 values(1,1,'b');
+
+#阻塞协调者主到备的网络
+let $leader0=deploy_get_value(ob1.get_leader obtest:obtest:t1:0);
+let $follower0_1=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,1);
+let $follower0_2=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,2);
+
+$leader0.block_net $follower0_1;
+$follower0_1.block_net $leader0;
+$leader0.block_net $follower0_2;
+$follower0_2.block_net $leader0;
+
+--error 4012,6002
+commit;
+
+##会从follower0_1和follower0_2中选出一个新的leader，这是协调者发prepare会发给新的leader，而新的leader没有事务上下文，会回复协调者unknown，这是协调者会abort整个事务
+sleep 20;
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+
+$leader0.clean_net $follower0_1;
+$leader0.clean_net $follower0_2;
+$follower0_1.clean_net $leader0;
+$follower0_2.clean_net $leader0;
+
+
+sleep 15;
+
+##将原来的leader重新切换为主
+$leader0.switch_partition obtest:obtest:t1:0;
+
+sleep 25;
+
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(0,0,'a');
+insert into t1 values(1,1,'b');
+
+#阻塞参与者主到备的网络
+let $leader0=deploy_get_value(ob1.get_leader obtest:obtest:t1:0);
+let $follower0_1=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,1);
+let $follower0_2=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,2);
+
+$leader0.block_net $follower0_1;
+$follower0_1.block_net $leader0;
+$leader0.block_net $follower0_2;
+$follower0_2.block_net $leader0;
+
+--error 4012,0
+rollback;
+
+commit;
+
+sleep 16;
+
+$leader0.clean_net $follower0_1;
+$follower0_1.clean_net $leader0;
+$leader0.clean_net $follower0_2;
+$follower0_2.clean_net $leader0;
+
+rollback;
+
+sleep 3;
+set autocommit=1;
+select /*+ read_consistency(weak)*/* from t1;
+

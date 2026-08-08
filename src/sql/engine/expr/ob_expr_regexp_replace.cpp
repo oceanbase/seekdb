@@ -295,7 +295,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         ObString to_utf;
         ObString text_str;
         if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-          if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, text_str))) {
+          if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, text_str))) {
             LOG_WARN("get text string failed", K(ret));
           }
         } else {
@@ -347,7 +347,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     ObExprStrResAlloc out_alloc(expr, ctx);
     ObString out;
     if (is_no_pattern_to_replace && ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
-      if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, res_replace))) {
+      if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, text, res_replace))) {
         LOG_WARN("get text string failed", K(ret));
       }
     }

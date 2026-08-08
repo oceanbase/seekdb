@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "data_plane/ddl/ob_ddl_seq_generator.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_slice_calc.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -831,6 +832,7 @@ int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
                                           int64_t &slice_idx, ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   uint64_t hash_val = SLICE_CALC_HASH_SEED;
   ObDatum *datum = nullptr;
   bool found_null = false;
@@ -841,6 +843,8 @@ int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: n_keys is invalid", K(ret),
              K(n_keys_), K(hash_dist_exprs_->count()));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; ++i) {
@@ -856,7 +860,8 @@ int ObHashSliceIdCalc::calc_slice_idx(ObEvalCtx &eval_ctx, int64_t slice_size,
       round_robin_idx_++;
       found_null = true;
       break;
-    } else if (OB_FAIL(hash_funcs_->at(i).hash_func_(*datum, hash_val, hash_val))) {
+    } else if (OB_FAIL(
+                   hash_funcs_->at(i).hash_func_(*datum, hash_val, hash_val, access_ctx))) {
       LOG_WARN("failed to do hash", K(ret));
     }
   }
@@ -874,6 +879,7 @@ int ObHashSliceIdCalc::calc_hash_value(ObEvalCtx &eval_ctx, uint64_t &hash_val,
                                               ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   ObDatum *datum = nullptr;
   if (OB_ISNULL(hash_dist_exprs_) || OB_ISNULL(hash_funcs_)) {
     ret = OB_NOT_INIT;
@@ -882,12 +888,15 @@ int ObHashSliceIdCalc::calc_hash_value(ObEvalCtx &eval_ctx, uint64_t &hash_val,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: n_keys is invalid", K(ret),
       K(n_keys_), K(hash_dist_exprs_->count()));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < n_keys_; ++i) {
     const ObExpr* dist_expr = hash_dist_exprs_->at(i);
     if (OB_FAIL(dist_expr->eval(eval_ctx, datum))) {
       LOG_WARN("failed to eval datum", K(ret));
-    } else if (OB_FAIL(hash_funcs_->at(i).hash_func_(*datum, hash_val, hash_val))) {
+    } else if (OB_FAIL(
+                   hash_funcs_->at(i).hash_func_(*datum, hash_val, hash_val, access_ctx))) {
       LOG_WARN("failed to do hash", K(ret));
     }
   }
@@ -916,10 +925,13 @@ int ObHashSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEv
                                          int64_t *&indexes)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   if (n_keys_ > hash_dist_exprs_->count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: n_keys is invalid", K(ret),
       K(n_keys_), K(hash_dist_exprs_->count()));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
     LOG_WARN("setup slice indexes failed", K(ret));
   } else {
@@ -954,7 +966,8 @@ int ObHashSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &, ObEv
                                             skip,
                                             batch_size,
                                             is_batch_seed ? hash_val : &default_seed,
-                                            is_batch_seed);
+                                            is_batch_seed,
+                                            access_ctx);
         for (int64_t i = 0; use_special_null_dist() && i < batch_size; ++i) {
           if (datums[i].is_null()) {
             null_bitmap_->set(i);
@@ -1153,14 +1166,16 @@ bool ObSlaveMapPkeyRangeIdxCalc::Compare::operator()(
   int &ret = ret_;
   if (OB_FAIL(ret)) {
     // already fail
-  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)) {
+  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
+             || OB_ISNULL(access_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(l), K(r));
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cnt; i++) {
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp))) {
+      if (OB_FAIL(
+              sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp, access_ctx_))) {
         LOG_WARN("do cmp failed", K(ret), K(i), K(l), K(r));
       } else if (cmp < 0) {
         less = sort_collations_->at(i).is_ascending_;
@@ -1179,6 +1194,7 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
     int64_t &task_idx)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   PartitionRangeChannelInfo *item = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1189,12 +1205,15 @@ int ObSlaveMapPkeyRangeIdxCalc::get_task_idx(
   } else if (OB_UNLIKELY(sort_key.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(sort_key));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(part_range_map_.get_refactored(tablet_id, item))) {
     LOG_WARN("get partition ranges failed", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(nullptr == item || item->tablet_id_ != tablet_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid range channel map", K(ret), K(tablet_id), KP(item));
   } else {
+    sort_cmp_.set_access_ctx(access_ctx);
     ObPxTabletRange::RangeCut &range_cut = item->range_cut_;
     ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
         range_cut.begin(), range_cut.end(), sort_key, sort_cmp_);
@@ -1414,11 +1433,14 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
                                           ObBitVector *skip)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_FAIL(setup_slice_index(slice_idx_array))) {
     LOG_WARN("set slice index failed", K(ret));
   } else if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected dist exprs", K(ret));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
     slice_idx_array.at(0) = 0;
     if (nullptr != ddl_slice_id_expr_) {
@@ -1439,7 +1461,7 @@ int ObRangeSliceIdCalc::get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs,
       }
     }
     if (OB_SUCC(ret)) {
-      Compare sort_cmp(&sort_cmp_funs_, &sort_collations_);
+      Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx);
       ObPxTabletRange::RangeCut &range_cut = const_cast<ObPxTabletRange::RangeCut &>(range_->range_cut_);
       ObPxTabletRange::RangeCut::iterator found_it = std::lower_bound(
         range_cut.begin(), range_cut.end(), sort_key, sort_cmp);
@@ -1461,9 +1483,12 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
                                               int64_t *&indexes)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   if (OB_ISNULL(dist_exprs_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected dist exprs", K(ret));
+  } else if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(setup_slice_indexes(eval_ctx))) {
     LOG_WARN("setup slice indexes failed", K(ret));
   } else if (OB_ISNULL(range_) || range_->range_cut_.empty()) {
@@ -1479,7 +1504,7 @@ int ObRangeSliceIdCalc::get_slice_idx_batch_inner(const ObIArray<ObExpr*> &,
       }
     }
   } else {
-    Compare sort_cmp(&sort_cmp_funs_, &sort_collations_);
+    Compare sort_cmp(&sort_cmp_funs_, &sort_collations_, access_ctx);
     ObPxTabletRange::DatumKey sort_key;
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
     batch_info_guard.set_batch_size(batch_size);
@@ -1530,14 +1555,16 @@ bool ObRangeSliceIdCalc::Compare::operator()(
   int &ret = ret_;
   if (OB_FAIL(ret)) {
     // already fail
-  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)) {
+  } else if (OB_ISNULL(sort_cmp_funs_) || OB_ISNULL(sort_collations_)
+             || OB_ISNULL(access_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(l), K(r));
   } else {
     int cmp = 0;
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < cnt; i++) {
-      if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp))) {
+      if (OB_FAIL(
+              sort_cmp_funs_->at(i).cmp_func_(l.at(i), r.at(i), cmp, access_ctx_))) {
         LOG_WARN("do cmp failed", K(ret), K(i), K(l), K(r));
       } else if (cmp < 0) {
         less = sort_collations_->at(i).is_ascending_;

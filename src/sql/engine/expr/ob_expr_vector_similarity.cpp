@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_vector_similarity.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "storage/vector_type/ob_vector_norm.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "data_plane/vector/ob_vector_norm.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -206,25 +206,9 @@ int ObExprVectorIPSimilarity::calc_ip_similarity(const ObExpr &expr, ObEvalCtx &
 
 int ObExprVectorSimilarity::calc_similarity_from_distance(const ObExprVectorDistance::ObVecDisType dis_type, const float &distance, float &similarity)
 {
-  int ret = OB_SUCCESS;
-  switch (dis_type) {
-    case ObExprVectorDistance::ObVecDisType::EUCLIDEAN: 
-      // l2_similarity = 1 / (1 + l2_square_distance), ob use l2_distance
-      similarity = 1 / (1 + distance * distance);
-      break;
-      // currently we don't support ip similarity
-    case ObExprVectorDistance::ObVecDisType::DOT:
-      similarity = (1 + distance) / 2;
-      break;
-      // case T_FUN_SYS_NEGATIVE_INNER_PRODUCT: 
-    case ObExprVectorDistance::ObVecDisType::COSINE:
-      // cosine_similarity = (1 + cosine) / 2, ob cosine_distance = 1 - cosine
-      similarity = (2 - distance) / 2;
-      break;
-    default:
-      ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support vector sort expr", K(ret), K(dis_type));
-      break;
+  int ret = share::vector_similarity_from_distance(dis_type, distance, similarity);
+  if (OB_FAIL(ret)) {
+    LOG_WARN("not support vector sort expr", K(ret), K(dis_type));
   }
   return ret;
 }

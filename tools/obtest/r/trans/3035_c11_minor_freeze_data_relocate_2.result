@@ -1,0 +1,25 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+create table t1 (id1 int primary key, id2 int);
+create unique index u_index on t1(id2);
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+set ob_query_timeout=500000000000000;
+set ob_trx_timeout=500000000000000;
+insert into t1 values(1, 1);
+insert into t1 values(2, 2);
+ob1.mysql set ob_global_debug_sync = 'BEFORE_INSERT_ROWS wait_for later timeout 1000000000';
+begin;
+delete from t1;
+insert into t1 values(1, 1);
+ob1.mysql alter system minor freeze;
+ob1.mysql set ob_global_debug_sync = 'NOW signal later';
+commit;
+select * from t1;
+id1	id2
+1	1
+select /*+index(t1 u_index)*/* from t1;
+id1	id2
+1	1

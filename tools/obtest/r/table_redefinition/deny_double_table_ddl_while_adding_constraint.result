@@ -1,0 +1,15 @@
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+ERROR 0A000: The DDL cannot be run concurrently with adding constraint. not supported
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+ERROR 0A000: The DDL cannot be run concurrently with adding constraint. not supported
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS wait_for signal1 execute 10000';
+ERROR 0A000: The DDL cannot be run concurrently with adding constraint. not supported
+$leader_obs.mysql set ob_global_debug_sync = 'CONSTRAINT_SUCCESS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';

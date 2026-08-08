@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "pl/ob_pl_server_cursor.h"
+#include "sql/pl/ob_pl_server_cursor.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase

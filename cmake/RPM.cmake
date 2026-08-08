@@ -49,31 +49,31 @@ set(CPACK_RPM_SPEC_MORE_DEFINE
 set(CPACK_RPM_SERVER_PACKAGE_REQUIRES "libaio, systemd")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh
+              ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh
               @ONLY)
-set(CPACK_RPM_SERVER_PRE_INSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_install.sh)
+set(CPACK_RPM_SERVER_PRE_INSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh
+              ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh
               @ONLY)
-set(CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_install.sh)
+set(CPACK_RPM_SERVER_POST_INSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh
+              ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh
               @ONLY)
-set(CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/pre_uninstall.sh)
+set(CPACK_RPM_SERVER_PRE_UNINSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh.template
-              ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh
+              ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh
               @ONLY)
-set(CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE ${CMAKE_CURRENT_SOURCE_DIR}/tools/systemd/profile/post_uninstall.sh)
+set(CPACK_RPM_SERVER_POST_UNINSTALL_SCRIPT_FILE ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh)
 
 # add the rpm post and pre script
-install(FILES
-  tools/systemd/profile/pre_install.sh
-  tools/systemd/profile/post_install.sh
-  tools/systemd/profile/post_uninstall.sh
-  tools/systemd/profile/pre_uninstall.sh
+install(PROGRAMS
+  ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_install.sh
+  ${SEEKDB_PACKAGE_PROFILE_DIR}/post_install.sh
+  ${SEEKDB_PACKAGE_PROFILE_DIR}/post_uninstall.sh
+  ${SEEKDB_PACKAGE_PROFILE_DIR}/pre_uninstall.sh
   DESTINATION usr/libexec/seekdb/scripts
   COMPONENT server)
 
@@ -89,14 +89,13 @@ execute_process(
   ERROR_QUIET
 )
 
-set(CPACK_FULL_PACKAGE_NAME 
+set(CPACK_FULL_PACKAGE_NAME
   "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_RPM_PACKAGE_RELEASE}${RPM_DIST}.${ARCHITECTURE}.rpm")
 
 message(STATUS "Cpack Components:${CPACK_COMPONENTS_ALL}")
 
-# refs https://stackoverflow.com/questions/48711342/what-does-the-cpack-preinstall-target-do
-# see https://cmake.org/cmake/help/latest/module/CPack.html
-set(CPACK_CMAKE_GENERATOR "Ninja") # this disables a rebuild i.e. "CPack: - Run preinstall target for..." which seems to be only done for "Unix Makefiles"
+# Avoid CPack's Makefile preinstall rebuild; the package target owns the build.
+set(CPACK_CMAKE_GENERATOR "Ninja")
 
 # install cpack to make everything work
 include(CPack)

@@ -21,7 +21,7 @@
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/scn.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 
 namespace oceanbase
 {

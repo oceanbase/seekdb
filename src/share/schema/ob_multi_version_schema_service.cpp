@@ -16,9 +16,13 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_multi_version_schema_service.h"
-#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_schema_publish_signal.h"
 #include "share/rc/ob_context.h"  // CREATE_WITH_TEMP_ENTITY_P/RESOURCE_OWNER(previously hidden behind a transitive include)
 #include "share/ob_schema_status_proxy.h"  // previously hidden behind the ob_server.h include chain,make the dependency explicit
+#include "share/ob_rpc_struct.h"
+#include "share/ob_share_util.h"
+#include "share/config/ob_server_config.h"
 #include "lib/atomic/atomic128.h"  // types::uint128_t/LOAD128/CAS128, previously hidden behind the ob_service.h include chain, make the dependency explicit
 #include "lib/stat/ob_diagnostic_info_guard.h"  // ObASHSetInnerSqlWaitGuard, previously hidden behind the same include chain, make the dependency explicit
 #ifdef __APPLE__
@@ -30,7 +34,6 @@ namespace oceanbase
 using namespace common;
 using namespace common::hash;
 using namespace oceanbase::sql;
-using namespace oceanbase::observer;
 
 namespace share
 {
@@ -38,8 +41,6 @@ namespace schema
 {
 // Defined in observer/omt/ob_server_runtime_controller.cpp from the schema-slot configuration.
 int64_t get_max_schema_slot_num_for_add_schema(const int64_t default_val);
-
-int (*g_submit_async_refresh_schema_task_fn)(const int64_t schema_version) = nullptr;
 
 
 const char *ObMultiVersionSchemaService::print_refresh_schema_mode(const RefreshSchemaMode mode)
@@ -774,14 +775,15 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard_with_version_in_inner_
   int ret = OB_SUCCESS;
   int64_t version_in_inner_table = OB_INVALID_VERSION;
   ObRefreshSchemaStatus schema_status;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
+  common::ObMySQLProxy *sql_proxy = get_sql_proxy();
+  if (OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy is null", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else {
     
-    if (OB_FAIL(get_schema_version_in_inner_table(*GCTX.sql_proxy_, schema_status, version_in_inner_table))) {
+    if (OB_FAIL(get_schema_version_in_inner_table(*sql_proxy, schema_status, version_in_inner_table))) {
       LOG_WARN("fail to get latest schema version in inner table", K(ret));
     } else if (OB_FAIL(get_runtime_schema_guard(schema_guard, version_in_inner_table))) {
       if (OB_SCHEMA_EAGAIN == ret) {
@@ -1122,6 +1124,8 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
 
 ObMultiVersionSchemaService::ObMultiVersionSchemaService() :
     init_(false),
+    schema_refresh_scheduler_(NULL),
+    schema_publish_signal_(NULL),
     schema_refresh_mutex_(common::ObLatchIds::REFRESH_SCHEMA_LOCK),
     schema_cache_(),
     schema_mgr_cache_(),
@@ -1152,6 +1156,10 @@ int ObMultiVersionSchemaService::destroy()
   int ret = OB_SUCCESS;
   ddl_trans_controller_.destroy();
   schema_cache_.destroy();
+  schema_service_ = NULL;
+  schema_refresh_scheduler_ = NULL;
+  schema_publish_signal_ = NULL;
+  init_ = false;
   return ret;
 }
 
@@ -1165,14 +1173,24 @@ ObMultiVersionSchemaService &ObMultiVersionSchemaService::get_instance()
 int ObMultiVersionSchemaService::init(
     ObMySQLProxy *sql_proxy,
     const ObCommonConfig *config,
-    const int64_t init_version_count)
+    ObSchemaStatusProxy &schema_status_proxy,
+    const ObServiceStatus &service_status,
+    bool &in_bootstrap,
+    const int64_t init_version_count,
+    ObSchemaService &schema_backend,
+    ObISchemaRefreshScheduler &schema_refresh_scheduler,
+    ObSchemaPublishSignal &schema_publish_signal)
 {
   int ret = OB_SUCCESS;
 
   if (true == init_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init schema manager twice, ", K(ret));
-  } else if (OB_FAIL(ObServerSchemaService::init(sql_proxy, config))) {
+  } else if (FALSE_IT(schema_refresh_scheduler_ = &schema_refresh_scheduler)) {
+  } else if (FALSE_IT(schema_publish_signal_ = &schema_publish_signal)) {
+  } else if (OB_FAIL(ObServerSchemaService::init(
+      sql_proxy, config, schema_status_proxy, service_status,
+      in_bootstrap, schema_backend))) {
     LOG_WARN("failed to init base class ObServerSchemaService,", K(ret));
   } else if (OB_FAIL(schema_fetcher_.init(schema_service_, sql_proxy))) {
     LOG_WARN("fail to init schema cache", K(ret));
@@ -1202,9 +1220,13 @@ int ObMultiVersionSchemaService::init(
 bool ObMultiVersionSchemaService::check_inner_stat() const
 {
   bool ret = true;
-  if (!ObServerSchemaService::check_inner_stat() || !init_) {
+  if (!ObServerSchemaService::check_inner_stat()
+      || OB_ISNULL(schema_refresh_scheduler_)
+      || OB_ISNULL(schema_publish_signal_)
+      || !init_) {
     ret = false;
-    LOG_WARN("inner stat error", K(init_));
+    LOG_WARN("inner stat error", K(init_), KP_(schema_refresh_scheduler),
+             KP_(schema_publish_signal));
   }
   return ret;
 }
@@ -1709,11 +1731,11 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
             }
           }
           if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(g_submit_async_refresh_schema_task_fn)) {
+          } else if (OB_ISNULL(schema_refresh_scheduler_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("observice is null", K(ret));
-          // uses function-pointer indirection(defined in observer/ob_service.cpp), share must not depend upward on observer
-          } else if (OB_FAIL(g_submit_async_refresh_schema_task_fn(schema_version))) {
+            LOG_WARN("schema refresh scheduler is null", K(ret));
+          } else if (OB_FAIL(schema_refresh_scheduler_->schedule_refresh_at_least(
+              schema_version))) {
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
               ret = OB_SUCCESS;
             } else {
@@ -1883,8 +1905,8 @@ int ObMultiVersionSchemaService::publish_schema()
   if (OB_FAIL(add_schema(force_add))) {
     LOG_WARN("fail to add schema", K(ret));
   }
-  if (OB_SUCCESS == check_server_runtime_ready()) {
-    share::server_runtime()->on_schema_publish();
+  if (OB_NOT_NULL(schema_publish_signal_)) {
+    schema_publish_signal_->notify_schema_published();
   }
   return ret;
 }
@@ -2682,7 +2704,7 @@ int ObMultiVersionSchemaService::get_baseline_schema_version(
     if (OB_INVALID_VERSION == baseline_schema_version && auto_update) {
       ObISQLClient &sql_client = *sql_proxy_;
       ObRefreshSchemaStatus schema_status;
-      ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+      ObSchemaStatusProxy *schema_status_proxy = get_schema_status_proxy();
       if (OB_ISNULL(schema_status_proxy)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status_proxy is null", K(ret));
@@ -2817,8 +2839,86 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
   return ret;
 }
 
-// cal purge recyclebin need timeout
-// moved definition to rootserver/ob_ddl_operator.cpp(real upper-layer symbol user, previously hidden by a unity-build dependency)
+int ObMultiVersionSchemaService::cal_purge_need_timeout(
+    const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
+    int64_t &cal_timeout)
+{
+  int ret = OB_SUCCESS;
+  int64_t tmp_timeout = 0;
+  int64_t total_purge_count = 0;
+  ObArray<ObRecycleObject> recycle_objs;
+  const int64_t purge_num = purge_recyclebin_arg.purge_num_;
+  const int64_t expire_time = purge_recyclebin_arg.expire_time_;
+
+  if (OB_ISNULL(schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema service is NULL", KR(ret));
+  } else if (OB_ISNULL(sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql proxy is NULL", KR(ret));
+  } else if (OB_FAIL(schema_service_->fetch_expire_recycle_objects(
+      expire_time, *sql_proxy_, recycle_objs))) {
+    LOG_WARN("fail to fetch expire recycle objects",
+        KR(ret), K(purge_recyclebin_arg));
+  } else {
+    for (int64_t i = 0;
+         OB_SUCC(ret) && i < recycle_objs.count()
+             && total_purge_count < purge_num;
+         ++i) {
+      const ObRecycleObject &recycle_obj = recycle_objs.at(i);
+      switch (recycle_obj.get_type()) {
+        case ObRecycleObject::VIEW:
+        case ObRecycleObject::TABLE: {
+          int64_t cal_table_timeout = 0;
+          const uint64_t table_id = recycle_obj.get_table_id();
+          if (OB_FAIL(cal_purge_table_timeout_(
+              table_id, cal_table_timeout, total_purge_count))) {
+            LOG_WARN("fail to cal purge table timeout", KR(ret), K(table_id));
+          } else {
+            tmp_timeout += cal_table_timeout;
+          }
+          break;
+        }
+        case ObRecycleObject::DATABASE: {
+          int64_t cal_database_timeout = 0;
+          const int64_t database_id = recycle_obj.get_database_id();
+          if (OB_FAIL(cal_purge_database_timeout_(
+              database_id, cal_database_timeout, total_purge_count))) {
+            LOG_WARN("fail to cal purge database timeout", KR(ret));
+          } else {
+            tmp_timeout += cal_database_timeout;
+          }
+          break;
+        }
+        case ObRecycleObject::TRIGGER:
+        case ObRecycleObject::INDEX:
+        case ObRecycleObject::AUX_LOB_META:
+        case ObRecycleObject::AUX_LOB_PIECE:
+        case ObRecycleObject::RESERVED_TYPE_5:
+          break;
+        default:
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unknown recycle object type", K(recycle_obj));
+          break;
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    int64_t high_bound_timeout = 0;
+    const int64_t low_bound_timeout = 10 * GCONF.rpc_timeout;
+    if (0 == total_purge_count) {
+      cal_timeout = 0;
+    } else if (OB_FAIL(ObShareUtil::get_ctx_timeout(
+        GCONF._ob_ddl_timeout, high_bound_timeout))) {
+      LOG_WARN("fail to set timeout", KR(ret));
+    } else {
+      tmp_timeout = std::max(low_bound_timeout, tmp_timeout);
+      cal_timeout = std::min(high_bound_timeout, tmp_timeout);
+    }
+  }
+  return ret;
+}
 
 int ObMultiVersionSchemaService::cal_purge_table_timeout_(
     const uint64_t &table_id,

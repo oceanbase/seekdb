@@ -96,11 +96,13 @@ public:
                         int64_t num_distinct,
                         int64_t pop_count,
                         int64_t pop_freq,
-                        const ObObjMeta &obj_meta);
+                        const ObObjMeta &obj_meta,
+                        const ObDatumAccessContext *datum_access_ctx);
   static int build_prefix_str_datum_for_lob(ObIAllocator &allocator,
                                             const ObObjMeta &obj_meta,
                                             const ObDatum &old_datum,
-                                            ObDatum &new_datum);
+                                            ObDatum &new_datum,
+                                            const ObDatumAccessContext *datum_access_ctx);
   TO_STRING_KV(K_(total_count),
                K_(num_distinct),
                K_(pop_count),

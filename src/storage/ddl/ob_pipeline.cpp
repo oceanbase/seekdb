@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "data_plane/direct_load/ob_table_load_row_array_lifecycle.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_pipeline.h"

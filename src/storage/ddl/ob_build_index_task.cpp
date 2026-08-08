@@ -15,14 +15,16 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "ob_build_index_task.h"
-#include "share/rc/ob_module_provider.h"
-#include "rootserver/ob_local_management_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_error_message_table_operator.h"
+#include "share/ob_ddl_task_executor.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "share/ob_ddl_sim_point.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -32,7 +34,6 @@ using namespace oceanbase::blocksstable;
 using namespace oceanbase::compaction;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
-using namespace oceanbase::observer;
 using namespace oceanbase::omt;
 using namespace oceanbase::palf;
 
@@ -142,7 +143,7 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
       ObArray<bool> need_reshape;
       ObLS *ls = nullptr;
 
-      if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
         LOG_WARN("fail to get log stream", K(ret));
       } else if (OB_FAIL(ls->get_tablet_svr()->get_read_tables(param_->tablet_id_,
                                                                                ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
@@ -440,7 +441,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
   } else {
     SERVER_MODULE_SCOPE {
       ObLS *ls = nullptr;
-      ObLSService *ls_service = share::g_mp->ls_service();
+      ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
       if (OB_ISNULL(ls_service)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ls service is null", K(ret));
@@ -449,7 +450,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
       } else if (OB_ISNULL(ls)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("local log stream is null", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param_->tablet_id_, tablet_handle_))) {
+      } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, param_->tablet_id_, tablet_handle_))) {
         LOG_WARN("fail to get tablet", K(ret), K(param_->tablet_id_), K(tablet_handle_));
       } else if (param_->index_schema_->is_fts_index() || param_->index_schema_->is_vec_index()) {
         STORAGE_LOG(INFO, "do not need to check unique for domain index", "index_id", param_->index_schema_->get_table_id());
@@ -512,7 +513,7 @@ int ObUniqueIndexChecker::wait_trans_end(ObIDag *dag)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObUniqueIndexChecker has not been inited", K(ret));
@@ -854,7 +855,7 @@ int ObSimpleUniqueCheckingTask::process()
       "snapshot_version", dag->get_snapshot_version(),
       "tablet_id", param_->tablet_id_);
   }
-  LOG_INFO("simple unique check task process.", K(ret), "ddl_event_info", ObDDLEventInfo(), KPC(dag), K(task_id_));
+  LOG_INFO("simple unique check task process.", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), KPC(dag), K(task_id_));
   return ret;
 }
 
@@ -961,7 +962,12 @@ int ObUniqueCheckingMergeTask::process()
       uint64_t data_format_version = 0;
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
-      if (OB_FAIL(ObDDLUtil::get_data_information(param_->task_id_, data_format_version, snapshot_version, unused_task_status))) {
+      if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("sql proxy is not initialized", K(ret), K(param_->task_id_));
+      } else if (OB_FAIL(ObDDLUtil::get_data_information(
+                     *::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>(), param_->task_id_,
+                     data_format_version, snapshot_version, unused_task_status))) {
         LOG_WARN("get ddl data format version failed", K(ret));
       } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *GCTX.sql_proxy_))) {
         LOG_WARN("fail to update checksum", K(ret));
@@ -1005,7 +1011,7 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
     }
 #endif
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.local_management_service_->calc_column_checksum_repsonse(arg))) {
+  } else if (OB_FAIL(data_plane::report_column_checksum_response(arg))) {
     STORAGE_LOG(WARN, "fail to check unique index response", K(ret), K(arg));
   } else {
     STORAGE_LOG(INFO, "send column checksum response", K(arg));
@@ -1048,7 +1054,7 @@ int ObUniqueCheckingParam::init(
         K(index_table_id), K(schema_version), K(task_id), K(execution_id), K(snapshot_version));
   } else {
     SERVER_MODULE_SCOPE {
-      if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+      if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get schema service failed", K(ret));
       } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard_, schema_version))) {
@@ -1088,7 +1094,7 @@ int ObUniqueCheckingParam::prepare_task_ranges()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_task_ranges(task_id_, tablet_id_, is_scan_index_ ? index_schema_->get_tablet_size()
+  } else if (OB_FAIL(ObDDLStorageUtil::get_task_ranges(task_id_, tablet_id_, is_scan_index_ ? index_schema_->get_tablet_size()
                                                 : data_table_schema_->get_tablet_size(), user_parallelism_, allocator_, ranges_))) {
     LOG_WARN("get_task_ranges failed", K(ret), KPC(this));
   } else {

@@ -1,0 +1,81 @@
+ob1=OBI(cluster=2:2,proxy_num=0);
+ob1.z1.obs1.set status=disable;
+ob1.reboot;
+set global time_zone='Asia/Shanghai';
+set session time_zone='Asia/Shanghai';
+create table t1(c1 int primary key, c2 timestamp);
+insert into t1 values(1, '2017-11-23 00:00:00');
+insert into t1 values(2, '2017-11-23 12:00:00');
+ob1.z1.obs1.set status=enable;
+ob1.z1.obs1.start;
+ob1.z1.obs1.add;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+show session variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+show global variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+select * from t1;
+c1	c2
+1	2017-11-23 00:00:00
+2	2017-11-23 12:00:00
+set session time_zone='America/Aruba';
+select * from t1;
+c1	c2
+1	2017-11-22 12:00:00
+2	2017-11-23 00:00:00
+ob1.z2.obs1.stop;
+ob1.z2.obs1.nstart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+show session variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+show global variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+select * from t1;
+c1	c2
+1	2017-11-23 00:00:00
+2	2017-11-23 12:00:00
+set session time_zone='America/Aruba';
+select * from t1;
+c1	c2
+1	2017-11-22 12:00:00
+2	2017-11-23 00:00:00
+ob1.restart;
+ob1.check_until_timeout select count(1) cnt from oceanbase.__all_server where status='active' and start_service_time>0,4,120;
+show session variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+show global variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+select * from t1;
+c1	c2
+1	2017-11-23 00:00:00
+2	2017-11-23 12:00:00
+set session time_zone='America/Aruba';
+select * from t1;
+c1	c2
+1	2017-11-22 12:00:00
+2	2017-11-23 00:00:00
+ob1.mysql alter tenant sys set primary_zone='z2';
+ob1.z2.obs0.switch_rs;
+ob1.check_until_timeout select count(1) from __all_virtual_core_meta_table where role=1 and zone='z2',1,120;
+ob1.check_until_timeout select count(1) from __all_virtual_server_stat,4,120;
+show session variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+show global variables like 'time_zone';
+Variable_name	Value
+time_zone	Asia/Shanghai
+select * from t1;
+c1	c2
+1	2017-11-23 00:00:00
+2	2017-11-23 12:00:00
+set session time_zone='America/Aruba';
+select * from t1;
+c1	c2
+1	2017-11-22 12:00:00
+2	2017-11-23 00:00:00

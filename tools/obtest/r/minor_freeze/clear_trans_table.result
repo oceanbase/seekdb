@@ -1,0 +1,11 @@
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.z2.obs0.switch_partition obtest:test:t1;
+ob1.z2.obs0.check_leader obtest:test:t1;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_trans_stat, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 200;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_trans_stat, 0, 100;

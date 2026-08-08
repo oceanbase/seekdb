@@ -15,7 +15,7 @@
  */
 
 #include "ob_tablet_pointer_map.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
@@ -450,7 +450,7 @@ int ObTabletPointerMap::read_from_disk(
       real_load_addr.set_size(ObTabletCommon::MAX_TABLET_FIRST_LEVEL_META_SIZE);
     }
   }
-  if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(real_load_addr, allocator, r_buf, r_len))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(real_load_addr, allocator, r_buf, r_len))) {
     if (OB_SEARCH_NOT_FOUND != ret) {
       STORAGE_LOG(WARN, "fail to read from addr", K(ret), K(real_load_addr), K(ls_epoch));
     }
@@ -566,7 +566,7 @@ int ObTabletPointerMap::get_meta_obj_with_external_memory(
         if (CLICK_FAIL(load_meta_obj(key, t_ptr, allocator, disk_addr, t))) {
           STORAGE_LOG(WARN, "load obj from disk fail", K(ret), K(key), KPC(t_ptr), K(lbt()));
         } else {
-          ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+          ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
           ObTabletPointerHandle tmp_ptr_hdl(*this);
           common::ObBucketHashWLockGuard lock_guard(ResourceMap::bucket_lock_, hash_val);
           // some other thread finish loading

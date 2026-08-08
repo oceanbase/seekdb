@@ -1117,10 +1117,10 @@ private:
  * @param[out] has_null_cell Set to true if any column in the row is NULL
  * @return Calculated hash value, this value is invalid if the output has_null_cell is true
  */
-  static int llc_calc_hash_value(const ObChunkDatumStore::StoredRow &stored_row,
-                                 const ObIArray<ObExpr *> &param_exprs,
-                                 bool &has_null_cell,
-                                 uint64_t &hash_value);
+  int llc_calc_hash_value(const ObChunkDatumStore::StoredRow &stored_row,
+                          const ObIArray<ObExpr *> &param_exprs,
+                          bool &has_null_cell,
+                          uint64_t &hash_value);
   static int llc_add(ObDatum &result, const ObDatum &new_value);
   void set_expr_datum_null(ObExpr *expr);
 
@@ -1269,6 +1269,7 @@ private:
   bool has_extra_;
 
   ObEvalCtx &eval_ctx_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   common::ObArenaAllocator aggr_alloc_;
   int64_t cur_batch_group_idx_;
   char *cur_batch_group_buf_;

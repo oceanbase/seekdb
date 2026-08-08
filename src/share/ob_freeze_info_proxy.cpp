@@ -25,7 +25,6 @@ namespace oceanbase
 {
 using namespace common;
 using namespace common::sqlclient;
-using namespace storage;
 using namespace share;
 using namespace palf;
 namespace share

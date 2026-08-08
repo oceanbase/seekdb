@@ -16,25 +16,5 @@
 
 #pragma once
 
-#include "pl/ob_pl.h"
-
-namespace oceanbase
-{
-namespace pl
-{
-
-class ObDBMSHybridVectorMySql
-{
-public:
-  ObDBMSHybridVectorMySql() {}
-  virtual ~ObDBMSHybridVectorMySql() {}
-
-#define DECLARE_FUNC(func) \
-  static int func(ObPLExecCtx &ctx, sql::ParamStore &params, common::ObObj &result);
-  DECLARE_FUNC(search);
-  DECLARE_FUNC(get_sql);
-#undef DECLARE_FUNC
-};
-
-} // namespace pl
-} // namespace oceanbase
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/sys_package/ob_dbms_hybrid_vector_mysql.h"

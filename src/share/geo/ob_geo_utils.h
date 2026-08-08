@@ -27,7 +27,6 @@
 #include "common/number/ob_number_v2.h"
 #include "common/object/ob_object.h"
 #include "share/geo/ob_geo_to_tree_visitor.h"
-#include "objit/common/ob_item_type.h"
 
 namespace oceanbase
 {
@@ -256,8 +255,8 @@ public:
   static bool is_point(const ObGeometry& geo) { return geo.type() == ObGeoType::POINT || geo.type() == ObGeoType::MULTIPOINT;}
   static bool is_line(const ObGeometry& geo) { return geo.type() == ObGeoType::LINESTRING || geo.type() == ObGeoType::MULTILINESTRING;}
   static bool is_polygon(const ObGeometry& geo) { return geo.type() == ObGeoType::POLYGON || geo.type() == ObGeoType::MULTIPOLYGON;}
-  static bool use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObItemType func_type);
-  static int get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObItemType func_type, bool& result);
+  static bool use_point_polygon_short_circuit(const ObGeometry& geo1, const ObGeometry& geo2, ObGeoPredicate predicate);
+  static int get_point_polygon_res(ObGeometry *geo1, ObGeometry *geo2, ObGeoPredicate predicate, bool& result);
   static bool need_get_srs(const uint32_t srid);
   template<typename GcTreeType>
   static int remove_duplicate_multi_geo(ObGeometry *&geo, lib::MemoryContext &mem_ctx, const ObSrsItem *srs);

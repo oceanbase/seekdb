@@ -28,7 +28,7 @@ class ObMPProcessInfo : public ObMPQuery
 {
 public:
   //static const obmysql::ObMySQLCmd COM = obmysql::COM_PROCESS_INFO;
-  explicit ObMPProcessInfo(const ObGlobalContext &gctx);
+  explicit ObMPProcessInfo(const share::ObGlobalContext &gctx);
   virtual ~ObMPProcessInfo();
 protected:
   int deserialize() override;

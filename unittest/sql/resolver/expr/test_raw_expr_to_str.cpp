@@ -50,7 +50,7 @@ public:
   virtual ~TestRawExprToStr() {}
   virtual void SetUp() {}
   virtual void TearDown() {}
-private:
+public:
   // disallow copy and assign
   TestRawExprToStr(const TestRawExprToStr &other);
   TestRawExprToStr& operator=(const TestRawExprToStr &ohter);
@@ -121,13 +121,4 @@ TEST_F(TestRawExprToStr, basic)
   _OB_LOG(INFO, "%.*s", static_cast<int32_t>(pos), buf);
 }
 
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -f ./test_raw_expr_to_str.log*");
-  OB_LOGGER.set_file_name("test_raw_expr_to_str.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
 }

@@ -22,11 +22,9 @@
 #include "sql/das/ob_das_ir_define.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "lib/hash/ob_hashset.h"
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
-#include "storage/vector_type/ob_vector_common_util.h"
-#include "storage/retrieval/ob_spiv_dim_iter.h"
-#include "storage/retrieval/ob_spiv_daat_iter.h"
-#include "storage/retrieval/ob_block_max_iter.h"
+#include "query/vector/ob_vector_query_result.h"
+#include "data_plane/retrieval/ob_sparse_retrieval.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -125,7 +123,9 @@ public:
       set_datum_func_(nullptr),
       docid_lt_func_(nullptr), 
       docid_gt_func_(nullptr),
-      spiv_iter_(nullptr),
+      retrieval_sources_(),
+      block_sources_(),
+      retrieval_(),
       is_pre_processed_(false)
       {
         result_docids_.set_attr(ObMemAttr("SPIVResultDocid"));
@@ -225,14 +225,13 @@ private:
   inline static bool docid_gt_string(const ObDocIdExt &left, const ObDocIdExt &right) {
     return left.get_datum().get_string() > right.get_datum().get_string();
   }
-  int init_dim_iter_param(ObSPIVDimIterParam &dim_param, int64_t idx);
   int create_dim_iters();
-  int init_spiv_merge_param(ObSPIVDaaTParam &iter_param);
   int create_spiv_merge_iter();
+  int project_retrieval_matches(int64_t &count, int64_t capacity);
+  void destroy_unowned_retrieval_ports();
   int pre_process(bool is_vectorized);
   int project_brute_result(int64_t &count, int64_t capacity);
   int build_inv_scan_range(ObNewRange &range, uint64_t table_id, uint32_t dim);
-  int init_block_max_iter_param();
   int set_inv_scan_range_key();
 
 private:
@@ -299,13 +298,12 @@ private:
   bool (*docid_lt_func_)(const ObDocIdExt &, const ObDocIdExt &);
   bool (*docid_gt_func_)(const ObDocIdExt &, const ObDocIdExt &);
   ObSEArray<ObDASScanIter *, OB_DEFAULT_SPIV_SCAN_ITER_CNT> inv_dim_scan_iters_;
-  ObSEArray<ObISRDaaTDimIter *, OB_DEFAULT_SPIV_SCAN_ITER_CNT> dim_iters_;
-  ObISparseRetrievalMergeIter* spiv_iter_;
+  ObSEArray<data_plane::ObISparseRetrievalSource *, OB_DEFAULT_SPIV_SCAN_ITER_CNT> retrieval_sources_;
+  ObSEArray<data_plane::ObISparseRetrievalBlockSource *, OB_DEFAULT_SPIV_SCAN_ITER_CNT> block_sources_;
+  data_plane::ObSparseRetrievalHandle retrieval_;
   common::ObTabletID dim_docid_value_tablet_id_;
-  ObSparseRetrievalMergeParam base_param_;
   ObFixedArray<ObTableScanParam *, ObIAllocator> inv_scan_params_;
   ObFixedArray<ObTableScanParam *, ObIAllocator> block_max_scan_params_;
-  ObBlockMaxScoreIterParam block_max_iter_param_;
   bool is_pre_processed_;
 };
 

@@ -31,7 +31,7 @@ void ObSqlTaskHandler::reset()
   sql_engine_ = NULL;
 }
 
-int ObSqlTaskHandler::init(observer::ObSrvTask *task, ObSql *sql_engine)
+int ObSqlTaskHandler::init(rpc::ObSrvTask *task, ObSql *sql_engine)
 {
   int ret = OB_SUCCESS;
   if (NULL == task || NULL == sql_engine) {

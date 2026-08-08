@@ -15,15 +15,15 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_basic_tablet_merge_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"
-#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
+#include "data_plane/report/ob_tablet_report.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tablet/ob_mds_scan_param_helper.h"
@@ -579,7 +579,7 @@ bool ObBasicTabletMergeCtx::is_valid() const
 int ObBasicTabletMergeCtx::get_ls_and_tablet()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(static_param_.ls_))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(static_param_.ls_))) {
     LOG_WARN("failed to get single log stream", K(ret));
   } else if (static_param_.ls_->is_offline()) {
     ret = OB_CANCELED;
@@ -823,7 +823,7 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
   }
 #undef ADD_COMMENT
   ObInfoParamBuffer info_allocator;
-  if (OB_SUCCESS == share::g_mp->dag_warning_history_manager()->get_with_param(hash, warning_info, info_allocator)) {
+  if (OB_SUCCESS == ::oceanbase::share::server_service<::oceanbase::share::ObDagWarningHistoryManager>()->get_with_param(hash, warning_info, info_allocator)) {
     diagnose_info.dag_ret_ = warning_info.dag_ret_;
     diagnose_info.error_trace_ = warning_info.task_id_;
     diagnose_info.retry_cnt_ = warning_info.retry_cnt_;
@@ -834,15 +834,15 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
 
   ObScheduleSuspectInfo ret_info;
   info_allocator.reuse();
-  if (OB_SUCCESS == share::g_mp->schedule_suspect_info_mgr()->get_with_param(hash, ret_info, info_allocator)) {
+  if (OB_SUCCESS == ::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->get_with_param(hash, ret_info, info_allocator)) {
     diagnose_info.suspect_add_time_ = ret_info.add_time_;
     merge_history.info_param_ = ret_info.info_param_;
-    if (OB_TMP_FAIL(share::g_mp->schedule_suspect_info_mgr()->delete_info(hash))) {
+    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->delete_info(hash))) {
       LOG_WARN_RET(tmp_ret, "failed to delete old suspect info", K(diagnose_info));
     }
   }
 
-  if (OB_TMP_FAIL(share::g_mp->sstable_merge_info_mgr()->add_sstable_merge_info(merge_history))) {
+  if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->add_sstable_merge_info(merge_history))) {
     LOG_ERROR_RET(tmp_ret, "failed to add sstable merge info", K(merge_history));
   }
   merge_history.info_param_ = nullptr;
@@ -850,7 +850,7 @@ void ObBasicTabletMergeCtx::add_sstable_merge_info(
   if (!static_info.is_fake_) {
     int64_t cost_time = running_info.merge_finish_time_ - time_guard.add_time_;
     if (nullptr != merge_dag_) {
-      share::g_mp->compaction_suggestion_mgr()->analyze_merge_info(merge_history, merge_dag_->get_type(), cost_time);
+      ::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionSuggestionMgr>()->analyze_merge_info(merge_history, merge_dag_->get_type(), cost_time);
     }
   }
 }
@@ -913,12 +913,12 @@ void ObBasicTabletMergeCtx::after_update_tablet_for_major()
   int tmp_ret = OB_SUCCESS;
   if (is_major_merge_type(get_merge_type())) {
     const ObTabletID &tablet_id = get_tablet_id();
-    if (OB_TMP_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(tablet_id, true/*need_diagnose*/))) {
+    if (OB_TMP_FAIL(data_plane::submit_tablet_update(tablet_id, true/*need_diagnose*/))) {
       LOG_ERROR_RET(tmp_ret, "failed to submit tablet update task to report", K(tablet_id));
     } else if (OB_TMP_FAIL(get_ls()->get_tablet_svr()->update_tablet_report_status(tablet_id))) {
       LOG_ERROR_RET(tmp_ret, "failed to update tablet report status", K(tablet_id));
     }
-    if (OB_TMP_FAIL(share::g_mp->medium_checker()->add_tablet(tablet_id, get_merge_version()))) {
+    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObMediumChecker>()->add_tablet(tablet_id, get_merge_version()))) {
       LOG_WARN_RET(tmp_ret, "failed to add tablet for check", K(tablet_id),
           "merge_version", get_merge_version());
     }
@@ -1301,7 +1301,7 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
     LOG_WARN("get unexpected static param", K(ret), K(static_param_), KPC(static_param_.schema_));
   } else if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
     LOG_WARN("failed to alloc storage schema", K(ret));
-  } else if (OB_ISNULL(schema_service = share::g_mp->schema_runtime_service()->get_schema_service())) {
+  } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema service from server module provider", K(ret));
   } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))){

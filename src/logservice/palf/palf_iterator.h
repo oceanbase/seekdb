@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_PALF_ITERATOR_
 #include "log_iterator_impl.h"           // LogIteratorImpl
 #include "log_iterator_storage.h"        // LogIteratorStorage
-#include "log_define.h"
+#include "share/log/palf/log_define.h"
 #include "lib/profile/ob_trace_id.h"  // ObCurTraceId(self-contained include fix)
 namespace oceanbase
 {

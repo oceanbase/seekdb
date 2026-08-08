@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
@@ -44,10 +44,6 @@ using namespace oceanbase::obcall;
 #define GET_OTHER_TSI_ADDR(var_name, addr) \
 const int64_t var_name##_offset = ((int64_t)addr - (int64_t)pthread_self()); \
 decltype(*addr) var_name = *(decltype(addr))(thread_base + var_name##_offset);
-
-#define EXPAND_INTERVAL (1 * 1000 * 1000)
-#define SHRINK_INTERVAL (1 * 1000 * 1000)
-#define SLEEP_INTERVAL (60 * 1000 * 1000)
 
 extern "C" {
 int ob_pthread_create(void **ptr, void *(*start_routine) (void *), void *arg);
@@ -806,7 +802,7 @@ void ObServerRuntime::periodically_check()
 void ObServerRuntime::check_dtl()
 {
   int ret = OB_SUCCESS;
-  auto dfc_manager = share::g_mp->dfc_manager();
+  auto dfc_manager = ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDfc>();
   if (OB_NOT_NULL(dfc_manager)) {
     dfc_manager->check_dtl();
   } else {
@@ -820,6 +816,7 @@ void ObServerRuntime::check_parallel_servers_target()
   int ret = OB_SUCCESS;
   int64_t val = 0;
   if (OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
+              *GCTX.schema_service_,
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
     LOG_WARN("fail read runtime variable", K(id()), K(ret));
@@ -831,7 +828,7 @@ void ObServerRuntime::check_parallel_servers_target()
 void ObServerRuntime::check_px_thread_recycle()
 {
   int ret = OB_SUCCESS;
-  auto px_pools = share::g_mp->px_pools();
+  auto px_pools = ::oceanbase::share::server_service<::oceanbase::omt::ObPxPools>();
   if (OB_NOT_NULL(px_pools)) {
     px_pools->thread_recycle();
   } else {
@@ -842,9 +839,5 @@ void ObServerRuntime::check_px_thread_recycle()
 
 void ObServerRuntime::on_schema_publish()
 {
-  int ret = OB_SUCCESS;
-  ObChangeStreamMgr *mgr = ::oceanbase::share::g_mp->change_stream_mgr();
-  if (OB_NOT_NULL(mgr) && mgr->is_inited()) {
-    mgr->get_fetcher().notify_schema_changed();
-  }
+  // Schema publication now notifies the shared publish signal directly.
 }

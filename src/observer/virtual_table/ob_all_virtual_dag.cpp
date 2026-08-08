@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_all_virtual_dag.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -43,10 +43,10 @@ int ObDagInfoIterator<T>::open()
   if (OB_SUCC(ret)) {
     SERVER_MODULE_SCOPE {
       if (typeid(T) == typeid(share::ObDagInfo)) {
-        if (OB_FAIL(share::g_mp->dag_scheduler()->get_all_dag_info(allocator_, dag_infos_))) {
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_all_dag_info(allocator_, dag_infos_))) {
           STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
         }
-      } else if (OB_FAIL(share::g_mp->dag_scheduler()->get_all_dag_scheduler_info(allocator_, dag_infos_))) {
+      } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_all_dag_scheduler_info(allocator_, dag_infos_))) {
         STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
       }
     } else {

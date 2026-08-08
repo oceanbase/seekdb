@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX CLOG
 #include "ob_server_log_block_mgr.h"
-#include "share/rc/ob_module_provider.h"
 #include <regex>
 #ifdef __APPLE__
 #include <fcntl.h>                              // For fcntl, F_PREALLOCATE on macOS
@@ -63,8 +62,6 @@ static int fallocate(int fd, int, int64_t, int64_t len) {
   return ::_chsize_s(fd, len);
 }
 #endif
-#include "observer/ob_server.h"                 // OBSERVER
-#include "observer/ob_server_utils.h"           // get_log_disk_info_in_config
 #include "logservice/ob_log_service.h"          // ObLogService
 
 #define BYTE_TO_MB(byte) (byte+1024*1024-1)/1024/1024
@@ -104,7 +101,9 @@ int ObServerLogBlockMgr::check_clog_directory_is_empty(const char *clog_dir, boo
 }
 
 ObServerLogBlockMgr::ObServerLogBlockMgr()
-    : block_cnt_in_use_(0),
+    : get_log_disk_info_in_config_func_(NULL),
+      log_service_(NULL),
+      block_cnt_in_use_(0),
       is_started_(false),
       is_inited_(false)
 {
@@ -115,18 +114,22 @@ ObServerLogBlockMgr::~ObServerLogBlockMgr()
   destroy();
 }
 
-int ObServerLogBlockMgr::init(const char *log_disk_base_path)
+int ObServerLogBlockMgr::init(
+    const char *log_disk_base_path,
+    GetLogDiskInfoInConfig get_log_disk_info_in_config)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(ERROR, "ObServerLogBlockMgr inited twice", K(ret), KPC(this));
-  } else if (OB_ISNULL(log_disk_base_path)) {
+  } else if (OB_ISNULL(log_disk_base_path)
+             || OB_ISNULL(get_log_disk_info_in_config)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "Invalid argument", K(ret), KPC(this), KP(log_disk_base_path));
   } else if (OB_FAIL(do_load_(log_disk_base_path))) {
     CLOG_LOG(ERROR, "do_load_ failed", K(ret), KPC(this), K(log_disk_base_path));
   } else {
+    get_log_disk_info_in_config_func_ = get_log_disk_info_in_config;
     is_inited_ = true;
     CLOG_LOG(INFO, "ObServerLogBlockMgr init success", KPC(this));
   }
@@ -142,6 +145,7 @@ void ObServerLogBlockMgr::destroy()
   is_inited_ = false;
   is_started_ = false;
   block_cnt_in_use_ = 0;
+  get_log_disk_info_in_config_func_ = NULL;
 }
 
 int ObServerLogBlockMgr::start(const int64_t new_size_byte)
@@ -182,7 +186,10 @@ int64_t ObServerLogBlockMgr::get_log_disk_size()
   int64_t total_log_disk_size = 0;
   if (OB_FAIL(get_runtime_log_disk_size_(log_disk_size))) {
     CLOG_LOG(WARN, "get_runtime_log_disk_size failed", K(ret), K(log_disk_size));
-  } else if (OB_FAIL(observer::ObServerUtils::get_log_disk_info_in_config(expected_log_disk_size,
+  } else if (OB_ISNULL(get_log_disk_info_in_config_func_)) {
+    ret = OB_NOT_INIT;
+    CLOG_LOG(ERROR, "get_log_disk_info_in_config_func_ is null", K(ret), KPC(this));
+  } else if (OB_FAIL(get_log_disk_info_in_config_func_(expected_log_disk_size,
              unused_log_disk_percentage,
              total_log_disk_size))) {
     CLOG_LOG(ERROR, "get_log_disk_info_in_config failed", K(expected_log_disk_size), KPC(this));
@@ -328,14 +335,12 @@ int ObServerLogBlockMgr::get_runtime_log_disk_size_(int64_t &runtime_log_disk_si
   runtime_log_disk_size = 0;
   // Called during boot before the server modules are constructed, so a missing
   // log_service contributes zero until the module set becomes ready.
-  ObLogService *log_service = share::g_mp->log_service();
   PalfOptions opts;
-  if (OB_NOT_NULL(log_service)) {
-    if (OB_FAIL(log_service->get_palf_options(opts))) {
-      CLOG_LOG(WARN, "get_palf_options failed", K(ret), K(runtime_log_disk_size));
-    } else {
-      runtime_log_disk_size += opts.disk_options_.log_disk_usage_limit_size_;
-    }
+  if (NULL == log_service_) {
+  } else if (OB_FAIL(log_service_->get_palf_options(opts))) {
+    CLOG_LOG(WARN, "get_palf_options failed", K(ret), K(runtime_log_disk_size));
+  } else {
+    runtime_log_disk_size += opts.disk_options_.log_disk_usage_limit_size_;
   }
   return ret;
 }

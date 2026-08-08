@@ -18,6 +18,8 @@
 
 
 #include "ob_io_calibration.h"
+#include "lib/utility/ob_sort.h"
+#include "share/config/ob_config_helper.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -280,200 +282,14 @@ int ObIOAbility::find_item(const ObIOMode mode, const int64_t size, int64_t &ite
   return ret;
 }
 
-/******************             IOBenchRunner              **********************/
-
-ObIOBenchRunner::ObIOBenchRunner()
-  : lib::Threads(1),
-    is_inited_(false),
-    thread_inited_(false),
-    block_handles_(),
-    load_(),
-    io_count_(0),
-    rt_us_(0),
-    write_buf_(nullptr),
-    read_buf_(nullptr),
-    block_count_(0)
-{
-
-}
-
-ObIOBenchRunner::~ObIOBenchRunner()
-{
-  destroy();
-}
-
-
-
-int ObIOBenchRunner::do_benchmark(const ObIOBenchLoad &load, const int64_t thread_count, ObIOBenchResult &result)
-{
-  int ret = OB_SUCCESS;
-  result.reset();
-  const int64_t BENCHMARK_TIMEOUT_S = 5L; // 5s
-  if (OB_UNLIKELY(!is_inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
-  } else if (OB_UNLIKELY(!load.is_valid() || thread_count <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(load), K(thread_count));
-  } else {
-    load_ = load;
-    io_count_ = 0;
-    rt_us_ = 0;
-    if (thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    if (OB_FAIL(lib::Threads::set_thread_count(thread_count))) {
-      LOG_WARN("set thread count failed", K(ret), K(thread_count));
-    } else if (OB_FAIL(lib::Threads::init())) {
-      LOG_WARN("init benchmark threads failed", K(ret), K(thread_count));
-    } else if (OB_FAIL(lib::Threads::start())) {
-      LOG_WARN("start thread failed", K(ret));
-    } else {
-      thread_inited_ = true;
-#ifdef _WIN32
-      Sleep(static_cast<DWORD>(BENCHMARK_TIMEOUT_S * 1000));
-#else
-      sleep(BENCHMARK_TIMEOUT_S);
-#endif
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-      if (io_count_ <= 0) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid io count", K(ret), K(io_count_));
-      } else {
-        result.mode_ = load_.mode_;
-        result.size_ = load_.size_;
-        result.iops_ = io_count_ / BENCHMARK_TIMEOUT_S;
-        result.rt_us_ = rt_us_ / io_count_;
-
-      }
-      LOG_INFO("IO BENCHMARK finished", K(ret), K_(load), K(result));
-    }
-    if (OB_FAIL(ret) && thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-  }
-  return ret;
-}
-
-void ObIOBenchRunner::destroy()
-{
-  if (thread_inited_) {
-    lib::Threads::stop();
-    lib::Threads::wait();
-    lib::Threads::destroy();
-    thread_inited_ = false;
-  }
-  if (nullptr != write_buf_) {
-    ob_free(write_buf_);
-    write_buf_ = nullptr;
-  }
-  if (nullptr != read_buf_) {
-    ob_free(read_buf_);
-    read_buf_ = nullptr;
-  }
-  is_inited_ = false;
-  block_handles_.reset();
-  load_.reset();
-  io_count_ = 0;
-  rt_us_ = 0;
-}
-
-
-
-/******************             IOBenchController              **********************/
-
-ObIOBenchController::ObIOBenchController()
-  : lib::Threads(1),
-    thread_inited_(false),
-    running_mutex_(),
-    start_ts_(0),
-    finish_ts_(0),
-    ret_code_(OB_SUCCESS)
-{
-
-}
-
-ObIOBenchController::~ObIOBenchController()
-{
-  if (thread_inited_) {
-    lib::Threads::stop();
-    lib::Threads::wait();
-    lib::Threads::destroy();
-    thread_inited_ = false;
-  }
-}
-
-int ObIOBenchController::start_io_bench()
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(running_mutex_.trylock())) {
-    if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-      LOG_WARN("try lock failed", K(ret));
-    } else {
-      // benchmark is running, ignore this request
-      ret = OB_SUCCESS;
-    }
-  } else {
-    if (thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    if (OB_FAIL(lib::Threads::init())) {
-      LOG_WARN("init thread failed", K(ret));
-    } else if (OB_FAIL(lib::Threads::start())) {
-      LOG_WARN("start thread failed", K(ret));
-    } else {
-      thread_inited_ = true;
-    }
-    if (OB_FAIL(ret) && thread_inited_) {
-      lib::Threads::stop();
-      lib::Threads::wait();
-      lib::Threads::destroy();
-      thread_inited_ = false;
-    }
-    int tmp_ret = running_mutex_.unlock();
-    if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
-      LOG_WARN("unlock running_mutex failed", K(ret));
-    }
-  }
-  return ret;
-}
-
-
-
-int64_t ObIOBenchController::get_start_timestamp()
-{
-  return start_ts_;
-}
-
-int64_t ObIOBenchController::get_finish_timestamp()
-{
-  return finish_ts_;
-}
-
-int ObIOBenchController::get_ret_code()
-{
-  return ret_code_;
-}
-
 /******************             IOCalibration              **********************/
 
 ObIOCalibration::ObIOCalibration()
   : is_inited_(false),
     baseline_iops_(0),
     io_ability_(),
-    lock_()
+    lock_(),
+    benchmark_controller_(nullptr)
 {
 }
 
@@ -488,13 +304,14 @@ ObIOCalibration &ObIOCalibration::get_instance()
   return instance;
 }
 
-int ObIOCalibration::init()
+int ObIOCalibration::init(ObIIOBenchController &benchmark_controller)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("io calibration init twice", K(ret), K(is_inited_));
   } else {
+    benchmark_controller_ = &benchmark_controller;
     is_inited_ = true;
   }
   if (OB_UNLIKELY(!is_inited_)) {
@@ -508,6 +325,7 @@ void ObIOCalibration::destroy()
   is_inited_ = false;
   baseline_iops_ = 0;
   io_ability_.reset();
+  benchmark_controller_ = nullptr;
 }
 
 int ObIOCalibration::update_io_ability(const ObIOAbility &io_ability)
@@ -637,7 +455,10 @@ int ObIOCalibration::refresh(const bool only_refresh, const ObIArray<ObIOBenchRe
 int ObIOCalibration::execute_benchmark()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(benchmark_controller_.start_io_bench())) {
+  if (OB_ISNULL(benchmark_controller_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("io benchmark controller is not initialized", K(ret));
+  } else if (OB_FAIL(benchmark_controller_->start_io_bench())) {
     LOG_WARN("start io benchmark failed", K(ret));
   }
   return ret;
@@ -646,9 +467,13 @@ int ObIOCalibration::execute_benchmark()
 int ObIOCalibration::get_benchmark_status(int64_t &start_ts, int64_t &finish_ts, int &ret_code)
 {
   int ret = OB_SUCCESS;
-  start_ts = benchmark_controller_.get_start_timestamp();
-  finish_ts = benchmark_controller_.get_finish_timestamp();
-  ret_code = benchmark_controller_.get_ret_code();
+  if (OB_ISNULL(benchmark_controller_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("io benchmark controller is not initialized", K(ret));
+  } else if (OB_FAIL(benchmark_controller_->get_benchmark_status(
+                 start_ts, finish_ts, ret_code))) {
+    LOG_WARN("fail to get io benchmark status", K(ret));
+  }
   return ret;
 }
 

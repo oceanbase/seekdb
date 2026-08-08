@@ -80,7 +80,15 @@ ObPsCache::~ObPsCache()
 int ObPsCache::server_module_init(ObPsCache* &ps_cache)
 {
   int ret = OB_SUCCESS;
-  ps_cache->inited_ = false;
+  if (OB_ISNULL(ps_cache)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("PS cache is null", K(ret));
+  } else if (OB_FAIL(ps_cache->init(
+                 common::calculate_scaled_value_by_memory(
+                     common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN,
+                     common::OB_PLAN_CACHE_BUCKET_NUMBER)))) {
+    LOG_WARN("failed to initialize PS cache", K(ret));
+  }
   return ret;
 }
 

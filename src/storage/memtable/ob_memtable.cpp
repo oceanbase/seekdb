@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_memtable.h"
-#include "share/rc/ob_module_provider.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "query/optimizer/stat/ob_optimizer_stat_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/memtable/ob_memtable_read_row_util.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
@@ -26,6 +26,7 @@
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/access/ob_sstable_row_getter.h"
 #include "storage/tx/ob_tx_ctx.h"
+#include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/access/ob_row_sample_iterator.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -179,7 +180,7 @@ int ObMemtable::batch_remove_unused_callback_for_uncommited_txn(
   // NB: Do not use cache here, because the trans_service may be destroyed under
   // SERVER_DESTROY() and the cache is pointing to a broken memory.
   transaction::ObTransService *txs_svr =
-    ::oceanbase::share::g_mp->trans_service();
+    ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   if (NULL != txs_svr
       && OB_FAIL(txs_svr->remove_callback_for_uncommited_txn(memtable_set))) {
@@ -272,7 +273,7 @@ int ObMemtable::safe_to_destroy(bool &is_safe)
       ret = OB_SUCCESS;
       bool is_done = false;
       palf::LSN end_lsn;
-      if (OB_FAIL(share::g_mp->log_service()->get_log_apply_service()->
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service()->
                   is_apply_done(is_done,
                                 end_lsn))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1454,7 +1455,7 @@ void ObMemtable::set_allow_freeze(const bool allow_freeze)
     const common::ObTabletID tablet_id = key_.tablet_id_;
     const int64_t retire_clock = local_allocator_.get_retire_clock();
     ObMemstoreFreezer *freezer = nullptr;
-    freezer = share::g_mp->memstore_freezer();
+    freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
 
     if (allow_freeze) {
       set_allow_freeze_();
@@ -2197,7 +2198,7 @@ int ObMemtable::multi_set_(
     } else {
       ObMemtableKeyGenerator::ObMemtableKeyBuffer *memtable_key_buffer = memtable_key_generator.get_key_buffer();
       for (int64_t idx = 0; idx < memtable_key_buffer->count(); ++idx) {
-        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
+        ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->set_hash_holder(key_.get_tablet_id(),
                                              memtable_key_buffer->at(idx),
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2356,7 +2357,7 @@ int ObMemtable::set_(
     if (param.is_non_unique_local_index_) {
       // no need to detect deadlock for non-unique local index table
     } else {
-      share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
+      ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->set_hash_holder(key_.get_tablet_id(),
                                            mtk,
                                            context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
     }
@@ -2486,7 +2487,7 @@ int ObMemtable::lock_(
       if (param.is_non_unique_local_index_) {
         // no need to detect deadlock for non-unique local index table
       } else {
-        share::g_mp->lock_wait_mgr()->set_hash_holder(key_.get_tablet_id(),
+        ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()->set_hash_holder(key_.get_tablet_id(),
                                              mtk,
                                              context.store_ctx_->mvcc_acc_ctx_.get_mem_ctx()->get_tx_id());
       }
@@ -2817,7 +2818,7 @@ int ObMemtable::post_row_write_conflict_(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = share::server_module<ObLockWaitMgr*>())) {
+  } else if (OB_ISNULL(lock_wait_mgr = share::server_service<ObLockWaitMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "can not get server lock_wait_mgr");
   } else {
@@ -2964,18 +2965,17 @@ int ObMemtable::try_report_dml_stat_(const int64_t table_id)
     if (ATOMIC_BCAS(&reported_dml_stat_.is_reporting_, false, true)) {
       // double check
       if (current_ts - reported_dml_stat_.last_report_time_ > ObReportedDmlStat::REPORT_INTERVAL) {
-        ObOptDmlStat dml_stat;
-        
-        dml_stat.table_id_ = table_id;
-        dml_stat.tablet_id_ = get_tablet_id().id();
         const int64_t current_insert_row_cnt = mt_stat_.insert_row_count_;
         const int64_t current_update_row_cnt = mt_stat_.update_row_count_;
         const int64_t current_delete_row_cnt = mt_stat_.delete_row_count_;
-        dml_stat.insert_row_count_ = current_insert_row_cnt - reported_dml_stat_.insert_row_count_;
-        dml_stat.update_row_count_ = current_update_row_cnt - reported_dml_stat_.update_row_count_;
-        dml_stat.delete_row_count_ = current_delete_row_cnt - reported_dml_stat_.delete_row_count_;
-        if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
-          TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat));
+        const int64_t inserted_rows = current_insert_row_cnt - reported_dml_stat_.insert_row_count_;
+        const int64_t updated_rows = current_update_row_cnt - reported_dml_stat_.update_row_count_;
+        const int64_t deleted_rows = current_delete_row_cnt - reported_dml_stat_.delete_row_count_;
+        if (OB_FAIL(query::ObOptimizerStatService::report_dml_stat(
+                table_id, get_tablet_id().id(),
+                inserted_rows, updated_rows, deleted_rows))) {
+          TRANS_LOG(WARN, "failed to update local cache", K(ret), K(table_id),
+                    K(inserted_rows), K(updated_rows), K(deleted_rows));
         } else {
           reported_dml_stat_.insert_row_count_ = current_insert_row_cnt;
           reported_dml_stat_.update_row_count_ = current_update_row_cnt;
@@ -3028,15 +3028,14 @@ int ObMemtable::report_residual_dml_stat_()
     if (mt_stat_.insert_row_count_ > reported_dml_stat_.insert_row_count_ ||
         mt_stat_.update_row_count_ > reported_dml_stat_.update_row_count_ ||
         mt_stat_.delete_row_count_ > reported_dml_stat_.delete_row_count_) {
-      ObOptDmlStat dml_stat;
-      
-      dml_stat.table_id_ = reported_dml_stat_.table_id_;
-      dml_stat.tablet_id_ = get_tablet_id().id();
-      dml_stat.insert_row_count_ = mt_stat_.insert_row_count_ - reported_dml_stat_.insert_row_count_;
-      dml_stat.update_row_count_ = mt_stat_.update_row_count_ - reported_dml_stat_.update_row_count_;
-      dml_stat.delete_row_count_ = mt_stat_.delete_row_count_ - reported_dml_stat_.delete_row_count_;
-      if (OB_FAIL(share::g_mp->opt_stat_monitor_manager()->update_local_cache(dml_stat))) {
-        TRANS_LOG(WARN, "failed to update local cache", K(ret), K(dml_stat), K(reported_dml_stat_));
+      const int64_t inserted_rows = mt_stat_.insert_row_count_ - reported_dml_stat_.insert_row_count_;
+      const int64_t updated_rows = mt_stat_.update_row_count_ - reported_dml_stat_.update_row_count_;
+      const int64_t deleted_rows = mt_stat_.delete_row_count_ - reported_dml_stat_.delete_row_count_;
+      if (OB_FAIL(query::ObOptimizerStatService::report_dml_stat(
+              reported_dml_stat_.table_id_, get_tablet_id().id(),
+              inserted_rows, updated_rows, deleted_rows))) {
+        TRANS_LOG(WARN, "failed to update local cache", K(ret),
+                  K(inserted_rows), K(updated_rows), K(deleted_rows), K(reported_dml_stat_));
       } else {
         reported_dml_stat_.insert_row_count_ = mt_stat_.insert_row_count_;
         reported_dml_stat_.update_row_count_ =  mt_stat_.update_row_count_;

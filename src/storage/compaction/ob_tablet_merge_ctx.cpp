@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_tablet_merge_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/compaction/ob_schedule_tablet_func.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
@@ -184,8 +184,9 @@ void ObTabletMiniMergeCtx::try_update_snapshot_gc_renew_target()
   } else if (FALSE_IT(target_scn = new_sstable->get_max_merged_trans_version())) {
   } else if (target_scn <= 0 || INT64_MAX == target_scn) {
     // An unresolved transaction is covered when its upper_trans_version becomes finite.
-  } else if (OB_ISNULL(share::g_mp)
-      || OB_ISNULL(freeze_info_mgr = share::g_mp->freeze_info_mgr())) {
+  } else if (OB_ISNULL(
+                 freeze_info_mgr = ::oceanbase::share::server_service<
+                     ::oceanbase::storage::ObFreezeInfoMgr>())) {
     LOG_WARN_RET(OB_ERR_UNEXPECTED, "freeze info mgr is null",
         K(target_scn), K(get_dag_param()));
   } else {
@@ -249,7 +250,7 @@ int ObTabletMiniMergeCtx::try_report_tablet_stat_after_mini()
     report_stat.insert_row_cnt_ = tnode_stat.insert_row_count_;
     report_stat.update_row_cnt_ = tnode_stat.update_row_count_;
     report_stat.delete_row_cnt_ = tnode_stat.delete_row_count_;
-    if (OB_FAIL(share::g_mp->tablet_stat_mgr()->report_stat(report_stat, report_succ))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()->report_stat(report_stat, report_succ))) {
       LOG_WARN("failed to report tablet stat", KR(ret));
     }
   }

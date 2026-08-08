@@ -367,7 +367,7 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
             } else {
               // bool type convert to json bool, need to know outside has lob header or not
               bool has_lob_header = true;
-              ObTextStringObObjResult text_result(ObJsonType, nullptr, tmp, has_lob_header);
+              common::ObTextStringObObjResult text_result(ObJsonType, nullptr, tmp, has_lob_header);
               if (OB_FAIL(text_result.init(raw_bin.length(), expr_ctx.calc_buf_))) {
                 LOG_WARN("init lob result failed");
               } else if (OB_FAIL(text_result.append(raw_bin.ptr(), raw_bin.length()))) {
@@ -404,7 +404,7 @@ int ObInfixExpression::calc_row(common::ObExprCtx &expr_ctx, const common::ObNew
           } else {
             // bool type convert to json bool, need to know outside has lob header or not
             bool has_lob_header = true;
-            ObTextStringObObjResult text_result(ObJsonType, nullptr, stack, has_lob_header);
+            common::ObTextStringObObjResult text_result(ObJsonType, nullptr, stack, has_lob_header);
             if (OB_FAIL(text_result.init(raw_bin.length(), expr_ctx.calc_buf_))) {
               LOG_WARN("init lob result failed");
             } else if (OB_FAIL(text_result.append(raw_bin.ptr(), raw_bin.length()))) {

@@ -20,6 +20,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "common/mysqlclient/ob_mysql_result.h"
+#include "share/object/ob_obj_cast.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
 #include "share/system_variable/ob_system_variable_alias.h"

@@ -69,7 +69,7 @@ public:
                                     ObColumnSchemaV2 &column);
   static int resolve_column_default_value(const sql::ObSelectStmt *select_stmt,
                                         const sql::SelectItem &select_item,
-                                        schema::ObColumnSchemaV2 &column_schema,
+                                        share::schema::ObColumnSchemaV2 &column_schema,
                                         common::ObIAllocator &alloc,
                                         sql::ObSQLSessionInfo &session_info);
 private:

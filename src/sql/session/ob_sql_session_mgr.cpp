@@ -18,7 +18,8 @@
 
 #include "ob_sql_session_mgr.h"
 #include "rpc/ob_sql_request_operator.h"
-#include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "query/session/ob_deadlock_session.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
 
 using namespace oceanbase::common;
@@ -26,9 +27,151 @@ using namespace oceanbase::sql;
 using namespace oceanbase::share;
 using namespace oceanbase::observer;
 
+namespace
+{
+
+// Query owns session traversal. The data plane consumes only the aggregate
+// snapshot exposed through ObIActiveSnapshotService.
+class GetMinActiveSnapshotVersionFunctor
+{
+public:
+  GetMinActiveSnapshotVersionFunctor()
+      : min_active_snapshot_version_(SCN::max_scn())
+  {}
+  bool operator()(ObSQLSessionMgr::Key key, ObSQLSessionInfo *sess_info);
+  SCN get_min_active_snapshot_version() const
+  {
+    return min_active_snapshot_version_;
+  }
+
+private:
+  SCN min_active_snapshot_version_;
+};
+
+bool GetMinActiveSnapshotVersionFunctor::operator()(
+    ObSQLSessionMgr::Key key,
+    ObSQLSessionInfo *sess_info)
+{
+  int ret = OB_SUCCESS;
+  UNUSED(key);
+
+  if (OB_ISNULL(sess_info)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("session info is NULL");
+  } else if (!sess_info->is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("session info is not valid", K(ret));
+  } else if (sess_info->get_is_deserialized()) {
+    // Visit only the original session.
+  } else {
+    ObSQLSessionInfo::LockGuard data_lock_guard(
+        sess_info->get_thread_data_lock());
+    SCN snapshot_version(SCN::max_scn());
+    transaction::ObTxDesc *tx_desc = sess_info->get_tx_desc();
+    const SCN sess_snapshot = sess_info->get_reserved_snapshot_version();
+
+    if (OB_NOT_NULL(tx_desc)) {
+      const SCN desc_snapshot =
+          data_plane::tx_desc_snapshot_version(tx_desc);
+      if (data_plane::tx_desc_uses_rr_or_serializable(tx_desc)) {
+        if (desc_snapshot.is_valid()) {
+          snapshot_version = desc_snapshot;
+        }
+        LOG_DEBUG("RR/SI txn with tx_desc", KPC(sess_info),
+                  K(snapshot_version), K(min_active_snapshot_version_),
+                  K(desc_snapshot), K(sess_snapshot));
+      } else if (data_plane::tx_desc_uses_read_committed(tx_desc)) {
+        if (ObSQLSessionState::QUERY_ACTIVE ==
+            sess_info->get_session_state()) {
+          if (desc_snapshot.is_valid()) {
+            snapshot_version = desc_snapshot;
+          } else if (sess_snapshot.is_valid()) {
+            snapshot_version = sess_snapshot;
+          } else {
+            snapshot_version.convert_from_ts(
+                sess_info->get_cur_state_start_time()
+                - 5L * 1000L * 1000L * 60L);
+            LOG_INFO("RC txn with tx_desc uses session start time",
+                     KPC(sess_info), K(snapshot_version),
+                     K(min_active_snapshot_version_),
+                     K(sess_info->get_cur_state_start_time()));
+          }
+        }
+        LOG_DEBUG("RC txn with tx_desc", KPC(sess_info),
+                  K(snapshot_version), K(min_active_snapshot_version_),
+                  K(desc_snapshot), K(sess_snapshot));
+      } else {
+        LOG_INFO("unknown txn with tx_desc", KPC(sess_info),
+                 K(snapshot_version), K(min_active_snapshot_version_),
+                 K(desc_snapshot));
+      }
+    } else if (transaction::ObTxIsolationLevel::SERIAL ==
+                   sess_info->get_tx_isolation()
+               || transaction::ObTxIsolationLevel::RR ==
+                   sess_info->get_tx_isolation()) {
+      if (ObSQLSessionState::QUERY_ACTIVE ==
+          sess_info->get_session_state()) {
+        if (sess_snapshot.is_valid()) {
+          snapshot_version = sess_snapshot;
+        } else {
+          snapshot_version.convert_from_ts(
+              sess_info->get_cur_state_start_time()
+              - 5L * 1000L * 1000L * 60L);
+          LOG_INFO("RR/SI txn without tx_desc uses session start time",
+                   KPC(sess_info), K(snapshot_version), K(sess_snapshot),
+                   K(min_active_snapshot_version_),
+                   K(sess_info->get_cur_state_start_time()));
+        }
+      }
+    } else if (transaction::ObTxIsolationLevel::RC ==
+               sess_info->get_tx_isolation()) {
+      if (ObSQLSessionState::QUERY_ACTIVE ==
+          sess_info->get_session_state()) {
+        if (sess_snapshot.is_valid()) {
+          snapshot_version = sess_snapshot;
+        } else {
+          snapshot_version.convert_from_ts(
+              sess_info->get_cur_state_start_time()
+              - 5L * 1000L * 1000L * 60L);
+          LOG_INFO("RC txn without tx_desc uses session start time",
+                   KPC(sess_info), K(snapshot_version), K(sess_snapshot),
+                   K(min_active_snapshot_version_),
+                   K(sess_info->get_cur_state_start_time()));
+        }
+      }
+    } else {
+      LOG_INFO("unknown txn without tx_desc", KPC(sess_info),
+               K(snapshot_version), K(min_active_snapshot_version_));
+    }
+
+    if (OB_SUCC(ret)
+        && SCN::min_scn() != snapshot_version
+        && snapshot_version < min_active_snapshot_version_) {
+      const int64_t current_timestamp = ObClockGenerator::getRealClock();
+      const int64_t snapshot_version_ts =
+          snapshot_version.get_val_for_tx() / 1000;
+      if (snapshot_version_ts < current_timestamp
+          && current_timestamp - snapshot_version_ts
+                 > 100L * 60L * 1000L * 1000L) {
+        LOG_INFO("found a small snapshot transaction",
+                 KPC(sess_info), K(snapshot_version),
+                 K(current_timestamp), K(min_active_snapshot_version_));
+      }
+      min_active_snapshot_version_ = snapshot_version;
+    }
+  }
+
+  return OB_SUCCESS == ret;
+}
+
+} // namespace
+
 ObSQLSessionMgr::ObSQLSessionMgr()
   : sessinfo_map_(),
-    next_sessid_(1)
+    next_sessid_(1),
+    debug_sync_broadcaster_(nullptr),
+    ps_cache_(nullptr),
+    connect_resource_manager_(nullptr)
 {}
 
 ObSQLSessionMgr::~ObSQLSessionMgr()
@@ -83,6 +226,8 @@ int ObSQLSessionMgr::init()
 void ObSQLSessionMgr::destroy()
 {
   sessinfo_map_.destroy();
+  ps_cache_ = nullptr;
+  connect_resource_manager_ = nullptr;
 }
 
 int ObSQLSessionMgr::inc_session_ref(const ObSQLSessionInfo *my_session)
@@ -153,7 +298,12 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
   int err = OB_SUCCESS;
   session_info = NULL;
   ObSQLSessionInfo *tmp_sess = NULL;
-  if (OB_FAIL(sessinfo_map_.create(Key(sessid), tmp_sess))) {
+  if (OB_ISNULL(ps_cache_)
+      || OB_ISNULL(debug_sync_broadcaster_)
+      || OB_ISNULL(connect_resource_manager_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("SQL session runtime services are not bound", K(ret));
+  } else if (OB_FAIL(sessinfo_map_.create(Key(sessid), tmp_sess))) {
     LOG_WARN("fail to create session", K(ret), K(sessid));
     if (OB_ENTRY_EXIST == ret) {
       ret = OB_SESSION_ENTRY_EXIST;
@@ -182,6 +332,9 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
       LOG_DEBUG("free session successfully in create session", K(err), K(sessid));
     }
   } else {
+    tmp_sess->set_debug_sync_broadcaster(debug_sync_broadcaster_);
+    tmp_sess->set_connect_resource_manager(connect_resource_manager_);
+    tmp_sess->set_session_manager(this);
     tmp_sess->update_last_active_time();
     session_info = tmp_sess;
   }
@@ -197,6 +350,15 @@ int ObSQLSessionMgr::free_session(const ObFreeSessionCtx &ctx)
   ObSQLSessionInfo *sess_info = NULL;
   sessinfo_map_.get(Key(sessid), sess_info);
   if (NULL != sess_info) {
+    if (OB_ISNULL(ps_cache_)) {
+      LOG_ERROR("PS cache is not bound while freeing SQL session", K(sessid));
+    } else {
+      const int close_ret = sess_info->close_all_ps_stmt(*ps_cache_);
+      if (OB_UNLIKELY(OB_SUCCESS != close_ret)) {
+        LOG_WARN("failed to close prepared statements while freeing session",
+                 K(close_ret), K(sessid));
+      }
+    }
     if (OB_UNLIKELY(OB_SUCCESS != sess_info->on_user_disconnect())) {
       LOG_WARN("user disconnect failed", K(ret), K(sess_info->get_user_id()));
     }
@@ -222,7 +384,7 @@ int ObSQLSessionMgr::get_min_active_snapshot_version(share::SCN &snapshot_versio
 {
   int ret = OB_SUCCESS;
 
-  concurrency_control::GetMinActiveSnapshotVersionFunctor min_active_txn_version_getter;
+  GetMinActiveSnapshotVersionFunctor min_active_txn_version_getter;
 
   if (OB_FAIL(for_each_session(min_active_txn_version_getter))) {
     LOG_WARN("fail to get min active snapshot version", K(ret));
@@ -308,7 +470,8 @@ int ObSQLSessionMgr::kill_session(ObSQLSessionInfo &session)
   if (session.is_in_transaction()) {
     if (OB_SUCCESS != (tmp_ret = ObSqlTransControl::kill_tx_on_session_killed(&session))) {
       LOG_WARN("fail to rollback transaction", K(session.get_server_sid()),
-               K(tmp_ret), KPC(session.get_tx_desc()),
+               K(tmp_ret),
+               "tx_desc", data_plane::ObTxDescLogView(session.get_tx_desc()),
                "query_str", session.get_current_query_string(),
                K(need_disconnect));
     }
@@ -515,3 +678,207 @@ ObSessionGetterGuard::~ObSessionGetterGuard()
     mgr_.revert_session(session_);
   }
 }
+
+int ObSQLSessionMgr::acquire_session(uint32_t session_id, void *&session)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = nullptr;
+  session = nullptr;
+  if (OB_FAIL(get_session(session_id, session_info))) {
+    LOG_WARN("get session for deadlock operation failed",
+             KR(ret), K(session_id));
+  } else if (OB_ISNULL(session_info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("deadlock session is null", KR(ret), K(session_id));
+  } else {
+    session = session_info;
+  }
+  return ret;
+}
+
+void ObSQLSessionMgr::release_session(void *session)
+{
+  if (OB_NOT_NULL(session)) {
+    revert_session(static_cast<ObSQLSessionInfo *>(session));
+  }
+}
+
+int ObSQLSessionMgr::get_deadlock_facts(
+    const void *session,
+    query::ObDeadlockSessionFacts &facts) const
+{
+  int ret = OB_SUCCESS;
+  facts = query::ObDeadlockSessionFacts();
+  const ObSQLSessionInfo *session_info =
+      static_cast<const ObSQLSessionInfo *>(session);
+  if (OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const transaction::ObTxDesc *tx = session_info->get_tx_desc();
+    facts.current_query_ = session_info->get_current_query_string();
+    if (OB_FAIL(session_info->get_query_timeout(facts.query_timeout_us_))) {
+      LOG_WARN("get deadlock query timeout failed", KR(ret));
+    } else if (nullptr != tx) {
+      facts.has_transaction_ = true;
+      facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
+      facts.transaction_scheduler_ = data_plane::tx_desc_scheduler(tx);
+      facts.transaction_start_ts_ =
+          data_plane::tx_desc_active_timestamp(tx);
+    }
+  }
+  return ret;
+}
+
+int ObSQLSessionMgr::get_lock_wait_facts(
+    const void *session,
+    query::ObLockWaitSessionFacts &facts) const
+{
+  int ret = OB_SUCCESS;
+  facts = query::ObLockWaitSessionFacts();
+  const ObSQLSessionInfo *session_info =
+      static_cast<const ObSQLSessionInfo *>(session);
+  if (OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    const transaction::ObTxDesc *tx = session_info->get_tx_desc();
+    facts.is_terminated_ = session_info->is_terminate(facts.terminate_error_);
+    facts.has_explicit_transaction_ =
+        session_info->has_explicit_start_trans();
+    facts.server_session_id_ = session_info->get_server_sid();
+    if (OB_FAIL(session_info->get_autocommit(facts.autocommit_))) {
+      LOG_WARN("get lock-wait session autocommit failed", KR(ret));
+    } else if (nullptr != tx) {
+      facts.has_transaction_ = true;
+      facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
+    }
+  }
+  return ret;
+}
+
+int ObSQLSessionMgr::mark_transaction_victim(void *session)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = static_cast<ObSQLSessionInfo *>(session);
+  if (OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(kill_deadlock_tx(session_info))) {
+    LOG_WARN("kill deadlock transaction failed", KR(ret));
+  } else if (OB_FAIL(set_query_deadlocked(*session_info))) {
+    LOG_WARN("mark deadlock query failed", KR(ret));
+  } else {
+    session_info->reset_tx_variable();
+  }
+  return ret;
+}
+
+int ObSQLSessionMgr::mark_statement_victim(void *session)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session_info = static_cast<ObSQLSessionInfo *>(session);
+  if (OB_ISNULL(session_info)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(set_query_deadlocked(*session_info))) {
+    LOG_WARN("mark statement deadlock victim failed", KR(ret));
+  }
+  return ret;
+}
+
+namespace oceanbase
+{
+namespace query
+{
+
+ObDeadlockSessionGuard::ObDeadlockSessionGuard(
+    ObIDeadlockSessionService &service)
+  : service_(&service), session_(nullptr)
+{}
+
+ObDeadlockSessionGuard::~ObDeadlockSessionGuard()
+{
+  reset_();
+}
+
+void ObDeadlockSessionGuard::reset_()
+{
+  if (nullptr != session_ && nullptr != service_) {
+    service_->release_session(session_);
+  }
+  session_ = nullptr;
+}
+
+int ObDeadlockSessionGuard::acquire(uint32_t session_id)
+{
+  int ret = common::OB_SUCCESS;
+  reset_();
+  if (OB_UNLIKELY(0 == session_id)) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(service_)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(service_->acquire_session(session_id, session_))) {
+    LOG_WARN("acquire deadlock session failed", KR(ret), K(session_id));
+  }
+  return ret;
+}
+
+bool ObDeadlockSessionGuard::is_valid() const
+{
+  return nullptr != session_ && nullptr != service_;
+}
+
+int ObDeadlockSessionGuard::get_deadlock_facts(
+    ObDeadlockSessionFacts &facts) const
+{
+  return is_valid()
+      ? service_->get_deadlock_facts(session_, facts)
+      : common::OB_NOT_INIT;
+}
+
+int ObDeadlockSessionGuard::get_lock_wait_facts(
+    ObLockWaitSessionFacts &facts) const
+{
+  return is_valid()
+      ? service_->get_lock_wait_facts(session_, facts)
+      : common::OB_NOT_INIT;
+}
+
+int ObDeadlockSessionGuard::mark_transaction_victim()
+{
+  return is_valid()
+      ? service_->mark_transaction_victim(session_)
+      : common::OB_NOT_INIT;
+}
+
+int ObDeadlockSessionGuard::mark_statement_victim()
+{
+  return is_valid()
+      ? service_->mark_statement_victim(session_)
+      : common::OB_NOT_INIT;
+}
+
+int is_session_alive(ObIDeadlockSessionService &service,
+                     uint32_t session_id,
+                     bool &is_alive)
+{
+  int ret = common::OB_SUCCESS;
+  ObDeadlockSessionGuard guard(service);
+  ObLockWaitSessionFacts facts;
+  is_alive = true;
+  if (OB_FAIL(guard.acquire(session_id))) {
+    if (common::OB_ENTRY_NOT_EXIST == ret) {
+      is_alive = false;
+      ret = common::OB_SUCCESS;
+    } else {
+      LOG_WARN("acquire session for liveness check failed",
+               KR(ret), K(session_id));
+    }
+  } else if (OB_FAIL(guard.get_lock_wait_facts(facts))) {
+    LOG_WARN("get session liveness facts failed",
+             KR(ret), K(session_id));
+  } else {
+    is_alive = !facts.is_terminated_;
+  }
+  return ret;
+}
+
+} // namespace query
+} // namespace oceanbase

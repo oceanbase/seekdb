@@ -301,7 +301,7 @@ int ObDASIndexMergeIter::init_scan_param(const common::ObTabletID &tablet_id,
     }
     scan_param.pd_storage_filters_ = rtdef->p_pd_expr_op_->pd_storage_filters_;
     if (OB_NOT_NULL(tx_desc_)) {
-      scan_param.tx_id_ = tx_desc_->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(tx_desc_);
     } else {
       scan_param.tx_id_.reset();
     }

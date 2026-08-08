@@ -16,18 +16,9 @@
 
 #define USING_LOG_PREFIX CLOG
 #include "ob_log_service.h"
-#include "palf_handle_guard.h"
-#include "share/rc/ob_module_provider.h"
-#include "ob_server_log_block_mgr.h"
 #include "logservice/palf_handle_guard.h"
 #include "logservice/ob_log_allocator_mgr.h"
-#include "share/rc/ob_server_module_init_ctx.h"
-#include "observer/ob_srv_network_frame.h"
-#include "storage/ob_file_system_router.h"
-#include "share/ob_io_device_helper.h"
 #include "lib/ob_running_mode.h"
-#include "storage/ls/ob_ls.h"
-#include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_share_util.h"
 
 namespace oceanbase
@@ -44,12 +35,14 @@ using namespace oceanbase::common;
 ObLogService::ObLogService() :
   is_inited_(false),
   is_running_(false),
+  enable_shared_storage_(false),
   self_(),
   palf_env_(NULL),
   alloc_mgr_(NULL),
   apply_service_(),
   replay_service_(),
-  ls_adapter_(),
+  log_storage_(NULL),
+  runtime_config_(),
   monitor_(),
   update_palf_opts_lock_()
 {}
@@ -59,27 +52,43 @@ ObLogService::~ObLogService()
   destroy();
 }
 
-int ObLogService::server_module_init(ObLogService* &logservice)
+int ObLogService::server_module_init(
+    ObLogService *&logservice,
+    const palf::PalfOptions &palf_options,
+    const char *runtime_clog_dir,
+    const char *clog_dir,
+    const common::ObAddr &self,
+    ObILogStorage *log_storage,
+    palf::ILogBlockPool *log_block_pool,
+    common::ObIODevice *log_local_device,
+    common::ObIOManager *io_manager,
+    const bool is_shared_storage_mode,
+    const int64_t replay_thread_quota,
+    const ObLogRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
-  const ObAddr &self = GCTX.self_addr();
-  
-  const share::ObServerModuleInitCtx *module_init_ctx =
-      share::server_runtime()->get_module_init_ctx();
-  const palf::PalfOptions &palf_options = module_init_ctx->palf_options_;
-  const char *runtime_clog_dir = module_init_ctx->clog_dir_;
-  const char *clog_dir = OB_FILE_SYSTEM_ROUTER.get_clog_dir();
-  ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
   common::ObILogAllocator *alloc_mgr = NULL;
-  if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
+  if (OB_ISNULL(logservice) || OB_ISNULL(runtime_clog_dir) ||
+      OB_ISNULL(clog_dir) || OB_ISNULL(log_storage) ||
+      OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device) ||
+      OB_ISNULL(io_manager) || OB_UNLIKELY(!self.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    CLOG_LOG(WARN, "invalid log service composition", K(ret), KP(logservice),
+        KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
+        KP(log_block_pool), KP(log_local_device), KP(io_manager), K(self));
+  } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
     CLOG_LOG(WARN, "get_log_allocator failed", K(ret));
   } else if (OB_FAIL(logservice->init(palf_options,
                                       runtime_clog_dir,
                                       self,
                                       alloc_mgr,
-                                      share::g_mp->ls_service(),
-                                      log_block_mgr,
-                                      GCTX.sql_proxy_))) {
+                                      log_storage,
+                                      log_block_pool,
+                                      log_local_device,
+                                      io_manager,
+                                      is_shared_storage_mode,
+                                      replay_thread_quota,
+                                      runtime_config))) {
     CLOG_LOG(ERROR, "init ObLogService failed", K(ret), K(runtime_clog_dir));
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
     CLOG_LOG(ERROR, "fsync_dir failed", K(ret), K(clog_dir));
@@ -132,7 +141,7 @@ void ObLogService::destroy()
   self_.reset();
   apply_service_.destroy();
   replay_service_.destroy();
-  ls_adapter_.destroy();
+  log_storage_ = NULL;
   if (NULL != palf_env_) {
     PalfEnv::destroy_palf_env(palf_env_);
     palf_env_ = NULL;
@@ -161,9 +170,13 @@ int ObLogService::init(const PalfOptions &options,
                        const char *base_dir,
                        const common::ObAddr &self,
                        common::ObILogAllocator *alloc_mgr,
-                       ObLSService *ls_service,
+                       ObILogStorage *log_storage,
                        palf::ILogBlockPool *log_block_pool,
-                       common::ObMySQLProxy *sql_proxy)
+                       common::ObIODevice *log_local_device,
+                       common::ObIOManager *io_manager,
+                       const bool is_shared_storage_mode,
+                       const int64_t replay_thread_quota,
+                       const ObLogRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
 
@@ -174,30 +187,34 @@ int ObLogService::init(const PalfOptions &options,
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
   } else if (false == options.is_valid() || OB_ISNULL(base_dir) || OB_UNLIKELY(!self.is_valid())
-      || OB_ISNULL(alloc_mgr) || OB_ISNULL(ls_service)
-      || OB_ISNULL(log_block_pool)
-      || OB_ISNULL(sql_proxy)) {
+      || OB_ISNULL(alloc_mgr) || OB_ISNULL(log_storage)
+      || OB_ISNULL(log_block_pool) || OB_ISNULL(log_local_device)
+      || OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(options), KP(base_dir), K(self),
-             KP(alloc_mgr), KP(ls_service), KP(log_block_pool), KP(sql_proxy));
+             KP(alloc_mgr), KP(log_storage), KP(log_block_pool),
+             KP(log_local_device), KP(io_manager));
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
-                                              alloc_mgr, log_block_pool, &monitor_, &LOCAL_DEVICE_INSTANCE,
-                                              &OB_IO_MANAGER, palf_env_))) {
+                                              alloc_mgr, log_block_pool, &monitor_,
+                                              log_local_device, io_manager, palf_env_))) {
     CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
   } else if (OB_ISNULL(palf_env_)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "palf_env_ is NULL", K(ret));
-  } else if (OB_FAIL(ls_adapter_.init(ls_service))) {
-    CLOG_LOG(ERROR, "failed to init ls_adapter", K(ret));
-  } else if (OB_FAIL(apply_service_.init(palf_env_, &ls_adapter_))) {
+  } else if (OB_FAIL(apply_service_.init(palf_env_, log_storage))) {
     CLOG_LOG(WARN, "failed to init apply_service", K(ret));
-  } else if (OB_FAIL(replay_service_.init(palf_env_, &ls_adapter_, alloc_mgr))) {
+  } else if (OB_FAIL(replay_service_.init(
+      palf_env_, log_storage, alloc_mgr, replay_thread_quota))) {
     CLOG_LOG(WARN, "failed to init replay_service", K(ret));
   } else {
     alloc_mgr_ = alloc_mgr;
+    log_storage_ = log_storage;
+    runtime_config_ = runtime_config;
+    enable_shared_storage_ = is_shared_storage_mode;
     self_ = self;
     is_inited_ = true;
-    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self), KP(ls_service));
+    FLOG_INFO("ObLogService init success", K(ret), K(base_dir), K(self),
+        KP(log_storage), K(enable_shared_storage_));
   }
 
   if (OB_FAIL(ret) && OB_INIT_TWICE != ret) {
@@ -363,7 +380,8 @@ int ObLogService::get_palf_stable_disk_usage(int64_t &used_size_byte, int64_t &t
   return ret;
 }
 
-int ObLogService::update_palf_options_except_disk_usage_limit_size()
+int ObLogService::update_palf_options_except_disk_usage_limit_size(
+    const ObLogRuntimeConfig &runtime_config)
 {
   ObSpinLockGuard guard(update_palf_opts_lock_);
   int ret = OB_SUCCESS;
@@ -374,14 +392,19 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size()
     if (OB_FAIL(palf_env_->get_options(palf_opts))) {
       CLOG_LOG(WARN, "palf get_options failed", K(ret));
     } else {
-      palf_opts.disk_options_.log_disk_utilization_threshold_ = GCONF.log_disk_utilization_threshold;
-      palf_opts.disk_options_.log_disk_utilization_limit_threshold_ = GCONF.log_disk_utilization_limit_threshold;
-      palf_opts.disk_options_.log_disk_throttling_percentage_ = GCONF.log_disk_throttling_percentage;
-      palf_opts.disk_options_.log_disk_throttling_maximum_duration_ = GCONF.log_disk_throttling_maximum_duration;
-      palf_opts.enable_log_cache_ = GCONF._enable_log_cache;
+      palf_opts.disk_options_.log_disk_utilization_threshold_ =
+          runtime_config.log_disk_utilization_threshold_;
+      palf_opts.disk_options_.log_disk_utilization_limit_threshold_ =
+          runtime_config.log_disk_utilization_limit_threshold_;
+      palf_opts.disk_options_.log_disk_throttling_percentage_ =
+          runtime_config.log_disk_throttling_percentage_;
+      palf_opts.disk_options_.log_disk_throttling_maximum_duration_ =
+          runtime_config.log_disk_throttling_maximum_duration_;
+      palf_opts.enable_log_cache_ = runtime_config.enable_log_cache_;
       if (OB_FAIL(palf_env_->update_options(palf_opts))) {
         CLOG_LOG(WARN, "palf update_options failed", K(ret), K(palf_opts));
       } else {
+        runtime_config_ = runtime_config;
         CLOG_LOG(INFO, "palf update_options success", K(ret), K(palf_opts));
       }
     }
@@ -562,7 +585,7 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
     CLOG_LOG(WARN, "get_disk_usage failed", K(ret));
   } else {
     int64_t unrecyclable_log_disk_size = 0;
-    const int64_t CHECKPOINT_PERCENTAGE = 30;
+    const int64_t CHECKPOINT_PERCENTAGE = enable_shared_storage_ ? 60 : 30;
     if (OB_FAIL(get_unrecyclable_log_disk_size(unrecyclable_log_disk_size))) {
       CLOG_LOG(WARN, "get unrecyclable log disk size failed", K(ret));
     } else {
@@ -576,26 +599,13 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
 int ObLogService::get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_size)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
-  ObLS *ls = nullptr;
   unrecyclable_log_disk_size = 0;
-  if (OB_ISNULL(ls_service)) {
+  if (OB_ISNULL(log_storage_)) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "ls service is null", K(ret));
-  } else if (OB_FAIL(ls_service->get_ls(ls))) {
-    CLOG_LOG(WARN, "get log stream failed", KP(ls_service), K(ret));
-  } else {
-    ObLogHandler *log_handler = ls->get_log_handler();
-    LSN end_lsn;
-    LSN base_lsn = ls->get_clog_base_lsn();
-    if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-      CLOG_LOG(WARN, "get_end_lsn failed", KP(ls), K(base_lsn));
-    } else if (end_lsn < base_lsn) {
-      ret = OB_ERR_UNEXPECTED;
-      CLOG_LOG(WARN, "end_lsn is smaller than base_lsn", K(lbt()), K(end_lsn), K(base_lsn));
-    } else {
-      unrecyclable_log_disk_size = end_lsn - base_lsn;
-    }
+    CLOG_LOG(WARN, "log storage is null", K(ret));
+  } else if (OB_FAIL(log_storage_->get_unrecyclable_log_disk_size(
+      unrecyclable_log_disk_size))) {
+    CLOG_LOG(WARN, "get unrecyclable log disk size failed", K(ret));
   }
   return ret;
 }
@@ -603,26 +613,13 @@ int ObLogService::get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_
 }//end of namespace logservice
 }//end of namespace oceanbase
 
-// ===== definition moved from share/ob_share_util.cpp =====
-
-namespace oceanbase
-{
-namespace share
-{
-
-// check_clog_disk_full_or_hang has been demoted to logservice::free function(see end of file)
-
-
-}  // namespace share
-}  // namespace oceanbase
-
-// from share::ObShareUtil demoted(A-setmember split)
 namespace oceanbase
 {
 namespace logservice
 {
 using namespace oceanbase::share;
 int check_clog_disk_full_or_hang(
+    ObLogService &log_service,
     bool &clog_disk_is_full,
     bool &clog_disk_is_hang)
 {
@@ -632,18 +629,16 @@ int check_clog_disk_full_or_hang(
   int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
   const int64_t now = ObTimeUtility::current_time();
   bool is_disk_enough = true;
-  logservice::ObLogService *log_service = share::g_mp->log_service();
-  if (OB_ISNULL(log_service)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(log_service));
-  } else if (OB_FAIL(log_service->get_io_start_time(clog_disk_last_working_time))) {
+  if (OB_FAIL(log_service.get_io_start_time(clog_disk_last_working_time))) {
     LOG_WARN("get_io_start_time failed", KR(ret));
-  } else if (OB_FAIL(log_service->check_disk_space_enough(is_disk_enough))) {
+  } else if (OB_FAIL(log_service.check_disk_space_enough(is_disk_enough))) {
     LOG_WARN("check_disk_space_enough failed", KR(ret));
   } else {
     clog_disk_is_full = !is_disk_enough;
-    clog_disk_is_hang = OB_INVALID_TIMESTAMP != clog_disk_last_working_time
-                        && now - clog_disk_last_working_time > GCONF.log_storage_warning_tolerance_time;
+    clog_disk_is_hang =
+        OB_INVALID_TIMESTAMP != clog_disk_last_working_time &&
+        now - clog_disk_last_working_time >
+            log_service.get_log_storage_warning_tolerance_time();
   }
   return ret;
 }

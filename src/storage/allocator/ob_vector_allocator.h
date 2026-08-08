@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_ALLOCATOR_OB_VECTOR_ALLOCATOR_H_
 #define OCEANBASE_ALLOCATOR_OB_VECTOR_ALLOCATOR_H_
+#include "data_plane/vector/ob_i_vector_memory.h"
 #include "lib/vector/ob_vector_util.h"
 #include "storage/throttle/ob_share_throttle_define.h"
 #include "share/config/ob_runtime_config.h"
@@ -120,7 +121,8 @@ private:
   constexpr static int64_t MEM_PTR_HEAD_SIZE = 16;
 };
 
-class ObIvfMemContext : public ObVectorMemContext
+class ObIvfMemContext : public ObVectorMemContext,
+                        public data_plane::ObIVectorMemory
 {
 public:
   ObIvfMemContext(uint64_t *all_vsag_use_mem)
@@ -136,6 +138,9 @@ public:
   bool is_inited() { return OB_NOT_NULL(mem_context_); }
   void* Allocate(size_t size);
   void Deallocate(void* p);
+  void *allocate(size_t size) override { return Allocate(size); }
+  void deallocate(void *p) override { Deallocate(p); }
+  uint64_t allocated_bytes() const override { return ATOMIC_LOAD(all_vsag_use_mem_); }
   int64_t hold() {
     int res = 0;
     if (mem_context_.ref_context() != NULL) {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_sstable.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_sstable_multi_version_row_iterator.h"
 #include "storage/access/ob_sstable_row_lock_checker.h"
 #include "storage/access/ob_sstable_row_whole_scanner.h"
@@ -1462,7 +1462,7 @@ int ObSSTable::add_used_size() const
     LOG_WARN("get small sstable macro block failed", K(ret));
   } else {
     ObSharedMacroBlockMgr *shared_block_mgr =
-        share::g_mp->shared_macro_block_mgr();
+        ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>();
     if (OB_ISNULL(shared_block_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("shared macro block manager is null", K(ret));
@@ -1497,7 +1497,7 @@ int ObSSTable::dec_used_size() const
     LOG_WARN("get small sstable macro block failed", K(ret));
   } else {
     ObSharedMacroBlockMgr *shared_block_mgr =
-        share::g_mp->shared_macro_block_mgr();
+        ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>();
     if (OB_ISNULL(shared_block_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("shared macro block manager is null", K(ret));

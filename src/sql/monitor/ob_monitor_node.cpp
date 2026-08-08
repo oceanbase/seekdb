@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
-#include "sql/monitor/ob_monitor_node.h"
+#include "query/monitor/ob_monitor_node.h"
 #include "sql/engine/ob_operator.h"
 
 namespace oceanbase { namespace common { uint64_t lib_get_cpu_khz(); } }

@@ -22,7 +22,6 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace observer;
 
 namespace share
 {

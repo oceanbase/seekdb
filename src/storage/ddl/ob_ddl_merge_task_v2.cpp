@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 #include "share/ob_ddl_checksum.h"
@@ -29,7 +29,6 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/ddl/ob_ddl_merge_schedule.h"
-using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;
 using namespace oceanbase::common;

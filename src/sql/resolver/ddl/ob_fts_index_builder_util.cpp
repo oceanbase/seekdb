@@ -19,12 +19,12 @@
 #include "ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "storage/fts/dict/ob_gen_dic_loader.h"
-#include "storage/fts/dict/ob_dic_lock.h"
+#include "data_plane/fts/dict/ob_gen_dic_loader.h"
+#include "data_plane/fts/dict/ob_dic_lock_service.h"
 #include "share/ob_server_struct.h"
-#include "rootserver/ob_local_management_service.h"
-#include "storage/fts/ob_fts_parser_helper.h"
-#include "share/schema/ob_schema_utils.h"  // relocated-definition owner
+#include "data_plane/fts/ob_fts_parser_helper.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "share/schema/ob_schema_utils.h"
 
 namespace oceanbase
 {
@@ -180,7 +180,7 @@ int ObFtsIndexBuilderUtil::check_fts_aux_index_schema_exist(
     const obcall::ObCreateIndexArg &arg,
     const share::schema::ObIndexType index_type,
     ObSchemaGetterGuard &schema_guard,
-    rootserver::ObDDLService &ddl_service,
+    query::ObIAuxIndexSchemaChecker &schema_checker,
     ObIAllocator &allocator,
     bool &is_exist)
 {
@@ -199,11 +199,11 @@ int ObFtsIndexBuilderUtil::check_fts_aux_index_schema_exist(
   } else if (FALSE_IT(tmp_arg.index_type_ = index_type)) {
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_aux_index_name(tmp_arg, &allocator))) {
     LOG_WARN("failed to adjust fts index name", K(ret));
-  } else if (OB_FAIL(ddl_service.check_aux_index_schema_exist(tmp_arg,
-                                                              schema_guard,
-                                                              &data_schema,
-                                                              is_exist,
-                                                              rowkey_doc_schema))) {
+  } else if (OB_FAIL(schema_checker.check_aux_index_schema_exist(tmp_arg,
+                                                                 schema_guard,
+                                                                 &data_schema,
+                                                                 is_exist,
+                                                                 rowkey_doc_schema))) {
     LOG_WARN("fail to check rowkey doc schema existence", K(ret));
   }
   return ret;
@@ -2172,8 +2172,8 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
         LOG_WARN("fail to get charset type", K(ret), K(index_schema));
       }
       if (OB_SUCC(ret)) {
-        ObDicLoaderHandle dic_loader_handle;
-        if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
+        storage::ObDicLoaderHandle dic_loader_handle;
+        if (OB_FAIL(storage::ObGenDicLoader::get_instance().get_dic_loader(
                                                                   parser_name,
                                                                   charset_type,
                                                                   dic_loader_handle))) {
@@ -2184,9 +2184,8 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
           LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
         } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans())) {
           LOG_WARN("fail to try load dictionary", K(ret), K(dic_loader_handle));
-        } else if (OB_FAIL(storage::ObDicLock::lock_dic_tables_in_trans(*dic_loader_handle.get_loader(),
-                                                                        transaction::tablelock::SHARE,
-                                                                        trans))) {
+        } else if (OB_FAIL(data_plane::ObDictionaryLockService::lock_tables_shared_in_transaction(
+                       *dic_loader_handle.get_loader(), trans))) {
           LOG_WARN("fail to lock all dictionaries", K(ret), K(1UL), K(dic_loader_handle));
         }
       }
@@ -2198,12 +2197,12 @@ int ObFtsIndexBuilderUtil::try_load_and_lock_dictionary_tables(
 int ObFtsIndexBuilderUtil::try_load_dictionary()
 {
   int ret = OB_SUCCESS;
-  ObDicLoaderHandle dic_loader_handle;
+  storage::ObDicLoaderHandle dic_loader_handle;
 
   DEBUG_SYNC(BEFORE_LOAD_DICTIONARY_IN_BACKGROUND);
 
-  if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
-          ObFTSLiteral::PARSER_NAME_IK,
+  if (OB_FAIL(storage::ObGenDicLoader::get_instance().get_dic_loader(
+          storage::ObFTSLiteral::PARSER_NAME_IK,
           ObCharsetType::CHARSET_UTF8MB4,
           dic_loader_handle))) {
     LOG_WARN("fail to get dictionary loader", K(ret));
@@ -2229,7 +2228,7 @@ int ObFtsIndexBuilderUtil::check_supportability_for_loader_key(const ObString &p
     if (nullptr != real_parser_name.find('.')) {
       real_parser_name = real_parser_name.split_on('.');
     }
-    if (0 == real_parser_name.case_compare(ObFTSLiteral::PARSER_NAME_IK)) {
+    if (0 == real_parser_name.case_compare(storage::ObFTSLiteral::PARSER_NAME_IK)) {
       switch (charset_type)
       {
         case ObCharsetType::CHARSET_UTF8MB4: {
@@ -2295,7 +2294,7 @@ int ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
     ObTableSchema &new_table_schema,
     ObTableSchema &new_index_schema,
     common::ObIAllocator &allocator,
-    oceanbase::rootserver::ObDDLOperator &ddl_operator,
+    query::ObIColumnSchemaWriter &column_writer,
     common::ObMySQLTransaction &trans,
     ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
     ObSEArray<ObString, 1> &domain_store_columns)
@@ -2339,7 +2338,7 @@ int ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
           }
           tmp_table_schema.set_in_offline_ddl_white_list(true);
           FOREACH_X(it, gen_columns, OB_SUCC(ret)) {
-            if (OB_FAIL(ddl_operator.insert_single_column(trans, tmp_table_schema, *(*it)))) {
+            if (OB_FAIL(column_writer.insert_single_column(trans, tmp_table_schema, *(*it)))) {
               LOG_WARN("failed to insert vec column", K(ret), KP(*it));
             }
           }
@@ -3379,7 +3378,7 @@ int ObFtsIndexSchemaPrinter::print_fts_parser_info(
     LOG_WARN("fail to init parser properties", K(ret));
   } else if (OB_FAIL(parser_properties.parse_from_valid_str(table_schema.get_parser_property_str()))) { // TODO: check valid.
     LOG_WARN("fail to parse properties", K(ret), K(parser), K(table_schema.get_parser_property_str()));
-  } else if (OB_FAIL(ObFTParserJsonProps::show_parser_properties(parser_properties, buf, buf_len, pos))) {
+  } else if (OB_FAIL(storage::ObFTParserJsonProps::show_parser_properties(parser_properties, buf, buf_len, pos))) {
     LOG_WARN("fail to show parser properties", K(ret), K(parser_properties));
   }
   return ret;

@@ -1,0 +1,67 @@
+# owner: binifei.bnf
+# owner group: major freeze
+# Major freeze has been launched, but not finished.
+# In this time, delete one server.
+# We need to ensure that this round major_freeze should complete.
+
+ob1=OBI(cluster=2:2:2, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,test, $proxy_port);
+connection sys_conn;
+alter system set merger_check_interval = '10s';
+# Note: there may be unfinished major_merge, which are launched according to major_freeze_duty_time.
+# Therefore, we need to disable daily_merge and wait the launched major_merge to finish here.
+ob1.mysql alter system set major_freeze_duty_time = 'Disable';
+ob1.check_until_timeout select frozen_scn=last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1, 1, 600;
+
+let $leader_zone = deploy_get_value(ob1.select select zone from oceanbase.__all_server where with_rootserver = 1, zone, 1);
+let $non_leader_zone = deploy_get_value(ob1.select select zone from oceanbase.__all_server where zone != '$leader_zone' order by zone desc, zone, 1);
+let $delete_ip_candidate1 = deploy_get_value(ob1.select select svr_ip from oceanbase.__all_server where zone = '$non_leader_zone', svr_ip, 1);
+let $delete_port_candidate1 = deploy_get_value(ob1.select select svr_port from oceanbase.__all_server where zone = '$non_leader_zone', svr_port, 1);
+let $delete_ip_candidate2 = deploy_get_value(ob1.select select svr_ip from oceanbase.__all_server where zone = '$non_leader_zone', svr_ip, 2);
+let $delete_port_candidate2 = deploy_get_value(ob1.select select svr_port from oceanbase.__all_server where zone = '$non_leader_zone', svr_port, 2);
+
+# launch one major freeze, and modify epoch after publishing the new global broadcast SCN
+ob1.mysql alter system major freeze;
+let $new_frozen_scn = deploy_get_value(ob1.select select max(frozen_scn) as value from oceanbase.__all_freeze_info, value, 1);
+ob1.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where global_broadcast_scn = $new_frozen_scn, 1, 600;
+--disable_query_log
+eval update oceanbase.__all_service_epoch set value = -5 where tenant_id = 1 and name = 'freeze_service_epoch';
+--enable_query_log
+
+# delete one server without leader rs but containing tablets
+let $cnt = deploy_get_value(ob1.select select count(*) as cnt from oceanbase.__all_tablet_meta_table where svr_ip = '$delete_ip_candidate1' and svr_port = $delete_port_candidate1, cnt, 1);
+let $delete_ip = "";
+let $delete_port = 0;
+if ($cnt > 0)
+{
+    let $delete_ip = $delete_ip_candidate1;
+    let $delete_port = $delete_port_candidate1;
+}
+if ($cnt <= 0)
+{
+    let $delete_ip = $delete_ip_candidate2;
+    let $delete_port = $delete_port_candidate2;
+}
+let $gmt_create = deploy_get_value(ob1.select select gmt_create from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, gmt_create, 1);
+let $gmt_modified = deploy_get_value(ob1.select select gmt_modified from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, gmt_modified, 1);
+let $tablet_id = deploy_get_value(ob1.select select tablet_id from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, tablet_id, 1);
+let $ls_id = deploy_get_value(ob1.select select ls_id from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, ls_id, 1);
+let $data_size = deploy_get_value(ob1.select select data_size from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, data_size, 1);
+let $required_size = deploy_get_value(ob1.select select required_size from __all_tablet_meta_table where svr_ip = "$delete_ip" and svr_port = $delete_port limit 1, required_size, 1);
+--disable_query_log
+eval alter system delete server "$delete_ip:$delete_port";
+--enable_query_log
+
+# wait unitl delete from __all_server, then insert into __all_tablet_meta_table tablets that need filter and resume epoch
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where svr_ip = "delete_ip" and svr_port = $delete_port, 0, 600;
+ob1.check_until_timeout select count(*) from oceanbase.__all_tablet_meta_table where svr_ip = '$delete_ip' and svr_port = $delete_port, 0, 600;
+--disable_query_log
+eval insert into oceanbase.__all_tablet_meta_table values('$gmt_create', '$gmt_modified', 1, $tablet_id, $ls_id, '$delete_ip', $delete_port, 1, $data_size, $required_size, 1, 0);
+eval update oceanbase.__all_service_epoch set value = 1 where tenant_id = 1 and name = 'freeze_service_epoch';
+--enable_query_log
+
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = $new_frozen_scn, 1, 600;

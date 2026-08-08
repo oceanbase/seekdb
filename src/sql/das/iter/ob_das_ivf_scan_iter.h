@@ -22,7 +22,8 @@
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "query/vector/ob_vector_index_service.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -255,7 +256,7 @@ protected:
   int prepare_cid_range(const ObDASScanCtDef *cid_vec_ctdef, int64_t &cid_vec_column_count,
                         int64_t &cid_vec_pri_key_cnt, int64_t &rowkey_cnt);
   int scan_cid_range(const ObString &cid, int64_t cid_vec_pri_key_cnt, const ObDASScanCtDef *cid_vec_ctdef,
-                     ObDASScanRtDef *cid_vec_rtdef, storage::ObTableScanIterator *&cid_vec_scan_iter);
+                     ObDASScanRtDef *cid_vec_rtdef, common::ObNewRowIterator *&cid_vec_scan_iter);
   int64_t get_nprobe(const common::ObLimitParam &limit_param, int64_t enlargement_factor = 1);
   int generate_nearest_cid_heap(bool is_vectorized,
                                 share::ObVectorCenterClusterHelper<float, ObCenterId> &nearest_cid_heap,

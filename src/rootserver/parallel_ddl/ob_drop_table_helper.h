@@ -18,7 +18,6 @@
 #define OCEANBASE_ROOTSERVER_OB_DROP_TABLE_HELPER_H_
 
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
-#include "storage/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase {
 namespace share {
@@ -49,7 +48,7 @@ public:
                K_(dep_objs),
                K_(ddl_stmt_str),
                K_(err_table_list),
-               K_(tablet_autoinc_cleaner));
+               K_(tablet_autoinc_cache_tablet_ids));
 private:
   virtual int init_() override;
   virtual int lock_objects_() override;
@@ -115,7 +114,7 @@ private:
   ObArray<ObArray<std::pair<uint64_t, share::schema::ObObjectType>>> dep_objs_;
   ObSqlString ddl_stmt_str_;
   ObSqlString err_table_list_;
-  ObTabletAutoincCacheCleaner tablet_autoinc_cleaner_;
+  ObArray<ObTabletID> tablet_autoinc_cache_tablet_ids_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObDropTableHelper);

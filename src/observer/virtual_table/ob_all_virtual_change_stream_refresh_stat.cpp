@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_all_virtual_change_stream_refresh_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_global_stat_proxy.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
@@ -70,7 +70,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
     int64_t fetch_scn = 0;
 
     // Get refresh_scn from in-memory manager state
-    ObChangeStreamMgr *cs_mgr = share::g_mp->change_stream_mgr();
+    ObChangeStreamMgr *cs_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
     if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
       refresh_scn_val = cs_mgr->get_dispatcher().get_refresh_scn();
     }
@@ -91,7 +91,7 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
 
     // Get stats from ObCSFetcher
     if (OB_SUCC(ret)) {
-      ObChangeStreamMgr *cs_mgr = share::g_mp->change_stream_mgr();
+      ObChangeStreamMgr *cs_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
       if (OB_NOT_NULL(cs_mgr) && cs_mgr->is_inited()) {
         ObCSFetcher &fetcher = cs_mgr->get_fetcher();
         pending_tx_count = fetcher.get_current_processing_tx_count();

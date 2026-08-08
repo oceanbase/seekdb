@@ -18,12 +18,11 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memstore_freezer.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/compaction/ob_i_major_freeze_coordinator.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/ob_running_mode.h"
-#include "observer/ob_srv_network_frame.h"
 #include "share/ob_ex_rpc.h"
 #include "storage/tx_storage/ob_memstore_freezer_local_dispatch.h"
-#include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_structured_event_logger.h"
@@ -80,8 +79,7 @@ int ObMemstoreFreezer::init()
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("[MemstoreFreezer] memstore freezer init twice.", KR(ret));
-  } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid()) ||
-             OB_ISNULL(GCTX.net_frame_)) {
+  } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_trigger_timer_.init("MemstoreFreezer", ObMemAttr("MemstoreFreezer")))) {
@@ -143,7 +141,7 @@ bool ObMemstoreFreezer::exist_ls_freezing()
   int ret = OB_SUCCESS;
   bool exist_ls_freezing = false;
   ObLS *ls = nullptr;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
@@ -172,7 +170,7 @@ bool ObMemstoreFreezer::exist_ls_throttle_is_skipping()
       ATOMIC_BCAS(&throttle_is_skipping_cache_.update_ts_, last_update_ts, cur_ts)) {
     bool exist_ls_throttle_is_skipping = false;
 
-    ObLSService *ls_srv = share::g_mp->ls_service();
+    ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     ObLS *ls = nullptr;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
@@ -210,7 +208,7 @@ bool ObMemstoreFreezer::memstore_remain_memory_is_exhausting()
     } else {
       const int64_t MEMORY_IS_EXHAUSTING_PERCENTAGE = 10;
       ObMemstoreAllocator &memstore_allocator =
-          share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+          share::server_service<share::ObSharedMemAllocMgr>()->memstore_allocator();
       const int64_t memstore_limit = memstore_info_.get_memstore_limit();
       const int64_t memstore_used = memstore_allocator.get_memstore_quota_used();
       const int64_t memstore_remain = memstore_limit - memstore_used;
@@ -307,7 +305,7 @@ int ObMemstoreFreezer::ls_freeze_all_unit_(ObLS *ls,
 int ObMemstoreFreezer::freeze_all_data_()
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
   FLOG_INFO("[MemstoreFreezer] freeze_all start", KR(ret));
 
@@ -334,7 +332,7 @@ int ObMemstoreFreezer::freeze_all(const ObFreezeSourceFlag source)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
   int64_t abs_timeout_ts = INT64_MAX;
 
@@ -377,7 +375,7 @@ int ObMemstoreFreezer::tablet_freeze(const common::ObTabletID &tablet_id,
                                    const ObFreezeSourceFlag source)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
   // 0 as default timeout ts
   const int64_t abs_timeout_ts = (0 == max_retry_time_us) ? 0 : ObClockGenerator::getClock() + max_retry_time_us;
@@ -503,7 +501,7 @@ int ObMemstoreFreezer::get_tx_data_info_for_freeze_(int64_t &tx_data_frozen_mem_
   int ret = OB_SUCCESS;
   tx_data_frozen_mem_used = 0;
   tx_data_active_mem_used = 0;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
 
   if (IS_NOT_INIT) {
@@ -589,7 +587,9 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
     bool trigger_flush = false;
     int64_t memory_budget = lib::get_memory_budget();
     int64_t trigger_freeze_memory = lib::get_mds_freeze_trigger_memory();
-    ObMdsAllocator &mds_allocator = share::g_mp->shared_mem_alloc_mgr()->mds_allocator();
+    ObMdsAllocator &mds_allocator =
+        ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()
+            ->mds_allocator();
     int64_t hold_memory = mds_allocator.hold();
 
     if (OB_UNLIKELY(0 == trigger_freeze_memory)) {
@@ -617,7 +617,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
 int ObMemstoreFreezer::do_freeze_diagnose()
 {
   int ret = OB_SUCCESS;
-  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
   const int64_t current_time = ObTimeUtility::current_time();
   const int64_t capture_time_interval = 1_min;
 
@@ -877,7 +877,8 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
                  "memstore_freeze_trigger_limit", ctx.memstore_freeze_trigger_,
                  "memory_budget", lib::get_memory_budget(),
                  "memstore_quota_used",
-                 share::g_mp->shared_mem_alloc_mgr()->memstore_allocator().get_memstore_quota_used());
+                 share::server_service<share::ObSharedMemAllocMgr>()
+                     ->memstore_allocator().get_memstore_quota_used());
       }
     }
   }
@@ -1042,7 +1043,7 @@ int64_t ObMemstoreFreezer::get_memstore_limit_percentage()
 int ObMemstoreFreezer::get_memory_usage_(ObMemstoreFreezeCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
 
   int64_t active_memstore_used = 0;
   int64_t freezable_active_memstore_used = 0;
@@ -1065,7 +1066,7 @@ int ObMemstoreFreezer::get_memory_usage_(ObMemstoreFreezeCtx &ctx)
 int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
   int64_t active_memstore_used = 0;
   int64_t memstore_quota_used = 0;
   int64_t max_cached_memstore_size = 0;
@@ -1371,7 +1372,12 @@ int ObMemstoreFreezer::get_global_frozen_scn_(int64_t &frozen_scn)
 
 
   SCN tmp_frozen_scn;
-  if (OB_FAIL(rootserver::ObMajorFreezeHelper::get_frozen_scn(tmp_frozen_scn))) {
+  data_plane::ObIMajorFreezeCoordinator *major_freeze_coordinator =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIMajorFreezeCoordinator>();
+  if (OB_ISNULL(major_freeze_coordinator)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("major freeze coordinator is not configured", KR(ret));
+  } else if (OB_FAIL(major_freeze_coordinator->get_frozen_scn(tmp_frozen_scn))) {
     LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     frozen_scn = tmp_frozen_scn.get_val_for_tx();
@@ -1506,7 +1512,9 @@ int ObMemstoreFreezer::do_major_freeze_(const int64_t try_frozen_scn)
 void ObMemstoreFreezer::log_frozen_memstore_info_if_need_(const ObMemstoreFreezeCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator =
+      ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()
+          ->memstore_allocator();
   if (ctx.memstore_quota_used_ > ctx.memstore_freeze_trigger_ ||
       ctx.freezable_active_memstore_used_ > ctx.memstore_freeze_trigger_) {
     // There is an unreleased memstable
@@ -1764,7 +1772,7 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
   if (OB_SUCC(ret)) {
     storage::ObMemstoreFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+    if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
     } else if (OB_FAIL(freezer->check_memstore_full_internal(is_out_of_mem))) {
       COMMON_LOG(ERROR, "fail to check memory limit", K(ret), K(1UL));
     }
@@ -1795,7 +1803,7 @@ int ObMemstoreAllocator::set_memstore_threshold_without_lock()
   int64_t memstore_threshold = INT64_MAX;
 
   storage::ObMemstoreFreezer *freezer = nullptr;
-  if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+  if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
   } else if (OB_FAIL(freezer->get_memstore_limit(memstore_threshold))) {
     COMMON_LOG(WARN, "failed to get_memstore_limit", K(ret));
   } else {

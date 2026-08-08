@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
-#include "pl/sys_package/ob_dbms_stats.h"
+#include "sql/pl/sys_package/ob_dbms_stats.h"
 #include "sql/engine/cmd/ob_analyze_executor.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "src/observer/virtual_table/ob_all_virtual_dml_stats.h"
+#include "share/ob_share_util.h"
 
 //#define COMPUTE_FREQUENCY_HISTOGRAM
 //   "SELECT /*+NO_USE_PX*/ col, sum(val) over (order by col rows between unbounded preceding and current row) "

@@ -20,6 +20,7 @@
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "query/optimizer/stat/ob_optimizer_stat_service.h"
 
 #define GET_COMPRESSED_INFO_SQL "select sum(occupy_size)/sum(original_size) as compression_ratio from oceanbase.__all_virtual_tablet_sstable_macro_info "\
                                 "where tablet_id in (%.*s);"\
@@ -984,5 +985,60 @@ int ObDbmsSpace::generate_tablet_predicate_str(ObSqlString &target_str,
   return ret;
 }
 
+} // namespace pl
+
+namespace query
+{
+
+int ObOptimizerStatService::estimate_index_table_size(
+    common::ObMySQLProxy *sql_proxy,
+    const share::schema::ObTableSchema *table_schema,
+    const common::ObIArray<int64_t> &partition_ids,
+    const common::ObIArray<uint64_t> &column_ids,
+    common::ObIArray<uint64_t> &table_sizes)
+{
+  int ret = OB_SUCCESS;
+  pl::ObDbmsSpace::IndexCostInfo cost_info;
+  if (OB_ISNULL(table_schema)) {
+    ret = OB_INVALID_ARGUMENT;
+    SQL_ENG_LOG(WARN, "table schema is null", K(ret));
+  } else if (OB_FAIL(cost_info.part_ids_.assign(partition_ids))) {
+    SQL_ENG_LOG(WARN, "fail to assign partition ids", K(ret));
+  } else if (OB_FAIL(cost_info.column_ids_.assign(column_ids))) {
+    SQL_ENG_LOG(WARN, "fail to assign column ids", K(ret));
+  } else {
+    cost_info.table_id_ = table_schema->get_table_id();
+    if (OB_FAIL(pl::ObDbmsSpace::estimate_index_table_size(
+        sql_proxy, table_schema, cost_info, table_sizes))) {
+      SQL_ENG_LOG(WARN, "fail to estimate index table size", K(ret));
+    }
+  }
+  return ret;
 }
+
+int ObOptimizerStatService::get_each_tablet_size(
+    common::ObMySQLProxy *sql_proxy,
+    const share::schema::ObTableSchema *table_schema,
+    common::ObIArray<ObOptimizerTabletSize> &tablet_sizes)
+{
+  int ret = OB_SUCCESS;
+  common::ObSEArray<std::pair<common::ObTabletID, uint64_t>, 4> raw_tablet_sizes;
+  tablet_sizes.reset();
+  if (OB_FAIL(pl::ObDbmsSpace::get_each_tablet_size(
+      sql_proxy, table_schema, raw_tablet_sizes))) {
+    SQL_ENG_LOG(WARN, "fail to get each tablet size", K(ret));
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < raw_tablet_sizes.count(); ++i) {
+      ObOptimizerTabletSize item = {
+          raw_tablet_sizes.at(i).first.id(), raw_tablet_sizes.at(i).second};
+      if (OB_FAIL(tablet_sizes.push_back(item))) {
+        SQL_ENG_LOG(WARN, "fail to append tablet size", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace query
+
 }

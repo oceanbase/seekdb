@@ -66,7 +66,7 @@ int ObExprPrivSTMakeValid::eval_priv_st_makevalid(const ObExpr &expr, ObEvalCtx 
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *gis_datum1 = nullptr;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = nullptr;
   ObGeometry *geo = NULL;
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, gis_datum1))) {

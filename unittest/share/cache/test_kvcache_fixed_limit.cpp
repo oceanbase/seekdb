@@ -68,10 +68,3 @@ TEST(TestKVCacheFixedLimit, computes_store_block_excess)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  OB_LOGGER.set_file_name("test_kvcache_fixed_limit.log", true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

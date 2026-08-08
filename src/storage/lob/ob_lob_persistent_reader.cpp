@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/lob/ob_lob_access_context.h"
 #include "ob_lob_persistent_reader.h"
 #include "storage/lob/ob_lob_persistent_iterator.h"
 
@@ -105,4 +106,34 @@ ObLobMetaIterator* ObPersistLobReaderCache::alloc_reader(const ObLobAccessCtx *a
 }
 
 } // storage
+
+namespace data_plane
+{
+
+int create_lob_access_context(
+    common::ObIAllocator &allocator,
+    common::ObILobAccessContext *&context)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLobAccessCtx *storage_context = nullptr;
+  if (OB_ISNULL(storage_context = OB_NEWx(storage::ObLobAccessCtx, &allocator))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate lob access context", K(ret));
+  } else {
+    context = storage_context;
+  }
+  return ret;
+}
+
+void destroy_lob_access_context(common::ObILobAccessContext *&context)
+{
+  if (OB_NOT_NULL(context)) {
+    storage::ObLobAccessCtx *storage_context =
+        static_cast<storage::ObLobAccessCtx *>(context);
+    storage_context->~ObLobAccessCtx();
+    context = nullptr;
+  }
+}
+
+} // namespace data_plane
 } // oceanbase

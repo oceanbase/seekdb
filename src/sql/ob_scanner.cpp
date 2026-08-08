@@ -18,7 +18,7 @@
 
 #include "sql/ob_scanner.h"
 
-#include "pl/ob_pl_package_state.h"
+#include "sql/pl/ob_pl_package_state.h"
 
 namespace oceanbase
 {

@@ -2034,7 +2034,7 @@ int ObTableSqlService::check_table_history_matched_(
     ObSchemaGetterGuard guard;
     const ObTableSchema *table_schema = NULL;
     ObSqlString column_sql;
-    if (OB_FAIL(GSCHEMASERVICE.get_runtime_schema_guard(guard))) {
+    if (OB_FAIL(multi_version_schema_service_.get_runtime_schema_guard(guard))) {
       LOG_WARN("fail to get schema guard", KR(ret));
     } else if (OB_FAIL(guard.get_table_schema( OB_ALL_TABLE_HISTORY_TID, table_schema))) {
       LOG_WARN("fail to get table schema", KR(ret));

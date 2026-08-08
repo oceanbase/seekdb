@@ -1,0 +1,64 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试功能点：单机多partition，日志不同partition交替
+# 用例描述: 每次写入一个partition，交替写入后重启 
+##
+ob1=OBI(cluster=1, init_unit_cpu=1);
+ob1.reboot;
+sleep 5;
+
+ob_connect(conn1, ob1.z1.obs0, root@obtest, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 3) partitions 3;
+
+#连续写入partition(p2)
+--disable_query_log
+let $cnt=50;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+	dec $cnt;
+	dec $cnt;
+}
+
+#写入一条partition(p1)
+insert into t1 values(49,49,'c49');
+
+#写入一条partition(p0)
+--disable_query_log
+let $cnt=48;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+	dec $cnt;
+	dec $cnt;
+}
+
+sleep 10;
+#写入一条partition(p2)
+update t1 set c2='c5050' where pk=50;
+
+--enable_query_log
+select * from t1 partition(p0);
+select * from t1 partition(p1);
+select * from t1 partition(p2);
+
+ob1.z1.obs0.restart;
+
+sleep 90;
+
+--enable_query_log
+
+ob_connect(conn1, ob1.z1.obs0, root@obtest, , oceanbase, , USE_MYSQL_CONNECTOR);
+use obtest;
+select * from t1 partition(p0);
+select * from t1 partition(p1);
+select * from t1 partition(p2);
+
+

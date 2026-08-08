@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_collection_construct.h"
-#include "pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_package.h"
 
 namespace oceanbase
 {

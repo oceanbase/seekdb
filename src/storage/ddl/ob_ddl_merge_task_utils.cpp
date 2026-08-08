@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_ddl_checksum.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -28,8 +28,7 @@
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_structured_event_logger.h"
-#include "observer/ob_tablet_runtime_meta_updater.h" // for ObTabletRuntimeMetaUpdater
-using namespace oceanbase::observer;
+#include "data_plane/report/ob_tablet_report.h"
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -214,13 +213,13 @@ int ObDDLMergeTaskUtils::freeze_ddl_kv(const ObTabletID &tablet_id,
     
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObLS *ls = nullptr;
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   if (OB_FAIL(ls_service->get_ls(ls))) {
     LOG_WARN("get ls failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls,
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls,
                                                tablet_id,
                                                tablet_handle,
                                                ObMDSGetTabletMode::READ_ALL_COMMITED))) {
@@ -351,7 +350,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
   bool for_major = dag_merge_param.for_major_;
   
   ObLS *ls = nullptr;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletHandle tablet_handle, new_tablet_handle;
 
   int64_t snapshot_version = 0;
@@ -401,7 +400,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ls->update_tablet_table_store(target_tablet_id, table_store_param, new_tablet_handle))) {
         LOG_WARN("failed to update tablet table store", K(ret), K(target_tablet_id), K(table_store_param));
-      } else if (for_major && OB_FAIL(share::g_mp->tablet_runtime_meta_updater()->submit_update_task(target_tablet_id))) {
+      } else if (for_major && OB_FAIL(data_plane::submit_tablet_update(target_tablet_id))) {
         LOG_ERROR("fail to submit tablet update task", K(ret), K(dag_merge_param));
       }
     }

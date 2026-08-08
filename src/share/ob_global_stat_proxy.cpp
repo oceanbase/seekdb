@@ -178,8 +178,6 @@ int ObGlobalStatProxy::get_snapshot_info(int64_t &snapshot_gc_scn,
 
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
-
 int ObGlobalStatProxy::get_core_schema_version(int64_t &core_schema_version)
 {
   int ret = OB_SUCCESS;
@@ -249,8 +247,6 @@ int ObGlobalStatProxy::get_baseline_schema_version(int64_t &baseline_schema_vers
   }
   return ret;
 }
-
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
 
 int ObGlobalStatProxy::select_snapshot_gc_scn_for_update_nowait(
     common::ObISQLClient &sql_client,

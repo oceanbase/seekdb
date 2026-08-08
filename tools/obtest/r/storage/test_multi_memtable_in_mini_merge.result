@@ -1,0 +1,30 @@
+ob1=OBI(cluster=1, proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+create table test01(c1 int, c2 int, c3 varchar(4096), c4 int, c5 int, c6 double, c7 int, c8 varchar(512), c9 int, c10 float, primary key(c1)) primary_zone='z1';
+begin;
+ob1.mysql set ob_global_debug_sync = 'AFTER_FREEZE_BEFORE_MINI_MERGE wait_for signal_1';
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+ob1.check_until_timeout select count(*) from __all_virtual_table_mgr where is_active = 0 and table_type = 0 and tenant_id = tenant_id, 0, 120;
+ob1.check_until_timeout select count(*) from __all_virtual_table_mgr where table_id = '$table_id' and contain_uncommitted_row = 1 and table_type = 7, 1, 10;
+commit;
+select * from test01 where c1 = 218;
+c1	c2	c3	c4	c5	c6	c7	c8	c9	c10
+218	218	oceanbase	218	218	54.5	218	hello world 218	218	109
+select count(*) from test01 where c1 < 200;
+count(*)
+29
+begin;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 120;
+select * from test01 where c1 = 218;
+c1	c2	c3	c4	c5	c6	c7	c8	c9	c10
+218	218	oceanbase	218	218	54.5	218	hello world 218	218	109
+select count(*) from test01 where c1 < 200;
+count(*)
+29
+drop table test01;

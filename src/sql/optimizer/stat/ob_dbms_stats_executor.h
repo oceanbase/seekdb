@@ -21,7 +21,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_item.h"
 #include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
-#include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase {
 namespace observer
@@ -195,7 +194,8 @@ private:
                                       const ObIArray<int64_t> &no_stats_partition_ids,
                                       const ObIArray<uint64_t> &part_stattypes);
 
-  static int check_need_split_gather(const ObTableStatParam &param,
+  static int check_need_split_gather(ObExecContext &ctx,
+                                     const ObTableStatParam &param,
                                      GatherHelper &gather_helper);
 
   static int prepare_conn_and_store_session_for_online_stats(sql::ObSQLSessionInfo *session,

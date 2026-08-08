@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_vector_index_async_task_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -27,6 +27,8 @@
 #include "storage/ob_value_row_iterator.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/ob_table_dml_param.h"
+#include "data_plane/scheduler/ob_sys_task_stat.h"
+#include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "share/ob_common_id.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -1047,7 +1049,7 @@ int ObVecIndexAsyncTaskHandler::push_task(
 int ObVecIndexAsyncTaskHandler::get_allocator(ObIAllocator *&allocator)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
   if (OB_ISNULL(vector_index_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1073,7 +1075,7 @@ void ObVecIndexAsyncTaskHandler::handle(void *task)
     LOG_WARN("invalid argument", KR(ret));
   } else {
     async_task = static_cast<ObVecIndexIAsyncTask *>(task);
-    ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+    ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
     if (async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL 
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING
     || async_task->get_task_type() == ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_IVF_LOAD
@@ -1160,7 +1162,7 @@ void ObVecIndexAsyncTaskHandler::handle_drop(void *task)
 void ObVecIndexAsyncTaskHandler::update_processing_task_count(const bool is_inc)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
   if (OB_ISNULL(vector_index_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1180,7 +1182,7 @@ int ObVecIndexIAsyncTask::init(
   ObVecIndexAsyncTaskCtx *ctx)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
@@ -1247,7 +1249,7 @@ int ObVecIndexAsyncTask::do_work()
   int ret = OB_SUCCESS;
   bool task_started = false;
   ObPluginVectorIndexAdapterGuard adpt_guard;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   ObPluginVectorIndexAdaptor *new_adapter = nullptr;
   LOG_INFO("start do_work", K(ret), K(ctx_->task_status_));
   void *adpt_buff = nullptr;
@@ -1373,7 +1375,7 @@ int ObVecIndexAsyncTask::process_data_for_index(ObPluginVectorIndexAdaptor &adap
   //  hnsw:    [vector]  [rowkey(extra_colun)]           data_table.
   //  hybrid:  [vid]                  [vector]           embedded_table.
   common::ObNewRowIterator *data_iter = nullptr;
-  ObAccessService *tsc_service = share::g_mp->access_service();
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   const uint32_t VEC_INDEX_HNSWSQ_BUILD_COUNT_THRESHOLD = 10000;
   // (dim: 128 + vals: 128) * 4 = 1024
   const uint32_t VEC_INDEX_IPIVF_BUILD_COUNT_THRESHOLD = 10000 * 1024;
@@ -1625,7 +1627,7 @@ int ObVecIndexAsyncTask::optimize_vector_index(ObPluginVectorIndexAdaptor &adapt
   transaction::ObTxDesc *tx_desc = nullptr;
   oceanbase::transaction::ObTxReadSnapshot snapshot;
   bool trans_start = false;
-  oceanbase::transaction::ObTransService *txs = share::g_mp->trans_service();
+  oceanbase::transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_FAIL(ObInsertLobColumnHelper::start_trans(false/*is_for_read*/, timeout_us, tx_desc))) {
     LOG_WARN("fail to get tx_desc", K(ret));
@@ -1678,7 +1680,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   HEAP_VARS_3((ObLS *, ls, nullptr), (ObTabletHandle, data_tablet_handle), (ObTabletBindingMdsUserData, ddl_data))
   {
     ObLSService *ls_service = nullptr;
-    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+    if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected err", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
@@ -1697,7 +1699,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   const ObTableSchema *data_table_schema;
   const ObTableSchema *snapshot_table_schema;
   int64_t lob_inrow_threshold;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   share::schema::ObTableDMLParam table_dml_param(allocator_);
   share::schema::ObTableDMLParam table_delete_dml_param(allocator_);
   ObDMLBaseParam dml_param;
@@ -1837,7 +1839,7 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
         param.tx_desc_ = tx_desc;
         ObVectorIndexAlgorithmType index_type = VIAT_MAX;
 
-        if (OB_FAIL(adaptor.set_snapshot_key_prefix(adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH))) {
+        if (OB_FAIL(adaptor.set_snapshot_key_prefix(adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH))) {
           LOG_WARN("failed to set snapshot key prefix", K(ret), K(adaptor.get_snap_tablet_id().id()), K(ctx_->task_status_.target_scn_.get_val_for_inner_table_field()));
         } else if (OB_FAIL(adaptor.check_snap_hnswsq_index())) {
           LOG_WARN("failed to check snap hnswsq index", K(ret));
@@ -1858,20 +1860,20 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
             for (int64_t row_id = 0; row_id < ctx.vals_.count() && OB_SUCC(ret); row_id++) {
               int64_t key_pos = 0;
               char *key_str = nullptr;
-              key_str = static_cast<char*>(allocator_.alloc(ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH));
+              key_str = static_cast<char*>(allocator_.alloc(data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH));
               if (OB_ISNULL(key_str)) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
                 LOG_WARN("fail to alloc vec key", K(ret));
-              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build vec snapshot key str", K(ret), K(index_type));
               } else if (index_type == VIAT_HGRAPH &&
-                OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hgraph_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+                OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hgraph_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build vec hgraph snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_sq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_SQ && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_sq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build sq vec snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_HNSW_BQ && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_hnsw_bq_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build bq vec snapshot key str", K(ret), K(index_type));
-              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, ObVectorIndexSliceStore::OB_VEC_IDX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
+              } else if (index_type == VIAT_IPIVF && OB_FAIL(databuff_printf(key_str, data_plane::OB_VECTOR_INDEX_SNAPSHOT_KEY_LENGTH, key_pos, "%lu_%lu_ipivf_data_part%05ld", adaptor.get_snap_tablet_id().id(), ctx_->task_status_.target_scn_.get_val_for_inner_table_field(), row_id))) {
                 LOG_WARN("fail to build ipivf vec snapshot key str", K(ret), K(index_type));
               } else if (OB_ISNULL(key_str)) {
                 ret = OB_ERR_UNEXPECTED;
@@ -1982,7 +1984,7 @@ int ObVecIndexAsyncTask::get_old_snapshot_data(
     storage::ObValueRowIterator &delete_row_iter)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   int64_t loop_cnt = 0;
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   if (OB_ISNULL(lob_mngr)) {
@@ -2079,7 +2081,7 @@ int ObVecIndexAsyncTask::delete_tablet_data(
   bool delete_unfinish = true;
   int64_t delta_table_affected_rows = 0;
   storage::ObValueRowIterator row_iter;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   if (OB_ISNULL(tx_desc) || OB_ISNULL(oas)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get tx desc or ob access service, get nullptr", K(ret));
@@ -2145,7 +2147,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
   storage::ObValueRowIterator index_row_iter;
   ObSEArray<uint64_t, 4> delta_dml_column_ids;
   ObSEArray<uint64_t, 4> index_dml_column_ids;
-  ObAccessService *oas = share::g_mp->access_service();
+  ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   int64_t loop_cnt = 0;
   const ObTableSchema *delta_table_schema;
   const ObTableSchema *index_table_schema;

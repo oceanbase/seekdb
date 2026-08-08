@@ -17,7 +17,6 @@
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_MVI_LOOKUP_ITER_H_
 #define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_MVI_LOOKUP_ITER_H_
 
-// #include "storage/access/ob_dml_param.h"
 #include "sql/das/iter/ob_das_local_lookup_iter.h"
 
 namespace oceanbase

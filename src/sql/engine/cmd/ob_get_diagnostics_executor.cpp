@@ -16,7 +16,8 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 #include "sql/engine/cmd/ob_get_diagnostics_executor.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "share/ob_lob_access_utils.h"
 #include "sql/session/ob_basic_session_info.h"
 using namespace oceanbase::common;
@@ -362,7 +363,7 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
   int tmp_ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
   ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
-  observer::ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
    
   int64_t warning_count = 0;
@@ -372,11 +373,14 @@ int ObGetDiagnosticsExecutor::execute(ObExecContext &ctx, ObGetDiagnosticsStmt &
     LOG_WARN("invalid args", K(ret), KP(session_info));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+  } else if (OB_FAIL(
+                 query::ObInnerSQLConnectionAccess::
+                     create_connection_with_external_session(
                          session_info, conn_guard))) {
     LOG_WARN("failed to get conn", K(ret));
-  } else if (FALSE_IT(conn = static_cast<observer::ObInnerSQLConnection *>(
-                          conn_guard.get_ptr()))) {
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner SQL connection is null", K(ret));
   } else if (OB_FAIL(query_virtual.assign_fmt("select count(*) from %s.%s", 
                       OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
     LOG_WARN("assign format failed", K(ret));

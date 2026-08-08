@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ob_sync_tablet_seq_clog.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -106,7 +106,7 @@ int ObSyncTabletSeqMdsLogCb::init(const ObTabletID &tablet_id, const int64_t wri
 {
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet id", K(ret), K(tablet_id));

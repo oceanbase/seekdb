@@ -17,17 +17,16 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_fork_mds_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/ob_tablet_autoinc_seq_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "observer/ob_inner_sql_connection.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
-using namespace oceanbase::observer;
 using oceanbase::sqlclient::ObISQLConnection;
 
 namespace oceanbase
@@ -122,7 +121,7 @@ int ObTabletForkMdsArg::set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoin
   return ret;
 }
 
-int ObTabletForkMdsArg::set_truncate_arg(const rootserver::ObTruncateTabletArg &arg)
+int ObTabletForkMdsArg::set_truncate_arg(const ObTruncateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -177,7 +176,8 @@ int ObTabletForkMdsHelper::register_mds(
       LOG_WARN("failed to allocate buffer for tablet fork mds", KR(ret), K(size));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
       LOG_WARN("failed to serialize tablet fork mds arg", KR(ret), K(size), K(pos));
-    } else if (OB_FAIL(static_cast<ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(ObTxDataSourceType::TABLET_FORK, buf, pos, flag))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                   isql_conn, ObTxDataSourceType::TABLET_FORK, buf, pos, flag))) {
       LOG_WARN("failed to register tablet fork mds", KR(ret), K(need_flush_redo), K(pos));
     }
   }
@@ -222,7 +222,7 @@ int ObTabletForkMdsHelper::modify(
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("fail to get ls", KR(ret), K(arg));
   }
 
@@ -238,7 +238,7 @@ int ObTabletForkMdsHelper::modify(
   }
 
   if (OB_SUCC(ret) && arg.truncate_arg_.is_valid()) {
-    const rootserver::ObTruncateTabletArg &truncate_arg = arg.truncate_arg_;
+    const ObTruncateTabletArg &truncate_arg = arg.truncate_arg_;
     ObTabletHandle tablet_handle;
     const ObTabletMapKey key(truncate_arg.index_tablet_id_);
 

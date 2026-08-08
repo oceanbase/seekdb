@@ -27,7 +27,7 @@ using namespace obmysql;
 
 namespace observer
 {
-ObMPDebug::ObMPDebug(const ObGlobalContext &gctx)
+ObMPDebug::ObMPDebug(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx)
 {
 }
@@ -53,7 +53,8 @@ int ObMPDebug::process()
   } else if (FALSE_IT(session->update_last_active_time())) {
   } else {
     ObArenaAllocator allocator; // no use, just a param for ObMySQLResultSet()
-    SMART_VAR(ObMySQLResultSet, result, *session, allocator) {// use default values
+    SMART_VAR(ObMySQLResultSet, result, *session, allocator,
+              ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {// use default values
       if (OB_FAIL(send_eof_packet(*session, result))) {
         LOG_WARN("fail to send eof pakcet in debug response",  K(ret));
       }

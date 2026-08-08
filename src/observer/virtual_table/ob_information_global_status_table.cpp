@@ -16,6 +16,7 @@
 
 #include "ob_information_global_status_table.h"
 
+#include "observer/ob_server_runtime_access.h"
 #include "share/ob_time_utility2.h"
 #include "sql/session/ob_sql_session_mgr.h"
 
@@ -56,7 +57,7 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
   int ret = OB_SUCCESS;
 
   if (OB_ISNULL(global_ctx_) ||
-      OB_ISNULL(global_ctx_->session_mgr_)) {
+      OB_ISNULL(get_observer_sql_session_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "global_ctx_ is NULL or session_mgr_ is NULL", K(ret));
   } else {
@@ -66,7 +67,7 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       switch (i) {
       case THREADS_CONNECTED: {
           int64_t session_cnt = 0;
-          if (OB_FAIL(global_ctx_->session_mgr_->get_session_count(session_cnt))) {
+          if (OB_FAIL(get_observer_sql_session_mgr()->get_session_count(session_cnt))) {
             SERVER_LOG(WARN, "get session count failed");
           } else {
             obj.set_int(session_cnt);

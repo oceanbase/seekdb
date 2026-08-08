@@ -18,6 +18,8 @@
 #define OB_BLOCK_STAT_ITER_H_
 
 #include "storage/blocksstable/index_block/ob_sstable_index_scanner.h"
+#include "storage/access/ob_scan_merge_loser_tree.h"
+#include "storage/access/ob_simple_rows_merger.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "ob_block_stat_collector.h"

@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_lock_func.h"
 
 #include "sql/engine/ob_exec_context.h"
-#include "storage/tablelock/ob_lock_func_executor.h"
+#include "sql/tablelock/ob_lock_func_executor.h"
 
 namespace oceanbase
 {

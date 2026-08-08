@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/ddl/ob_ddl_merge_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
@@ -25,7 +25,6 @@
 #include "storage/tablet/ob_tablet_create_sstable_param.h"
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 
-using namespace oceanbase::observer;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::share;
 using namespace oceanbase::common;
@@ -68,7 +67,7 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
 int ObIDDLMergeHelper::freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param)
 {
   int ret = OB_SUCCESS;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   ObTabletHandle tablet_handle;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   ObTabletID target_tablet_id;
@@ -551,7 +550,7 @@ int ObIDDLMergeHelper::remove_tablet_from_log_handler(const ObTabletID &tablet_i
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObSEArray<ObTabletID, 1> tablet_ids;
-  ObLSService *ls_service = share::g_mp->ls_service();
+  ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
@@ -618,7 +617,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
   } else if (merge_param.for_major_ && 
              !merge_param.for_replay_ &&
              !merge_param.for_lob_ &&
-             OB_FAIL(ObDDLUtil::report_ddl_checksum_from_major_sstable(target_tablet_id,
+             OB_FAIL(ObDDLStorageUtil::report_ddl_checksum_from_major_sstable(target_tablet_id,
                                                                        merge_param.ddl_task_param_.target_table_id_,
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,

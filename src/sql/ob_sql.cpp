@@ -18,6 +18,7 @@
 #include "sql/ob_sql.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "query/runtime/ob_query_runtime_environment.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/plan_cache/ob_pcv_set.h"
@@ -31,9 +32,10 @@
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/code_generator/ob_code_generator.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
+#include "sql/optimizer/ob_optimizer.h"
 
 namespace oceanbase
 {
@@ -52,7 +54,19 @@ const int64_t ObSql::SQL_MEM_SIZE_LIMIT = 1024 * 1024 * 64;
 
 int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
                 common::ObITabletScan *vt_partition_service,
-                common::ObAddr &addr)
+                common::ObAddr &addr,
+                ObPlanCache &plan_cache,
+                ObPsCache &ps_cache,
+                pl::ObPL &pl_engine,
+                query::ObIPlanCacheAccessService &plan_cache_access_service,
+                query::ObIQueryRuntimeEnvironment &query_runtime_environment,
+                query::ObIRootCommandService &root_command_service,
+                query::ObILocalCommandService &local_command_service,
+                query::ObIChangeStreamService &change_stream_service,
+                query::ObIDdlExecutionLimiter &ddl_execution_limiter,
+                ObIVirtualTableFactoryProvider &virtual_table_factory_provider,
+                common::ObISrsProvider &srs_provider,
+                common::ObILobReadService &lob_read_service)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(opt_stat_mgr)
@@ -66,8 +80,21 @@ int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
     if (OB_FAIL(queue_.init(1, 512))) {
       LOG_WARN("queue init failed", K(ret));
     } else {
+      queue_.bind_root_command_service(root_command_service);
       opt_stat_mgr_ = opt_stat_mgr;
       vt_partition_service_ = vt_partition_service;
+      plan_cache_ = &plan_cache;
+      ps_cache_ = &ps_cache;
+      pl_engine_ = &pl_engine;
+      plan_cache_access_service_ = &plan_cache_access_service;
+      query_runtime_environment_ = &query_runtime_environment;
+      root_command_service_ = &root_command_service;
+      local_command_service_ = &local_command_service;
+      change_stream_service_ = &change_stream_service;
+      ddl_execution_limiter_ = &ddl_execution_limiter;
+      virtual_table_factory_provider_ = &virtual_table_factory_provider;
+      srs_provider_ = &srs_provider;
+      lob_read_service_ = &lob_read_service;
       self_addr_ = addr;
       inited_ = true;
       queue_.start();
@@ -79,8 +106,52 @@ int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
 void ObSql::destroy() {
   if (inited_) {
     queue_.destroy();
+    plan_cache_ = NULL;
+    ps_cache_ = NULL;
+    pl_engine_ = NULL;
+    plan_cache_access_service_ = NULL;
+    query_runtime_environment_ = NULL;
+    root_command_service_ = NULL;
+    local_command_service_ = NULL;
+    change_stream_service_ = NULL;
+    ddl_execution_limiter_ = NULL;
+    virtual_table_factory_provider_ = NULL;
+    srs_provider_ = NULL;
+    lob_read_service_ = NULL;
     inited_ = false;
   }
+}
+
+void ObSql::bind_resolver_runtime_services(ObResolverParams &resolver_ctx)
+{
+  resolver_ctx.plan_cache_ = plan_cache_;
+  resolver_ctx.pl_sql_runtime_ = this;
+  resolver_ctx.pl_engine_ = pl_engine_;
+  resolver_ctx.dependency_info_queue_ = &queue_;
+  resolver_ctx.root_command_service_ = root_command_service_;
+  resolver_ctx.srs_provider_ = srs_provider_;
+  resolver_ctx.lob_read_service_ = lob_read_service_;
+}
+
+void ObSql::bind_exec_context_runtime_services(ObExecContext &exec_ctx)
+{
+  ObExecContext::RuntimeServices services = exec_ctx.get_runtime_services();
+  services.lob_read_service_ = lob_read_service_;
+  services.plan_cache_ = plan_cache_;
+  services.ps_cache_ = ps_cache_;
+  services.plan_cache_access_service_ = plan_cache_access_service_;
+  services.pl_sql_runtime_ = this;
+  services.pl_engine_ = pl_engine_;
+  services.prepared_statement_runtime_ = this;
+  services.sql_execution_id_provider_ = this;
+  services.query_runtime_environment_ = query_runtime_environment_;
+  services.root_command_service_ = root_command_service_;
+  services.local_command_service_ = local_command_service_;
+  services.change_stream_service_ = change_stream_service_;
+  services.ddl_execution_limiter_ = ddl_execution_limiter_;
+  services.virtual_table_factory_provider_ = virtual_table_factory_provider_;
+  services.srs_provider_ = srs_provider_;
+  exec_ctx.set_runtime_services(services);
 }
 
 
@@ -714,7 +785,7 @@ int ObSql::do_add_ps_cache(const PsCacheInfoCtx &info_ctx,
   int ret = OB_SUCCESS;
   bool is_contain_tmp_tbl = false;
   ObSQLSessionInfo &session = result.get_session();
-  ObPsCache *ps_cache = session.get_ps_cache();
+  ObPsCache *ps_cache = ps_cache_;
   uint64_t db_id = OB_INVALID_ID;
   (void)session.get_database_id(db_id);
   if (OB_ISNULL(ps_cache)) {
@@ -1032,10 +1103,10 @@ int ObSql::set_timeout_for_pl(ObSQLSessionInfo &session_info, int64_t &abs_timeo
  * PLPrepareResult: output result after prepare
  */
 
-int ObSql::handle_pl_prepare(const ObString &sql,
-                             ObSPIService::PLPrepareCtx &pl_prepare_ctx,
-                             ObSPIService::PLPrepareResult &pl_prepare_result,
-                             ParamStore *params)
+int ObSql::prepare_pl_sql(const ObString &sql,
+                          ObSPIService::PLPrepareCtx &pl_prepare_ctx,
+                          ObSPIService::PLPrepareResult &pl_prepare_result,
+                          ParamStore *params)
 {
   int ret = OB_SUCCESS;
   ObString cur_query;
@@ -1053,6 +1124,7 @@ int ObSql::handle_pl_prepare(const ObString &sql,
   TimeoutGuard timeout_guard(sess);
   int64_t old_query_start_time = sess.get_query_start_time();
   sess.set_query_start_time(ObTimeUtility::current_time());
+  OZ (pl_prepare_result.init(sess, get_plan_cache_access_service()));
   CK (OB_NOT_NULL(pl_prepare_result.get_allocator()));
   CK (OB_NOT_NULL(pl_prepare_result.result_set_));
   if (OB_SUCC(ret)) {
@@ -1213,7 +1285,7 @@ int ObSql::handle_sql_execute(const ObString &sql,
   ParamStore *ab_params = NULL;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(session) || OB_ISNULL(session->get_plan_cache())) {
+  } else if (OB_ISNULL(session) || OB_ISNULL(plan_cache_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if ((mode == PC_PS_MODE || mode == PC_PL_MODE) && OB_ISNULL(pctx)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1283,13 +1355,13 @@ int ObSql::handle_sql_execute(const ObString &sql,
  * res: Direct result set
  */
 // TODO remove is_prepare_protocol and is_dynamic_sql
-int ObSql::handle_pl_execute(const ObString &sql,
-                             ObSQLSessionInfo &session,
-                             ParamStore &params,
-                             ObResultSet &result,
-                             ObSqlCtx &context,
-                             bool is_prepare_protocol,
-                             bool is_dynamic_sql)
+int ObSql::execute_pl_sql(const ObString &sql,
+                          ObSQLSessionInfo &session,
+                          ParamStore &params,
+                          ObResultSet &result,
+                          ObSqlCtx &context,
+                          bool is_prepare_protocol,
+                          bool is_dynamic_sql)
 {
   int ret = OB_SUCCESS;
   int get_plan_err = OB_SUCCESS;
@@ -1391,7 +1463,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
 
   if (OB_SUCC(ret)) {
     ObSQLSessionInfo &session = result.get_session();
-    ObPsCache *ps_cache = session.get_ps_cache();
+    ObPsCache *ps_cache = ps_cache_;
     ObExecContext &ectx = result.get_exec_context();
     ObIAllocator &allocator = result.get_mem_pool();
     ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
@@ -1487,7 +1559,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
         LOG_WARN("add ps session info failed", K(ret), K(inner_stmt_id), K(client_stmt_id));
       } else if (OB_FAIL(fill_result_set(client_stmt_id, *stmt_info, result))) {
         // prepare ps stmt succeeded, failure here requires close
-        IGNORE_RETURN session.close_ps_stmt(client_stmt_id);
+        IGNORE_RETURN session.close_ps_stmt(*ps_cache, client_stmt_id);
         LOG_WARN("fill result set failed", K(ret), K(client_stmt_id));
       }
       LOG_DEBUG("prepare done", K(ret), K(need_do_real_prepare), K(duplicate_prepare));
@@ -1874,8 +1946,8 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
   ObExecContext &ectx = result.get_exec_context();
   ParamStore fixed_params( (ObWrapperAllocator(allocator)) );
   ParamStore ps_params( (ObWrapperAllocator(allocator)) );
-  ObPsCache *ps_cache = session.get_ps_cache();
-  ObPlanCache *plan_cache = session.get_plan_cache();
+  ObPsCache *ps_cache = ps_cache_;
+  ObPlanCache *plan_cache = plan_cache_;
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
   ObSchemaGetterGuard *schema_guard = context.schema_guard_;
@@ -2167,6 +2239,7 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     resolver_ctx.schema_checker_ = schema_checker;
     resolver_ctx.secondary_namespace_ = context.secondary_namespace_;
     resolver_ctx.session_info_ = context.session_info_;
+    bind_resolver_runtime_services(resolver_ctx);
     resolver_ctx.expr_factory_ = result.get_exec_context().get_expr_factory();
     resolver_ctx.stmt_factory_ = result.get_exec_context().get_stmt_factory();
     resolver_ctx.cur_sql_ = context.cur_sql_;
@@ -2452,9 +2525,11 @@ int ObSql::generate_plan(ParseResult &parse_result,
   int ret = OB_SUCCESS;
   uint64_t aggregate_setting = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
+  ObPlanCache *plan_cache = plan_cache_;
   bool allow_audit = false;
   if (OB_ISNULL(pctx) || OB_ISNULL(basic_stmt) ||
-      OB_ISNULL(result.get_exec_context().get_expr_factory())) {
+      OB_ISNULL(result.get_exec_context().get_expr_factory()) ||
+      OB_ISNULL(plan_cache)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Physical plan ctx should not be NULL", K(ret));
   } else if (OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
@@ -2494,7 +2569,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     ObPhysicalPlan *phy_plan = NULL;
     ObCacheObjGuard& guard = result.get_cache_obj_guard();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
+    } else if (OB_FAIL(ObCacheObjectFactory::alloc(*plan_cache, guard,
                                                     ObLibCacheNameSpace::NS_CRSR))) {
       LOG_WARN("fail to alloc phy_plan", K(ret));
     } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
@@ -3038,8 +3113,8 @@ int ObSql::code_generate(
 
   if (OB_SUCC(ret)) {
     bool use_plan_cache = sql_ctx.session_info_->get_local_ob_enable_plan_cache();
-    ObPlanCache *plan_cache = NULL;
-    if (OB_UNLIKELY(NULL == (plan_cache = sql_ctx.session_info_->get_plan_cache()))) {
+    ObPlanCache *plan_cache = plan_cache_;
+    if (OB_UNLIKELY(NULL == plan_cache)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid plan cache", K(ret));
     } else {
@@ -3094,6 +3169,7 @@ OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &e
     LOG_WARN("faile to create physical plan ctx", K(ret));
   } else {
     exec_ctx.set_my_session(context.session_info_);
+    bind_exec_context_runtime_services(exec_ctx);
     exec_ctx.set_sql_ctx(const_cast<ObSqlCtx*>(&context));
     if (OB_NOT_NULL(exec_ctx.get_physical_plan_ctx()) && OB_NOT_NULL(context.session_info_)) {
       int64_t query_timeout = 0;
@@ -3180,10 +3256,9 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   //NG_TRACE(cache_get_plan_begin);
   ObPlanCache *plan_cache = NULL;
-  ObSQLSessionInfo *session = pc_ctx.sql_ctx_.session_info_;
-  if (OB_ISNULL(session) || OB_ISNULL(plan_cache = session->get_plan_cache())) {
+  if (OB_ISNULL(plan_cache = plan_cache_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid plan cache", K(ret), K(session), K(plan_cache));
+    LOG_WARN("Invalid plan cache", K(ret), K(plan_cache));
   } else if (OB_FAIL(execute_get_plan(*plan_cache, pc_ctx, guard))) {
     if (OB_EAGAIN == ret
         || OB_ARRAY_BINDING_ROLLBACK == ret
@@ -3499,7 +3574,7 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             THIS_WORKER.set_timeout_ts(session->get_query_start_time() + GCONF._ob_ddl_timeout);
           }
           if (IS_DML_STMT(type) || is_show_variables) {
-            if (OB_UNLIKELY(NULL == (plan_cache = session->get_plan_cache()))) {
+            if (OB_UNLIKELY(NULL == (plan_cache = plan_cache_))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Invalid plan cache", K(ret));
             } else {
@@ -3824,7 +3899,7 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   MEMSET(&outline_parse_result, 0, SIZEOF(ParseResult));
   bool add_plan_to_pc = false;
   ObSQLSessionInfo &session = result.get_session();
-  ObPlanCache *plan_cache = session.get_plan_cache();
+  ObPlanCache *plan_cache = plan_cache_;
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   // record whether needs to do parameterization at this time,
   // if exact mode is on, not do parameterizaiton
@@ -4427,8 +4502,9 @@ void ObSql::rollback_implicit_trans_when_fail(ObResultSet &result, int &ret)
   bool ac = false;
   result.get_session().get_autocommit(ac);
   transaction::ObTxDesc *tx = result.get_session().get_tx_desc();
-  if (ac && tx && tx->get_tx_id().is_valid() && !tx->is_explicit()) {
-    const transaction::ObTransID txid = tx->get_tx_id();
+  if (ac && tx && data_plane::tx_desc_id(tx).is_valid()
+      && !data_plane::tx_desc_is_explicit(tx)) {
+    const transaction::ObTransID txid = data_plane::tx_desc_id(tx);
     int tmp_ret = OB_SUCCESS;
     bool need_disconnect = false;
     if (OB_TMP_FAIL(ObSqlTransControl::rollback_trans(&result.get_session(), need_disconnect))) {

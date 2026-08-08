@@ -427,7 +427,8 @@ int ObLimitOp::is_row_order_by_item_value_equal(bool &is_equal)
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
         LOG_WARN("expression evaluate failed", K(ret));
       } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
-                 pre_sort_columns_.store_row_->cells()[i], *datum, cmp_ret))) {
+                 pre_sort_columns_.store_row_->cells()[i], *datum, cmp_ret,
+                 datum_access_ctx_))) {
         LOG_WARN("compare failed", K(ret));
       } else {
         is_equal = 0 == cmp_ret;
@@ -473,7 +474,8 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
         int cmp_ret = 0;
         if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                     pre_sort_columns_.store_row_->cells()[col_idx],
-                    *(datum_vectors[col_idx].at(row_idx)), cmp_ret))) {
+                    *(datum_vectors[col_idx].at(row_idx)), cmp_ret,
+                    datum_access_ctx_))) {
           LOG_WARN("compare failed", K(ret));
         } else {
           keep_iterating = (0 == cmp_ret);

@@ -17,9 +17,9 @@
 
 #include "ob_trans_factory.h"
 #include "lib/objectpool/ob_server_object_pool.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ob_server_struct.h"
 #include "ob_tx_ctx.h"
-#include "observer/ob_server.h"
 
 namespace oceanbase
 {

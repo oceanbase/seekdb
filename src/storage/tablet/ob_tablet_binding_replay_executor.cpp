@@ -24,7 +24,7 @@ namespace storage
 {
 
 ObTabletBindingReplayExecutor::ObTabletBindingReplayExecutor()
-  :logservice::ObTabletReplayExecutor(), user_ctx_(nullptr), user_data_(nullptr)
+  : ObTabletReplayExecutor(), user_ctx_(nullptr), user_data_(nullptr)
 {}
 
 int ObTabletBindingReplayExecutor::init(

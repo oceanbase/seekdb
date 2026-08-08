@@ -84,9 +84,3 @@ TEST(ObDistribution, normal_matches_gcc12)
   const double value = ObDistribution::normal(gen, 3.1415, 2.0);
   EXPECT_EQ(UINT64_C(0x3fdb2ffaeda08b88), double_bits(value));
 }
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -23,7 +23,7 @@
 #include "ob_ctx_tx_data.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/queue/ob_link.h"
-#include "logservice/palf/lsn.h"
+#include "share/log/palf/lsn.h"
 #include "ob_tx_ctx_mds.h"
 #include <cstdint>
 #include "storage/multi_data_source/buffer_ctx.h"

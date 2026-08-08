@@ -1,0 +1,39 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob4=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id1 set redo_transport_options='SYNC';
+ob1.mysql alter system commit to switchover to physical standby;
+ob1.mysql alter system failover to '$cluster_name' cluster_id $cluster_id1;
+ob1.mysql_p select cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+cluster_role	protection_mode	protection_level
+PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='ASYNC';
+ob2.force_stop;
+ob3.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+ob1.mysql alter system failover to '$cluster_name' cluster_id $cluster_id1;
+ob1.mysql_p select cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+cluster_role	protection_mode	protection_level
+PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob3.force_stop;
+ob4.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+ob1.mysql ALTER SYSTEM ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob1.mysql_p select cluster_role,protection_mode,protection_level from oceanbase.__all_virtual_cluster;
+cluster_role	protection_mode	protection_level
+PRIMARY	MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE

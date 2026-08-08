@@ -17,13 +17,15 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_variable_set_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
-#include "observer/ob_server.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "share/ob_server_struct.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/engine/cmd/ob_set_names_executor.h"
+#include "sql/session/ob_inner_sql_connection.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
@@ -245,7 +247,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
               } else {}
 
               if (OB_SUCC(ret) && 0 == set_var.var_name_.case_compare(OB_SV_SECURE_FILE_PRIV)) {
-                ObAddr addr = OBSERVER.get_self();
+                ObAddr addr = GCTX.self_addr();
                 char buf[MAX_IP_ADDR_LENGTH + 1];
                 if (OB_NOT_NULL(ctx.get_my_session())) {
                   ObString client_ip = ctx.get_my_session()->get_client_ip();
@@ -384,17 +386,21 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  observer::ObInnerSQLConnection *conn = NULL;
+  sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   
   if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
-  } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+  } else if (OB_FAIL(
+                 query::ObInnerSQLConnectionAccess::
+                     create_connection_with_external_session(
                          session_info, conn_guard))) {
     LOG_WARN("failed to acquire connection", K(ret));
+  } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("inner SQL connection is null", K(ret));
   } else {
-    conn = static_cast<observer::ObInnerSQLConnection *>(conn_guard.get_ptr());
     int64_t idx = 0;
     ObObj tmp_value;
     SMART_VAR(ObISQLClient::ReadResult, res) {
@@ -638,7 +644,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       LOG_WARN("task exec ctx is NULL", K(ret), K(task_exec_ctx));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->modify_system_variable(arg); }))) {
+    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().modify_system_variable(arg); }))) {
       LOG_WARN("rpc proxy alter system variable failed", K(ret));
     } else {}
   }
@@ -809,7 +815,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
     LOG_WARN("session is NULL", K(ret));
   } else {
     auto tx_desc = my_session->get_tx_desc();
-    bool in_trans = OB_NOT_NULL(tx_desc) && tx_desc->in_tx_or_has_extra_state();
+    bool in_trans = data_plane::tx_desc_in_tx_or_has_extra_state(tx_desc);
     if (OB_FAIL(my_session->get_autocommit(orig_ac))) {
       LOG_WARN("fail to get autocommit", K(ret));
     } else if (OB_FAIL(val.get_int(autocommit))) {

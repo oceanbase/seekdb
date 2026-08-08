@@ -15,22 +15,21 @@
  */
 #define USING_LOG_PREFIX MDS
 #include "storage/truncate_info/ob_truncate_info_mds_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/truncate_info/ob_truncate_info.h"
-#include "rootserver/truncate_info/ob_truncate_info_service.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/truncate_info/ob_truncate_tablet_arg.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ls/ob_ls.h"
 namespace oceanbase
 {
-using namespace rootserver;
 namespace storage
 {
 using namespace mds;
-class ObTruncateInfoClogReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTruncateInfoClogReplayExecutor final : public storage::ObTabletReplayExecutor
 {
 public:
-  ObTruncateInfoClogReplayExecutor(rootserver::ObTruncateTabletArg &truncate_arg);
+  ObTruncateInfoClogReplayExecutor(ObTruncateTabletArg &truncate_arg);
   int init(mds::BufferCtx &user_ctx, const share::SCN &scn);
 protected:
   bool is_replay_update_tablet_status_() const override
@@ -44,7 +43,7 @@ protected:
   }
 private:
   mds::BufferCtx *user_ctx_;
-  rootserver::ObTruncateTabletArg &truncate_arg_;
+  ObTruncateTabletArg &truncate_arg_;
   share::SCN scn_;
 };
 
@@ -70,7 +69,7 @@ int ObTruncateInfoMdsHelper::on_register(
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("arg is invalid", K(ret), K(arg));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get log stream", K(ret), K(arg));
   } else if (OB_FAIL(tenant_ls->get_tablet(arg.index_tablet_id_, tablet_handle))) {
     LOG_WARN("failed to get tablet", K(ret), K(arg.index_tablet_id_));
@@ -94,7 +93,7 @@ int ObTruncateInfoMdsHelper::on_replay(
   MDS_TG(1_s);
   int ret = OB_SUCCESS;
   ObArenaAllocator tmp_allocator;
-  rootserver::ObTruncateTabletArg arg;
+  ObTruncateTabletArg arg;
   int64_t pos = 0;
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
@@ -119,7 +118,7 @@ int ObTruncateInfoMdsHelper::on_replay(
 }
 
 ObTruncateInfoClogReplayExecutor::ObTruncateInfoClogReplayExecutor(
-    rootserver::ObTruncateTabletArg &truncate_arg)
+    ObTruncateTabletArg &truncate_arg)
     : user_ctx_(nullptr),
       truncate_arg_(truncate_arg),
       scn_()

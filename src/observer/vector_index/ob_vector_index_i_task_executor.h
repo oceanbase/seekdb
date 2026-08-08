@@ -24,6 +24,8 @@ namespace oceanbase
 namespace share 
 {
 
+class ObPluginVectorIndexService;
+
 class ObVecITaskExecutor
 {
 public: 

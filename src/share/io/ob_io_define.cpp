@@ -19,7 +19,6 @@
 #include "share/resource/ob_server_resource_config.h"
 #include "share/ob_force_print_log.h"
 #include "lib/ob_define.h"
-#include "share/config/ob_server_config.h"
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
 using namespace oceanbase::share;
@@ -64,7 +63,7 @@ int oceanbase::common::transform_usage_index_to_group_config_index(const uint64_
   uint64_t MODE_CNT = static_cast<uint64_t>(ObIOMode::MAX_MODE) + 1;
   uint64_t GROUP_MODE_CNT = static_cast<uint64_t>(ObIOGroupMode::MODECNT);
   uint64_t quot = usage_index / GROUP_MODE_CNT;
-  group_config_index = quot * MODE_CNT + static_cast<uint64>(ObIOMode::MAX_MODE);
+  group_config_index = quot * MODE_CNT + static_cast<uint64_t>(ObIOMode::MAX_MODE);
   return ret;
 }
 
@@ -1328,10 +1327,10 @@ int ObIORequest::set_fd_cache_handle(const ObIOInfo &info)
 ObPhyQueue::ObPhyQueue()
   : is_inited_(false),
     stop_accept_(false),
-    reservation_ts_(INT_MAX64),
-    limitation_ts_(INT_MAX64),
-    proportion_ts_(INT_MAX64),
-    last_empty_ts_(INT_MAX64),
+    reservation_ts_(INT64_MAX),
+    limitation_ts_(INT64_MAX),
+    proportion_ts_(INT64_MAX),
+    last_empty_ts_(INT64_MAX),
     queue_index_(-1),
     reservation_pos_(-1),
     limitation_pos_(-1),
@@ -1370,10 +1369,10 @@ void ObPhyQueue::destroy()
 {
   is_inited_ = false;
   stop_accept_ = true;
-  reservation_ts_ = INT_MAX64;
-  limitation_ts_ = INT_MAX64;
-  proportion_ts_ = INT_MAX64;
-  last_empty_ts_ = INT_MAX64;
+  reservation_ts_ = INT64_MAX;
+  limitation_ts_ = INT64_MAX;
+  proportion_ts_ = INT64_MAX;
+  last_empty_ts_ = INT64_MAX;
   reservation_pos_ = -1;
   limitation_pos_ = -1;
   proportion_pos_ = -1;

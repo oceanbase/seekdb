@@ -1888,17 +1888,21 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value(
   uint64_t &hash_value)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *access_ctx = nullptr;
   hash_value = DEFAULT_PART_HASH_VALUE;
-  if (OB_ISNULL(hash_funcs_) || OB_ISNULL(sort_collations_)) {
+  if (OB_ISNULL(hash_funcs_) || OB_ISNULL(sort_collations_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "unexpect status: hash funcs is null", K(ret));
+  } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(access_ctx))) {
+    SQL_ENG_LOG(WARN, "failed to get datum access context", K(ret));
   } else if (0 != sort_collations_->count()) {
     ObDatum *datum = nullptr;
     for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); ++i) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(exprs.at(idx)->eval(*eval_ctx_, datum))) {
         SQL_ENG_LOG(WARN, "failed to eval expr", K(ret));
-      } else if (OB_FAIL(hash_funcs_->at(i).hash_func_(*datum, hash_value, hash_value))) {
+      } else if (OB_FAIL(
+                     hash_funcs_->at(i).hash_func_(*datum, hash_value, hash_value, access_ctx))) {
         SQL_ENG_LOG(WARN, "failed to do hash", K(ret));
       }
     }
@@ -1917,6 +1921,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
   uint64_t *hash_vals)
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *access_ctx = nullptr;
   uint64_t default_hash_value = DEFAULT_PART_HASH_VALUE;
   if (OB_ISNULL(hash_funcs_) || OB_ISNULL(sort_collations_) || OB_ISNULL(skip)
       || OB_ISNULL(eval_ctx_)
@@ -1927,6 +1932,8 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
                 K(hash_values_for_batch), K(ret));
   } else if (0 == batch_size) {
     //do nothing
+  } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(access_ctx))) {
+    SQL_ENG_LOG(WARN, "failed to get datum access context", K(ret));
   } else if (0 != sort_collations_->count()) {
     //from child op, need eval
     for (int64_t j = start_idx; OB_SUCC(ret) && j < sort_collations_->count(); ++j) {
@@ -1951,10 +1958,10 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
         ObDatum &curr_datum = exprs.at(idx)->locate_batch_datums(*eval_ctx_)[0];
         if (0 == j) {
           hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
-                    *skip, batch_size, &default_hash_value, is_batch_seed);
+                    *skip, batch_size, &default_hash_value, is_batch_seed, access_ctx);
         } else {
           hash_func(hash_values_for_batch, &curr_datum, exprs.at(idx)->is_batch_result(),
-                    *skip, batch_size, hash_values_for_batch, is_batch_seed);
+                    *skip, batch_size, hash_values_for_batch, is_batch_seed, access_ctx);
         }
       }
       for (int64_t i = 0; i < batch_size; ++i) {

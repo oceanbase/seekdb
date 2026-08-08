@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_operator.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
@@ -2173,7 +2174,7 @@ DEF_SET_LOCAL_SESSION_VARS(ObExprOperator, raw_expr) {
   return OB_SUCCESS;
 }
 
-int ObExprOperator::add_local_var_to_expr(ObSysVarClassType var_type,
+int ObExprOperator::add_local_var_to_expr(share::ObSysVarClassType var_type,
                                           const ObBasicSessionInfo *session,
                                           ObLocalSessionVar &local_vars)
 {
@@ -4748,7 +4749,7 @@ int ObBitwiseExprOperator::get_uint64(const ObObj &obj,
 DEF_SET_LOCAL_SESSION_VARS(ObBitwiseExprOperator, raw_expr) {
   int ret = OB_SUCCESS;
   SET_LOCAL_SYSVAR_CAPACITY(1);
-  EXPR_ADD_LOCAL_SYSVAR(SYS_VAR_SQL_MODE);
+  EXPR_ADD_LOCAL_SYSVAR(share::SYS_VAR_SQL_MODE);
   return ret;
 }
 
@@ -5297,9 +5298,11 @@ int ObLocationExprOperator::calc_(const ObExpr &expr, const ObExpr &sub_arg,
       bool ori_has_lob_header = ori_arg.obj_meta_.has_lob_header();
       ObTextStringIter sub_str_iter(sub_arg.datum_meta_.type_, sub_arg.datum_meta_.cs_type_, sub_str, sub_has_lob_header);
       ObTextStringIter ori_str_iter(ori_arg.datum_meta_.type_, ori_arg.datum_meta_.cs_type_, ori_str, ori_has_lob_header);
-      if (OB_FAIL(ori_str_iter.init(0, NULL, &calc_alloc))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              ori_str_iter, ctx.exec_ctx_, &calc_alloc))) {
         LOG_WARN("Lob: init ori_str_iter failed ", K(ret), K(ori_str_iter));
-      } else if (OB_FAIL(sub_str_iter.init(0, NULL, &calc_alloc))) {
+      } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                     sub_str_iter, ctx.exec_ctx_, &calc_alloc))) {
         LOG_WARN("Lob: init sub_str_iter failed ", K(ret), K(sub_str_iter));
       } else if (OB_FAIL(sub_str_iter.get_full_data(sub_str_data))) {
         LOG_WARN("Lob: init lob str iter failed ", K(ret), K(sub_str_iter));
@@ -5576,6 +5579,10 @@ int ObRelationalExprOperator::row_cmp(
   bool cnt_row_null = false;
   int first_nonequal_cmp_ret = 0;
   int i = 0;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(l_ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   // locate first non-equal pair
   for (; OB_SUCC(ret) && i < expr.inner_func_cnt_; i++) {
     if (OB_FAIL(l_row[i]->eval(l_ctx, left))) {
@@ -5600,7 +5607,9 @@ int ObRelationalExprOperator::row_cmp(
       }
     } else if (left->is_null() || right->is_null()) {
       cnt_row_null = true;
-    } else if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[i])(*left, *right, first_nonequal_cmp_ret))) {
+    } else if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[i])(
+                   *left, *right, first_nonequal_cmp_ret,
+                   datum_access_ctx))) {
       LOG_WARN("failed to cmp", K(ret));
     } else if (0 != first_nonequal_cmp_ret) {
       break;

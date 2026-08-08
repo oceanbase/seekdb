@@ -57,6 +57,7 @@ struct ObILibCacheKey;
 class ObILibCacheNode;
 class ObPlanCacheKey;
 class ObPlanCacheCtx;
+class DASRelatedTabletMap;
 
 typedef uint64_t ObCacheObjID;
 

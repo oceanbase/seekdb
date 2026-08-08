@@ -17,8 +17,7 @@
 #ifndef __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 #define __OB_RS_SYS_DDL_SCHEDULER_UTIL_H__
 
-#include "observer/omt/ob_server_runtime_controller.h" // for ObServerRuntimeController
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h" // for ObDDLScheduler
 
 namespace oceanbase
@@ -26,20 +25,18 @@ namespace oceanbase
 namespace rootserver
 {
 
+int check_local_is_sys_leader();
+
 #define SYS_DDL_SCHEDULER_FUNC(func_name)                                                 \
   template <typename... Args> static int func_name(Args &&...args) {                      \
     int ret = OB_SUCCESS;                                                                 \
-    if (OB_ISNULL(GCTX.server_runtime_controller_)) {                                                           \
-      ret = OB_INVALID_ARGUMENT;                                                          \
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.server_runtime_controller_));                               \
-    } else if (OB_UNLIKELY(!GCTX.server_runtime_controller_->has_runtime())) {                  \
-      ret = OB_RUNTIME_SCHEMA_NOT_READY;                                                          \
-      LOG_WARN("local runtime is unavailable", KR(ret));                \
-    } else if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {                         \
+    if (OB_FAIL(share::check_server_runtime_ready())) {                                  \
+      LOG_WARN("local runtime is unavailable", KR(ret));                                 \
+    } else if (OB_FAIL(check_local_is_sys_leader())) {                                    \
       LOG_WARN("local runtime is not ready", KR(ret));                                \
     } else {                                                                              \
       SERVER_MODULE_SCOPE {                                                      \
-        rootserver::ObDDLScheduler* sys_ddl_scheduler = share::g_mp->ddl_scheduler(); \
+        rootserver::ObDDLScheduler* sys_ddl_scheduler = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLScheduler>(); \
         if (OB_ISNULL(sys_ddl_scheduler)) {                                               \
           ret = OB_ERR_UNEXPECTED;                                                        \
           LOG_WARN("sys ddl scheduler service is null", KR(ret));                         \

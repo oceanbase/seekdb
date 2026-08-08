@@ -15,7 +15,7 @@
  */
 
 #include "ob_i_memtable_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::share;
@@ -206,8 +206,8 @@ int ObIMemtableMgr::init(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   ObLSService *ls_service = nullptr;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-  if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+  if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "failed to get ObLSService from server module provider", KR(ret), KPC(ls_service));
   } else if (OB_ISNULL(t3m)) {

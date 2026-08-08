@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+alter system set replica_safe_remove_time = '2h';
+1
+0
+pass
+1
+alter system reload server;
+alter system run job 'check_partition_table';
+0
+pass
+alter system reload server;
+alter system run job 'check_partition_table';
+pass
+alter system reload server;
+alter system run job 'check_partition_table';
+pass

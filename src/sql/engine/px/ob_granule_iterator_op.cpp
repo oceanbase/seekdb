@@ -1294,7 +1294,8 @@ int ObGranuleIteratorOp::do_join_filter_partition_pruning(
       datum.int_ = &tablet_id;
       datum.len_ = sizeof(tablet_id);
       ObRFBloomFilterMsg *bf_msg = static_cast<ObRFBloomFilterMsg *>(rf_msg_);
-      if (OB_FAIL(MY_SPEC.hash_func_.hash_func_(datum, hash_val, hash_val))) {
+      if (OB_FAIL(
+              MY_SPEC.hash_func_.hash_func_(datum, hash_val, hash_val, datum_access_ctx_))) {
         LOG_WARN("fail to calc hash value", K(ret));
       } else if (OB_FAIL(bf_msg->bloom_filter_.might_contain(hash_val, is_match))) {
         LOG_WARN("fail to check filter might contain value", K(ret), K(hash_val));

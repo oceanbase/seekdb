@@ -17,7 +17,6 @@
 #ifndef OB_EXECUTOR_UTIL_H_
 #define OB_EXECUTOR_UTIL_H_
 
-#include "share/config/ob_server_config.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/utility.h"
 #include "sql/das/ob_das_define.h"
@@ -34,9 +33,6 @@ class ObStoreRange;
 }
 namespace sql
 {
-
-#define NON_ZERO_VALUE(num) \
-     ((num == 0) ? 1 : num)
 
 /**
  *    ----JOIN----
@@ -239,52 +235,6 @@ enum ObGranuleSplitterType
   GIT_RANDOM,
 };
 
-// the params used to decide the load of every task
-struct ObParallelBlockRangeTaskParams
-{
-  ObParallelBlockRangeTaskParams() :
-    parallelism_(0),
-    expected_task_load_(sql::OB_EXPECTED_TASK_LOAD),
-    min_task_count_per_thread_(sql::OB_MIN_PARALLEL_TASK_COUNT),
-    max_task_count_per_thread_(sql::OB_MAX_PARALLEL_TASK_COUNT),
-    min_task_access_size_(GCONF.px_task_size >> 10),
-    marcos_count_(0)
-  { }
-  virtual ~ObParallelBlockRangeTaskParams()
-  { }
-  int valid() const;
-  TO_STRING_KV(K(parallelism_), K(expected_task_load_), K(min_task_count_per_thread_), K(max_task_count_per_thread_), K(min_task_access_size_), K(marcos_count_));
-  /* parallelism */
-  int64_t parallelism_;
-  /**
-   * Unit is KB
-   * Default is 102400, meaning it expects a task to read 100M of data from disk.
-   * Currently, tablet size is used instead of the default value.
-   */
-  int64_t expected_task_load_;
-  /**
-   * Unit is individual
-   * Expected minimum number of tasks each thread should hold, default is magic number 13
-   */
-  int64_t min_task_count_per_thread_;
-  /**
-   * Unit is individual
-   * Expected maximum number of tasks each thread can hold, default is magic number 100
-   */
-  int64_t max_task_count_per_thread_;
-  /**
-   * Unit is KB
-   * The minimum amount of data each task is responsible for, default is one macroblock, 2M.
-   * This value can be changed via system settings.
-   */
-  int64_t min_task_access_size_;
-  /**
-   * Total number of macroblocks
-   */
-  uint64_t marcos_count_;
-};
-
-
 class ObGranuleUtil
 {
 public:
@@ -425,16 +375,6 @@ public:
                                 common::ObIArray<int64_t> &granule_idx,
                                 bool range_independent);
 
-  /**
-   * get the total task count for all partitions
-   * params                     IN the parameters for splitting
-   * total_size                 IN the estimated size for all partitions
-   *
-   * total_task_count           OUT the expected total count for tasks
-   */
-  static int compute_total_task_count(const ObParallelBlockRangeTaskParams &params,
-                                int64_t total_size,
-                                int64_t &total_task_count);
   static ObGranuleSplitterType calc_split_type(uint64_t gi_attr_flag);
 
 private:

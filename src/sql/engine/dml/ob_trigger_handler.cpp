@@ -20,8 +20,10 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/dml/ob_table_update_op.h"
 #include "sql/ob_spi.h"
-#include "pl/ob_pl_user_type.h"
-#include "pl/ob_pl_stmt.h"
+#include "sql/pl/ob_pl_user_type.h"
+#include "sql/pl/ob_pl_stmt.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include "lib/oblog/ob_warning_buffer.h"
 
 namespace oceanbase
 {
@@ -468,9 +470,33 @@ int TriggerHandle::calc_trigger_routine(
   OX (old_flag = exec_ctx.get_my_session()->is_for_trigger_package());
   OX (exec_ctx.get_my_session()->set_for_trigger_package(true));
   OV (OB_NOT_NULL(exec_ctx.get_pl_engine()));
-  OZ (exec_ctx.get_pl_engine()->execute(
-    exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, result),
-      trigger_id, routine_id, params);
+  if (OB_SUCC(ret)) {
+    // TODO: Replace this manual TSI buffer switch with a common nested
+    // diagnostic scope for PL, triggers, and inner SQL.  The scope must make
+    // discard-on-success/propagate-on-error, merge, and discard-all policies
+    // explicit, and no nested execution should reset the outer diagnostic area.
+    // Trigger warnings are private to the enclosing DML, but detailed errors
+    // still belong to the caller.  Execute with a private diagnostic area so
+    // local SQLWARNING handlers work, then copy back only an unhandled error.
+    ObWarningBuffer trigger_diagnostics;
+    ObWarningBuffer *outer_diagnostics = ob_get_tsi_warning_buffer();
+    ob_setup_tsi_warning_buffer(&trigger_diagnostics);
+    OZ (exec_ctx.get_pl_engine()->execute(
+      exec_ctx, tmp_allocator, trigger_id, routine_id, path, params, result),
+        trigger_id, routine_id, params);
+    ob_setup_tsi_warning_buffer(outer_diagnostics);
+    if (OB_FAIL(ret) && OB_ERR_FUNCTION_UNKNOWN != ret
+        && OB_NOT_NULL(outer_diagnostics)
+        && (OB_MAX_ERROR_CODE != trigger_diagnostics.get_err_code()
+            || '\0' != trigger_diagnostics.get_err_msg()[0])) {
+      outer_diagnostics->set_error(trigger_diagnostics.get_err_msg(),
+                                   trigger_diagnostics.get_err_code());
+      outer_diagnostics->set_error_line_column(
+          trigger_diagnostics.get_error_line(),
+          trigger_diagnostics.get_error_column());
+      outer_diagnostics->set_sql_state(trigger_diagnostics.get_sql_state());
+    }
+  }
   CK (OB_NOT_NULL(exec_ctx.get_my_session()));
   OZ (exec_ctx.get_my_session()->reset_all_package_state_by_dbms_session());
   if (exec_ctx.get_my_session()->is_for_trigger_package()) {
@@ -513,18 +539,21 @@ int TriggerHandle::check_and_update_new_row(
           bool is_strict_equal = false;
           if (new_obj.is_lob_storage()) {
             common::ObArenaAllocator lob_allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
+            const common::ObLobReadOptions *lob_read_options = nullptr;
             ObObj cmp_obj;
             ObObj other_obj;
             if (new_obj.is_delta_tmp_lob() || new_cells[i].is_delta_tmp_lob()) {
               is_strict_equal = false;
+            } else if (OB_FAIL(eval_ctx.exec_ctx_.get_lob_read_options(lob_read_options))) {
+              LOG_WARN("failed to get LOB read options", K(ret));
             } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(new_obj,
                                                                               cmp_obj,
-                                                                              NULL,
+                                                                              lob_read_options,
                                                                               &lob_allocator))) {
               LOG_WARN("failed to convert lob", K(ret), K(new_obj));
             } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(new_cells[i],
                                                                               other_obj,
-                                                                              NULL,
+                                                                              lob_read_options,
                                                                               &lob_allocator))) {
               LOG_WARN("failed to convert lob", K(ret), K(i), K(new_cells[i]));
             } else {
@@ -575,7 +604,8 @@ int TriggerHandle::check_and_update_new_row(
           } else if (OB_FAIL(write_datum.from_obj(tmp_obj))) {
             LOG_WARN("failed to from obj", K(ret));
           } else if (is_lob_storage(tmp_obj.get_type()) &&
-                     OB_FAIL(ob_adjust_lob_datum(tmp_obj, expr->obj_meta_,
+                     OB_FAIL(ob_adjust_lob_datum(eval_ctx.exec_ctx_,
+                                                 tmp_obj, expr->obj_meta_,
                                                  eval_ctx.exec_ctx_.get_allocator(), write_datum))) {
           LOG_WARN("adjust lob datum failed", K(ret), K(tmp_obj.get_meta()), K(expr->obj_meta_));
         } else {
@@ -790,7 +820,8 @@ int TriggerHandle::convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
   } else {
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
     ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());
-    cast_ctx.exec_ctx_ = &exec_ctx;
+    ObSqlObjCastRuntime cast_runtime(&exec_ctx);
+    cast_ctx.runtime_ = &cast_runtime;
     if (OB_FAIL(ObObjCaster::to_type(ObExtendType, cast_ctx, src, dst))) {
       LOG_WARN("failed to cast to extend type", K(ret), K(src), K(dst), K(obj_type));
     }

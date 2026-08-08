@@ -21,6 +21,8 @@
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "sql/code_generator/ob_column_index_provider.h"
+#include "query/resolver/ob_partition_type_policy.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "lib/utility/utility.h"
 #include "sql/parser/parse_malloc.h"
@@ -29,13 +31,14 @@
 #include "sql/resolver/expr/ob_raw_expr_part_func_checker.h"
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build.h"
+#include "sql/pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_build.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "pl/ob_pl_dependency_util.h"
+#include "sql/pl/ob_pl_dependency_util.h"
+#include "data_plane/transaction/ob_xa_id.h"
 
 namespace oceanbase
 {
@@ -79,12 +82,13 @@ int ObResolverUtils::resolve_local_runtime_selector(const ParseNode *runtime_sel
 
 const ObString ObResolverUtils::stmt_type_string[] = {
 #define OB_STMT_TYPE_DEF(stmt_type, priv_check_func, id, action_type) ObString::make_string(#stmt_type),
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #undef OB_STMT_TYPE_DEF
 };
 
 int ObResolverUtils::get_user_type(ObIAllocator *allocator,
                                    ObSQLSessionInfo *session_info,
+                                   ObPlanCache *plan_cache,
                                    ObMySQLProxy *sql_proxy,
                                    share::schema::ObSchemaGetterGuard *schema_guard,
                                    pl::ObPLPackageGuard &package_guard,
@@ -94,12 +98,16 @@ int ObResolverUtils::get_user_type(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(allocator));
   CK (OB_NOT_NULL(session_info));
+  CK (OB_NOT_NULL(plan_cache));
   CK (OB_NOT_NULL(sql_proxy));
   CK (OB_NOT_NULL(schema_guard));
   OX (user_type = NULL);
   if (OB_SUCC(ret)) {
     pl::ObPLResolveCtx resolve_ctx(
       *allocator, *session_info, *schema_guard, package_guard, *sql_proxy, false);
+    resolve_ctx.params_.plan_cache_ = plan_cache;
+    resolve_ctx.params_.srs_provider_ = nullptr;
+    resolve_ctx.params_.lob_read_service_ = nullptr;
     if (!package_guard.is_inited()) {
       OZ (package_guard.init());
     }
@@ -126,7 +134,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
 
   CK (OB_NOT_NULL(params.schema_checker_));
   OZ (ObResolverUtils::get_user_type(
-    params.allocator_, params.session_info_, params.sql_proxy_,
+    params.allocator_, params.session_info_, params.plan_cache_, params.sql_proxy_,
     params.schema_checker_->get_schema_guard(),
     *package_guard,
     table_expr->get_udt_id(), user_type));
@@ -159,7 +167,7 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
     const ObUserDefinedType *user_type = NULL;
     CK (OB_NOT_NULL(params.schema_checker_));
     OZ (ObResolverUtils::get_user_type(
-      params.allocator_, params.session_info_, params.sql_proxy_,
+      params.allocator_, params.session_info_, params.plan_cache_, params.sql_proxy_,
       params.schema_checker_->get_schema_guard(),
       *package_guard,
       coll_type->get_element_type().get_user_type_id(), user_type));
@@ -859,6 +867,11 @@ int ObResolverUtils::check_type_match(ObResolverParams &params,
                              package_guard,
                              *(params.sql_proxy_),
                              false);
+  resolve_ctx.params_.plan_cache_ = params.plan_cache_;
+  resolve_ctx.params_.pl_sql_runtime_ = params.pl_sql_runtime_;
+  resolve_ctx.params_.pl_engine_ = params.pl_engine_;
+  resolve_ctx.params_.srs_provider_ = params.srs_provider_;
+  resolve_ctx.params_.lob_read_service_ = params.lob_read_service_;
   OZ (package_guard.init());
   OZ (check_type_match(
     resolve_ctx, match_info, expr, src_type, src_type_id, dst_pl_type));
@@ -999,6 +1012,11 @@ int ObResolverUtils::check_type_match(const pl::ObPLResolveCtx &resolve_ctx,
                                         resolve_ctx.package_guard_,
                                         resolve_ctx.sql_proxy_,
                                         false);
+          pl_resolve_ctx.params_.plan_cache_ = resolve_ctx.params_.plan_cache_;
+          pl_resolve_ctx.params_.pl_sql_runtime_ = resolve_ctx.params_.pl_sql_runtime_;
+          pl_resolve_ctx.params_.pl_engine_ = resolve_ctx.params_.pl_engine_;
+          pl_resolve_ctx.params_.srs_provider_ = resolve_ctx.params_.srs_provider_;
+          pl_resolve_ctx.params_.lob_read_service_ = resolve_ctx.params_.lob_read_service_;
           const pl::ObUserDefinedType *pl_user_type = NULL;
           const pl::ObCollectionType *coll_type = NULL;
           OZ (pl_resolve_ctx.get_user_type(dst_pl_type.get_user_type_id(), pl_user_type));
@@ -1220,7 +1238,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
                                                   dst_pl_type,
                                                   NULL));
     } else {
-      dst_pl_type = routine_param->get_pl_data_type();
+      dst_pl_type = pl::get_pl_data_type(*routine_param);
     }
     if (OB_SUCC(ret) && OB_FAIL(check_type_match(resolve_ctx,
                                                  match_info.match_info_.at(position),
@@ -1257,10 +1275,12 @@ int ObResolverUtils::match_vacancy_parameters(
                K(i),
                K(match_info));
       } else {
+        const pl::ObPLDataType routine_pl_type =
+            pl::get_pl_data_type(*routine_param);
         OX (match_info.match_info_.at(i) =
           ObRoutineMatchInfo::MatchInfo(routine_param->is_default_cast(),
-                                        routine_param->get_pl_data_type().get_obj_type(),
-                                        routine_param->get_pl_data_type().get_obj_type()));
+                                        routine_pl_type.get_obj_type(),
+                                        routine_pl_type.get_obj_type()));
       }
     }
   }
@@ -1464,6 +1484,11 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
                                false, /*check mode*/
                                true, /*sql scope*/
                                params.param_list_);
+    resolve_ctx.params_.plan_cache_ = params.plan_cache_;
+    resolve_ctx.params_.pl_sql_runtime_ = params.pl_sql_runtime_;
+    resolve_ctx.params_.pl_engine_ = params.pl_engine_;
+    resolve_ctx.params_.srs_provider_ = params.srs_provider_;
+    resolve_ctx.params_.lob_read_service_ = params.lob_read_service_;
     resolve_ctx.params_.secondary_namespace_ = params.secondary_namespace_;
     resolve_ctx.params_.param_list_ = params.param_list_;
     resolve_ctx.params_.is_execute_call_stmt_ = params.is_execute_call_stmt_;
@@ -2703,16 +2728,7 @@ int ObResolverUtils::name_case_cmp(const ObSQLSessionInfo *session_info,
 
 bool ObResolverUtils::is_partition_range_column_type(const ObObjType type)
 {
-  // true means if the partition column(s) contain the type, then it's
-  // part_func_type must be PARTITION_FUNC_TYPE_RANGE_COLUMNS
-  return ob_is_float_tc(type) ||
-         ob_is_double_tc(type) ||
-         ob_is_decimal_int_tc(type) ||
-         ob_is_datetime_or_mysql_datetime_tc(type) ||
-         ob_is_string_tc(type) ||
-         ob_is_date_or_mysql_date(type) ||
-         ob_is_time_tc(type) ||
-         ob_is_number_tc(type);
+  return query::ObPartitionTypePolicy::requires_range_columns(type);
 }
 
 bool ObResolverUtils::is_valid_partition_column_type(const ObObjType type,
@@ -5779,6 +5795,11 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                   schema_guard,
                                   *package_guard,
                                   NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
+                                  session_info.get_cur_exec_ctx()->get_plan_cache(),
+                                  session_info.get_cur_exec_ctx()->get_pl_sql_runtime(),
+                                  session_info.get_cur_exec_ctx()->get_pl_engine(),
+                                  session_info.get_cur_exec_ctx()->get_srs_provider(),
+                                  session_info.get_cur_exec_ctx()->get_lob_read_service(),
                                   expr_factory,
                                   NULL == ns ? NULL : ns->get_external_ns()->get_parent_ns(),
                                   is_prepare_protocol,
@@ -5790,6 +5811,9 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
         if (OB_FAIL(pl::ObPLBuilder::init_anonymous_ast(func_ast,
                                                         allocator,
                                                         session_info,
+                                                        *session_info.get_cur_exec_ctx()->get_plan_cache(),
+                                                        session_info.get_cur_exec_ctx()->get_srs_provider(),
+                                                        session_info.get_cur_exec_ctx()->get_lob_read_service(),
                                                         NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
                                                         schema_guard,
                                                         *package_guard,

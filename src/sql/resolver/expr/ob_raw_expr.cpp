@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr.h"
+#include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
 #include "sql/resolver/expr/ob_expr_relation_analyzer.h"
@@ -1301,9 +1302,9 @@ int ObConstRawExpr::get_expr_dep_session_vars(const ObBasicSessionInfo *session,
   int ret = OB_SUCCESS;
   if (ob_is_string_type(get_result_type().get_type())) {
     //solidify vars for parser
-    if (OB_FAIL(ObExprOperator::add_local_var_to_expr(SYS_VAR_SQL_MODE, session, dep_vars))) {
+    if (OB_FAIL(ObExprOperator::add_local_var_to_expr(share::SYS_VAR_SQL_MODE, session, dep_vars))) {
       LOG_WARN("fail to add sql mode", K(ret));
-    } else if (OB_FAIL(ObExprOperator::add_local_var_to_expr(SYS_VAR_COLLATION_CONNECTION,
+    } else if (OB_FAIL(ObExprOperator::add_local_var_to_expr(share::SYS_VAR_COLLATION_CONNECTION,
                                                              session, dep_vars))) {
       LOG_WARN("fail to add collation connection", K(ret));
     }
@@ -7012,4 +7013,14 @@ int ObMatchFunRawExpr::replace_param_expr(int64_t index, ObRawExpr *expr)
 }
 
 }//namespace sql
+
+namespace query
+{
+
+bool is_topn_filter(const sql::ObRawExpr *expr)
+{
+  return nullptr != expr && expr->is_topn_filter();
+}
+
+} // namespace query
 }//namespace oceanbase

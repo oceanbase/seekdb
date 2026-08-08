@@ -17,8 +17,10 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_truncate_partition_filter.h"
 #include "share/schema/ob_list_row_values.h"
+#include "query/engine/basic/ob_external_pushdown_filter.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/truncate_info/ob_truncate_info_array.h"
+#include "storage/truncate_info/ob_truncate_filter_evaluator.h"
 #include "storage/truncate_info/ob_mds_info_distinct_mgr.h"
 
 namespace oceanbase
@@ -38,17 +40,10 @@ ObTruncatePartitionFilter::ObTruncatePartitionFilter()
     has_combined_to_pd_filter_(false),
     filter_allocator_("TruncateFilter", OB_MALLOC_NORMAL_BLOCK_SIZE),
     truncate_info_allocator_("TruncateInfo", OB_MALLOC_NORMAL_BLOCK_SIZE),
-    filter_factory_(&filter_allocator_),
     mds_info_mgr_(),
     truncate_info_array_(),
-    exec_ctx_(filter_allocator_),
-    eval_ctx_(exec_ctx_),
-    expr_spec_(filter_allocator_),
-    op_(eval_ctx_, expr_spec_),
-    truncate_filter_node_(nullptr),
-    truncate_filter_executor_(nullptr),
-    pd_filter_node_with_truncate_(nullptr),
-    pd_filter_with_truncate_(nullptr),
+    evaluator_(nullptr),
+    pushdown_runtime_(nullptr),
     outer_allocator_(nullptr),
     ref_column_idxs_()
 {
@@ -57,23 +52,11 @@ ObTruncatePartitionFilter::ObTruncatePartitionFilter()
 
 ObTruncatePartitionFilter::~ObTruncatePartitionFilter()
 {
-  if (nullptr != pd_filter_with_truncate_) {
-    // should not desconstruct its children as they are not alloced here
-    pd_filter_with_truncate_->set_childs(0, nullptr);
-    pd_filter_with_truncate_->~ObPushdownFilterExecutor();
-    pd_filter_with_truncate_ = nullptr;
-  }
-  if (nullptr != truncate_filter_executor_) {
-    truncate_filter_executor_->~ObTruncateAndFilterExecutor();
-    truncate_filter_executor_ = nullptr;
-  }
-  if (nullptr != truncate_filter_node_) {
-    truncate_filter_node_->~ObPushdownFilterNode();
-    truncate_filter_node_ = nullptr;
-  }
-  if (nullptr != pd_filter_node_with_truncate_) {
-    pd_filter_node_with_truncate_->~ObPushdownFilterNode();
-    pd_filter_node_with_truncate_ = nullptr;
+  sql::destroy_external_pushdown_filter_runtime(filter_allocator_, pushdown_runtime_);
+  if (nullptr != evaluator_) {
+    evaluator_->~ObTruncateFilterEvaluator();
+    filter_allocator_.free(evaluator_);
+    evaluator_ = nullptr;
   }
 }
 
@@ -161,14 +144,14 @@ int ObTruncatePartitionFilter::switch_info(
   } else if (OB_UNLIKELY(schema_rowkey_cnt_ != tablet.get_rowkey_read_info().get_schema_rowkey_count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not equal schema rowkey cnt", K(ret), K_(schema_rowkey_cnt), K(tablet.get_rowkey_read_info().get_schema_rowkey_count()));
-  } else if (OB_ISNULL(truncate_filter_executor_)) {
+  } else if (OB_ISNULL(evaluator_)) {
     if (OB_FAIL(init_truncate_filter(schema_rowkey_cnt_, cols_desc, cols_param, truncate_info_array_))) {
       LOG_WARN("failed to init truncate filter", K(ret));
     } else {
       filter_type_ = ObTruncateFilterType::NORMAL_FILTER;
     }
-  } else if (OB_FAIL(truncate_filter_executor_->switch_info(filter_factory_, schema_rowkey_cnt_, cols_desc, truncate_info_array_))) {
-    LOG_WARN("failed to init truncate filter executor", K(ret));
+  } else if (OB_FAIL(evaluator_->switch_info(schema_rowkey_cnt_, cols_desc, truncate_info_array_))) {
+    LOG_WARN("failed to switch truncate evaluator", K(ret));
   } else {
     filter_type_ = ObTruncateFilterType::NORMAL_FILTER;
   }
@@ -186,9 +169,13 @@ void ObTruncatePartitionFilter::reuse()
   truncate_info_array_.reset();
   mds_info_mgr_.reset();
   truncate_info_allocator_.reuse();
-  if (OB_NOT_NULL(truncate_filter_executor_)) {
-    truncate_filter_executor_->reuse();
+  if (OB_NOT_NULL(evaluator_)) {
+    evaluator_->reuse();
   }
+  if (OB_NOT_NULL(pushdown_runtime_)) {
+    sql::detach_external_pushdown_filter(*pushdown_runtime_);
+  }
+  has_combined_to_pd_filter_ = false;
 }
 
 int ObTruncatePartitionFilter::filter(
@@ -227,7 +214,10 @@ int ObTruncatePartitionFilter::do_normal_filter(const blocksstable::ObDatumRow &
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row.row_flag_.is_delete() || row.row_flag_.is_lock())) {
     filtered = false;
-  } else if (OB_FAIL(truncate_filter_executor_->filter(row, filtered))) {
+  } else if (OB_ISNULL(evaluator_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("truncate evaluator is null", K(ret));
+  } else if (OB_FAIL(evaluator_->filter(row, filtered))) {
     LOG_WARN("failed to filter", K(ret));
   }
   return ret;
@@ -277,35 +267,25 @@ int ObTruncatePartitionFilter::combine_to_filter_tree(sql::ObPushdownFilterExecu
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
-  } else if (OB_ISNULL(truncate_filter_executor_)) {
+  } else if (OB_ISNULL(pushdown_runtime_) || OB_ISNULL(evaluator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null truncate filter executor", K(ret), KPC(this));
-  } else if (nullptr == root_filter) {
-    root_filter = truncate_filter_executor_;
-    LOG_DEBUG("[TRUNCATE INFO] pushdown filter is null, only truncate filter exists", KP(root_filter), KPC(this));
-  } else {
-    if (nullptr == pd_filter_node_with_truncate_ &&
-        OB_FAIL(filter_factory_.alloc(sql::PushdownFilterType::AND_FILTER, 2, pd_filter_node_with_truncate_))) {
-      LOG_WARN("Failed to alloc pushdown and filter node", K(ret));
-    } else if (nullptr == pd_filter_with_truncate_ &&
-               OB_FAIL(filter_factory_.alloc(sql::PushdownExecutorType::AND_FILTER_EXECUTOR, 2, *pd_filter_node_with_truncate_,
-                    pd_filter_with_truncate_, op_))) {
-      LOG_WARN("Failed to alloc pushdown and filter executor", K(ret));
-    } else {
-      pd_filter_with_truncate_->set_child(0, root_filter);
-      pd_filter_with_truncate_->set_child(1, truncate_filter_executor_);
-      root_filter = pd_filter_with_truncate_;
-    }
-    if (OB_FAIL(ret)) {
-      RELEASE_TRUNCATE_PTR_WHEN_FAILED(ObPushdownFilterNode, pd_filter_node_with_truncate_);
-      RELEASE_TRUNCATE_PTR_WHEN_FAILED(ObPushdownFilterExecutor, pd_filter_with_truncate_);
-    }
+    LOG_WARN("truncate pushdown runtime is not initialized", K(ret), KPC(this));
+  } else if (OB_FAIL(sql::attach_external_pushdown_filter(*pushdown_runtime_, root_filter))) {
+    LOG_WARN("failed to attach truncate evaluator", K(ret));
   }
   if (OB_SUCC(ret)) {
     has_combined_to_pd_filter_ = true;
   }
-  LOG_INFO("[TRUNCATE INFO]", K(ret), KP(root_filter), KP_(truncate_filter_executor), KPC(this));
+  LOG_INFO("[TRUNCATE INFO]", K(ret), KP(root_filter), KP_(evaluator), KPC(this));
   return ret;
+}
+
+void ObTruncatePartitionFilter::uncombined_from_pd_filter()
+{
+  if (nullptr != pushdown_runtime_) {
+    sql::detach_external_pushdown_filter(*pushdown_runtime_);
+  }
+  has_combined_to_pd_filter_ = false;
 }
 
 int ObTruncatePartitionFilter::init_truncate_filter(
@@ -315,15 +295,23 @@ int ObTruncatePartitionFilter::init_truncate_filter(
     const ObTruncateInfoArray &array)
 {
   int ret = OB_SUCCESS;
-  ObPushdownFilterExecutor *executor = nullptr;
-  if (OB_FAIL(filter_factory_.alloc(PushdownFilterType::TRUNCATE_AND_FILTER, 0, truncate_filter_node_))) {
-    LOG_WARN("failed to alloc truncate filter node", K(ret));
-  } else if (OB_FAIL(filter_factory_.alloc(PushdownExecutorType::TRUNCATE_AND_FILTER_EXECUTOR,
-                                           0, *truncate_filter_node_, executor, op_))) {
-    LOG_WARN("failed to alloc truncate filter executor", K(ret));
-  } else if (FALSE_IT(truncate_filter_executor_ = static_cast<ObTruncateAndFilterExecutor*>(executor))) {
-  } else if (OB_FAIL(truncate_filter_executor_->init(filter_factory_, schema_rowkey_cnt, cols_desc, cols_param, array))) {
-    LOG_WARN("failed to init truncate filter executor", K(ret));
+  UNUSED(cols_param);
+  if (nullptr == evaluator_) {
+    void *buf = filter_allocator_.alloc(sizeof(ObTruncateFilterEvaluator));
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate truncate evaluator", K(ret));
+    } else {
+      evaluator_ = new (buf) ObTruncateFilterEvaluator();
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(evaluator_->init(schema_rowkey_cnt, cols_desc, array))) {
+    LOG_WARN("failed to initialize truncate evaluator", K(ret));
+  } else if (nullptr == pushdown_runtime_ &&
+             OB_FAIL(sql::create_external_pushdown_filter_runtime(
+                 filter_allocator_, *evaluator_, pushdown_runtime_))) {
+    LOG_WARN("failed to create truncate pushdown runtime", K(ret));
   } else if (OB_FAIL(init_column_idxs(array))) {
     LOG_WARN("failed to init column idxs", KR(ret), K(array));
   } else {

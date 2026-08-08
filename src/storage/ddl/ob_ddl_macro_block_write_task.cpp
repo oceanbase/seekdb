@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "storage/ddl/ob_ddl_macro_block_write_task.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
@@ -234,7 +235,7 @@ int ObDDLWriteMacroBlockBasePipeline::fill_writer_param(ObWriteMacroParam &param
   if (OB_ISNULL(dag = static_cast<ObDDLIndependentDag *>(get_dag())) || OB_ISNULL(ddl_slice_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, dag must not be nullptr", K(ret), KPC(get_dag()), KPC(ddl_slice_));
-  } else if (OB_FAIL(ObDDLUtil::fill_writer_param(ddl_slice_->get_tablet_id(),
+  } else if (OB_FAIL(ObDDLStorageUtil::fill_writer_param(ddl_slice_->get_tablet_id(),
                                                   ddl_slice_->get_slice_idx(),
                                                   dag,
                                                   0/*max_batch_size*/,

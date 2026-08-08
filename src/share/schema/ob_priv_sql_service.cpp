@@ -49,7 +49,6 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace sql;
 namespace share
 {
 namespace schema

@@ -18,6 +18,7 @@
 
 #include "sql/code_generator/ob_code_generator.h"
 #include "sql/code_generator/ob_static_engine_cg.h"
+#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {

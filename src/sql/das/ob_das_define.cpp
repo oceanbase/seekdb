@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_define.h"
-#include "pl/ob_pl.h"
+#include "sql/pl/ob_pl.h"
 
 namespace oceanbase
 {

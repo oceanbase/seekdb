@@ -18,7 +18,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sql_utils.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
 #include "sql/printer/ob_select_stmt_printer.h"
@@ -30,8 +30,9 @@
 #include "sql/printer/ob_schema_printer.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include <openssl/md5.h>
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
+#include "query/ob_sql_name_service.h"
 extern "C" {
 #include "sql/parser/ob_non_reserved_keywords.h"
 #include "share/schema/ob_schema_struct.h"  // relocated-definition owner
@@ -594,6 +595,11 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                                         ObCtxIds::EXECUTE_CTX_ID));
         exec_ctx.set_physical_plan_ctx(phy_plan_ctx);
         if (NULL != out_ctx) {
+          // Calculable expressions execute in a short-lived context.  Keep the
+          // request-scoped service bindings explicit when deriving that
+          // context; process services are intentionally no longer stored on
+          // the SQL session.
+          exec_ctx.set_runtime_services(out_ctx->get_runtime_services());
           exec_ctx.set_sql_ctx(out_ctx->get_sql_ctx());
           if (NULL != out_ctx->get_original_package_guard()) {
             exec_ctx.set_package_guard(out_ctx->get_original_package_guard());
@@ -3393,10 +3399,12 @@ bool ObExprConstraint::operator==(const ObExprConstraint &rhs) const
   return bret;
 }
 
-int ObSqlGeoUtils::check_srid_by_srs(uint64_t srid)
+int ObSqlGeoUtils::check_srid_by_srs(
+    common::ObISrsProvider &srs_provider,
+    uint64_t srid)
 {
   int ret = OB_SUCCESS;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
 
   if (0 == srid || UINT32_MAX == srid) {
@@ -3405,7 +3413,7 @@ int ObSqlGeoUtils::check_srid_by_srs(uint64_t srid)
     ret = OB_OPERATE_OVERFLOW;
     LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "srid", "UINT32_MAX");
   } else if (srid != 0 &&
-      OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
+      OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
     LOG_WARN("failed to get srs guard", K(srid), K(ret));    
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
     LOG_WARN("get srs failed", K(srid), K(ret));
@@ -3414,10 +3422,13 @@ int ObSqlGeoUtils::check_srid_by_srs(uint64_t srid)
   return ret;
 }
 
-int ObSqlGeoUtils::check_srid(uint32_t column_srid, uint32_t input_srid)
+int ObSqlGeoUtils::check_srid(
+    common::ObISrsProvider &srs_provider,
+    uint32_t column_srid,
+    uint32_t input_srid)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(check_srid_by_srs(input_srid))) {
+  if (OB_FAIL(check_srid_by_srs(srs_provider, input_srid))) {
     LOG_WARN("invalid srid", K(ret), K(input_srid));
   } else if (UINT32_MAX == column_srid) {
     // do nothing, accept all.
@@ -3783,7 +3794,8 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
                                      ObSelectStmt *select_stmt,
                                      bool reset_column_infos,
                                      ObIAllocator &alloc,
-                                     ObSQLSessionInfo &session_info)
+                                     ObSQLSessionInfo &session_info,
+                                     ObMaintainDepInfoTaskQueue &dependency_info_queue)
 {
   int ret = OB_SUCCESS;
   ObTableSchema new_view_schema(&alloc);
@@ -3797,14 +3809,11 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(new_view_schema.assign(old_view_schema))) {
     LOG_WARN("failed to assign table schema", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_engine_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get sql engine", K(ret));
   } else if ((0 == old_view_schema.get_object_status()
              || 0 == old_view_schema.get_column_count()
              || (old_view_schema.is_sys_view()
                  && old_view_schema.get_schema_version() <= GCTX.start_time_
-                 && OB_HASH_NOT_EXIST == GCTX.sql_engine_->get_dep_info_queue()
+                 && OB_HASH_NOT_EXIST == dependency_info_queue
                     .read_consistent_sys_view_from_set(old_view_schema.get_table_id())))) {
     if (!reset_column_infos) {
       ObArray<ObString> dummy_column_list;
@@ -3830,11 +3839,12 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
       } else if (!new_view_schema.is_view_table() || new_view_schema.get_column_count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get wrong schema", K(ret), K(new_view_schema));
-      } else if (old_view_schema.is_sys_view() && OB_FAIL(check_sys_view_changed(old_view_schema, new_view_schema, changed))) {
+      } else if (old_view_schema.is_sys_view() && OB_FAIL(check_sys_view_changed(
+          old_view_schema, new_view_schema, changed, dependency_info_queue))) {
         LOG_WARN("failed to check sys view changed", K(ret));
       } else if (!select_stmt->get_ref_obj_table()->is_inited() || (old_view_schema.is_sys_view() && !changed)) {
         // do nothing
-      } else if (OB_FAIL(GCTX.sql_engine_->get_dep_info_queue().add_view_id_to_set(new_view_schema.get_table_id()))) {
+      } else if (OB_FAIL(dependency_info_queue.add_view_id_to_set(new_view_schema.get_table_id()))) {
         if (OB_HASH_EXIST == ret) {
           ret = OB_SUCCESS;
           LOG_WARN("table id exists", K(new_view_schema.get_table_id()));
@@ -3842,7 +3852,7 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
           LOG_WARN("failed to set table id", K(ret));
         }
       } else if (OB_FAIL(process_reference_obj_table(*select_stmt->get_ref_obj_table(),
-        new_view_schema.get_table_id(), &new_view_schema, GCTX.sql_engine_->get_dep_info_queue()))) {
+        new_view_schema.get_table_id(), &new_view_schema, dependency_info_queue))) {
         LOG_WARN("failed to process reference obj table", K(ret), K(new_view_schema), K(old_view_schema));
       }
     }
@@ -3852,7 +3862,8 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
 
 int ObSQLUtils::check_sys_view_changed(const share::schema::ObTableSchema &old_view_schema,
                                        const share::schema::ObTableSchema &new_view_schema,
-                                       bool &changed)
+                                       bool &changed,
+                                       ObMaintainDepInfoTaskQueue &dependency_info_queue)
 {
   int ret = OB_SUCCESS;
   changed = false;
@@ -3890,8 +3901,8 @@ int ObSQLUtils::check_sys_view_changed(const share::schema::ObTableSchema &old_v
     }
   }
   if (OB_SUCC(ret) && !changed) {
-    if (OB_FAIL(GCTX.sql_engine_->get_dep_info_queue()
-                .add_consistent_sys_view_id_to_set(old_view_schema.get_table_id()))) {
+    if (OB_FAIL(dependency_info_queue.add_consistent_sys_view_id_to_set(
+        old_view_schema.get_table_id()))) {
       LOG_WARN("failed to add sys view", K(ret));
     }
   }
@@ -4063,3 +4074,75 @@ int ObSQLUtils::get_outline_sql(const share::schema::ObOutlineInfo &outline_info
 }
 }  // namespace sql
 }  // namespace oceanbase
+
+namespace oceanbase
+{
+namespace query
+{
+
+int ObSQLNameService::check_and_convert_database_name(
+    const common::ObCollationType cs_type,
+    const bool preserve_lettercase,
+    common::ObString &name)
+{
+  return sql::ObSQLUtils::check_and_convert_db_name(
+      cs_type, preserve_lettercase, name);
+}
+
+int ObSQLNameService::check_and_convert_table_name(
+    const common::ObCollationType cs_type,
+    const bool preserve_lettercase,
+    common::ObString &name)
+{
+  return sql::ObSQLUtils::check_and_convert_table_name(
+      cs_type, preserve_lettercase, name);
+}
+
+int ObSQLNameService::resolve_table_name(
+    const common::ObCollationType cs_type,
+    const common::ObNameCaseMode case_mode,
+    const common::ObString &name,
+    common::ObString &database_name,
+    common::ObString &table_name)
+{
+  int ret = common::OB_SUCCESS;
+  static const char split_character = '.';
+  database_name.reset();
+  table_name.reset();
+  if (OB_UNLIKELY(name.empty())) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else {
+    common::ObString name_str = name;
+    const char *separator = name_str.find(split_character);
+    if (nullptr == separator) {
+      table_name = name_str;
+    } else {
+      database_name = name_str.split_on(separator);
+      table_name = name_str;
+      if (OB_UNLIKELY(database_name.empty() || table_name.empty()
+          || nullptr != table_name.find(split_character))) {
+        ret = common::OB_WRONG_TABLE_NAME;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const bool preserve_lettercase =
+          common::OB_LOWERCASE_AND_INSENSITIVE != case_mode;
+      if (common::OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
+        ::str_tolower(database_name.ptr(), database_name.length());
+        ::str_tolower(table_name.ptr(), table_name.length());
+      }
+      if (!database_name.empty()) {
+        ret = check_and_convert_database_name(
+            cs_type, preserve_lettercase, database_name);
+      }
+      if (OB_SUCC(ret)) {
+        ret = check_and_convert_table_name(
+            cs_type, preserve_lettercase, table_name);
+      }
+    }
+  }
+  return ret;
+}
+
+} // namespace query
+} // namespace oceanbase

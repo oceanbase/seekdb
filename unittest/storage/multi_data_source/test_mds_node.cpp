@@ -20,35 +20,12 @@
 #define private public
 #define protected public
 
-#include "storage/multi_data_source/common_define.h"
+#include "unittest/storage/multi_data_source/common_define.h"
 #include "storage/multi_data_source/mds_row.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-namespace oceanbase {
-namespace storage {
-namespace mds {
-void *DefaultAllocator::alloc(const int64_t size) {
-  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
-  ATOMIC_INC(&alloc_times_);
-  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
-  return ptr;
-}
-void DefaultAllocator::free(void *ptr) {
-  ATOMIC_INC(&free_times_);
-  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
-  std::free(ptr);// ob_free(ptr);
-}
-void *MdsAllocator::alloc(const int64_t size) {
-  void *ptr = std::malloc(size);// ob_malloc(size, "MDS"); 
-  ATOMIC_INC(&alloc_times_);
-  MDS_LOG(DEBUG, "alloc obj", KP(ptr), K(size), K(lbt()));
-  return ptr;
-}
-void MdsAllocator::free(void *ptr) {
-  ATOMIC_INC(&free_times_);
-  MDS_LOG(DEBUG, "free obj", KP(ptr), K(lbt()));
-  std::free(ptr);// ob_free(ptr);
-}
-}}}
+#undef protected
+#undef private
+
 namespace oceanbase {
 namespace unittest {
 
@@ -66,7 +43,7 @@ public:
   };
   virtual void TearDown() {
   };
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestMdsNode);
 };
@@ -224,23 +201,4 @@ TEST_F(TestMdsNode, test_node_print) {
 
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_mds_node.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_mds_node.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  int ret = RUN_ALL_TESTS();
-  int64_t alloc_times = oceanbase::storage::mds::MdsAllocator::get_alloc_times();
-  int64_t free_times = oceanbase::storage::mds::MdsAllocator::get_free_times();
-  if (alloc_times != free_times) {
-    MDS_LOG(ERROR, "memory may leak", K(free_times), K(alloc_times));
-    ret = -1;
-  } else {
-    MDS_LOG(INFO, "all memory released", K(free_times), K(alloc_times));
-  }
-  return ret;
 }

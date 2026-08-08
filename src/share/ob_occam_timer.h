@@ -43,11 +43,12 @@
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/guard/ob_unique_guard.h"
 #include "lib/guard/ob_scope_guard.h"
+#include "lib/literals/ob_literals.h"
 #include "lib/ob_errno.h"
 #include "share/ob_occam_thread_pool.h"
 #include "lib/task/ob_timer.h"
 #include "lib/future/ob_future.h"
-#include "storage/tx/ob_time_wheel.h"
+#include "share/ob_time_wheel.h"
 #include "lib/time/ob_clock_generator.h"
 #include "share/ob_occam_time_guard.h"
 #include "share/ob_delegate.h"
@@ -546,14 +547,19 @@ class ObOccamTimer
 public:
   ObOccamTimer() : total_running_task_count_(0), precision_(0), is_running_(false) {}
   ~ObOccamTimer() { destroy(); }
-  int init_and_start(ObOccamThreadPool &pool, const int64_t precision, const char *name)
+  int init_and_start(
+      ObOccamThreadPool &pool,
+      const int64_t precision,
+      const char *name,
+      lib::IRunWrapper *run_wrapper = nullptr)
   {
     TIMEGUARD_INIT(OCCAM, 100_ms);
     int ret = OB_SUCCESS;
     ret = ob_make_shared<ObTimeWheel>(timer_shared_ptr_);
     if (CLICK_FAIL(ret)) {
       OCCAM_LOG(WARN, "init time wheel failed", K(ret));
-    } else if (CLICK_FAIL(timer_shared_ptr_->init(precision, 1, name))) {
+    } else if (CLICK_FAIL(
+        timer_shared_ptr_->init(precision, 1, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init timer_shared_ptr_ failed", K(ret));
     } else if (CLICK_FAIL(thread_pool_shared_ptr_.assign(pool.thread_pool_))) {
       OCCAM_LOG(WARN, "assign timer_shared_ptr_ failed", K(ret));
@@ -569,7 +575,8 @@ public:
   int init_and_start(const int64_t worker_number,
                      const int64_t precision,
                      const char *name,
-                     const int64_t queue_size_square_of_2 = 10)
+                     const int64_t queue_size_square_of_2 = 10,
+                     lib::IRunWrapper *run_wrapper = nullptr)
   {
     TIMEGUARD_INIT(OCCAM, 100_ms);
     int ret = OB_SUCCESS;
@@ -577,9 +584,11 @@ public:
       OCCAM_LOG(WARN, "create thread pool failed", K(ret));
     } else if (CLICK_FAIL(ob_make_shared<ObTimeWheel>(timer_shared_ptr_))) {
       OCCAM_LOG(WARN, "create time wheel failed", K(ret));
-    } else if (CLICK_FAIL(thread_pool_shared_ptr_->init(worker_number, queue_size_square_of_2))) {
+    } else if (CLICK_FAIL(thread_pool_shared_ptr_->init(
+        worker_number, queue_size_square_of_2, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init thread_pool_shared_ptr_ failed", K(ret));
-    } else if (CLICK_FAIL(timer_shared_ptr_->init(precision, 1, name))) {
+    } else if (CLICK_FAIL(
+        timer_shared_ptr_->init(precision, 1, name, run_wrapper))) {
       OCCAM_LOG(WARN, "init timer_shared_ptr_ failed", K(ret));
     } else if (CLICK_FAIL(timer_shared_ptr_->start())) {
       OCCAM_LOG(WARN, "timer_shared_ptr_ start failed", K(ret));

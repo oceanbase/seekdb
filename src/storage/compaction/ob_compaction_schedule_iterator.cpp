@@ -15,7 +15,6 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_compaction_schedule_iterator.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -191,7 +190,9 @@ ObCompactionScheduleIterator::ObCompactionScheduleIterator(
 {
 }
 
-int ObCompactionScheduleIterator::build_iter(const int64_t schedule_batch_size)
+int ObCompactionScheduleIterator::build_iter(
+    const int64_t schedule_batch_size,
+    ObLSService &ls_service)
 {
   int ret = OB_SUCCESS;
   bool need_reset_report_scn = !is_valid();
@@ -202,7 +203,7 @@ int ObCompactionScheduleIterator::build_iter(const int64_t schedule_batch_size)
     LOG_WARN("invalid argument", KR(ret), K(schedule_batch_size));
   } else if (!need_reset_report_scn) {
     ls = ls_;
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(ls_service.get_ls(ls))) {
     LOG_WARN("failed to get ls", K(ret));
   }
 

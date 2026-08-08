@@ -28,7 +28,7 @@ class ObMPDebug : public ObMPBase
 {
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_DEBUG;
-  explicit ObMPDebug(const ObGlobalContext &gctx);
+  explicit ObMPDebug(const share::ObGlobalContext &gctx);
   virtual ~ObMPDebug();
 
 protected:

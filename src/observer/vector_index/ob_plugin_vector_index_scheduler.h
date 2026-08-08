@@ -19,11 +19,12 @@
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "data_plane/vector/ob_i_vector_index_runtime.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_hybrid_vector_refresh_task.h"
 #include "logservice/ob_append_callback.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "logservice/ob_log_handler.h"
 #include "observer/vector_index/ob_ivf_async_task_executor.h"
 
@@ -184,7 +185,8 @@ struct ObPluginVectorIndexTaskCtx
 typedef hash::ObHashMap<ObTabletID, ObVectorIndexSharedTableInfo> ObVecIdxSharedTableInfoMap;
 
 // schedule vector tasks for a ls
-class ObPluginVectorIndexLoadScheduler : public common::ObTimerTask,
+class ObPluginVectorIndexLoadScheduler : public data_plane::ObIVectorIndexScheduler,
+                                         public common::ObTimerTask,
                                          public logservice::ObIReplaySubHandler,
                                          public logservice::ObICheckpointSubHandler,
                                          public logservice::ObILocalLogHandler
@@ -212,6 +214,10 @@ public:
   virtual ~ObPluginVectorIndexLoadScheduler()
   {
   }
+
+  logservice::ObIReplaySubHandler &replay_handler() override { return *this; }
+  logservice::ObICheckpointSubHandler &checkpoint_handler() override { return *this; }
+  logservice::ObILocalLogHandler &local_handler() override { return *this; }
 
   int init(ObLS *ls, common::ObTimer &scheduler_timer);
   virtual void runTimerTask() override;
@@ -275,7 +281,7 @@ public:
   int activate() override;
 
   // task save destory
-  void stop();
+  void stop() override;
   void destroy();
   bool is_stopped() { return (is_stopped_ == true); };
   void inc_dag_ref() { ATOMIC_INC(&dag_ref_cnt_); }

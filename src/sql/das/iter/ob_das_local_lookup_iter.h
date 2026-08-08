@@ -18,7 +18,7 @@
 #define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_LOCAL_LOOKUP_ITER_H_
 
 #include "sql/das/iter/ob_das_lookup_iter.h"
-#include "storage/access/ob_dml_param.h"
+#include "data_plane/access/ob_table_scan_param.h"
 
 namespace oceanbase
 {

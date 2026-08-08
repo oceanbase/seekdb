@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/meta_store/ob_local_storage_meta_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_persister.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/slog_ckpt/ob_linked_macro_block_writer.h"
@@ -626,8 +626,9 @@ int ObTabletPersister::calc_tablet_space_usage_(
     space_usage.all_sstable_data_required_size_
         = (block_info_set.data_block_info_set_.size()
            + block_info_set.shared_data_block_info_map_.size())
-          * DEFAULT_MACRO_BLOCK_SIZE;
-    space_usage.all_sstable_meta_size_ = block_info_set.meta_block_info_set_.size() * DEFAULT_MACRO_BLOCK_SIZE;
+          * OB_DEFAULT_MACRO_BLOCK_SIZE;
+    space_usage.all_sstable_meta_size_ =
+        block_info_set.meta_block_info_set_.size() * OB_DEFAULT_MACRO_BLOCK_SIZE;
     new_tablet_hdl.get_obj()->set_space_usage_(space_usage);
   }
   return ret;
@@ -693,7 +694,7 @@ int ObTabletPersister::acquire_tablet(
     ObTabletHandle &new_handle)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   if (OB_FAIL(t3m->acquire_tablet_from_pool(type, WashTabletPriority::WTP_HIGH, key, new_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
     } else if (ObTabletPoolType::TP_LARGE == type
@@ -720,7 +721,7 @@ int ObTabletPersister::persist_aggregated_meta(
   ObMacroInfoIterator macro_iter;
   bool inc_success = false;
   ObTablet *new_tablet = new_handle.get_obj();
-  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
+  ObLocalStorageMetaService *meta_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>();
   ObObjectWriteInfo write_info;
   ObObjectWriteHandle handle;
   ObObjectsWriteCtx write_ctx;
@@ -1017,7 +1018,7 @@ int ObTabletPersister::batch_write_sstable_info(
 {
   int ret = OB_SUCCESS;
   ObObjectBatchHandle handle;
-  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
+  ObLocalStorageMetaService *meta_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>();
   blocksstable::ObStorageObjectOpt curr_opt;
   build_async_write_start_opt_(curr_opt);
   if (OB_FAIL(meta_service->get_object_reader_writer().async_batch_write(write_infos, handle, curr_opt/*OUTPUT*/))) {
@@ -1372,7 +1373,7 @@ int ObTabletPersister::write_and_fill_args(
     ObBlockInfoSet::TabletMacroSet &meta_block_id_set)
 {
   int ret = OB_SUCCESS;
-  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
+  ObLocalStorageMetaService *meta_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>();
   ObObjectReaderWriter &reader_writer = meta_service->get_object_reader_writer();
   ObObjectBatchHandle handle;
   ObMetaDiskAddr* addr[] = { // NOTE: The order must be the same as the batch async write.
@@ -1454,7 +1455,7 @@ int ObTabletPersister::link_write_medium_info_list(
     ObBlockInfoSet::TabletMacroSet &meta_block_id_set)
 {
   int ret = OB_SUCCESS;
-  ObLocalStorageMetaService *meta_service = share::g_mp->local_storage_meta_service();
+  ObLocalStorageMetaService *meta_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>();
   ObObjectReaderWriter &reader_writer = meta_service->get_object_reader_writer();
   common::ObArenaAllocator arena_allocator(common::ObMemAttr("serializer"));
   ObObjectWriteInfo write_info;

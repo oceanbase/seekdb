@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_outline_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "sql/ob_sql.h"
 #include "sql/resolver/ddl/ob_create_outline_stmt.h"
@@ -146,14 +147,15 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session_info = ctx.get_my_session();
+  ObPlanCache *plan_cache = ctx.get_plan_cache();
   ObPhysicalPlan *phy_plan = NULL;
   ObOptimizer optimizer(opt_ctx);
   ObCacheObjGuard guard;
-  if (OB_ISNULL(session_info) || OB_ISNULL(outline_stmt)) {
+  if (OB_ISNULL(session_info) || OB_ISNULL(plan_cache) || OB_ISNULL(outline_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(
-                  guard, ObLibCacheNameSpace::NS_CRSR))) {
+                  *plan_cache, guard, ObLibCacheNameSpace::NS_CRSR))) {
     LOG_WARN("fail to alloc phy_plan", K(ret));
   } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
     // do nothing
@@ -282,7 +284,7 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_outline(arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().create_outline(arg); }))) {
     LOG_WARN("rpc proxy create outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
@@ -329,7 +331,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
     LOG_WARN("schema_guard reset failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->alter_outline(arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().alter_outline(arg); }))) {
     LOG_WARN("rpc proxy alter outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
@@ -350,7 +352,7 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_outline(arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().drop_outline(arg); }))) {
     LOG_WARN("rpc proxy drop outline failed", K(ret),
              "dst", GCTX.self_addr());
   } else {/*do nothing*/ }

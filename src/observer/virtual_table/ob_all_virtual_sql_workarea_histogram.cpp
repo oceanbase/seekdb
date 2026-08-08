@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_all_virtual_sql_workarea_histogram.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -43,7 +43,8 @@ void ObSqlWorkareaHistogramIterator::reset()
 int ObSqlWorkareaHistogramIterator::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(
+          ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null of omt", KR(ret));
   }
@@ -61,7 +62,7 @@ int ObSqlWorkareaHistogramIterator::get_next_batch_wa_histograms()
     
     SERVER_MODULE_SCOPE {
       ObSqlMemoryManager *sql_mem_mgr = nullptr;
-      sql_mem_mgr = share::g_mp->sql_memory_manager();
+      sql_mem_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSqlMemoryManager>();
       if (nullptr != sql_mem_mgr && OB_FAIL(sql_mem_mgr->get_workarea_histogram(wa_histograms_))) {
         LOG_WARN("failed to get workarea stat", K(ret));
       }

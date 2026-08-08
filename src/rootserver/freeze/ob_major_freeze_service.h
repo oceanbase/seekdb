@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
 #define OCEANBASE_ROOTSERVER_FREEZE_OB_MAJOR_FREEZE_SERVICE_
 
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "share/scn.h"
 #include "lib/lock/ob_recursive_mutex.h"
-#include "rootserver/freeze/ob_local_major_freeze.h"
+#include "rootserver/freeze/ob_major_freeze_util.h"
 
 namespace oceanbase
 {

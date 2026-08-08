@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_ddl_common.h"
+#include "share/rc/ob_server_runtime.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/ob_server_struct.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -27,13 +29,14 @@
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "rootserver/ob_domain_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "lib/hash/ob_hashset.h"
 
 using namespace oceanbase;
 using namespace oceanbase::share;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
+using namespace oceanbase::rootserver;
 
 int ObForkTableUtil::collect_complete_domain_index_schemas(
     ObSchemaGetterGuard &schema_guard,
@@ -111,7 +114,7 @@ int ObForkTableUtil::collect_complete_domain_index_schemas(
       LOG_WARN("fail to check need doc id", K(ret));
     } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(table_schema, need_vid))) {
       LOG_WARN("fail to check need vid", K(ret));
-    } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
+    } else if (OB_FAIL(rootserver::ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
                  shared_schema_array,
                  domain_schema_array,
                  aux_schema_array,
@@ -434,7 +437,7 @@ int ObForkTableUtil::obtain_snapshot(
     int64_t &new_fetched_snapshot)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObDDLService &ddl_service = GCTX.local_management_service_->get_ddl_service();
+  rootserver::ObDDLService &ddl_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service();
   new_fetched_snapshot = 0;
   ObSEArray<ObTabletID, 16> tablet_ids;
   SCN snapshot_scn;
@@ -443,7 +446,7 @@ int ObForkTableUtil::obtain_snapshot(
   if (OB_UNLIKELY(data_table_schemas.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("data_table_schemas is empty", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::calc_snapshot_with_gts(new_fetched_snapshot))) {
+  } else if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(new_fetched_snapshot))) {
     LOG_WARN("fail to calc snapshot with gts", K(ret), K(new_fetched_snapshot));
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -545,7 +548,7 @@ int ObForkTableUtil::release_snapshot(
     }
     task->add_event_info("release snapshot finish");
     LOG_INFO("release snapshot finished for multiple tables", K(snapshot_version), K(schema_version),
-        "table_cnt", table_ids.count(), "tablet_cnt", tablet_ids.count(), "ddl_event_info", ObDDLEventInfo());
+        "table_cnt", table_ids.count(), "tablet_cnt", tablet_ids.count(), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     LOG_DEBUG("release snapshot detail", K(snapshot_version), K(schema_version), K(table_ids), K(tablet_ids));
   }
   return ret;

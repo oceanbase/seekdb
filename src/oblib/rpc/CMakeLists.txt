@@ -1,0 +1,2 @@
+seekdb_apply_unity_inventory(oblib_rpc SEEKDB_OBLIB_RPC_UNITY)
+ob_lib_add_target(oblib_rpc)

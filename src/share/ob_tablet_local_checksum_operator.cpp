@@ -21,7 +21,6 @@
 #include "share/ob_tablet_local_checksum_operator.h"
 #include "share/storage/ob_tablet_local_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
-#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 namespace share
@@ -480,13 +479,13 @@ int ObTabletLocalChecksumItem::set_ckm_mem_attr()
 
 /****************************** ObTabletLocalChecksumOperator ******************************/
 
-int ObTabletLocalChecksumOperator::init()
+int ObTabletLocalChecksumOperator::init(ObSQLiteConnectionPool *pool)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.meta_db_pool_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ not initialized", K(ret));
-  } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
+  if (OB_ISNULL(pool)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("SQLite connection pool is null", K(ret));
+  } else if (OB_FAIL(storage_.init(pool))) {
     LOG_WARN("failed to init storage", K(ret));
   }
   return ret;

@@ -17,9 +17,10 @@
 #define USING_LOG_PREFIX RS_COMPACTION
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_ex_rpc.h"
 #include "share/ob_freeze_info_proxy.h"
+#include "share/ob_share_util.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -70,7 +71,7 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
     ret = ex_rpc::sync_call([&]() -> int {
       int ret = OB_SUCCESS;
       SERVER_MODULE_SCOPE {
-        if (OB_FAIL(share::g_mp->tablet_scheduler()->user_request_schedule_medium_merge(
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->user_request_schedule_medium_merge(
             param.tablet_id_))) {
           LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(param));
         }
@@ -114,10 +115,10 @@ int ObMajorFreezeHelper::do_local_major_freeze(const ObMajorFreezeReason freeze_
     ObRestoreMajorFreezeService *restore_service = nullptr;
     ObMajorFreezeService *major_freeze_service = nullptr;
     bool is_primary_service = true;
-    if (OB_ISNULL(primary_service = share::g_mp->primary_major_freeze_service())) {
+    if (OB_ISNULL(primary_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObPrimaryMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("primary major freeze service is null", KR(ret));
-    } else if (OB_ISNULL(restore_service = share::g_mp->restore_major_freeze_service())) {
+    } else if (OB_ISNULL(restore_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObRestoreMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("restore major freeze service is null", KR(ret));
     } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(
@@ -161,10 +162,10 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
     ObRestoreMajorFreezeService *restore_service = nullptr;
     ObMajorFreezeService *major_freeze_service = nullptr;
     bool is_primary_service = true;
-    if (OB_ISNULL(primary_service = share::g_mp->primary_major_freeze_service())) {
+    if (OB_ISNULL(primary_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObPrimaryMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major_freeze_service is nullptr", K(ret));
-    } else if (OB_ISNULL(restore_service = share::g_mp->restore_major_freeze_service())) {
+    } else if (OB_ISNULL(restore_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObRestoreMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("restore_major_freeze_service is nullptr", KR(ret));
     } else if (OB_FAIL(ObMajorFreezeUtil::get_major_freeze_service(primary_service,

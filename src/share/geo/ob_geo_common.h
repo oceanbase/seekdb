@@ -70,6 +70,17 @@ enum class ObGeoRelationType
   T_DFULLYWITHIN = 5
 };
 
+// Predicates supported by the point/polygon short-circuit. SQL expression
+// tags are deliberately translated at the caller instead of leaking parser
+// vocabulary into the Share Geo interface.
+enum class ObGeoPredicate
+{
+  INTERSECTS,
+  COVERS,
+  CONTAINS,
+  WITHIN,
+};
+
 // will define in other file, later 
 enum class ObDomainOpType
 {

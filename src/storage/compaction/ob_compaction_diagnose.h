@@ -18,23 +18,16 @@
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_DIAGNOSE_H_
 
 #include "storage/ob_i_store.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_tablet_merge_task.h"
 #include "lib/list/ob_dlist.h"
-#include "observer/scheduler/ob_diagnose_config.h"
+#include "data_plane/scheduler/ob_diagnose_config.h"
+#include "data_plane/compaction/ob_i_major_freeze_coordinator.h"
 #include "storage/compaction/ob_compaction_tablet_diagnose.h"
 #include "share/compaction/ob_compaction_info_param.h"
 
 namespace oceanbase
 {
-namespace rootserver
-{
-  class ObMajorFreezeService;
-}
-namespace share
-{
-  class ObTabletRuntimeInfo;
-}
 using namespace storage;
 using namespace share;
 namespace compaction
@@ -507,10 +500,9 @@ private:
       share::ObSuspectInfoType &suspect_info_type,
       char *buf,
       const int64_t buf_len);
-  int check_if_need_diagnose(rootserver::ObMajorFreezeService *&major_freeze_service,
-                             bool &need_diagnose) const;
-  int do_database_major_merge_diagnose(rootserver::ObMajorFreezeService *major_freeze_service);
-  int add_uncompacted_tablet_to_diagnose(const ObIArray<share::ObTabletRuntimeInfo> &uncompacted_tablets);
+  int add_uncompacted_tablet_to_diagnose(
+      const ObIArray<data_plane::ObMajorMergeTabletDiagnostic>
+          &uncompacted_tablets);
   void add_uncompacted_table_ids_to_diagnose(const ObIArray<uint64_t> &uncompacted_table_ids);
 private:
   static const int64_t NS_TIME = 1000L * 1000L * 1000L;
@@ -566,13 +558,13 @@ private:
     dag_hash.merge_type_ = type;                                               \
     dag_hash.tablet_id_ = tablet_id;                                           \
     int64_t hash_value = dag_hash.inner_hash();                                \
-    if (OB_TMP_FAIL(share::g_mp->schedule_suspect_info_mgr()                \
+    if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()                \
                         ->delete_info(hash_value))) {                          \
       if (OB_HASH_NOT_EXIST != tmp_ret) {                                      \
         LOG_WARN_RET(tmp_ret, "failed to delete suspect info",                 \
                      K(tmp_ret), K(dag_hash));                                 \
       }                                                                        \
-    } else if (OB_TMP_FAIL(share::g_mp->diagnose_tablet_mgr()              \
+    } else if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObDiagnoseTabletMgr>()              \
                                ->delete_diagnose_tablet(tablet_id,             \
                                                         diagnose_type))) {     \
       if (OB_HASH_NOT_EXIST != tmp_ret) {                                      \
@@ -701,9 +693,9 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, UNKNOW_TABLET_ID, info_type, __VA_AR
     info_param->struct_type_ = ObInfoParamStructType::SUSPECT_INFO_PARAM;                          \
     INT_TO_PARAM_##n_int                                                                          \
     info.info_param_ = info_param;                                                               \
-    if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(tablet_id, diagnose_type))) {     \
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObDiagnoseTabletMgr>()->add_diagnose_tablet(tablet_id, diagnose_type))) {     \
       STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(tablet_id));                   \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),              \
@@ -740,9 +732,9 @@ ADD_SUSPECT_INFO(merge_type, diagnose_type, UNKNOW_TABLET_ID, info_type, __VA_AR
     info.info_param_ = info_param;                                                                \
     if (OB_FAIL(ret) && OB_SIZE_OVERFLOW != ret) {                                                \
       STORAGE_LOG(WARN, "fail to fill parameter kv into info param", K(ret));                     \
-    } else if (OB_FAIL(share::g_mp->schedule_suspect_info_mgr()->add_suspect_info(info.hash(), info))) { \
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObScheduleSuspectInfoMgr>()->add_suspect_info(info.hash(), info))) { \
       STORAGE_LOG(WARN, "failed to add suspect info", K(ret), K(info));                          \
-    } else if (OB_FAIL(share::g_mp->diagnose_tablet_mgr()->add_diagnose_tablet(tablet_id, diagnose_type))) { \
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObDiagnoseTabletMgr>()->add_diagnose_tablet(tablet_id, diagnose_type))) { \
       STORAGE_LOG(WARN, "failed to add diagnose tablet", K(ret), K(tablet_id));                   \
     } else {                                                                                      \
       STORAGE_LOG(DEBUG, "success to add suspect info", K(ret), K(info), K(info_type),             \

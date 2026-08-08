@@ -18,13 +18,12 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_replay_create_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
 namespace oceanbase
 {
-using namespace observer;
 using namespace share;
 using namespace blocksstable;
 
@@ -356,7 +355,7 @@ int ObTabletReplayCreateHandler::get_tablet_svr_(
     ObLS *&tenant_ls)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("fail to get ls", K(ret));
   } else {
     ls_tablet_svr = tenant_ls->get_tablet_svr();
@@ -385,7 +384,7 @@ int ObTabletReplayCreateHandler::replay_discrete_tablets(const ObIArray<ObTablet
         // io maybe timeout, so need retry
         int64_t max_retry_time = 5;
         do {
-          if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(replay_item.addr_, io_allocator, buf, buf_len))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(replay_item.addr_, io_allocator, buf, buf_len))) {
             LOG_WARN("fail to read from disk", K(ret), K(replay_item), KP(buf), K(buf_len));
           }
         } while (OB_FAIL(ret) && OB_TIMEOUT == ret && max_retry_time-- > 0);

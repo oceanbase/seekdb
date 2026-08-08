@@ -18,12 +18,14 @@
 
 #include "ob_query_driver.h"
 #include "ob_mysql_result_set.h"
-#include "obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "obsm_row.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "sql/engine/expr/ob_lob_result_materializer.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
 
 namespace oceanbase
@@ -439,12 +441,16 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
                                                sql::ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(session_info);
   bool is_lob_type = value.is_lob()
                      || value.is_json() || value.is_geometry();
   if (!is_lob_type) {
     // not lob types, do nothing
   } else if (value.is_null() || value.is_nop_value()) {
     // do nothing
+  } else if (OB_ISNULL(exec_ctx)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("exec context is null for LOB result", K(ret), K(value));
   } else {
     // Should remove locator header and read full lob data
     ObString data;
@@ -453,7 +459,8 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
     } else { // lob locator v2
       ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter instr_iter(value);
-      if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, exec_ctx, session_info, allocator, &tmp_alloc))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              instr_iter, *exec_ctx, allocator, &tmp_alloc))) {
         LOG_WARN("init lob str inter failed", K(ret), K(value));
       } else if (OB_FAIL(instr_iter.get_full_data(data))) {
         LOG_WARN("Lob: init lob str iter failed ", K(value));
@@ -515,6 +522,7 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
                                               sql::ObExecContext *exec_ctx)
 {
   int ret = OB_SUCCESS;
+  UNUSED(session);
   ObString raw_str = value.get_string();
   if (value.is_null() || value.is_nop_value()) {
   } else if (OB_ISNULL(raw_str.ptr()) || raw_str.length() == 0) {
@@ -550,7 +558,15 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
           ObTextStringIter str_iter(value);
           // it's fine that res_allocator and tmp_allocator is same
           // because the final result will be allocated by allocator when convert charset
-          if (OB_FAIL(ObTextStringHelper::build_text_iter(str_iter, exec_ctx, session, &tmp_alloc/*res_allocator*/, &tmp_alloc/*tmp_allocator*/))) {
+          if (OB_ISNULL(exec_ctx)) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("exec context is null for LOB charset conversion",
+                     K(ret), K(value));
+          } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
+                         str_iter,
+                         *exec_ctx,
+                         &tmp_alloc/*res_allocator*/,
+                         &tmp_alloc/*tmp_allocator*/))) {
             LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
           } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
             LOG_WARN("Lob: get full data failed ", K(ret), K(value));

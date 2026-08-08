@@ -18,7 +18,7 @@
 #define OCEANBASE_TRANSACTION_OB_TRANS_TIMER_
 
 #include <stdint.h>
-#include "ob_time_wheel.h"
+#include "share/ob_time_wheel.h"
 
 namespace oceanbase
 {

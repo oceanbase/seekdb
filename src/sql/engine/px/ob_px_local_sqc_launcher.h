@@ -18,10 +18,11 @@
 #define OB_PX_LOCAL_SQC_LAUNCHER_H
 
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_dfo.h"
 #include "sql/engine/ob_des_exec_context.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 
 namespace oceanbase {
@@ -35,13 +36,14 @@ class ObPxSqcHandler;
 class ObLocalSqcLauncher
 {
 public:
-  ObLocalSqcLauncher(const observer::ObGlobalContext &gctx)
-    : exec_ctx_(CURRENT_CONTEXT->get_arena_allocator(), gctx.session_mgr_),
+  ObLocalSqcLauncher(const share::ObGlobalContext &gctx)
+    : exec_ctx_(CURRENT_CONTEXT->get_arena_allocator(),
+          share::server_service<ObSQLSessionMgr>()),
       phy_plan_(),
       unregister_interrupt_(false)
   {}
   ~ObLocalSqcLauncher() = default;
-  int init();
+  int init(const ObExecContext::RuntimeServices &runtime_services);
   void destroy();
   int process();
   int after_process(int error_code);
@@ -65,12 +67,13 @@ private:
 class ObLocalFastSqcLauncher
 {
 public:
-  ObLocalFastSqcLauncher(const observer::ObGlobalContext &gctx)
-    : exec_ctx_(CURRENT_CONTEXT->get_arena_allocator(), gctx.session_mgr_),
+  ObLocalFastSqcLauncher(const share::ObGlobalContext &gctx)
+    : exec_ctx_(CURRENT_CONTEXT->get_arena_allocator(),
+          share::server_service<ObSQLSessionMgr>()),
       phy_plan_()
   {}
   ~ObLocalFastSqcLauncher() = default;
-  int init();
+  int init(const ObExecContext::RuntimeServices &runtime_services);
   void destroy();
   int process();
   int decode_arg(const char *buf, const int64_t len, int64_t &pos);
@@ -108,8 +111,15 @@ public:
 
 // Local SQC launch entry points. The buffer is a private deep-clone boundary
 // between QC and the independently owned SQC execution context.
-int launch_sqc_async_local(const char *buf, const int64_t len, ObPxInitSqcResponse &resp);
-int launch_sqc_fast_local(const char *buf, const int64_t len);
+int launch_sqc_async_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services,
+    ObPxInitSqcResponse &resp);
+int launch_sqc_fast_local(
+    const char *buf,
+    const int64_t len,
+    const ObExecContext::RuntimeServices &runtime_services);
 
 }  // sql
 }  // oceanbase

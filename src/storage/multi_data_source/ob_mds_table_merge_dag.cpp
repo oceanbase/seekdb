@@ -15,10 +15,9 @@
  */
 
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 
 #define USING_LOG_PREFIX MDS
 

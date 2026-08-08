@@ -310,7 +310,10 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObDatum *cmp_e1 = NULL;
   ObDatum *res_e = NULL;
   DatumCastExtraInfo *cast_info = NULL;
-  if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (OB_FAIL(expr.args_[0]->eval(ctx, cmp_e0))) {
     LOG_WARN("eval param 0 failed", K(ret));
   } else if (cmp_e0->is_null()) {
     res.set_null();
@@ -328,7 +331,8 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     int cmp_ret = 0;
     bool equal = false;
     if (!cmp_e1->is_null()) {
-      if (OB_FAIL(cmp_func(*cmp_e0, *cmp_e1, cmp_ret))) {
+      if (OB_FAIL(cmp_func(
+              *cmp_e0, *cmp_e1, cmp_ret, datum_access_ctx))) {
         LOG_WARN("cmp failed", K(ret));
       } else {
         equal = (0 == cmp_ret);
@@ -358,7 +362,8 @@ int ObExprNullif::eval_nullif(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       LOG_WARN("cast param failed", K(ret));
     } else {
       int cmp_ret = 0;
-      if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret))) {
+      if (OB_FAIL(cmp_func(
+              datum1, datum2, cmp_ret, datum_access_ctx))) {
         LOG_WARN("cmp failed", K(ret));
       } else if (cmp_ret == 0) {
         res.set_null();

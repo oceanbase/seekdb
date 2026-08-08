@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_merge_iter.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -246,7 +246,7 @@ int ObDASMergeIter::rescan_das_task(ObDASScanOp *scan_op)
   if (OB_ISNULL(das_ref_) || OB_ISNULL(scan_op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(das_ref_), K(scan_op), K(ret));
-  } else if (OB_FAIL(share::g_mp->data_access_service()->rescan_das_task(*das_ref_, *scan_op))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->rescan_das_task(*das_ref_, *scan_op))) {
     LOG_WARN("failed to rescan das task", K(ret));
   }
   return ret;

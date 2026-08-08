@@ -313,10 +313,9 @@ int ObPartitionExecutorUtils::cast_list_expr_to_obj(
           }
         }
         if (OB_SUCC(ret)) {
-          auto &list_row_values = is_subpart
-                                  ? subpartition_array[i]->list_row_values_
-                                  : partition_array[i]->list_row_values_;
-          ret = list_row_values.sort_array();
+          ret = is_subpart
+              ? subpartition_array[i]->sort_list_row_values()
+              : partition_array[i]->sort_list_row_values();
         }
       }
     }

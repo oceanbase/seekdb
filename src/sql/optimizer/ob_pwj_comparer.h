@@ -80,30 +80,6 @@ struct PwjTable {
   common::ObSEArray<int64_t, 8> all_subpartition_indexes_;
 };
 
-typedef common::ObSEArray<uint64_t, 8> TabletIdArray;
-
-struct GroupPWJTabletIdInfo {
-  OB_UNIS_VERSION(1);
-public:
-  TO_STRING_KV(K_(group_id), K_(tablet_id_array));
-  /* 
-    for union all non strict partition wise join, there may be several partition wise join groups,
-    for example:
-                          union all
-                    |                     |
-                  join                  join
-                |       |             |       |
-          t1(p0-p15)  t2(p0-p15)    t3(p0-p8)  t4(p0-p8)
-
-        t1 and t2 are in group 0
-        t3 and t4 are in group 1
-  */
-  int64_t group_id_{0};
-  TabletIdArray tablet_id_array_;
-};
-// TODO yibo use a pointer to PartitionIdArray as value, otherwise each get will copy the array once
-typedef common::hash::ObHashMap<uint64_t, TabletIdArray, common::hash::NoPthreadDefendMode> PWJTabletIdMap;
-typedef common::hash::ObHashMap<uint64_t, GroupPWJTabletIdInfo, common::hash::NoPthreadDefendMode> GroupPWJTabletIdMap;
 typedef common::hash::ObHashMap<uint64_t, uint64_t, common::hash::NoPthreadDefendMode,
                                 common::hash::hash_func<uint64_t>,
                                 common::hash::equal_to<uint64_t>,

@@ -31,7 +31,9 @@ int ObSearchMethodOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalCtx &eval_c
 {
   int ret = OB_SUCCESS;
   ObChunkDatumStore::LastStoredRow last_row(allocator_);
-  if (input_rows_.empty() && 0 == input_rows_.get_capacity()
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (input_rows_.empty() && 0 == input_rows_.get_capacity()
       && OB_FAIL(input_rows_.reserve(INIT_ROW_COUNT))) {
     LOG_WARN("Failed to pre allocate array", K(ret));
   } else if (OB_UNLIKELY(exprs.empty())) {
@@ -64,7 +66,8 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
     // detect whole row
     is_cycle = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < left_output_.count(); i++) {
-      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_(cells_1st[i], cells_2nd[i], cmp_ret))) {
+      if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_(
+              cells_1st[i], cells_2nd[i], cmp_ret, datum_access_ctx_))) {
         LOG_WARN("failed to compare", K(ret), K(i));
       } else if (0 != cmp_ret) {
         is_cycle = false;
@@ -334,7 +337,9 @@ int ObBreadthFirstSearchBulkOp::add_result_rows(bool left_branch)
 int ObBreadthFirstSearchBulkOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(malloc_allocator_)) {
+  if (OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (OB_ISNULL(malloc_allocator_)) {
     if (OB_FAIL(init_mem_context())) {
       LOG_WARN("Failed to init mem context", K(ret));
     } else if (OB_ISNULL(malloc_allocator_)) {

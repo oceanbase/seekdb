@@ -17,19 +17,22 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/engine/expr/ob_datum_cast.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_insert_op.h"
 #include "sql/das/ob_das_delete_op.h"
 #include "sql/das/ob_das_update_op.h"
 #include "sql/das/ob_das_lock_op.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/engine/dml/ob_trigger_handler.h"
-#include "storage/ob_tablet_autoincrement_service.h"
-#include "pl/ob_pl.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
+#include "data_plane/lob/ob_lob_read.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "sql/pl/ob_pl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/geo/ob_geo_utils.h"
 #include "sql/engine/ob_batch_rows.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "query/vector/ob_vector_index_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -217,7 +220,8 @@ int ObDMLService::check_geometry_type(
     const ObGeoType column_geo_type = static_cast<ObGeoType>(column_info.srs_info_.geo_type_);
     ObString wkb = datum.get_string();
     uint32_t input_srid = UINT32_MAX;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+        eval_ctx.exec_ctx_, allocator, datum,
         expr->datum_meta_, expr->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::check_geo_type(column_geo_type, wkb))) {
@@ -226,7 +230,13 @@ int ObDMLService::check_geometry_type(
       LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, input_srid))) {
       LOG_WARN("get srid by wkb failed", K(ret), K(wkb));
-    } else if (OB_FAIL(ObSqlGeoUtils::check_srid(column_srid, input_srid))) {
+    } else if (OB_ISNULL(eval_ctx.exec_ctx_.get_srs_provider())) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("SRS provider is not configured", K(ret));
+    } else if (OB_FAIL(ObSqlGeoUtils::check_srid(
+                   *eval_ctx.exec_ctx_.get_srs_provider(),
+                   column_srid,
+                   input_srid))) {
       ret = OB_ERR_WRONG_SRID_FOR_COLUMN;
       LOG_USER_ERROR(OB_ERR_WRONG_SRID_FOR_COLUMN, static_cast<uint64_t>(input_srid),
           static_cast<uint64_t>(column_srid));
@@ -420,13 +430,9 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
             const ObExpr& new_expr, ObDatum& new_datum,
             int64_t& result) {
   INIT_SUCC(ret);
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
   int64_t timeout = 0;
   int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
-  if (OB_ISNULL(lob_mngr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get lob manager handle null.", K(ret));
-  } else if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
+  if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
     LOG_WARN("failed to get session query timeout", K(ret));
   } else {
     timeout += query_st;
@@ -438,20 +444,13 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
     ObLobLocatorV2 new_lob(new_str, new_set_has_lob_header);
     if (old_set_has_lob_header && new_set_has_lob_header) {
       bool is_equal = false;
-      ObLobCompareParams cmp_params;
-      // binary compare ignore charset
-      cmp_params.collation_left_ = CS_TYPE_BINARY;
-      cmp_params.collation_right_ = CS_TYPE_BINARY;
-      cmp_params.offset_left_ = 0;
-      cmp_params.offset_right_ = 0;
-      cmp_params.compare_len_ = UINT64_MAX;
-      cmp_params.timeout_ = timeout;
-      cmp_params.tx_desc_ = eval_ctx.exec_ctx_.get_my_session()->get_tx_desc();
       if (old_lob.is_persist_lob() && new_lob.is_delta_temp_lob()) {
         if (OB_FAIL(ObDeltaLob::has_diff(new_lob, result))) {
           LOG_WARN("delata lob has_diff fail", K(ret), K(old_lob), K(new_lob));
         }
-      } else if(OB_FAIL(lob_mngr->equal(old_lob, new_lob, cmp_params, is_equal))) {
+      } else if (OB_FAIL(data_plane::lob_binary_equal(
+                     old_lob, new_lob, timeout,
+                     eval_ctx.exec_ctx_.get_my_session()->get_tx_desc(), is_equal))) {
         LOG_WARN("fail to compare lob", K(ret), K(old_lob), K(new_lob));
       } else {
         result = is_equal ? 0 : 1;
@@ -1235,42 +1234,50 @@ int ObDMLService::delete_row(const ObDASDelCtDef &das_del_ctdef,
                                                   stored_row);
 }
 
-int ObDMLService::init_dml_param(const ObDASDMLBaseCtDef &base_ctdef,
-                                 ObDASDMLBaseRtDef &base_rtdef,
-                                 transaction::ObTxReadSnapshot &snapshot,
-                                 const int16_t write_branch_id,
-                                 ObIAllocator &das_alloc,
-                                 storage::ObStoreCtxGuard &store_ctx_gurad,
-                                 storage::ObDMLBaseParam &dml_param,
-                                 bool use_snapshot_opt)
+int ObDMLService::prepare_dml_execution(
+    const ObDASDMLBaseCtDef &base_ctdef,
+    ObDASDMLBaseRtDef &base_rtdef,
+    transaction::ObTxReadSnapshot &snapshot,
+    const int16_t write_branch_id,
+    ObIAllocator &das_alloc,
+    data_plane::ObWriteContext &write_context,
+    data_plane::ObDmlExecution &execution,
+    bool use_snapshot_opt)
 {
   int ret = OB_SUCCESS;
-  dml_param.timeout_ = base_rtdef.timeout_ts_;
-  dml_param.schema_version_ = base_ctdef.schema_version_;
-  dml_param.is_total_quantity_log_ = base_ctdef.is_total_quantity_log_;
-  dml_param.tz_info_ = &base_ctdef.tz_info_;
-  dml_param.sql_mode_ = base_rtdef.sql_mode_;
-  dml_param.table_param_ = &base_ctdef.table_param_;
-  dml_param.runtime_schema_version_ = base_rtdef.runtime_schema_version_;
-  dml_param.prelock_ = base_rtdef.prelock_;
-  dml_param.is_batch_stmt_ = base_ctdef.is_batch_stmt_;
-  dml_param.dml_allocator_ = &das_alloc;
-  dml_param.is_main_table_in_fts_ddl_ = base_ctdef.is_main_table_in_fts_ddl_;
-  dml_param.check_schema_version_ = !base_ctdef.skip_check_schema_version_;
-  if (!dml_param.has_async_index_ && base_ctdef.table_param_.get_data_table().has_async_index()) {
-    dml_param.has_async_index_ = true;
+  data_plane::ObDmlWriteSpec write_spec;
+  concurrent_control::ObWriteFlag write_flag;
+  write_spec.timeout_ = base_rtdef.timeout_ts_;
+  write_spec.schema_version_ = base_ctdef.schema_version_;
+  write_spec.sql_mode_ = base_rtdef.sql_mode_;
+  write_spec.tz_info_ = &base_ctdef.tz_info_;
+  write_spec.branch_id_ = write_branch_id;
+  write_spec.is_total_quantity_log_ = base_ctdef.is_total_quantity_log_;
+  write_spec.prelock_ = base_rtdef.prelock_;
+  write_spec.is_batch_stmt_ = base_ctdef.is_batch_stmt_;
+  write_spec.is_main_table_in_fts_ddl_ =
+      base_ctdef.is_main_table_in_fts_ddl_;
+  write_spec.check_schema_version_ =
+      !base_ctdef.skip_check_schema_version_;
+  write_spec.access_vector_id_as_master_table_ =
+      base_ctdef.is_access_vidx_as_master_table_;
+  init_dml_write_flag(
+      base_ctdef, base_rtdef, write_flag, use_snapshot_opt);
+  data_plane::ObIDmlService *dml_service =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  if (OB_ISNULL(dml_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("DML service is null", K(ret));
+  } else if (OB_FAIL(dml_service->prepare_execution(
+                 write_spec,
+                 base_ctdef.table_param_,
+                 snapshot,
+                 das_alloc,
+                 write_context,
+                 write_flag,
+                 execution))) {
+    LOG_WARN("prepare DML execution failed", K(ret));
   }
-  if (dml_param.has_async_index_
-      && base_ctdef.is_access_vidx_as_master_table_
-      && base_ctdef.table_param_.get_data_table().is_vector_index_id()) {
-    dml_param.check_schema_version_ = false;
-  }
-  if (OB_FAIL(dml_param.snapshot_.assign(snapshot))) {
-    LOG_WARN("assign snapshot fail", K(ret));
-  }
-  dml_param.branch_id_ = write_branch_id;
-  dml_param.store_ctx_guard_ = &store_ctx_gurad;
-  init_dml_write_flag(base_ctdef, base_rtdef, dml_param.write_flag_, use_snapshot_opt);
   return ret;
 }
 
@@ -1903,6 +1910,23 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
       dml_op->set_das_ctdef(static_cast<const CtDefType*>(&ctdef));
       dml_op->set_das_rtdef(static_cast<RtDefType*>(&rtdef));
     }
+    bool has_domain_index = ctdef.table_param_.get_data_table().is_domain_index();
+    if (!has_domain_index && OB_NOT_NULL(rtdef.related_ctdefs_)) {
+      for (int64_t i = 0; !has_domain_index && i < rtdef.related_ctdefs_->count(); ++i) {
+        const ObDASDMLBaseCtDef *related_ctdef = rtdef.related_ctdefs_->at(i);
+        has_domain_index = OB_NOT_NULL(related_ctdef)
+            && related_ctdef->table_param_.get_data_table().is_domain_index();
+      }
+    }
+    if (OB_SUCC(ret) && has_domain_index) {
+      const common::ObLobReadOptions *lob_read_options = nullptr;
+      if (OB_FAIL(dml_rtctx.get_exec_ctx().get_lob_read_options(lob_read_options))) {
+        LOG_WARN("get LOB read options for domain index DML failed", K(ret));
+      } else {
+        dml_op->set_srs_provider(dml_rtctx.get_exec_ctx().get_srs_provider());
+        dml_op->set_lob_read_options(lob_read_options);
+      }
+    }
     if (OB_SUCC(ret) &&
         rtdef.related_ctdefs_ != nullptr && !rtdef.related_ctdefs_->empty()) {
       if (OB_FAIL(add_related_index_info(*tablet_loc,
@@ -2034,8 +2058,12 @@ int ObDMLService::get_heap_table_hidden_pk(const ObTabletID &tablet_id,
 {
   int ret = OB_SUCCESS;
   uint64_t autoinc_seq = 0;
-  ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
-  if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, autoinc_seq))) {
+  share::ObITabletAutoincrementService *auto_inc =
+      ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
+  if (OB_ISNULL(auto_inc)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("tablet autoincrement service is null", K(ret));
+  } else if (OB_FAIL(auto_inc->next_value(tablet_id, autoinc_seq))) {
     LOG_WARN("get_autoinc_seq fail", K(ret), K(tablet_id));
   } else {
     pk = autoinc_seq;
@@ -2104,8 +2132,13 @@ int ObDMLService::create_anonymous_savepoint(ObTxDesc &tx_desc, transaction::ObT
 int ObDMLService::rollback_local_savepoint(ObTxDesc &tx_desc, const transaction::ObTxSEQ savepoint, int64_t expire_ts)
 {
   int ret = OB_SUCCESS;
-  ObTransService *tx = share::g_mp->trans_service();
-  if (OB_FAIL(tx->rollback_to_implicit_savepoint(tx_desc, savepoint, expire_ts, false))) {
+  data_plane::ObITransactionService *tx =
+      data_plane::query_transaction_service();
+  if (OB_ISNULL(tx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("transaction service is null", K(ret));
+  } else if (OB_FAIL(tx->rollback_to_implicit_savepoint(
+                 tx_desc, savepoint, expire_ts, false))) {
     LOG_WARN("rollback to implicit local savepoint failed", K(ret));
   }
   return ret;

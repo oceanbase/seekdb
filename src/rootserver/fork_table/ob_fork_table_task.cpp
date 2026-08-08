@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/fork_table/ob_fork_table_task.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_service.h"
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -93,7 +94,7 @@ int ObForkTableTask::init(
     LOG_WARN("invalid argument", K(ret), K(task_id), K(schema_version),
              K(snapshot_version),
              KP(src_table_schema), KP(dst_table_schema));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else {
@@ -129,7 +130,7 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObForkTableTask has already been inited", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!task_record.is_valid()) {
@@ -438,7 +439,7 @@ int ObForkTableTask::wait_data_complement(const ObDDLTaskStatus next_task_status
   } else if (OB_ISNULL(dst_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
-  } else if (OB_FAIL(share::ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *dst_table_schema, dst_tablet_ids))) {
+  } else if (OB_FAIL(rootserver::ObForkTableUtil::collect_tablet_ids_from_table(schema_guard, *dst_table_schema, dst_tablet_ids))) {
     LOG_WARN("fail to collect dst tablet ids", K(ret));
   } else if (dst_tablet_ids.empty()) {
     is_data_complement_ = true;
@@ -585,7 +586,7 @@ int ObForkTableTask::cleanup_impl()
       ObSchemaGetterGuard schema_guard;
       const ObTableSchema *src_table_schema = nullptr;
       const ObTableSchema *dst_table_schema = nullptr;
-      observer::ObInnerSQLConnection *conn = nullptr;
+      common::sqlclient::ObISQLConnection *conn = nullptr;
       ObTableLockOwnerID lock_owner;
       ObMySQLTransaction trans;
       ObTimeoutCtx ctx;
@@ -606,7 +607,7 @@ int ObForkTableTask::cleanup_impl()
         LOG_WARN("start transaction failed", K(ret));
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
         LOG_WARN("fail to set timeout ctx", KR(ret));
-      } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
+      } else if (OB_ISNULL(conn = trans.get_connection())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn_ is NULL", KR(ret));
       } else {

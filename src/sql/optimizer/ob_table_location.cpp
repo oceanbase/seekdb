@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_table_location.h"
 #include "sql/resolver/dml/ob_delete_resolver.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
@@ -47,12 +47,6 @@ static int is_all_ranges_empty(const ObQueryRangeArray &query_array, bool &is_em
 }
 
 
-
-
-
-bool TableLocationKey::operator==(const TableLocationKey &other) const {
-  return table_id_ == other.table_id_ && ref_table_id_ == other.ref_table_id_;
-}
 
 
 
@@ -4128,29 +4122,6 @@ int ObTableLocation::replace_ref_table_id(const uint64_t ref_table_id, ObExecCon
   if (OB_SUCC(ret)) {
     //replace the ref table id finally
     loc_meta_.ref_table_id_ = ref_table_id;
-  }
-  return ret;
-}
-
-
-const ObPartIdRowMapManager::ObRowIdList* ObPartIdRowMapManager::get_row_id_list(int64_t part_index)
-{
-  const ObPartIdRowMapManager::ObRowIdList* ret = NULL;
-  //linear search right now. maybe, we can run binary search even interpolation search to get a better perf.
-  //if you are free, please do not be shy to improve this.
-  if (part_index >= 0 && part_index < manager_.count()) {
-    ret = &(manager_.at(part_index).list_);
-  }
-  return ret;
-}
-
-int ObPartIdRowMapManager::MapEntry::assign(const ObPartIdRowMapManager::MapEntry &other)
-{
-  int ret = OB_SUCCESS;
-  if (this != &other) {
-    if (OB_FAIL(list_.assign(other.list_))) {
-      LOG_WARN("copy list failed", K(ret));
-    }
   }
   return ret;
 }

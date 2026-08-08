@@ -205,7 +205,8 @@ int ObPxMSCoordOp::init_row_heap(int64_t n_ways)
     LOG_WARN("failed to init store rows", K(ret));
   } else if (OB_FAIL(row_heap_.init(n_ways,
       &MY_SPEC.sort_collations_,
-      &MY_SPEC.sort_cmp_funs_))) {
+      &MY_SPEC.sort_cmp_funs_,
+      datum_access_ctx_))) {
     LOG_WARN("fail init row heap for root dfo", "heap", row_heap_, K(ret));
   }
   return ret;

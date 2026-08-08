@@ -1,0 +1,137 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：多partition，阻塞协调者和参与者的网络（事务回滚）
+# 测试场景：开启事务，执行SQL, 阻塞协调者和参与者的网络，commit/rollback
+# 由于协调者会做重试，所以当网络恢复后事务会被提交，如果再网络恢复之前事务超时的话，该事务就会被回滚
+##
+ob1=OBI(cluster=3:3:3,proxy_num=0,init_unit_cpu=11,init_unit_num=2);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_monotonic_weak_read=false;
+
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,obtest,$port);
+connection conn1;
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20)) partition by hash(pk % 3) partitions 2;
+
+let $scheduler=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,1);
+let $participant=deploy_get_value(ob1.get_leader obtest:obtest:t1:0);
+let $coordinator=deploy_get_value(ob1.get_leader obtest:obtest:t1:1);
+
+let $scheduler_ip=deploy_get_value($scheduler.ip);
+let $scheduler_port=deploy_get_value($scheduler.mysql_port);
+connect (conn,$scheduler_ip,admin@obtest,admin,obtest,$scheduler_port);
+
+connection conn;
+
+set ob_trx_timeout=20000000;
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##阻塞协调者和参与者之间的网络
+$coordinator.block_net $participant;
+
+--error 4012
+commit;
+
+rollback;
+
+##等待事务超时
+sleep 15;
+
+$coordinator.clean_net $participant;
+
+commit;
+
+sleep 3;
+set autocommit=1;
+select * from t1 order by pk;
+
+
+let $scheduler=deploy_get_value(ob1.get_follower obtest:obtest:t1:0,1);
+let $participant=deploy_get_value(ob1.get_leader obtest:obtest:t1:0);
+let $coordinator=deploy_get_value(ob1.get_leader obtest:obtest:t1:1);
+
+connect (conn,$scheduler_ip,admin@obtest,admin,obtest,$scheduler_port);
+connection conn;
+
+set ob_trx_timeout=20000000;
+
+##rollback
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##阻塞协调者和参与者之间的网络
+$coordinator.block_net $participant;
+
+rollback;
+
+commit;
+
+##等待事务超时
+sleep 15;
+
+$coordinator.clean_net $participant;
+
+commit;
+
+sleep 3;
+set autocommit=1;
+select * from t1 order by pk;
+
+##commit,网络恢复后被提交
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##阻塞协调者和参与者之间的网络
+$coordinator.block_net $participant;
+
+--error 4012
+commit;
+
+rollback;
+
+$coordinator.clean_net $participant;
+
+sleep 3;
+
+commit;
+
+set autocommit=1;
+select * from t1 order by pk;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(3,3,'a');
+insert into t1 values(4,4,'b');
+
+##阻塞协调者和参与者之间的网络
+$coordinator.block_net $participant;
+
+rollback;
+
+commit;
+
+$coordinator.clean_net $participant;
+
+sleep 3;
+
+commit;
+
+set autocommit=1;
+select * from t1 order by pk;
+

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_compact_store.h"
 #include "sql/engine/basic/chunk_store/ob_compact_block_writer.h"
-#include "storage/ddl/ob_direct_load_struct.h"
 
 namespace oceanbase
 {
@@ -258,24 +257,6 @@ int ObCompactStore::add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &
   return ret;
 }
 
-int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const int64_t extra_size,
-                            ObChunkDatumStore::StoredRow **stored_row)
-{
-  int ret = OB_SUCCESS;
-  if (inited_) {
-    if (OB_FAIL(writer_->add_row(
-            datum_row.storage_datums_, datum_row.get_column_count(), extra_size, stored_row))) {
-      LOG_WARN("fail to add row", K(ret));
-    } else {
-      row_cnt_++;
-    }
-  } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should init writer first", K(ret));
-  }
-  return ret;
-}
-
 int ObCompactStore::add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr)
 {
   int ret = OB_SUCCESS;
@@ -367,27 +348,6 @@ int ObCompactStore::init(const int64_t mem_limit,
   OZ(init_writer_reader());
   LOG_INFO("success to init compact store", K(enable_dump), K(enable_trunc), K(compress_type),
             K(exprs), K(ret));
-  return ret;
-}
-
-int ObCompactStore::init(const int64_t mem_limit,
-                         const ObIArray<storage::ObColumnSchemaItem> &col_array,
-                         const int64_t mem_ctx_id,
-                         const char *label,
-                         const bool enable_dump,
-                         const uint32_t row_extra_size,
-                         const bool enable_trunc,
-                         const ObCompressorType compress_type)
-{
-  int ret = OB_SUCCESS;
-  inited_ = true;
-  ObTempBlockStore::set_inner_allocator_attr(ObMemAttr("CompactStore"));
-  OZ(row_meta_.init(col_array, row_extra_size));
-  OZ(ObTempBlockStore::init(mem_limit, enable_dump, mem_ctx_id, label, compress_type, enable_trunc));
-  OZ(block_reader_.init(this));
-  OZ(init_writer_reader());
-  LOG_INFO("success to init compact store", K(enable_dump), K(enable_trunc), K(compress_type),
-            K(col_array), K(ret));
   return ret;
 }
 

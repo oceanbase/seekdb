@@ -80,8 +80,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
   ObDatum *datum2 = NULL;
   ObGeometry *src_geo = NULL;
   ObGeometry *dest_geo = NULL;
-  omt::ObSrsCacheGuard srs_guard;
-  ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *src_srs_item = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
@@ -105,16 +104,15 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
     uint32_t dest_srid = 0;
     ObString wkb = gis_datum->get_string();
     const ObSrsItem *dest_srs_item = NULL;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real data.", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
       LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
-    } else if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-      LOG_WARN("get runtime SRS guard failed", K(src_srid), K(ret));
-    } else if (src_srid != 0 && OB_FAIL(srs_guard.get_srs_item(src_srid, src_srs_item))) {
+    } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                   ctx, srs_guard, src_srid, src_srs_item))) {
       LOG_WARN("failed to get srs item", K(ret), K(src_srid));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_PRIV_ST_TRANSFORM, 
                                                     GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
@@ -146,7 +144,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
                 res.set_string(res_wkb);
                 need_eval = false;
               }
-            } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+            } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                           ctx, srs_guard, dest_srid, dest_srs_item))) {
               LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
               LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
@@ -158,7 +157,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             LOG_USER_ERROR(OB_ERR_TRANSFORM_SOURCE_SRS_NOT_SUPPORTED, src_srid);
           } else {
             dest_proj4_param = datum2->get_string(); 
-            if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
+            if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum2,
                         expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), dest_proj4_param))) {
               LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
             } 
@@ -176,7 +175,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         ObDatum *datum3 = NULL;
         src_proj4_param = datum2->get_string();
         src_srs_item = NULL;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum2,
                     expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), src_proj4_param))) {
           LOG_WARN("fail to get real data.", K(ret), K(src_proj4_param));
         } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, datum3))) {
@@ -192,7 +191,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             if (dest_srid == 0) {
               ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
               LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
-            } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
+            } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+                           ctx, srs_guard, dest_srid, dest_srs_item))) {
               LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
               LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
@@ -200,7 +200,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
           }
         } else {
           dest_proj4_param = datum3->get_string();
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum3,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum3,
                       expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), dest_proj4_param))) {
             LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
           } 

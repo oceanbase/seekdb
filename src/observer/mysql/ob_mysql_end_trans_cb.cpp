@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "ob_mysql_end_trans_cb.h"
-#include "obmp_stmt_send_piece_data.h"
+#include "sql/ob_mysql_end_trans_cb.h"
+#include "sql/session/ob_piece_cache.h"
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;
 namespace oceanbase
@@ -320,7 +320,7 @@ void ObSqlEndTransCb::complete_aborted_callback_locked(
 
 void ObSqlEndTransCb::cleanup_session_locked(sql::ObSQLSessionInfo *session_info)
 {
-  ObPieceCache *piece_cache = session_info->get_piece_cache();
+  sql::ObPieceCache *piece_cache = session_info->get_piece_cache();
   if (OB_ISNULL(piece_cache)) {
     // do nothing
     // piece_cache not be null in piece data protocol

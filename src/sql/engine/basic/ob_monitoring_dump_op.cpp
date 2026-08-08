@@ -148,7 +148,8 @@ int ObMonitoringDumpOp::calc_hash_value()
     } else {
       uint64_t ori_hash_value = output_hash_.at(i);
       uint64_t hash_value = 0;
-      if (OB_FAIL(expr->basic_funcs_->default_hash_(*datum, 0, hash_value))) {
+      if (OB_FAIL(expr->basic_funcs_->default_hash_(
+              *datum, 0, hash_value, datum_access_ctx_))) {
         LOG_WARN("do hash failed", K(ret));
       } else {
         output_hash_.at(i) = ori_hash_value + hash_value;

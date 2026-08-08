@@ -16,10 +16,14 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "observer/ob_server_runtime_access.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/ob_server.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "ob_dbms_sched_table_operator.h"
 #include "ob_dbms_sched_service.h"
 #include "ob_dbms_sched_job_executor.h"
+#include "query/scheduler/ob_scheduler_job.h"
 
 #include "lib/oblog/ob_log.h"
 #include "common/mysqlclient/ob_isql_connection.h"
@@ -87,7 +91,7 @@ int ObDBMSSchedJobExecutor::init_session(
   OZ (session.update_sys_variable(share::SYS_VAR_SQL_MODE, sql_mode));
   OZ (session.set_default_database(database_name));
   OZ (session.get_pc_mem_conf(pc_mem_conf));
-  CK (OB_NOT_NULL(GCTX.sql_engine_));
+  CK (OB_NOT_NULL(::oceanbase::observer::get_observer_sql_engine()));
   OX (session.set_database_id(database_id));
   OZ (session.set_user(
     user_info->get_user_name(), user_info->get_host_name_str(), user_info->get_user_id()));
@@ -165,12 +169,10 @@ int ObDBMSSchedJobExecutor::create_session(
 {
   int ret = OB_SUCCESS;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
-  if (OB_ISNULL(GCTX.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_mgr_ is null", KR(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+  ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
+  if (OB_FAIL(session_mgr.create_sessid(sid))) {
     LOG_WARN("alloc session id failed", KR(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session_info))) {
+  } else if (OB_FAIL(session_mgr.create_session(sid, session_info))) {
     LOG_WARN("create session failed", K(ret), K(sid));
     session_info = NULL;
   } else if (OB_ISNULL(session_info)) {
@@ -187,16 +189,13 @@ int ObDBMSSchedJobExecutor::destroy_session(
     ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.session_mgr_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_mgr_ is null", KR(ret));
-  } else if (OB_ISNULL(session_info)) {
+  if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is null", KR(ret));
   } else {
     session_info->set_session_sleep();
-    GCTX.session_mgr_->revert_session(session_info);
-    GCTX.session_mgr_->free_session(free_session_ctx);
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(session_info);
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(free_session_ctx);
   }
   return ret;
 }

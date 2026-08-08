@@ -132,12 +132,3 @@ TEST_F(TestResovlerUtils, check_secure_path)
 }
 } // namespace sql
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  system("rm -f test_resolver_utils.log*");
-  OB_LOGGER.set_file_name("test_resolver_utils.log", true);
-  OB_LOGGER.set_log_level("INFO");
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

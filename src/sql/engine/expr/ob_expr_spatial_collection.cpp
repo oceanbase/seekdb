@@ -98,7 +98,11 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
   } else {
     for (uint32_t i = 0; OB_SUCC(ret) && i < param_num; i++) {
       ObString wkb = objs[i].get_string();
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator, objs[i], wkb))) {
+      if (OB_ISNULL(expr_ctx.exec_ctx_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("execution context is null", K(ret));
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                     *expr_ctx.exec_ctx_, &tmp_allocator, objs[i], wkb))) {
         LOG_WARN("fail to get real wkb data.", K(ret), K(wkb));
       } else if (ObGeoType::LINESTRING == geo_type) { // linestring
         if (OB_FAIL(calc_linestring(wkb, res_wkb_buf))) {
@@ -126,7 +130,7 @@ int ObExprSpatialCollection::calc_resultN(common::ObObj &result,
   }
 
   if (OB_SUCC(ret)) {
-    ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
+    common::ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
     if (OB_FAIL(text_result.init(res_wkb_buf.length(), expr_ctx.calc_buf_))) {
       LOG_WARN("init lob result failed");
     } else if (OB_FAIL(text_result.append(res_wkb_buf.ptr(), res_wkb_buf.length()))) {
@@ -286,7 +290,7 @@ int ObExprSpatialCollection::eval_spatial_collection(const ObExpr &expr,
       } else if (datum->is_null() ) {
         is_null_result = true;
       } else if (FALSE_IT(wkb = datum->get_string())) {
-      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *datum,
+      } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *datum,
                  expr.args_[i]->datum_meta_, expr.args_[i]->obj_meta_.has_lob_header(), wkb))) {
         LOG_WARN("fail to get real string data", K(ret), K(i), K(wkb));
       } else if (ObGeoType::LINESTRING == geo_type) { // linestring

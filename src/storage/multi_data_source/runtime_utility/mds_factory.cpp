@@ -15,7 +15,7 @@
  */
 
 #include "mds_factory.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
 
 namespace oceanbase
@@ -31,7 +31,7 @@ int deepcopy(const transaction::ObTransID &trans_id,
              BufferCtx *&new_ctx,
              ObIAllocator &allocator) {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezer *memstore_freezer = share::g_mp->memstore_freezer();
+  ObMemstoreFreezer *memstore_freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
   MDS_TG(1_ms);
   if (OB_ISNULL(memstore_freezer)) {
     ret = OB_ERR_UNEXPECTED;

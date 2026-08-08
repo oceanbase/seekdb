@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "ob_tablet_pointer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #define USING_LOG_PREFIX STORAGE
 
@@ -405,7 +405,7 @@ int ObTabletPointer::create_ddl_kv_mgr(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
     if (ddl_kv_mgr_handle_.is_valid()) {
       // do nothing
@@ -475,7 +475,7 @@ int ObTabletPointer::get_mds_table(const ObTabletID &tablet_id,
   if (not_exist_create) {
     ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp op(mds_ckpt_scn);
     if (OB_UNLIKELY(phy_addr_.is_none())) {// first time create, without phy addr, use min scn to init mds table
-    } else if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->scan_all_version_tablets(ObTabletMapKey(tablet_id), op))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->scan_all_version_tablets(ObTabletMapKey(tablet_id), op))) {
       LOG_WARN("failed to get mds_ckpt_scn", K(ret));
     }
   }

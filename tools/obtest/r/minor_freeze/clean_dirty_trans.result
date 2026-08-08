@@ -1,0 +1,12 @@
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=4);
+ob1.z1.obs0.set extra_config=_private_buffer_size='1B';
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='debug';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+count(*)
+0

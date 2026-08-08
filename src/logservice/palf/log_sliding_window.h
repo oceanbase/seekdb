@@ -25,11 +25,11 @@
 #include "log_group_entry.h"
 #include "log_group_buffer.h"
 #include "log_checksum.h"
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "lsn_allocator.h"
 #include "log_task.h"
 #include "fixed_sliding_window.h"
-#include "palf_base_info.h"
+#include "share/log/palf/palf_base_info.h"
 #include "palf_callback_wrapper.h"
 
 namespace oceanbase

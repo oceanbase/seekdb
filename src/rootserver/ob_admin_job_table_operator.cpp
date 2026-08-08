@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX RS
 #include "ob_admin_job_table_operator.h"
 #include "share/storage/ob_admin_job_table_storage.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::rootserver;

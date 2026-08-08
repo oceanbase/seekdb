@@ -15,14 +15,14 @@
  */
 
 #include "storage/ob_disk_usage_reporter.h"
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind a transitive include
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 
 #include "logservice/ob_log_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
+#include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
@@ -80,11 +80,11 @@ int ObDiskUsageReportTask::count_server_data()
   int64_t data_size = 0;
   int64_t occupy_size = 0;
 
-  if (OB_FAIL(share::g_mp->local_storage_meta_service()->get_meta_block_list(block_list))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_meta_block_list(block_list))) {
     STORAGE_LOG(WARN, "failed to get the server meta block list", K(ret));
   } else {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service) || OB_ISNULL(t3m) ) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "tenant meta memory manager must not be null", K(ret), KP(t3m));
@@ -150,7 +150,7 @@ int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
         ObDiskUsageReportKey tmp_key;
         tmp_key.file_type_ = ObDiskReportFileType::SERVER_TMP_DATA;
         
-        ObTmpFileManager *tmp_file_manager = share::g_mp->tmp_file_manager();
+        ObTmpFileManager *tmp_file_manager = ::oceanbase::share::server_service<::oceanbase::tmp_file::ObTmpFileManager>();
         int64_t tmp_occupy_size = 0;
         int64_t tmp_required_size = 0;
         if (OB_NOT_NULL(tmp_file_manager)

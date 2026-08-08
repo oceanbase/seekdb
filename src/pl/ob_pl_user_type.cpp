@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_pl_user_type.h"
-#include "observer/mysql/obsm_utils.h"
+#include "query/protocol/ob_mysql_protocol_util.h"
 #include "pl/ob_pl_package.h"
-#include "observer/mysql/ob_query_driver.h"
 
 namespace oceanbase
 {
@@ -155,7 +154,9 @@ int ObUserDefinedType::deep_copy_obj(
     }
       break;
     case PL_RECORD_TYPE: {
-      OZ (ObPLComposite::copy_element(src, dst, allocator, NULL, NULL, NULL,  need_new_allocator, ignore_del_element));
+      OZ (ObPLComposite::copy_element(
+          src, dst, allocator, NULL, NULL, NULL, NULL, NULL,
+          need_new_allocator, ignore_del_element));
     }
       break;
 
@@ -1106,6 +1107,11 @@ int ObRecordType::convert(ObPLResolveCtx &ctx, ObObj *&src, ObObj *&dst) const
                                     ctx.package_guard_,
                                     ctx.sql_proxy_,
                                     false);
+        resolve_ctx.params_.plan_cache_ = ctx.params_.plan_cache_;
+        resolve_ctx.params_.pl_sql_runtime_ = ctx.params_.pl_sql_runtime_;
+        resolve_ctx.params_.pl_engine_ = ctx.params_.pl_engine_;
+        resolve_ctx.params_.srs_provider_ = ctx.params_.srs_provider_;
+        resolve_ctx.params_.lob_read_service_ = ctx.params_.lob_read_service_;
         for (int64_t i = 0; OB_SUCC(ret) && i < record_members_.count(); ++i) {
           const ObPLDataType *type = get_record_member_type(i);
           ObObj* src_obj = NULL;
@@ -1129,6 +1135,8 @@ int ObPLComposite::deep_copy(ObPLComposite &src,
                              ObIAllocator &allocator,
                              const ObPLINS *ns,
                              sql::ObSQLSessionInfo *session,
+                             common::ObISrsProvider *srs_provider,
+                             common::ObILobReadService *lob_read_service,
                              bool need_new_allocator,
                              bool ignore_del_element)
 {
@@ -1156,7 +1164,9 @@ int ObPLComposite::deep_copy(ObPLComposite &src,
       OX (composite = static_cast<ObPLRecord*>(dest));
     }
     if (OB_SUCC(ret)) {
-      OZ (composite->deep_copy(static_cast<ObPLRecord&>(src), allocator, ns, session, ignore_del_element));
+      OZ (composite->deep_copy(
+          static_cast<ObPLRecord&>(src), allocator, ns, session,
+          srs_provider, lob_read_service, ignore_del_element));
       if (OB_FAIL(ret) && need_free) {
         ObObj destruct_obj;
         int tmp = OB_SUCCESS;
@@ -1199,6 +1209,8 @@ int ObPLComposite::copy_element(const ObObj &src,
                                 const ObPLINS *ns,
                                 sql::ObSQLSessionInfo *session,
                                 const ObDataType *dest_type,
+                                common::ObISrsProvider *srs_provider,
+                                common::ObILobReadService *lob_read_service,
                                 bool need_new_allocator,
                                 bool ignore_del_element)
 {
@@ -1208,13 +1220,10 @@ int ObPLComposite::copy_element(const ObObj &src,
       ObPLComposite *src_composite = reinterpret_cast<ObPLComposite*>(src.get_ext());
       if (src_composite != dest_composite) {
         CK (OB_NOT_NULL(src_composite));
-        OZ (SMART_CALL(ObPLComposite::deep_copy(*src_composite,
-                                    dest_composite,
-                                    allocator,
-                                    ns,
-                                    session,
-                                    need_new_allocator,
-                                    ignore_del_element)));
+        OZ (SMART_CALL(ObPLComposite::deep_copy(
+            *src_composite, dest_composite, allocator, ns, session,
+            srs_provider, lob_read_service,
+            need_new_allocator, ignore_del_element)));
         CK (OB_NOT_NULL(dest_composite));
         OX (dest.set_extend(reinterpret_cast<int64_t>(dest_composite),
                             src.get_meta().get_extend_type(),
@@ -1229,7 +1238,9 @@ int ObPLComposite::copy_element(const ObObj &src,
     OX (result_type.set_meta(dest_type->get_meta_type()));
     OX (result_type.set_accuracy(dest_type->get_accuracy()));
     OX (src_tmp = src);
-    OZ (ObSPIService::spi_convert(*session, tmp_allocator, src_tmp, result_type, result));
+    OZ (ObSPIService::spi_convert(
+        *session, tmp_allocator, src_tmp, result_type, result,
+        srs_provider, lob_read_service));
     OZ (ObUserDefinedType::destruct_objparam(allocator, dest));
     OZ (deep_copy_obj(allocator, result, dest));
   } else {
@@ -1429,6 +1440,8 @@ int ObPLRecord::deep_copy(ObPLRecord &src,
                           ObIAllocator &allocator,
                           const ObPLINS *ns,
                           sql::ObSQLSessionInfo *session,
+                          common::ObISrsProvider *srs_provider,
+                          common::ObILobReadService *lob_read_service,
                           bool ignore_del_element)
 {
   int ret = OB_SUCCESS;
@@ -1469,6 +1482,8 @@ int ObPLRecord::deep_copy(ObPLRecord &src,
                                       ns,
                                       session,
                                       NULL == elem_type ? NULL : elem_type->get_data_type(),
+                                      srs_provider,
+                                      lob_read_service,
                                       false, /*need_new_allocator*/
                                       ignore_del_element));
     }

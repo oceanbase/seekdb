@@ -15,7 +15,7 @@
  */
 
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -44,7 +44,7 @@ void ObTabletCreateMdsCtx::on_abort(const share::SCN &abort_scn)
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
 
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("fail to get ls", K(ret));
   } else {
     checkpoint::ObTabletEmptyShellHandler *handler =

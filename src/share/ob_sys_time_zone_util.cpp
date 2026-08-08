@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/ob_sys_time_zone_util.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_server_struct.h"
+#include "share/schema/ob_schema_getter_guard.h"
 #include "share/ob_timezone_mgr.h"
 #include "common/timezone/ob_timezone_info.h"
 namespace oceanbase
@@ -25,16 +25,17 @@ namespace oceanbase
 using namespace common;
 namespace share
 {
-int ObSysTimeZoneUtil::get_runtime_sys_time_zone_wrap(ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
+int ObSysTimeZoneUtil::get_runtime_sys_time_zone_wrap(
+    schema::ObMultiVersionSchemaService *schema_service,
+    ObFixedLengthString<common::OB_MAX_TIMESTAMP_TZ_LENGTH> &time_zone,
     ObTimeZoneInfoWrap &time_zone_info_wrap)
 {
   int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = nullptr;
   ObSchemaGetterGuard schema_guard;
   ObTZMapWrap tz_map_wrap;
   const schema::ObSysVarSchema *var_schema = nullptr;
   ObTimeZoneInfoManager *tz_info_mgr = nullptr;
-  if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service must not be null", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {

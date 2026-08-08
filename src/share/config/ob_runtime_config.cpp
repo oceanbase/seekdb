@@ -16,8 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_runtime_config.h"
-#include "share/ob_sql_client_decorator.h"
-#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

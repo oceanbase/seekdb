@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_ctx_mgr_stat.h"
+#include "storage/tx/ob_trans_service.h"
 #include "observer/ob_server.h"
 
 using namespace oceanbase::common;

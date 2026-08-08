@@ -25,6 +25,8 @@ namespace oceanbase
 {
 namespace storage
 {
+using common::ObLobDiff;
+using common::ObLobDiffHeader;
 
 /*************ObLobQueryBaseHandler*****************/
 

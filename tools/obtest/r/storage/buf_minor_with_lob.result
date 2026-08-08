@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+set GLOBAL ob_query_timeout = 1000000000000;
+set GLOBAL ob_trx_timeout = 10000000000000;
+set GLOBAL ob_trx_idle_timeout = 1000000000000;
+set global max_allowed_packet=50000000;
+create table if not exists blob_test_table(pk bigint auto_increment primary key,
+c1_blob blob, c2_text text, c3_longblob longblob, c4_longtext longtext,
+gmt_create  timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6),
+gmt_modified timestamp(6) NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6));
+insert into blob_test_table(c1_blob,c2_text,c3_longblob,c4_longtext) values(
+repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),50000),
+repeat(concat(now(6), '?'),50000));
+insert into blob_test_table(c1_blob,c2_text,c3_longblob,c4_longtext) values(
+repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),50000),
+repeat(concat(now(6), '?'),50000));
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+insert into blob_test_table(c1_blob,c2_text,c3_longblob,c4_longtext) values(
+repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),50000),
+repeat(concat(now(6), '?'),50000));
+alter table blob_test_table set table_mode = 'queuing';
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+insert into blob_test_table(c1_blob,c2_text,c3_longblob,c4_longtext) values(
+repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),1984),repeat(concat(now(6), '?'),50000),
+repeat(concat(now(6), '?'),50000));
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 0 and is_active=0, 0, 300;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_type = 14, 1, 120;
+ob1.z1.obs0.count_log "reuse orig lob macro blocks";
+0
+select count(*) from blob_test_table where length(c1_blob) = length(c2_text);
+count(*)
+4
+drop table blob_test_table;

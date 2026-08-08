@@ -22,7 +22,6 @@
 #include "common/number/ob_number_v2.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/charset/ob_dtoa.h"
-#include "share/object/ob_obj_cast.h"
 enum MyBool
 {
   MY_TRUE,

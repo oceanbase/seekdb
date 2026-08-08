@@ -17,14 +17,15 @@
 #define USING_LOG_PREFIX SQL
 
 #include "sql/monitor/ob_sql_stat_record.h"
-#include "share/rc/ob_module_provider.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/atomic/ob_atomic.h"
 #include "sql/ob_sql_context.h"
 #include "lib/allocator/page_arena.h"   // ObArenaAllocator
 #include "lib/time/ob_tsc_timestamp.h"
-#include "observer/ob_server.h"
+#include "query/runtime/ob_query_runtime_environment.h"
+#include "query/plan_cache/ob_plan_cache_access_service.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 
@@ -187,9 +188,10 @@ ObExecutingSqlStatRecord::ObExecutingSqlStatRecord()
 #undef DEF_SQL_STAT_ITEM_INIT
 }
 
-#define RECORD_ITEM(se)                                                                            \
+#define RECORD_ITEM(se, di, runtime_environment)                                                   \
   do {                                                                                             \
-    elapsed_time_##se##_ = rdtsc() * 1000 / OBSERVER.get_cpu_frequency_khz();                      \
+    elapsed_time_##se##_ = rdtsc() * 1000 /                                                        \
+        query::query_cpu_frequency_khz(runtime_environment);                                       \
   } while (0);
 
 void ObExecutingSqlStatRecord::reset()
@@ -249,16 +251,23 @@ int ObExecutingSqlStatRecord::assign(const ObExecutingSqlStatRecord& other)
   return OB_SUCCESS;
 }
 
-int ObExecutingSqlStatRecord::record_sqlstat_start_value()
+int ObExecutingSqlStatRecord::record_sqlstat_start_value(
+    query::ObIQueryRuntimeEnvironment &runtime_environment)
 {
 
-  RECORD_ITEM(start);
+  RECORD_ITEM(start, nullptr, runtime_environment);
   return OB_SUCCESS;
 }
 
-int ObExecutingSqlStatRecord::record_sqlstat_end_value()
+int ObExecutingSqlStatRecord::record_sqlstat_end_value(
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    ObDiagnoseSessionInfo* di /*= nullptr*/)
 {
-  RECORD_ITEM(end);
+  if (OB_NOT_NULL(di)) {
+    RECORD_ITEM(end, di, runtime_environment);
+  } else {
+    RECORD_ITEM(end, nullptr, runtime_environment);
+  }
   return OB_SUCCESS;
 }
 
@@ -266,6 +275,8 @@ int ObExecutingSqlStatRecord::record_sqlstat_end_value()
 
 int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
   ObSQLSessionInfo &session_info,
+  ObPlanCache &plan_cache,
+  query::ObIPlanCacheAccessService &access_service,
   ObString &cur_sql,
   const ObPhysicalPlan *plan /*= nullptr*/)
 {
@@ -280,12 +291,14 @@ int ObExecutingSqlStatRecord::move_to_sqlstat_cache(
     if (OB_ISNULL(plan)) {
       ObCacheObjGuard guard;
       bool is_use_cache = true;
-      if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(key, guard))) {
+      if (OB_FAIL(ObSqlStatRecordUtil::get_cache_obj(
+          plan_cache, access_service, key, guard))) {
         if (ret == OB_SQL_PC_NOT_EXIST) {
           // not found, need create 
           ret =OB_SUCCESS;
           is_use_cache = false;
-          if (OB_FAIL(ObSqlStatRecordUtil::create_cache_obj(key, guard))) {
+          if (OB_FAIL(ObSqlStatRecordUtil::create_cache_obj(
+              plan_cache, access_service, key, guard))) {
             LOG_WARN("failed to create cache obj", K(ret));
           }
         } else {
@@ -522,19 +535,16 @@ int ObSqlStatRecordNode::inner_add_cache_obj(ObILibCacheCtx &ctx,
   return ret;
 }
 
-int ObSqlStatRecordUtil::get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard)
+int ObSqlStatRecordUtil::get_cache_obj(
+    ObPlanCache &plan_cache,
+    query::ObIPlanCacheAccessService &access_service,
+    ObSqlStatRecordKey &key,
+    ObCacheObjGuard &guard)
 {
   int ret = OB_SUCCESS;
   sql::ObILibCacheCtx cache_ctx;
-  ObPlanCache* lib_cache = nullptr;
-  observer::ObReqTimeGuard req_timeinfo_guard;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server runtime controller is null", K(ret));
-  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get plan cache", K(ret));
-  } else if (OB_FAIL(lib_cache->get_cache_obj(cache_ctx, &key, guard))) {
+  query::ObPlanCacheAccessGuard req_timeinfo_guard(access_service);
+  if (OB_FAIL(plan_cache.get_cache_obj(cache_ctx, &key, guard))) {
     if (ret == OB_SQL_PC_NOT_EXIST) {
       LOG_INFO("sql stat record not found",K(ret), K(key));
     } else {
@@ -544,26 +554,23 @@ int ObSqlStatRecordUtil::get_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard&
   return ret;
 }
 
-int ObSqlStatRecordUtil::create_cache_obj(ObSqlStatRecordKey &key, ObCacheObjGuard& guard)
+int ObSqlStatRecordUtil::create_cache_obj(
+    ObPlanCache &plan_cache,
+    query::ObIPlanCacheAccessService &access_service,
+    ObSqlStatRecordKey &key,
+    ObCacheObjGuard &guard)
 {
   int ret = OB_SUCCESS;
   sql::ObILibCacheCtx cache_ctx;
-  ObPlanCache* lib_cache = nullptr;
   ObSqlStatRecordObj *cache_obj = nullptr;
-  observer::ObReqTimeGuard req_timeinfo_guard;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("server runtime controller is null", K(ret));
-  } else if (OB_ISNULL(lib_cache = share::g_mp->plan_cache())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get plan cache", K(ret));
-  } else if (OB_FAIL(ObCacheObjectFactory::alloc(guard,
-                                                 ObLibCacheNameSpace::NS_SQLSTAT))) {
+  query::ObPlanCacheAccessGuard req_timeinfo_guard(access_service);
+  if (OB_FAIL(ObCacheObjectFactory::alloc(
+      plan_cache, guard, ObLibCacheNameSpace::NS_SQLSTAT))) {
     LOG_WARN("fail to alloc new cache obj", K(ret));
   } else if (OB_ISNULL(cache_obj = static_cast<ObSqlStatRecordObj *>(guard.get_cache_obj()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get cache obj", K(ret));
-  } else if (OB_FAIL(lib_cache->add_cache_obj(cache_ctx, &key, cache_obj))) {
+  } else if (OB_FAIL(plan_cache.add_cache_obj(cache_ctx, &key, cache_obj))) {
     LOG_WARN( "fail to add cache obj to lib cache", K(ret), K(key));
   }
   return ret;

@@ -30,7 +30,6 @@ namespace share
 {
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;
-using namespace oceanbase::transaction;
 
 void ObTabletChecksumItem::reset()
 {

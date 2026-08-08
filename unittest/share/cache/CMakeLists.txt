@@ -1,8 +1,0 @@
-#ob_unittest(test_cache_utils)
-#ob_unittest(test_working_set_mgr)
-#ob_unittest(test_cache_working_set)
-#ob_unittest(test_perf_kv_storecache)
-storage_unittest(test_recycle_multi_kvcache)
-storage_unittest(test_vtable_event_recycle_buffer)
-storage_unittest(test_kvcache_fixed_limit)
-storage_unittest(test_kv_storecache_bucket)

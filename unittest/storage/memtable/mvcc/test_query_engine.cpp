@@ -169,11 +169,3 @@ TEST(TestObQueryEngine, smoke_test)
 
 }
 }
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_file_name("test_query_engine.log", true);
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

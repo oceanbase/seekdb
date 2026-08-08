@@ -16,6 +16,7 @@
 
 #include "ob_trans_define_v4.h"
 #include "ob_trans_functor.h"
+#include "lib/allocator/ob_malloc.h"
 
 #define USING_LOG_PREFIX TRANS
 namespace oceanbase
@@ -23,6 +24,65 @@ namespace oceanbase
 using namespace oceanbase::share;
 namespace transaction
 {
+
+struct ObTxExecResultImpl
+{
+  ObTxExecResultImpl()
+    : allocator_("TxExecResult"),
+      incomplete_(false),
+      touched_storage_(false),
+      has_write_state_(false),
+      write_state_(),
+      conflict_txs_(OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_)
+  {}
+
+  TransModulePageAllocator allocator_;
+  bool incomplete_;
+  bool touched_storage_;
+  bool has_write_state_;
+  ObTxWriteState write_state_;
+  ObSArray<ObTransID> conflict_txs_;
+  ObSArray<storage::ObRowConflictInfo> conflict_info_array_;
+};
+
+class ObTxExecResultAccess
+{
+public:
+  static ObTxExecResultImpl *get(ObTxExecResult &result)
+  {
+    return static_cast<ObTxExecResultImpl *>(result.impl_);
+  }
+
+  static const ObTxExecResultImpl *get(const ObTxExecResult &result)
+  {
+    return static_cast<const ObTxExecResultImpl *>(result.impl_);
+  }
+
+  static int ensure(ObTxExecResult &result, ObTxExecResultImpl *&impl)
+  {
+    int ret = OB_SUCCESS;
+    impl = get(result);
+    if (OB_ISNULL(impl)) {
+      impl = OB_NEW(ObTxExecResultImpl, common::ObMemAttr("TxExecResult"));
+      if (OB_ISNULL(impl)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        result.impl_ = impl;
+      }
+    }
+    return ret;
+  }
+
+  static void destroy(ObTxExecResult &result)
+  {
+    ObTxExecResultImpl *impl = get(result);
+    if (OB_NOT_NULL(impl)) {
+      OB_DELETE(ObTxExecResultImpl, common::ObMemAttr("TxExecResult"), impl);
+      result.impl_ = nullptr;
+    }
+  }
+};
+
 ObTxIsolationLevel tx_isolation_from_str(const ObString &s)
 {
   static const ObString LEVEL_NAME[4] =
@@ -125,9 +185,73 @@ DEF_TO_STRING(ObTxSavePoint)
   J_OBJ_END();
   return pos;
 }
-OB_SERIALIZE_MEMBER(ObTxExecResult, incomplete_, has_write_state_, write_state_,
-                    conflict_info_array_,
-                    touched_storage_);
+OB_DEF_SERIALIZE(ObTxExecResult)
+{
+  int ret = OB_SUCCESS;
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  if (OB_ISNULL(impl)) {
+    ObTxExecResultImpl empty;
+    LST_DO_CODE(OB_UNIS_ENCODE,
+                empty.incomplete_,
+                empty.has_write_state_,
+                empty.write_state_,
+                empty.conflict_txs_,
+                empty.conflict_info_array_,
+                empty.touched_storage_);
+  } else {
+    LST_DO_CODE(OB_UNIS_ENCODE,
+                impl->incomplete_,
+                impl->has_write_state_,
+                impl->write_state_,
+                impl->conflict_txs_,
+                impl->conflict_info_array_,
+                impl->touched_storage_);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(ObTxExecResult)
+{
+  int ret = OB_SUCCESS;
+  ObTxExecResultImpl *impl = nullptr;
+  if (OB_FAIL(ObTxExecResultAccess::ensure(*this, impl))) {
+    TRANS_LOG(WARN, "allocate tx exec result failed", K(ret));
+  } else {
+    LST_DO_CODE(OB_UNIS_DECODE,
+                impl->incomplete_,
+                impl->has_write_state_,
+                impl->write_state_,
+                impl->conflict_txs_,
+                impl->conflict_info_array_,
+                impl->touched_storage_);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(ObTxExecResult)
+{
+  int64_t len = 0;
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  if (OB_ISNULL(impl)) {
+    ObTxExecResultImpl empty;
+    LST_DO_CODE(OB_UNIS_ADD_LEN,
+                empty.incomplete_,
+                empty.has_write_state_,
+                empty.write_state_,
+                empty.conflict_txs_,
+                empty.conflict_info_array_,
+                empty.touched_storage_);
+  } else {
+    LST_DO_CODE(OB_UNIS_ADD_LEN,
+                impl->incomplete_,
+                impl->has_write_state_,
+                impl->write_state_,
+                impl->conflict_txs_,
+                impl->conflict_info_array_,
+                impl->touched_storage_);
+  }
+  return len;
+}
 OB_SERIALIZE_MEMBER(ObTxSnapshot, tx_id_, version_, scn_, elr_);
 OB_SERIALIZE_MEMBER(ObTxReadSnapshot,
                     valid_,
@@ -391,7 +515,6 @@ void ObTxDesc::reset()
   has_write_state_ = false;
 	  write_state_ = ObTxWriteState();
 	  savepoints_.reset();
-	  conflict_txs_.reset();
 
 	  commit_expire_ts_ = -1;
   commit_version_.reset();
@@ -673,7 +796,7 @@ int ObTxDesc::get_inc_exec_info(ObTxExecResult &exec_info)
       TRANS_LOG(WARN, "set exec write state failed", K(ret), K_(write_state), KPC(this), K(exec_info));
     }
     if (OB_FAIL(ret) || flags_.WRITE_STATE_INCOMPLETE_) {
-      exec_info.incomplete_ = true;
+      exec_info.set_incomplete();
       TRANS_LOG(WARN, "set incomplete", K(ret), K(flags_.WRITE_STATE_INCOMPLETE_));
     }
     exec_info_reap_ts_ += 1;
@@ -689,14 +812,19 @@ int ObTxDesc::add_exec_info(const ObTxExecResult &exec_info)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(lock_);
-  if (OB_FAIL(merge_write_state_if_present_(exec_info.write_state_, exec_info.has_write_state_))) {
+  const ObTxExecResultImpl *result_impl = ObTxExecResultAccess::get(exec_info);
+  if (OB_NOT_NULL(result_impl) &&
+      OB_FAIL(merge_write_state_if_present_(result_impl->write_state_,
+                                            result_impl->has_write_state_))) {
     TRANS_LOG(WARN, "update write state failed", K(ret), KPC(this), K(exec_info));
   }
-  if (exec_info.incomplete_) {
+  if (exec_info.is_incomplete()) {
     flags_.WRITE_STATE_INCOMPLETE_ = true;
     TRANS_LOG(WARN, "exec_info is incomplete set incomplete also", K(ret), K(exec_info));
   }
-  (void) merge_conflict_txs_(exec_info.conflict_txs_);
+  if (OB_NOT_NULL(result_impl)) {
+    (void) merge_conflict_txs_(result_impl->conflict_txs_);
+  }
   DETECT_LOG(TRACE, "add exec result conflict txs to desc", K(conflict_txs_), K(exec_info));
   return ret;
 }
@@ -923,7 +1051,7 @@ void ObTxDesc::reset_write_state()
 {
   ObSpinLockGuard guard(lock_);
   has_write_state_ = false;
-  write_state_ = ObTxWriteState();
+	  write_state_ = ObTxWriteState();
   state_change_flags_.WRITE_STATE_CHANGED_ = true;
 }
 
@@ -1107,33 +1235,58 @@ const char* ObTxReadSnapshot::get_source_name() const
 }
 
 ObTxExecResult::ObTxExecResult()
-  : allocator_("TxExecResult"),
-    incomplete_(false),
-    touched_storage_(false),
-    has_write_state_(false),
-    write_state_()
-{}
+  : impl_(nullptr)
+{
+}
 
 ObTxExecResult::~ObTxExecResult()
 {
-  incomplete_ = false;
+  ObTxExecResultAccess::destroy(*this);
 }
 
 void ObTxExecResult::reset()
 {
-  incomplete_ = false;
-  touched_storage_ = false;
-  has_write_state_ = false;
-  write_state_ = ObTxWriteState();
-  conflict_txs_.reset();
-  allocator_.reset();
+  ObTxExecResultAccess::destroy(*this);
+}
+
+void ObTxExecResult::set_incomplete()
+{
+  ObTxExecResultImpl *impl = nullptr;
+  if (OB_SUCCESS == ObTxExecResultAccess::ensure(*this, impl)) {
+    impl->incomplete_ = true;
+  }
+}
+
+bool ObTxExecResult::is_incomplete() const
+{
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  return OB_NOT_NULL(impl) && impl->incomplete_;
+}
+
+bool ObTxExecResult::touches_storage() const
+{
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  return OB_NOT_NULL(impl) && impl->touched_storage_;
+}
+
+void ObTxExecResult::mark_touched_storage()
+{
+  ObTxExecResultImpl *impl = nullptr;
+  if (OB_SUCCESS == ObTxExecResultAccess::ensure(*this, impl)) {
+    impl->touched_storage_ = true;
+  }
 }
 
 int ObTxExecResult::set_write_state(const ObTxWriteState &part)
 {
   int ret = OB_SUCCESS;
-  write_state_ = part;
-  has_write_state_ = true;
+  ObTxExecResultImpl *impl = nullptr;
+  if (OB_FAIL(ObTxExecResultAccess::ensure(*this, impl))) {
+    TRANS_LOG(WARN, "allocate tx exec result failed", K(ret));
+  } else {
+    impl->write_state_ = part;
+    impl->has_write_state_ = true;
+  }
   return ret;
 }
 
@@ -1141,10 +1294,25 @@ int ObTxExecResult::merge_write_state(const ObTxWriteState &part, const bool has
 {
   int ret = OB_SUCCESS;
   if (has_write_state && OB_FAIL(set_write_state(part))) {
-    incomplete_ = true;
+    set_incomplete();
     TRANS_LOG(WARN, "merge exec write state failed", K(ret), K(part), KPC(this));
   }
   return ret;
+}
+
+bool ObTxExecResult::has_write_state() const
+{
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  return OB_NOT_NULL(impl) && impl->has_write_state_;
+}
+
+const common::ObIArray<ObTransID> &ObTxExecResult::get_conflict_txs() const
+{
+  static const common::ObSEArray<ObTransID, 1> EMPTY_CONFLICT_TXS;
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  return OB_ISNULL(impl)
+      ? static_cast<const common::ObIArray<ObTransID> &>(EMPTY_CONFLICT_TXS)
+      : static_cast<const common::ObIArray<ObTransID> &>(impl->conflict_txs_);
 }
 
 template<typename T>
@@ -1162,18 +1330,26 @@ static int append_dedup(ObIArray<T> &a, const ObIArray<T> &b)
 int ObTxExecResult::merge_result(const ObTxExecResult &r)
 {
   int ret = OB_SUCCESS;
+  ObTxExecResultImpl *impl = nullptr;
+  const ObTxExecResultImpl *other = ObTxExecResultAccess::get(r);
   TRANS_LOG(TRACE, "txExecResult.merge with.start", K(r), KPC(this), K(lbt()));
-  incomplete_ |= r.incomplete_;
-  if (OB_FAIL(merge_write_state(r.write_state_, r.has_write_state_))) {
-    incomplete_ = true;
-    TRANS_LOG(WARN, "merge fail, set incomplete", K(ret), KPC(this));
-  }
-  touched_storage_ |= r.touched_storage_;
-  if (OB_SUCC(ret)) {
-    ret = merge_cflict_txs(r.conflict_txs_);
-  }
-  if (incomplete_) {
-    TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
+  if (OB_NOT_NULL(other)) {
+    if (OB_FAIL(ObTxExecResultAccess::ensure(*this, impl))) {
+      TRANS_LOG(WARN, "allocate tx exec result failed", K(ret));
+    } else {
+      impl->incomplete_ |= other->incomplete_;
+      if (OB_FAIL(merge_write_state(other->write_state_, other->has_write_state_))) {
+        impl->incomplete_ = true;
+        TRANS_LOG(WARN, "merge fail, set incomplete", K(ret), KPC(this));
+      }
+      impl->touched_storage_ |= other->touched_storage_;
+      if (OB_SUCC(ret)) {
+        ret = merge_cflict_txs(other->conflict_txs_);
+      }
+      if (impl->incomplete_) {
+        TRANS_LOG(TRACE, "tx result incomplete:", KP(this));
+      }
+    }
   }
 
   TRANS_LOG(TRACE, "txExecResult.merge with.end", KPC(this));
@@ -1184,7 +1360,10 @@ int ObTxExecResult::merge_cflict_txs(
     const common::ObIArray<transaction::ObTransID> &txs)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(append_dedup(conflict_txs_, txs))) {
+  ObTxExecResultImpl *impl = nullptr;
+  if (OB_FAIL(ObTxExecResultAccess::ensure(*this, impl))) {
+    TRANS_LOG(WARN, "allocate tx exec result failed", K(ret));
+  } else if (OB_FAIL(append_dedup(impl->conflict_txs_, txs))) {
     DETECT_LOG(WARN, "append fail", KR(ret), KPC(this), K(txs));
   }
   return ret;
@@ -1193,17 +1372,45 @@ int ObTxExecResult::merge_cflict_txs(
 int ObTxExecResult::assign(const ObTxExecResult &r)
 {
   int ret = OB_SUCCESS;
-  incomplete_ = r.incomplete_;
-  has_write_state_ = false;
-  write_state_ = ObTxWriteState();
-  if (OB_FAIL(merge_write_state(r.write_state_, r.has_write_state_))) {
-    incomplete_ = true;
-    TRANS_LOG(WARN, "assign fail, set incomplete", K(ret), KPC(this));
+  const ObTxExecResultImpl *other = ObTxExecResultAccess::get(r);
+  reset();
+  if (OB_NOT_NULL(other)) {
+    ObTxExecResultImpl *impl = nullptr;
+    if (OB_FAIL(ObTxExecResultAccess::ensure(*this, impl))) {
+      TRANS_LOG(WARN, "allocate tx exec result failed", K(ret));
+    } else {
+      impl->incomplete_ = other->incomplete_;
+      impl->touched_storage_ = other->touched_storage_;
+      impl->has_write_state_ = other->has_write_state_;
+      impl->write_state_ = other->write_state_;
+      if (OB_FAIL(impl->conflict_txs_.assign(other->conflict_txs_))) {
+        TRANS_LOG(WARN, "assign conflict transactions failed", K(ret));
+      } else if (OB_FAIL(impl->conflict_info_array_.assign(other->conflict_info_array_))) {
+        TRANS_LOG(WARN, "assign conflict info failed", K(ret));
+      }
+    }
   }
-  touched_storage_ = r.touched_storage_;
-  conflict_txs_.assign(r.conflict_txs_);
-  conflict_info_array_.assign(r.conflict_info_array_);
   return ret;
+}
+
+DEF_TO_STRING(ObTxExecResult)
+{
+  int64_t pos = 0;
+  const ObTxExecResultImpl *impl = ObTxExecResultAccess::get(*this);
+  if (OB_ISNULL(impl)) {
+    J_OBJ_START();
+    J_KV("incomplete", false, "touched_storage", false);
+    J_OBJ_END();
+  } else {
+    J_OBJ_START();
+    J_KV("incomplete", impl->incomplete_,
+         "has_write_state", impl->has_write_state_,
+         "write_state", impl->write_state_,
+         "touched_storage", impl->touched_storage_,
+         "conflict_txs", impl->conflict_txs_);
+    J_OBJ_END();
+  }
+  return pos;
 }
 
 ObTxWriteState::ObTxWriteState()

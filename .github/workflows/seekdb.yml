@@ -63,12 +63,6 @@ jobs:
           export MYSQLTEST_SLICES="${{ env.MYSQLTEST_SLICES }}"
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
           .github/script/seekdb/prepare.sh
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2.11
-        with:
-          max-size: 800M
-          save: ${{ github.event_name == 'push' }}
-          key: seekdb
 
       - name: Compile
         id: compile
@@ -83,7 +77,6 @@ jobs:
             export GITHUB_WORKSPACE="$WS"
           fi
           export SEEKDB_TASK_DIR="${{ env.SEEKDB_TASK_DIR }}"
-          export RELEASE_MODE="${{ vars.RELEASE_MODE || '' }}"
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
@@ -91,15 +84,12 @@ jobs:
         shell: bash
         run: |
           if [[ ! -x observer ]]; then
-            for base in build_debug build_release build; do
-              for cand in "$base/observer" "$base/src/observer/observer"; do
-                if [[ -f "$cand" ]] && [[ -x "$cand" ]]; then
-                  cp -f "$cand" observer && chmod +x observer
-                  echo "observer copied from $cand"
-                  break 2
-                fi
-              done
-            done
+            cand="build_release/src/observer/observer"
+            if [[ -x "$cand" ]]; then
+              cp -L -f "$cand" observer
+              chmod +x observer
+              echo "observer copied from $cand"
+            fi
           fi
           if [[ ! -x observer ]]; then echo "observer missing or not executable"; exit 1; fi
           echo "observer size: $(stat -c%s observer 2>/dev/null || stat -f%z observer 2>/dev/null) bytes"

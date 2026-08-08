@@ -20,6 +20,8 @@
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 
 namespace oceanbase
 {
@@ -96,15 +98,15 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null exprs", K(ret), KP(calc_vector_expr), KP(calc_distance_algo_expr));
   } else {
-    ObVectorIndexDistAlgorithm dis_algo = VIDA_MAX;
+    share::ObVectorIndexDistAlgorithm dis_algo = share::VIDA_MAX;
     if (OB_FAIL(ret)) {
     } else if (calc_distance_algo_expr->datum_meta_.type_ != ObUInt64Type) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("calc distance algo expr is invalid", K(ret), KPC(calc_distance_algo_expr));
     } else if (OB_FAIL(calc_distance_algo_expr->eval(eval_ctx, res))) {
       LOG_WARN("calc table id expr failed", K(ret));
-    } else if (FALSE_IT(dis_algo = static_cast<ObVectorIndexDistAlgorithm>(res->get_uint64()))) {
-    } else if (VIDA_MAX <= dis_algo) {
+    } else if (FALSE_IT(dis_algo = static_cast<share::ObVectorIndexDistAlgorithm>(res->get_uint64()))) {
+    } else if (share::VIDA_MAX <= dis_algo) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected distance algo", K(ret), K(dis_algo));
     } else {
@@ -119,11 +121,11 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
         LOG_WARN("failed to get vector", K(ret), KPC(calc_vector_expr));
       } else if (is_null) {
         expr_datum.set_null();
-      } else if (dis_algo == ObVectorIndexDistAlgorithm::VIDA_COS) {
+      } else if (dis_algo == share::ObVectorIndexDistAlgorithm::VIDA_COS) {
         if (OB_ISNULL(norm_vector = reinterpret_cast<float *>(tmp_allocator.alloc(sizeof(float) * arr->size())))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc vector", K(ret));
-        } else if (OB_FAIL(ObVectorNormalize::L2_normalize_vector(arr->size(),
+        } else if (OB_FAIL(share::ObVectorNormalize::L2_normalize_vector(arr->size(),
                                                                   reinterpret_cast<float *>(arr->get_data()),
                                                                   norm_vector))) {
           LOG_WARN("failed to normalize vector", K(ret));
@@ -153,4 +155,3 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
 
 }  // namespace sql
 }  // namespace oceanbase
-

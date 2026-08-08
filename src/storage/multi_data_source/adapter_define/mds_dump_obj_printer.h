@@ -16,6 +16,7 @@
 
 #ifndef SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_DUMP_OBJ_PRINTER_H
 #define SHARE_STORAGE_MULTI_DATA_SOURCE_MDS_DUMP_OBJ_PRINTER_H
+#include "lib/literals/ob_literals.h"
 #include "mds_dump_node.h"
 #include "storage/multi_data_source/mds_table_handle.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"

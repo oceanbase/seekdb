@@ -18,8 +18,8 @@
 
 #include "common/object/ob_obj_type.h"
 #include "common/ob_tablet_id.h"
-#include "sql/engine/vector/ob_i_vector.h"
-#include "sql/engine/ob_batch_rows.h"
+#include "query/engine/vector/ob_i_vector.h"
+#include "query/engine/ob_batch_rows.h"
 #include "share/ob_batch_selector.h"
 
 namespace oceanbase

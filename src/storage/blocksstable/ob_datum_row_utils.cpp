@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
 #include "ob_datum_row_utils.h"
 namespace oceanbase
 {
@@ -127,4 +128,28 @@ int ObDatumRowUtils::prepare_rowkey(
 }
 
 }  // namespace sql
+
+namespace data_plane
+{
+
+int create_datum_row(
+    common::ObIAllocator &allocator,
+    int64_t column_count,
+    blocksstable::ObDatumRow *&row)
+{
+  return blocksstable::ObDatumRowUtils::ob_create_row(
+      allocator, column_count, row);
+}
+
+int create_datum_rows(
+    common::ObIAllocator &allocator,
+    int64_t row_count,
+    int64_t column_count,
+    blocksstable::ObDatumRow *&rows)
+{
+  return blocksstable::ObDatumRowUtils::ob_create_rows(
+      allocator, row_count, column_count, rows);
+}
+
+} // namespace data_plane
 }  // namespace oceanbase

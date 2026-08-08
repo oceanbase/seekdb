@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_plan_cache_plan_explain.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/table/ob_table_scan_op.h"
@@ -272,7 +272,7 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
       if (!share::g_server_modules_ready) {
         ret = OB_ITER_END;
       } else {
-        ObPlanCache* plan_cache = share::g_mp->plan_cache();
+        ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
         if (OB_ISNULL(plan_cache)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
@@ -291,7 +291,7 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
         if (!share::g_server_modules_ready) {
           ret = OB_ITER_END;
         } else {
-          ObPlanCache* plan_cache = share::g_mp->plan_cache();
+          ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
@@ -354,7 +354,7 @@ int ObPlanCachePlanExplain::inner_open()
     ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
     if (share::g_server_modules_ready) {
-        plan_cache = share::g_mp->plan_cache();
+        plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
         if (OB_ISNULL(plan_cache)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "plan_cache is NULL", K(ret));

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_ai_func_utils.h"
 #include "ob_ai_func_client.h"
+#include "query/engine/expr/ob_ai_model_resolver.h"
 
 namespace oceanbase 
 {
@@ -906,7 +907,7 @@ int ObSiliconflowUtils::ObSiliconflowRerank::parse_output(common::ObIAllocator &
 
 int ObAIFuncUtils::get_header(ObIAllocator &allocator, 
                               const ObAIFuncExprInfo &info,
-                              const ObAiModelEndpointInfo &endpoint_info,
+                              const share::ObAiModelEndpointInfo &endpoint_info,
                               ObArray<ObString> &headers) 
 {
   int ret = OB_SUCCESS;
@@ -940,7 +941,7 @@ int ObAIFuncUtils::get_header(ObIAllocator &allocator,
 
 int ObAIFuncUtils::get_complete_body(ObIAllocator &allocator, 
                                     const ObAIFuncExprInfo &info, 
-                                    const ObAiModelEndpointInfo &endpoint_info,
+                                    const share::ObAiModelEndpointInfo &endpoint_info,
                                     ObString &prompt, 
                                     ObString &content, 
                                     ObJsonObject *config,
@@ -975,7 +976,7 @@ int ObAIFuncUtils::set_json_format_config(ObIAllocator &allocator, const ObStrin
 
 int ObAIFuncUtils::get_embed_body(ObIAllocator &allocator, 
                                   const ObAIFuncExprInfo &info, 
-                                  const ObAiModelEndpointInfo &endpoint_info,
+                                  const share::ObAiModelEndpointInfo &endpoint_info,
                                   ObArray<ObString> &contents, 
                                   ObJsonObject *config,
                                   ObJsonObject *&body) 
@@ -997,7 +998,7 @@ int ObAIFuncUtils::get_embed_body(ObIAllocator &allocator,
 
 int ObAIFuncUtils::get_rerank_body(ObIAllocator &allocator, 
                                    const ObAIFuncExprInfo &info,
-                                   const ObAiModelEndpointInfo &endpoint_info,
+                                   const share::ObAiModelEndpointInfo &endpoint_info,
                                    ObString &query,
                                    ObJsonArray *document_array,
                                    ObJsonObject *config,
@@ -1019,7 +1020,7 @@ int ObAIFuncUtils::get_rerank_body(ObIAllocator &allocator,
 }
 
 int ObAIFuncUtils::parse_complete_output(ObIAllocator &allocator, 
-                                        const ObAiModelEndpointInfo &endpoint_info,
+                                        const share::ObAiModelEndpointInfo &endpoint_info,
                                         ObJsonObject *http_response,
                                         ObIJsonBase *&result)                                                 
 {
@@ -1034,7 +1035,7 @@ int ObAIFuncUtils::parse_complete_output(ObIAllocator &allocator,
 }
 
 int ObAIFuncUtils::parse_embed_output(ObIAllocator &allocator, 
-                                      const ObAiModelEndpointInfo &endpoint_info,
+                                      const share::ObAiModelEndpointInfo &endpoint_info,
                                       ObJsonObject *http_response,
                                       ObIJsonBase *&result) 
 {
@@ -1049,7 +1050,7 @@ int ObAIFuncUtils::parse_embed_output(ObIAllocator &allocator,
 }
 
 int ObAIFuncUtils::parse_rerank_output(ObIAllocator &allocator, 
-                                       const ObAiModelEndpointInfo &endpoint_info,
+                                       const share::ObAiModelEndpointInfo &endpoint_info,
                                        ObJsonObject *http_response,
                                        ObIJsonBase *&result) 
 {
@@ -1432,13 +1433,13 @@ int ObAIFuncUtils::decode_base64_embedding_array(const ObIJsonBase &embedding_jb
 
 int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jbase,
                                                 ObIAllocator &allocator,
-                                                ObJsonReaderHelper &json_reader,
+                                                share::ObJsonReaderHelper &json_reader,
                                                 const int64_t dimension,
                                                 float *&vector)
 {
   int ret = OB_SUCCESS;
   float *tmp_vector = nullptr;
-  if (!ObJsonHelper::is_array_type(&embedding_jbase)) {
+  if (!share::ObJsonHelper::is_array_type(&embedding_jbase)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("embedding field is not an array", K(ret));
   } else {
@@ -1456,7 +1457,7 @@ int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jba
           ObIJsonBase *value = nullptr;
           if (OB_FAIL(json_reader.get_array_element(&embedding_jbase, i, value))) {
             LOG_WARN("failed to get array element", K(ret), K(i));
-          } else if (!ObJsonHelper::is_number_type(value)) {
+          } else if (!share::ObJsonHelper::is_number_type(value)) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("value is not a number", K(ret), K(i));
           } else {
@@ -1481,8 +1482,8 @@ int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jba
 int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info)
 {
   int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
-  schema::ObSchemaGetterGuard guard;
+  share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  share::schema::ObSchemaGetterGuard guard;
   
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -2002,4 +2003,28 @@ const ObString ObAIFuncModel::get_request_model_name()
 }
 
 } // namespace common
+
+namespace query
+{
+
+int ObAIModelResolver::resolve_model_name(
+    common::ObIAllocator &allocator,
+    const common::ObString &model_id,
+    common::ObString &model_name)
+{
+  int ret = OB_SUCCESS;
+  common::ObAIFuncExprInfo *info = nullptr;
+  if (OB_FAIL(common::ObAIFuncUtils::get_ai_func_info(
+          allocator, model_id, info))) {
+    LOG_WARN("failed to resolve ai model", K(ret), K(model_id));
+  } else if (OB_ISNULL(info)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ai model metadata is null", K(ret), K(model_id));
+  } else if (OB_FAIL(ob_write_string(allocator, info->model_, model_name))) {
+    LOG_WARN("failed to copy ai model name", K(ret), K(model_id));
+  }
+  return ret;
+}
+
+} // namespace query
 } // namespace oceanbase

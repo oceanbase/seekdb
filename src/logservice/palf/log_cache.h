@@ -19,7 +19,7 @@
 
 #include <cstdint>                                       // int64_t
 #include "log_reader_utils.h"                            // ReadBuf
-#include "lsn.h"
+#include "share/log/palf/lsn.h"
 #include "log_storage_interface.h"                       // LogIteratorInfo
 
 namespace oceanbase

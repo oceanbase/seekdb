@@ -24,7 +24,7 @@
 #include "lib/function/ob_function.h"
 #include "runtime_utility/mds_lock.h"
 #include "storage/multi_data_source/mds_table_mgr.h"
-#include "observer/virtual_table/ob_mds_event_buffer.h"
+#include "storage/multi_data_source/ob_mds_event_buffer.h"
 #include "storage/multi_data_source/runtime_utility/common_define.h"
 #include "storage/multi_data_source/runtime_utility/list_helper.h"
 #include "storage/multi_data_source/runtime_utility/mds_tlocal_info.h"
@@ -200,23 +200,23 @@ protected:
                                const uint32_t line = __builtin_LINE(),
                                const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "CONSTRUCTED";
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   void report_destruct_event_(const char *file = __builtin_FILE(),
                               const uint32_t line = __builtin_LINE(),
                               const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     event.record_thread_info_();
     event.info_str_.reset();
     event.event_ = "DESTRUCTED";
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   template <int N>
   void report_rec_scn_event_(const char (&event_str)[N],
@@ -226,7 +226,7 @@ protected:
                              const uint32_t line = __builtin_LINE(),
                              const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     constexpr int64_t buffer_size = 1_KB;
     char stack_buffer[buffer_size] = { 0 };
     int64_t pos = 0;
@@ -236,8 +236,8 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
   template <int N>
   void report_flush_event_(const char (&event_str)[N],
@@ -246,7 +246,7 @@ protected:
                            const uint32_t line = __builtin_LINE(),
                            const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     constexpr int64_t buffer_size = 1_KB;
     char stack_buffer[buffer_size] = { 0 };
     int64_t pos = 0;
@@ -255,8 +255,8 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
 
   }
   template <int N>
@@ -266,7 +266,7 @@ protected:
                               const uint32_t line = __builtin_LINE(),
                               const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     constexpr int64_t buffer_size = 1_KB;
     char stack_buffer[buffer_size] = { 0 };
     int64_t pos = 0;
@@ -275,9 +275,8 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = event_str;
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
 
   }
   void report_recycle_event_(share::SCN recycle_scn,
@@ -285,7 +284,7 @@ protected:
                              const uint32_t line = __builtin_LINE(),
                              const char *function_name = __builtin_FUNCTION()) {
     int ret = OB_SUCCESS;
-    observer::MdsEvent event;
+    MdsEvent event;
     constexpr int64_t buffer_size = 1_KB;
     char stack_buffer[buffer_size] = { 0 };
     int64_t pos = 0;
@@ -294,8 +293,8 @@ protected:
     event.record_thread_info_();
     event.info_str_.assign(stack_buffer, pos);
     event.event_ = "RECYCLE";
-    observer::MdsEventKey key(tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, this, file, line, function_name);
+    MdsEventKey key(tablet_id_);
+    ObMdsEventBuffer::append(key, event, this, file, line, function_name);
   }
 public:
   struct DebugInfo {

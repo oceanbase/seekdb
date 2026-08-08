@@ -18,7 +18,7 @@
 #define OCEANBASE_SRS_SERVICE_H_
 
 #include "share/ob_define.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/hash/ob_pointer_hashmap.h"
@@ -26,6 +26,7 @@
 #include "lib/allocator/page_arena.h"
 #include "share/geo/ob_srs_wkt_parser.h"
 #include "share/geo/ob_srs_info.h"
+#include "share/geo/ob_srs_provider.h"
 #include "lib/lock/ob_mutex.h"
 
 namespace oceanbase
@@ -43,7 +44,7 @@ class ObMySQLResult;
 namespace omt
 {
 
-class ObSrsCacheSnapShot
+class ObSrsCacheSnapShot final : public common::ObISrsSnapshot
 {
 public:
   static const uint32_t SRS_ITEM_BUCKET_NUM = 6144;
@@ -52,9 +53,11 @@ public:
   virtual ~ObSrsCacheSnapShot() { srs_item_map_.destroy(); }
   int init() { return srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot"); }
   int add_srs_item(uint64_t srid, const common::ObSrsItem* srs_item) { return srs_item_map_.set_refactored(srid, srs_item); }
-  int get_srs_item(uint64_t srid, const common::ObSrsItem *&srs_item);
-  void dec_ref_count() { ATOMIC_DEC(&ref_count_); }
-  void inc_ref_count() { ATOMIC_INC(&ref_count_); }
+  int get_srs_item(
+      uint64_t srid,
+      const common::ObSrsItem *&srs_item) override;
+  void retain() override { ATOMIC_INC(&ref_count_); }
+  void release() override { ATOMIC_DEC(&ref_count_); }
   int64_t get_ref_count() { return ATOMIC_LOAD64(&ref_count_); }
   int64_t get_srs_count() { return srs_item_map_.size(); }
   int parse_srs_item(common::sqlclient::ObMySQLResult *result, const common::ObSrsItem *&srs_item);
@@ -70,20 +73,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSrsCacheSnapShot);
 };
 
-class ObSrsCacheGuard
-{
-public:
-  explicit ObSrsCacheGuard() : srs_cache_(nullptr) {}
-  virtual ~ObSrsCacheGuard();
-  int get_srs_item(uint64_t srs_id, const common::ObSrsItem *&srs_item);
-  void set_srs_snapshot(ObSrsCacheSnapShot *srs_cache) { srs_cache_ =  srs_cache; }
-  inline bool empty() { return srs_cache_ == nullptr; }
-private:
-  ObSrsCacheSnapShot *srs_cache_;
-};
-
-
-class ObSrsService
+class ObSrsService final : public common::ObISrsProvider
 {
 public:
   static const int64_t DEFAULT_PAGE_SIZE = 8192L;
@@ -98,8 +88,11 @@ public:
       srs_stale_(true), infinite_plane_() {}
   virtual ~ObSrsService() {};
   int init();
-  int get_srs_guard(ObSrsCacheGuard &srs_guard);
-  int get_srs_bounds(uint64_t srid, const ObSrsItem *srs_item, const ObSrsBoundsItem *&bounds_item);
+  int get_tenant_srs_guard(common::ObSrsCacheGuard &srs_guard) override;
+  int get_srs_bounds(
+      uint64_t srid,
+      const common::ObSrsItem *srs_item,
+      const common::ObSrsBoundsItem *&bounds_item) override;
   static int server_module_init(ObSrsService* &srs_service);
   void destroy();
   void mark_stale() { ATOMIC_STORE(&srs_stale_, true); }
@@ -128,7 +121,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObSrsService);
 };
 
-#define SRS_SERVICE (share::g_mp->srs_service())
+#define SRS_SERVICE (::oceanbase::share::server_service<::oceanbase::omt::ObSrsService>())
 
 }  // namespace omt
 }  // namespace oceanbase

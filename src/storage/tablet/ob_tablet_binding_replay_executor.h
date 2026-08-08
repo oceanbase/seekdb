@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TABLET_BINDING_REPLAY_EXECUTOR
 
 #include "common/ob_tablet_id.h"
-#include "logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "storage/tablet/ob_tablet_binding_mds_user_data.h"
 
 namespace oceanbase
@@ -27,7 +27,7 @@ namespace oceanbase
 namespace storage
 {
 
-class ObTabletBindingReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTabletBindingReplayExecutor final : public ObTabletReplayExecutor
 {
 public:
   ObTabletBindingReplayExecutor();

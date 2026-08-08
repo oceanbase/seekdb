@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_basic_channel.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/dtl/ob_dtl_channel_loop.h"
 #include "sql/engine/px/ob_px_util.h"
 
@@ -352,7 +352,7 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
       buffer->seq_no() = 1;
       buffer->pos() = 0;
       if (use_interm_result_) {
-        if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buffer, id_))) {
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->process_interm_result(buffer, id_))) {
           LOG_WARN("fail to process internal result", K(ret));
         }
       } else {
@@ -612,7 +612,7 @@ int ObDtlBasicChannel::process1(
       SERVER_MODULE_SCOPE {
         if (channel_is_eof_) {
           ret = OB_DTL_WAIT_EAGAIN;
-        } else if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
+        } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->atomic_get_interm_result_info(
               key, result_info_guard_))) {
           if (is_px_channel()) {
             ret = OB_DTL_WAIT_EAGAIN;

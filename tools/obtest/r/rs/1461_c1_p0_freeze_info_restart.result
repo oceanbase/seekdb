@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1,  proxy_num=1, ct_num = 0);
+ob1.reboot;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.force_stop;
+ob1.nstart;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+alter system major freeze;
+ob1.check_version 4;
+ob1.mysql update oceanbase.__all_root_table set role = 2;
+ob1.force_stop;
+ob1.nstart;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+alter system major freeze;
+ob1.check_version 5;
+ob1.mysql_p select count(*) from __all_virtual_freeeze_info;

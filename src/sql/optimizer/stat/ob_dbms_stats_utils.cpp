@@ -15,17 +15,19 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/ob_result_set.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
+#include "share/ob_share_util.h"
+#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/optimizer/stat/ob_dbms_stats_executor.h"
-#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "query/runtime/ob_query_runtime_environment.h"
 
 
 namespace oceanbase
@@ -199,7 +201,7 @@ int ObDbmsStatsUtils::check_table_read_write_valid(bool &is_valid)
   int ret = OB_SUCCESS;
   is_valid = true;
   bool is_primary = true;
-  if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+  if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_primary(is_primary))) {
     LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_valid = false;
@@ -852,7 +854,8 @@ int ObDbmsStatsUtils::get_subpart_infos(const ObTableSchema &table_schema,
 
 int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
                                                     ObIAllocator &alloc,
-                                                    ObObj *&new_obj)
+                                                    ObObj *&new_obj,
+                                                    const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   bool is_truncated = false;
@@ -868,7 +871,16 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
         LOG_WARN("failed to check text obj can reuse", K(ret), K(*old_obj));
       } else if (can_reuse) {
         // do nothing
-      } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(&alloc, *old_obj, str, OPT_STATS_MAX_VALUE_CHAR_LEN))) {
+      } else if (OB_ISNULL(datum_access_ctx) ||
+                 OB_ISNULL(datum_access_ctx->lob_read_options_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("LOB datum access context is not initialized", K(ret));
+      } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
+                     *datum_access_ctx->lob_read_options_,
+                     &alloc,
+                     *old_obj,
+                     str,
+                     OPT_STATS_MAX_VALUE_CHAR_LEN))) {
         LOG_WARN("failed to read prefix string data", K(ret));
       } else if (OB_ISNULL(tmp_obj = static_cast<ObObj*>(alloc.alloc(sizeof(ObObj))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -912,7 +924,10 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(const ObObj *old_obj,
 }
 
 
-int ObDbmsStatsUtils::truncate_string_for_opt_stats(ObObj &obj, ObIAllocator &allocator)
+int ObDbmsStatsUtils::truncate_string_for_opt_stats(
+    ObObj &obj,
+    ObIAllocator &allocator,
+    const ObDatumAccessContext *datum_access_ctx)
 {
   int ret = OB_SUCCESS;
   if (ObColumnStatParam::is_valid_opt_col_type(obj.get_type()) && obj.is_string_type()) {
@@ -924,7 +939,16 @@ int ObDbmsStatsUtils::truncate_string_for_opt_stats(ObObj &obj, ObIAllocator &al
         LOG_WARN("failed to check text obj can reuse", K(ret), K(obj));
       } else if (can_reuse) {
         // do nothing
-      } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(&allocator, obj, str, OPT_STATS_MAX_VALUE_CHAR_LEN))) {
+      } else if (OB_ISNULL(datum_access_ctx) ||
+                 OB_ISNULL(datum_access_ctx->lob_read_options_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("LOB datum access context is not initialized", K(ret));
+      } else if (OB_FAIL(sql::ObTextStringHelper::read_prefix_string_data(
+                     *datum_access_ctx->lob_read_options_,
+                     &allocator,
+                     obj,
+                     str,
+                     OPT_STATS_MAX_VALUE_CHAR_LEN))) {
         LOG_WARN("failed to read prefix string data", K(ret));
       } else if (OB_FAIL(sql::ObTextStringHelper::str_to_lob_storage_obj(allocator, str, obj))) {
         LOG_WARN("failed to convert str to lob", K(ret));
@@ -1574,7 +1598,7 @@ int ObDbmsStatsUtils::deduce_index_column_stat_to_table(share::schema::ObSchemaG
                                                         ObIArray<ObOptColumnStat *> &all_column_stats)
 {
   int ret = OB_SUCCESS;
-  if (part_level == schema::ObPartitionLevel::PARTITION_LEVEL_ZERO) {
+  if (part_level == share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO) {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_column_stats.count(); ++i) {
       if (OB_ISNULL(all_column_stats.at(i))) {
         ret = OB_ERR_UNEXPECTED;
@@ -1861,7 +1885,7 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *table_schema = nullptr;
-  ObPartitionLevel part_level = schema::ObPartitionLevel::PARTITION_LEVEL_ZERO;
+  ObPartitionLevel part_level = share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO;
   if (OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
@@ -1900,7 +1924,7 @@ int ObDbmsStatsUtils::copy_global_index_prefix_stats_to_text(share::schema::ObSc
         } else {
           text_col_stat->set_column_id(pair.related_column_id_);
           text_col_stat->set_table_id(data_table_id);
-          text_col_stat->set_partition_id(part_level == schema::ObPartitionLevel::PARTITION_LEVEL_ZERO ? 
+          text_col_stat->set_partition_id(part_level == share::schema::ObPartitionLevel::PARTITION_LEVEL_ZERO ?
                                             data_table_id : -1);
         }
       }
@@ -1950,17 +1974,17 @@ int ObDbmsStatsUtils::copy_prefix_column_stat_to_text(ObIAllocator &allocator,
   return ret;
 }
 
-int ObDbmsStatsUtils::get_max_work_area_size(int64_t &max_wa_memory_size)
+int ObDbmsStatsUtils::get_max_work_area_size(
+    query::ObIQueryRuntimeEnvironment &runtime_environment,
+    int64_t &max_wa_memory_size)
 {
   int ret = OB_SUCCESS;
   max_wa_memory_size = 0;
-  const ObServerRuntimeState *runtime = NULL;
-  if (OB_ISNULL(runtime = share::server_runtime())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
+  int64_t worker_cnt = 0;
+  if (OB_FAIL(runtime_environment.get_current_tenant_min_worker_count(worker_cnt))) {
+    LOG_WARN("get current tenant worker count failed", K(ret));
   } else {
-    int64_t worker_cnt = std::max(static_cast<const omt::ObServerRuntime *>(runtime)->min_worker_cnt(),
-                                  static_cast<int64_t>(4L));
+    worker_cnt = std::max(worker_cnt, static_cast<int64_t>(4L));
     max_wa_memory_size = lib::get_memory_budget() / worker_cnt * 2;
     max_wa_memory_size = std::max(MIN_GATHER_WORK_ARANA_SIZE, max_wa_memory_size);
   }

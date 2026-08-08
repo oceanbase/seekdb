@@ -15,16 +15,18 @@
  */
 
 #define USING_LOG_PREFIX PL
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "pl/ob_pl_build.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
+#include "sql/resolver/ddl/ob_trigger_source_builder.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "pl/ob_pl_package.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "lib/ob_running_mode.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase {
 using namespace common;
@@ -33,7 +35,7 @@ using namespace schema;
 using namespace sql;
 namespace pl {
 
-ObMutex ObPLBuilder::package_dep_info_lock_;
+lib::ObMutex ObPLBuilder::package_dep_info_lock_;
 
 namespace
 {
@@ -144,6 +146,9 @@ int ObPLBuilder::init_anonymous_ast(
   ObPLFunctionAST &func_ast,
   ObIAllocator &allocator,
   ObSQLSessionInfo &session_info,
+  ObPlanCache &plan_cache,
+  common::ObISrsProvider *srs_provider,
+  common::ObILobReadService *lob_read_service,
   ObMySQLProxy &sql_proxy,
   ObSchemaGetterGuard &schema_guard,
   ObPLPackageGuard &package_guard,
@@ -154,6 +159,9 @@ int ObPLBuilder::init_anonymous_ast(
   ObPLDataType pl_type;
   common::ObDataType data_type;
   ObPLResolveCtx resolve_ctx(allocator, session_info, schema_guard, package_guard, sql_proxy, false);
+  resolve_ctx.params_.plan_cache_ = &plan_cache;
+  resolve_ctx.params_.srs_provider_ = srs_provider;
+  resolve_ctx.params_.lob_read_service_ = lob_read_service;
 
   func_ast.set_name(ObPLResolver::ANONYMOUS_BLOCK);
   data_type.set_obj_type(common::ObNullType);
@@ -276,6 +284,9 @@ int ObPLBuilder::compile(
     OZ (init_anonymous_ast(func_ast,
                            allocator_,
                            session_info_,
+                           plan_cache_,
+                           srs_provider_,
+                           lob_read_service_,
                            sql_proxy_,
                            schema_guard_,
                            package_guard_,
@@ -286,6 +297,7 @@ int ObPLBuilder::compile(
     int64_t init_end = ObTimeUtility::current_time();
     if (OB_SUCC(ret)) {
       ObPLResolver resolver(allocator_, session_info_, schema_guard_, package_guard_, sql_proxy_,
+                            &plan_cache_, pl_sql_runtime_, pl_engine_, srs_provider_, lob_read_service_,
                             func_ast.get_expr_factory(), NULL/*parent ns*/, is_prepare_protocol,
                             false/*is_check_mode_ = false*/, false/*bool is_sql_scope_ = false*/,
                             params);
@@ -487,6 +499,7 @@ int ObPLBuilder::compile(
   if (OB_SUCC(ret)) {
     bool is_prepare_protocol = false;
     ObPLResolver resolver(allocator_, session_info_, schema_guard_, package_guard_, sql_proxy_,
+                          &plan_cache_, pl_sql_runtime_, pl_engine_, srs_provider_, lob_read_service_,
                           func_ast.get_expr_factory(), NULL/*parent ns*/, false/*is_prepare_protocol*/);
     CK (OB_NOT_NULL(parse_tree));
     OZ (resolver.init(func_ast));
@@ -495,13 +508,15 @@ int ObPLBuilder::compile(
     ObErrorInfo error_info;
     
     if (OB_SUCC(ret)) {
-      OZ (error_info.delete_error(&routine));
+      OZ (error_info.delete_error(
+          sql_proxy_, &routine, share::server_is_primary()));
     } else {
       int tmp_ret = OB_SUCCESS;
       LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "ROUTINE",
                     func_ast.get_db_name().length(), func_ast.get_db_name().ptr(),
                     func_ast.get_name().length(), func_ast.get_name().ptr());
-      if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(&routine))) {
+      if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
+          sql_proxy_, &routine, share::server_is_primary()))) {
         LOG_WARN("handler compile routine error failed", K(ret), KR(tmp_ret), K(routine));
       }
     }
@@ -545,7 +560,8 @@ int ObPLBuilder::compile(
   ObErrorInfo error_info;
   
   if (OB_SUCC(ret)) {
-    OZ (error_info.delete_error(&routine));
+    OZ (error_info.delete_error(
+        sql_proxy_, &routine, share::server_is_primary()));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (NULL != db_schema) {
@@ -555,7 +571,8 @@ int ObPLBuilder::compile(
                     routine.get_routine_name().length(),
                     routine.get_routine_name().ptr());
     }
-    if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(&routine))) {
+    if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
+        sql_proxy_, &routine, share::server_is_primary()))) {
       LOG_WARN("handler compile udt error failed", K(ret), KR(tmp_ret), K(routine));
     }
   }
@@ -696,6 +713,11 @@ int ObPLBuilder::analyze_package(const ObString &source,
                           schema_guard_,
                           package_guard_,
                           sql_proxy_,
+                          &plan_cache_,
+                          pl_sql_runtime_,
+                          pl_engine_,
+                          srs_provider_,
+                          lob_read_service_,
                           package_ast.get_expr_factory(),
                           parent_ns,
                           false);
@@ -736,7 +758,7 @@ int ObPLBuilder::analyze_package(const ObString &source,
 int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
-  CK (OB_NOT_NULL(session_info_.get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine_));
   if (OB_SUCC(ret)) {
     WITH_CONTEXT(package.get_mem_context()) {
       CK (package.is_inited());
@@ -746,8 +768,8 @@ int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &pack
       OZ (generate_package_types(package_ast.get_user_type_table(), package));
       {
         // latch_id = (bucket_id % bucket_cnt_) / 8, so it is needed to multiply 8 to avoid consecutive ids being mapped to the same latch
-        ObBucketHashWLockGuard build_id_guard(GCTX.pl_engine_->get_build_lock().first, package.get_id() * 8);
-        ObBucketHashWLockGuard build_concurrency_guard(GCTX.pl_engine_->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
+        ObBucketHashWLockGuard build_id_guard(pl_engine_->get_build_lock().first, package.get_id() * 8);
+        ObBucketHashWLockGuard build_concurrency_guard(pl_engine_->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
 
         OZ (ObPL::check_session_alive(session_info_));
         OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));
@@ -792,10 +814,12 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   }
   if (OB_SUCC(ret)) {
     if (package_info.is_for_trigger()) {
-      OZ (ObTriggerInfo::gen_package_source(package_info.get_package_id(),
-                                            source,
-                                            schema::PACKAGE_TYPE == package_info.get_type(),
-                                            schema_guard_, package.get_allocator()));
+      OZ (ObTriggerSourceBuilder::generate_package_source(
+          package_info.get_package_id(),
+          source,
+          schema::PACKAGE_TYPE == package_info.get_type(),
+          schema_guard_,
+          package.get_allocator()));
       LOG_DEBUG("trigger package source", K(source), K(package_info.get_type()), K(ret));
     } else {
       source = package_info.get_source();
@@ -823,7 +847,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   OZ (check_dep_schema(schema_guard_, package.get_dependency_table()));
 
   if (OB_SUCC(ret)) {
-    ObMutexGuard guard(package_dep_info_lock_);
+    lib::ObMutexGuard guard(package_dep_info_lock_);
     {
       OZ (update_schema_object_dep_info(package_ast.get_dependency_table(),
                                         package_info.get_owner_id(),
@@ -838,9 +862,11 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   if (OB_SUCC(ret)) {
     if (package_info.is_for_trigger()) {
       CK (OB_NOT_NULL(trigger_info));
-      OZ (error_info.delete_error(trigger_info));
+      OZ (error_info.delete_error(
+          sql_proxy_, trigger_info, share::server_is_primary()));
     } else {
-      OZ (error_info.delete_error(&package_info));
+      OZ (error_info.delete_error(
+          sql_proxy_, &package_info, share::server_is_primary()));
     }
   } else {
     int tmp_ret = ret;
@@ -854,12 +880,14 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
                       db_schema->get_database_name_str().length(), db_schema->get_database_name_str().ptr(),
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
         CK (OB_NOT_NULL(trigger_info));
-        OZ (error_info.handle_error_info(trigger_info));
+        OZ (error_info.handle_error_info(
+            sql_proxy_, trigger_info, share::server_is_primary()));
       } else {
         LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "PACKAGE",
                       db_schema->get_database_name_str().length(), db_schema->get_database_name_str().ptr(),
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
-        OZ (error_info.handle_error_info(&package_info));
+        OZ (error_info.handle_error_info(
+            sql_proxy_, &package_info, share::server_is_primary()));
       }
     }
     ret = tmp_ret;

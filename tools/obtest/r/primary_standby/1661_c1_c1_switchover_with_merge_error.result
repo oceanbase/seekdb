@@ -1,0 +1,58 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout = 30000000;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob2.mysql update oceanbase.__all_root_table set data_checksum = 99999 where table_id = $table_id and zone = 'z1' and partition_id = 0;
+ob2.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+NOT ALLOWED
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+ob2.mysql update oceanbase.__all_root_table set data_checksum = $checksum where table_id = $table_id and zone = 'z1' and partition_id = 0;
+ob2.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+alter system set debug_sync_timeout = '100000s';
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', unit_num = 1,ZONE_LIST = ('z1', 'z2');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'),primary_zone='z1' set ob_tcp_invited_nodes='%';
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+insert into t1 values(1,1),(2,2),(3,3);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql set @@global.ob_query_timeout = 30000000;
+alter system change tenant tt;
+ob2.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+NOT ALLOWED
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+alter system change tenant tt;
+ob2.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+alter system change tenant tt;
+ob1.check_until_timeout select value from oceanbase.__all_zone where name = 'is_merge_error', 1, 30;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+switchover_status
+NOT ALLOWED
+alter system change tenant sys;
+alter system commit to switchover to physical standby;
+ERROR HY000: pre-check failed, switchover to standby not allowed
+alter system change tenant tt;
+ob1.mysql alter system clear merge error;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;

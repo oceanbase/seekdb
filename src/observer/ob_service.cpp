@@ -22,7 +22,7 @@
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"
 #include "storage/ob_storage_rpc_arg.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_telemetry.h"
 #include "lib/alloc/memory_dump.h"
 
@@ -34,6 +34,7 @@
 
 #include "rootserver/ob_bootstrap.h"
 #include "observer/ob_server.h"
+#include "observer/ob_system_package_load_task.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/ddl/ob_delete_lob_meta_row_task.h" // delete lob meta row for drop vec index
 #include "storage/ddl/ob_build_index_task.h"
@@ -51,6 +52,11 @@
 #include "share/ob_standby_source_util.h"
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "storage/ls/ob_ls.h"
+#include "storage/tx/ob_trans_service.h"
+#include "data_plane/scheduler/ob_sys_task_stat.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "sql/pl/ob_pl_package_manager.h"
 #include "share/ob_rpc_struct.h"  // ObCreateLSArg
 #include "share/schema/ob_multi_version_schema_service.h"  // hook registration
 
@@ -154,11 +160,14 @@ int TelemetryTask::report()
 //////////////////////////////////////
 
 // here gctx may hasn't been initialized already
-ObService::ObService(const ObGlobalContext &gctx)
+ObService::ObService(
+    const ObGlobalContext &gctx,
+    query::ObIChangeStreamService &change_stream_service)
     : inited_(false),
     stopped_(false),
     schema_updater_(),
     gctx_(gctx),
+    change_stream_service_(change_stream_service),
     schema_release_task_(),
     telemetry_task_(),
     need_bootstrap_(false)
@@ -167,6 +176,13 @@ ObService::ObService(const ObGlobalContext &gctx)
 
 ObService::~ObService()
 {
+}
+
+int ObService::wait_until_change_stream_refreshed(
+    common::ObMySQLProxy &mysql_proxy,
+    const int64_t timeout_us)
+{
+  return change_stream_service_.wait_until_refreshed(mysql_proxy, timeout_us);
 }
 
 int ObService::init(common::ObMySQLProxy &sql_proxy,
@@ -187,11 +203,11 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ is not initialized", K(ret));
-  } else if (OB_FAIL(ObGlobalMergeTableOperator::init())) {
+  } else if (OB_FAIL(ObGlobalMergeTableOperator::init(*GCTX.meta_db_pool_))) {
     FLOG_WARN("init global merge table operator failed", KR(ret));
-  } else if (OB_FAIL(ObColumnChecksumErrorOperator::init())) {
+  } else if (OB_FAIL(ObColumnChecksumErrorOperator::init(*GCTX.meta_db_pool_))) {
     FLOG_WARN("init column checksum error operator failed", KR(ret));
-  } else if (OB_FAIL(ObTabletLocalChecksumOperator::init())) {
+  } else if (OB_FAIL(ObTabletLocalChecksumOperator::init(GCTX.meta_db_pool_))) {
     FLOG_WARN("init local tablet checksum operator failed", KR(ret));
   } else if (OB_FAIL(OB_TSC_TIMESTAMP.init())) {
     FLOG_WARN("init tsc timestamp failed", KR(ret));
@@ -220,6 +236,7 @@ int ObService::start()
       ret = OB_NOT_SUPPORTED;
       LOG_ERROR("standby role is not supported by the local runtime", KR(ret));
     } else if (OB_FAIL(share::ObServerInfoProxy::init_server_info_from_role(
+        GCTX.config_mgr_,
         GCTX.server_role_))) {
       LOG_ERROR("failed to initialize server role state before bootstrap", KR(ret), K(GCTX.server_role_));
     } else if (OB_FAIL(bootstrap())) {
@@ -235,7 +252,8 @@ int ObService::start()
   } else {
     // Restore the persisted role after a normal restart.
     share::ObServerInfo server_info;
-    if (OB_FAIL(share::ObServerInfoProxy::load_server_info(server_info))) {
+    if (OB_FAIL(share::ObServerInfoProxy::load_server_info(
+        GCTX.config_mgr_, GCTX.server_role_, server_info))) {
       LOG_ERROR("failed to load server role state on restart",
                KR(ret));
     } else {
@@ -402,7 +420,7 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
     SERVER_MODULE_SCOPE {
       ObGlobalUniqueIndexCallback *callback = NULL;
       ObDagScheduler* dag_scheduler = nullptr;
-      if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+      if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, dag scheduler must not be nullptr", KR(ret));
       } else if (OB_FAIL(res.ret_codes_.reserve(arg.calc_items_.count()))) {
@@ -511,7 +529,7 @@ int ObService::handle_tablet_freeze_req_(const common::ObTabletID &tablet_id)
   {
     SERVER_MODULE_SCOPE {
       storage::ObMemstoreFreezer* freezer = nullptr;
-      if (OB_ISNULL(freezer = share::g_mp->memstore_freezer())) {
+      if (OB_ISNULL(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ObMemstoreFreezer shouldn't be null", K(ret));
       } else if (tablet_id.is_valid()) {
@@ -544,7 +562,7 @@ int ObService::server_freeze_()
   {
     SERVER_MODULE_SCOPE {
       storage::ObMemstoreFreezer* freezer = nullptr;
-      if (OB_ISNULL(freezer = share::g_mp->memstore_freezer())) {
+      if (OB_ISNULL(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ObMemstoreFreezer shouldn't be null", K(ret));
       } else if (freezer->exist_ls_freezing()) {
@@ -581,7 +599,7 @@ int ObService::tablet_major_freeze(const obcall::ObTabletMajorFreezeArg &arg,
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else {
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(share::g_mp->tablet_scheduler()->user_request_schedule_medium_merge(
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()->user_request_schedule_medium_merge(
         arg.tablet_id_))) {
         LOG_WARN("failed to try schedule tablet major freeze", K(ret), K(arg));
       }
@@ -609,8 +627,8 @@ int ObService::check_modify_time_elapsed(
   } else {
     SERVER_MODULE_SCOPE {
       SCN tmp_scn;
-      transaction::ObTransService *txs = share::g_mp->trans_service();
-      ObLSService *ls_service = share::g_mp->ls_service();
+      transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
+      ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
       if (OB_FAIL(result.results_.reserve(arg.tablets_.count()))) {
         LOG_WARN("reserve result array failed", K(ret), K(arg.tablets_.count()));
       }
@@ -664,7 +682,7 @@ int ObService::check_schema_version_elapsed(
   } else {
     SERVER_MODULE_SCOPE {
       ObLSService *ls_service = nullptr;
-      if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+      if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, get ls service failed", K(ret));
       } else if (OB_FAIL(result.results_.reserve(arg.tablets_.count()))) {
@@ -728,7 +746,7 @@ int ObService::check_ddl_tablet_merge_status(
         ObLSService *ls_service = nullptr;
         bool status = false;
 
-        if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+        if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("error unexpected, get ls service failed", K(ret));
         } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
@@ -770,7 +788,8 @@ int ObService::bootstrap()
   } else if (!need_bootstrap_) {
     ret = OB_ERR_UNEXPECTED;
     BOOTSTRAP_LOG(INFO, "no need to bootstrap", K(ret));
-  } else if (OB_ISNULL(gctx_.local_management_service_)) {
+  } else if (OB_ISNULL(
+                 share::server_service<rootserver::ObLocalManagementService>())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("local management service is null", K(ret));
   } else {
@@ -787,7 +806,9 @@ int ObService::bootstrap()
       BOOTSTRAP_LOG(ERROR, "failed to prepare boot strap", K(ret));
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(gctx_.local_management_service_->execute_bootstrap())) {
+    } else if (OB_FAIL(
+                   share::server_service<rootserver::ObLocalManagementService>()
+                       ->execute_bootstrap())) {
       BOOTSTRAP_LOG(ERROR, "failed to execute bootstrap", K(ret));
     } else {
       BOOTSTRAP_LOG(INFO, "succeed to do_boot_strap", K(master_rs));
@@ -803,7 +824,7 @@ int ObService::get_server_resource_info(share::ObServerResourceInfo &resource_in
   omt::ObServerRuntimeController::ServerResource svr_res_assigned;
   int64_t clog_in_use_size_byte = 0;
   int64_t clog_total_size_byte = 0;
-  logservice::ObServerLogBlockMgr *log_block_mgr = GCTX.log_block_mgr_;
+  logservice::ObServerLogBlockMgr *log_block_mgr = ::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>();
   resource_info.reset();
   int64_t reserved_size = 0;
 
@@ -812,11 +833,11 @@ int ObService::get_server_resource_info(share::ObServerResourceInfo &resource_in
     LOG_WARN("not init", KR(ret), K(inited_));
   } else if (OB_ISNULL(log_block_mgr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("log_block_mgr is null", KR(ret), K(GCTX.log_block_mgr_));
-  } else if (OB_ISNULL(GCTX.server_runtime_controller_)) {
+    LOG_WARN("log_block_mgr is null", KR(ret), K(::oceanbase::share::server_service<::oceanbase::logservice::ObServerLogBlockMgr>()));
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("omt is null", KR(ret));
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_allocated_resource(svr_res_assigned))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>()->get_server_allocated_resource(svr_res_assigned))) {
     LOG_WARN("fail to get server allocated resource", KR(ret));
   } else if (OB_FAIL(log_block_mgr->get_disk_usage(clog_in_use_size_byte))) {
     LOG_WARN("Failed to get clog stat ", KR(ret));
@@ -859,6 +880,63 @@ int ObService::get_build_version(share::ObBuildVersion &build_version)
   }
   return ret;
 }
+
+int ObService::get_build_version(char *buf, int64_t buf_len)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(buf) || buf_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid build version buffer", KR(ret), KP(buf), K(buf_len));
+  } else if (OB_FAIL(get_package_and_svn(buf, buf_len))) {
+    LOG_WARN("fail to get build version", KR(ret), K(buf_len));
+  }
+  return ret;
+}
+
+int ObService::wait_system_package_ready(const common::ObTimeoutCtx &ctx)
+{
+  return ObSystemPackageLoadTask::wait_system_package_ready(ctx);
+}
+
+int ObService::clear_expired_deadlock_events()
+{
+  int ret = OB_SUCCESS;
+  if (!DEALOCK_EVENT_INSTANCE.is_inited()) {
+    ret = OB_INNER_STAT_ERROR;
+    LOG_WARN("deadlock event history operator not initialized", KR(ret));
+  } else if (OB_FAIL(DEALOCK_EVENT_INSTANCE.async_delete())) {
+    LOG_WARN("failed to clear expired deadlock events", KR(ret));
+  }
+  return ret;
+}
+
+int ObService::load_all_special_system_packages()
+{
+  return pl::ObPLPackageManager::load_all_special_sys_package(*gctx_.sql_proxy_);
+}
+
+int ObService::refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+{
+  return ObOptStatManager::get_instance().refresh_stat_cache(arg);
+}
+
+int ObService::update_opt_stat_monitoring_info(
+    const obcall::ObFlushOptStatArg &arg)
+{
+  int ret = OB_SUCCESS;
+  SERVER_MODULE_SCOPE {
+    ObOptStatMonitorManager *manager =
+        ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+    if (OB_ISNULL(manager)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("optimizer stat monitor manager is null", KR(ret));
+    } else if (OB_FAIL(manager->update_opt_stat_monitoring_info(arg))) {
+      LOG_WARN("failed to update optimizer stat monitoring info", KR(ret));
+    }
+  }
+  return ret;
+}
+
 int ObService::check_server_empty(bool &is_empty)
 {
   int ret = OB_SUCCESS;
@@ -983,7 +1061,7 @@ int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+  } else if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag scheduler is null", K(ret));
   } else {
@@ -1026,7 +1104,7 @@ int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,
     } else if (ObDDLType(arg.ddl_type_) == ObDDLType::DDL_DROP_VEC_INDEX) {
       ObDagScheduler *dag_scheduler = nullptr;
       ObDeleteLobMetaRowDag *dag = nullptr;
-      if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+      if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("dag scheduler is null", K(ret));
       } else if (OB_FAIL(dag_scheduler->alloc_dag(dag))) {
@@ -1078,7 +1156,7 @@ int ObService::check_and_cancel_ddl_complement_data_dag(const ObDDLLocalBuildArg
   } else {
     ObDagScheduler *dag_scheduler = nullptr;
     ObComplementDataDag *dag = nullptr;
-    if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+    if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dag scheduler is null", K(ret));
     } else if (OB_FAIL(dag_scheduler->alloc_dag(dag))) {
@@ -1119,7 +1197,7 @@ int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocal
   } else {
     ObDagScheduler *dag_scheduler = nullptr;
     ObComplementDataDag *dag = nullptr;
-    if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+    if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dag scheduler is null", K(ret));
     } else if (OB_FAIL(dag_scheduler->alloc_dag(dag))) {
@@ -1197,7 +1275,7 @@ int ObService::fill_tablet_runtime_info(const ObTabletID &tablet_id,
     SERVER_MODULE_SCOPE {
       storage::ObLS *ls = nullptr;
       ObLSService* ls_svr = nullptr;
-      if (OB_ISNULL(ls_svr = share::g_mp->ls_service())) {
+      if (OB_ISNULL(ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("server ObLSService is null", KR(ret));
       } else if (OB_FAIL(ls_svr->get_ls(ls))) {
@@ -1226,24 +1304,3 @@ int ObService::fill_tablet_runtime_info(const ObTabletID &tablet_id,
 
 }// end namespace observer
 }// end namespace oceanbase
-
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-// mvss async schema refresh taskhook registration(removes share/schema → observer dependency, predecessor ob_memstore_freezer.cpp)
-static struct ObSubmitAsyncRefreshSchemaFnRegister
-{
-  ObSubmitAsyncRefreshSchemaFnRegister()
-  {
-    g_submit_async_refresh_schema_task_fn = [](const int64_t schema_version) -> int {
-      return OB_ISNULL(GCTX.ob_service_) ? OB_ERR_UNEXPECTED
-           : GCTX.ob_service_->submit_async_refresh_schema_task(schema_version);
-    };
-  }
-} g_submit_async_refresh_schema_fn_register;
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase

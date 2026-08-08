@@ -89,7 +89,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs1 = NULL;
   const ObSrsItem *srs2 = NULL;
   ObDatum *wkb1_datum = NULL;
@@ -115,10 +115,10 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
     is_null_result = true;
   } else if (FALSE_IT(wkb1 = wkb1_datum->get_string())) {
   } else if (FALSE_IT(wkb2 = wkb2_datum->get_string())) {
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb1_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb1_datum,
             expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb1))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *wkb2_datum,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *wkb2_datum,
             expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), wkb2))) {
     LOG_WARN("fail to get real string data", K(ret), K(wkb2));
   } else if (OB_FAIL(ob_write_string(tmp_allocator, wkb1, wkb1_copy))) {

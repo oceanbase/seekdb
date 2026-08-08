@@ -18,6 +18,7 @@
 #include "palf_handle_impl.h"
 #include "log_engine.h"                                // LogEngine
 #include "palf_env_impl.h"                             // IPalfEnvImpl::
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {

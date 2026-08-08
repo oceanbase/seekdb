@@ -17,10 +17,19 @@
 #ifndef OCEANBASE_SHARE_AI_SERVICE_OB_AI_SERVICE_PROXY_H_
 #define OCEANBASE_SHARE_AI_SERVICE_OB_AI_SERVICE_PROXY_H_
 
-#include "observer/ai_service/ob_ai_service_struct.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 
 namespace oceanbase
 {
+namespace common
+{
+class ObISQLClient;
+class ObMySQLTransaction;
+namespace sqlclient
+{
+class ObMySQLResult;
+}
+}
 namespace share
 {
 
@@ -30,14 +39,14 @@ public:
   ObAiServiceProxy() = default;
   ~ObAiServiceProxy() = default;
   // ai endpoint
-  static int insert_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
-  static int select_ai_endpoint(common::ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
+  static int insert_ai_endpoint(common::ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
+  static int select_ai_endpoint(common::ObArenaAllocator &allocator, common::ObISQLClient &sql_proxy,
                                 const ObString &name, ObAiModelEndpointInfo &endpoint, bool for_update = false);
-  static int drop_ai_model_endpoint(ObMySQLTransaction &trans, const ObString &name);
-  static int update_ai_endpoint(ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
-  static int select_ai_endpoint_by_ai_model_name(common::ObArenaAllocator &allocator, ObISQLClient &sql_proxy,
+  static int drop_ai_model_endpoint(common::ObMySQLTransaction &trans, const ObString &name);
+  static int update_ai_endpoint(common::ObMySQLTransaction &trans, const int64_t new_endpoint_version, const ObAiModelEndpointInfo &endpoint);
+  static int select_ai_endpoint_by_ai_model_name(common::ObArenaAllocator &allocator, common::ObISQLClient &sql_proxy,
                                                  const ObString &ai_model_name, common::ObNameCaseMode name_case_mode, ObAiModelEndpointInfo &endpoint);
-  static int check_ai_endpoint_exists(common::ObArenaAllocator &allocator, ObISQLClient &sql_proxy, const ObString &name, bool &is_exists);
+  static int check_ai_endpoint_exists(common::ObArenaAllocator &allocator, common::ObISQLClient &sql_proxy, const ObString &name, bool &is_exists);
 
 private:
   // ai endpoint

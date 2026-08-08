@@ -13,6 +13,12 @@ os=9
 arch=aarch64
 repo=http://mirrors.oceanbase.com/oceanbase/development-kit/el/9/aarch64/
 
+#RANGE_IF_BUSINESS
+[target-obshell]
+os=8
+arch=aarch64
+repo=https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+#RANGE_END
 
 [deps]
 devdeps-gtest-1.8.0-242026020914.el8.aarch64.rpm
@@ -47,8 +53,12 @@ obdevtools-gcc-12.3.0-32024122017.el8.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.el8.aarch64.rpm
 
 [tools-deps]
-obshell-4.4.1.1-32026031914.el8.aarch64.rpm target=community
-#obshell-4.5.0.0-12026050816.el8.aarch64.rpm target=community
+#RANGE_IF_BUSINESS
+obshell-4.5.0.0-12026050816.el8.aarch64.rpm target=obshell
+#RANGE_ELSE
+#obshell-4.4.1.1-32026031914.el8.aarch64.rpm target=community
+##obshell-4.5.0.0-12026050816.el8.aarch64.rpm target=community
+#RANGE_END
 
 [test-utils]
 ob-deploy-4.1.x-190.el8.aarch64.rpm target=community
@@ -56,6 +66,12 @@ obclient-2.2.2-1.el8.aarch64.rpm target=community
 libobclient-2.2.2-3.el8.aarch64.rpm target=community
 
 [test-utils]
-ob-deploy-4.1.0-2.el8.aarch64.rpm target=community
-obclient-2.2.2-1.el8.aarch64.rpm target=community
-libobclient-2.2.2-3.el8.aarch64.rpm target=community
+#RANGE_IF_BUSINESS
+ob-deploy-4.1.x-190.el8.aarch64.rpm target=obdeploy
+obclient-2.2.3-20230515141610.el8.aarch64.rpm
+libobclient-2.2.3-20230512140006.el8.aarch64.rpm
+#RANGE_ELSE
+#ob-deploy-4.1.0-2.el8.aarch64.rpm target=community
+#obclient-2.2.2-1.el8.aarch64.rpm target=community
+#libobclient-2.2.2-3.el8.aarch64.rpm target=community
+#RANGE_END

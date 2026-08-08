@@ -110,7 +110,7 @@ int ObExprStringToArray::eval_string_to_array(const ObExpr &expr, ObEvalCtx &ctx
     if (!arr_str_datum->is_null()) {
       has_arr_str = true;
       ObString get_arr_str;
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator,
                                                             *arr_str_datum,
                                                             expr.args_[0]->datum_meta_,
                                                             expr.args_[0]->obj_meta_.has_lob_header(),
@@ -187,7 +187,7 @@ int ObExprStringToArray::eval_string_to_array_batch(const ObExpr &expr, ObEvalCt
       if (!arr_str_array.at(j)->is_null()) {
         has_arr_str = true;
         ObString get_arr_str;
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator,
                                                               *arr_str_array.at(j),
                                                               expr.args_[0]->datum_meta_,
                                                               expr.args_[0]->obj_meta_.has_lob_header(),

@@ -186,8 +186,13 @@ int ObExprToOutfileRow::to_outfile_str(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           } else { // text tc
             ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
             common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
+            const common::ObLobReadOptions *lob_read_options = nullptr;
             if (OB_SUCC(ret)
-                && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(obj, obj, NULL, &temp_allocator))) {
+                && OB_FAIL(ctx.exec_ctx_.get_lob_read_options(lob_read_options))) {
+              LOG_WARN("failed to get LOB read options", K(ret));
+            } else if (OB_SUCC(ret)
+                && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                               obj, obj, lob_read_options, &temp_allocator))) {
               LOG_WARN("failed to convert outrow lobs", K(ret), K(obj));
             }
             OZ(print_field(buf, buf_len, pos, obj, *out_info));

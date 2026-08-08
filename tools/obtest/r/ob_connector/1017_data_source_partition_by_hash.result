@@ -1,0 +1,46 @@
+ob1=OBI(cluster=2:2:2,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+CREATE TABLE t1 (tid int, tname char(255)) PARTITION BY  hash(tid) PARTITIONS 8;
+insert into t1 values(0,'0000');
+insert into t1 values(1,'1111');
+insert into t1 values(2,'2222');
+insert into t1 values(3,'3333');
+insert into t1 values(4,'4444');
+insert into t1 values(5,'5555');
+insert into t1 values(6,'6666');
+insert into t1 values(7,'7777');
+select * from t1 where tid = 0;
+tid	tname
+0	0000
+select * from t1 where tid = 1;
+tid	tname
+1	1111
+select * from t1 where tid = 2;
+tid	tname
+2	2222
+select * from t1 where tid = 3;
+tid	tname
+3	3333
+select * from t1 where tid = 4;
+tid	tname
+4	4444
+select * from t1 where tid = 5;
+tid	tname
+5	5555
+select * from t1 where tid = 6;
+tid	tname
+6	6666
+select * from t1 where tid = 7;
+tid	tname
+7	7777
+$follower1.switch_partition obtest:test:t1:1;
+select * from t1 where tid = 1;
+tid	tname
+1	1111
+select * from t1 where tid = 1;
+tid	tname
+1	1111

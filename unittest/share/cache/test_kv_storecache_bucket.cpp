@@ -34,9 +34,3 @@ TEST(TestKVStorecacheBucket, low_memory_levels)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

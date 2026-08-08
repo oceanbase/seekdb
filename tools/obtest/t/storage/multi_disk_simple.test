@@ -1,0 +1,25 @@
+# owner: yongle.xh
+# owner group: storage
+# description: this case is use for reboot
+#
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.z1.obs0.set extra_config=raid_src_data_num=4,raid_parity_number=1;
+ob1.reboot;
+
+ob1.mysql alter system set enable_async_syslog=false;
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+use test;
+create table t0(a int);
+sleep 10;
+
+create table t1(a int);
+insert into t1(a) values(1);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

@@ -75,12 +75,12 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     res.set_null();
   } else {
     ObGeometry *geo = NULL;
-    omt::ObSrsCacheGuard srs_guard;
+    common::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs = NULL;
     ObString wkb = gis_datum->get_string();
     ObGeoBoostAllocGuard guard{};
     lib::MemoryContext *mem_ctx = nullptr;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *gis_datum,
         gis_arg->datum_meta_, gis_arg->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_AREA))) {

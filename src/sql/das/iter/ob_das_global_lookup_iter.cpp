@@ -212,7 +212,7 @@ int ObDASGlobalLookupIter::check_index_lookup()
       LOG_ERROR("Fatal Error!!! Catch a defensive error!",
           K(ret), K(lookup_rowkey_cnt_), K(lookup_row_cnt_),
           "main table id", lookup_ctdef_->ref_table_id_,
-          KPC(my_session->get_tx_desc()));
+          "tx_desc", data_plane::ObTxDescLogView(my_session->get_tx_desc()));
 
       int64_t row_num = 0;
       for (DASTaskIter task_iter = merge_iter->begin_task_iter(); !task_iter.is_end(); ++task_iter) {

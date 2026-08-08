@@ -15,7 +15,7 @@
  */
  
 #include "mds_table_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 using namespace oceanbase::common;
@@ -65,7 +65,7 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
       // do nothing
     } else {
       if (OB_ISNULL(mds_table_mgr_handle_.get_mds_table_mgr())) {
-        if (MDS_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+        if (MDS_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
           MDS_LOG_INIT(WARN, "failed to get ls");
         } else if (MDS_FAIL(tenant_ls->get_tablet_svr()->get_mds_table_mgr(
                 mds_table_mgr_handle_))) {

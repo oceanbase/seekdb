@@ -1,0 +1,82 @@
+# owner: msy164651
+# description: 备库locality变更没有限制，测试加减F，类型转换，加减L
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#创建租户，并确定备库同步上去，并且zone list是3个
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int);
+insert into t1 values(1,1);
+truncate table t1;
+drop table t1;
+drop database db;
+use test;
+create table t1(c1 int primary key,c2 int);
+use oceanbase;
+select tenant_id, table_id, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation;
+
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+let $balance_count = deploy_get_value(ob2.select select count(*) c from __all_virtual_server_event_history where module like '%balance%' and event = 'tenant_balance_started', c, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+connection conn2;
+eval select zone_list from __all_tenant where tenant_id = $tenant_id;
+## case 1: F转R
+#TODO 类型转换有待支持
+alter tenant tt set locality = 'F@z1,F@z2,R@z3';
+alter tenant tt set locality = 'f@z1,f@z2,f@z3';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY', job_id, 1);
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'FAILED', 1, 100;
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ROLLBACK_ALTER_TENANT_LOCALITY'  and job_id > $job_id, job_id, 1);
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+# case 2：备库减一个F副本
+alter tenant tt set locality = 'F@z1,F@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY'  and job_id > $job_id, job_id, 1);
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+#等待副本被gc
+ob2.check_until_timeout select count(*) from oceanbase.__all_root_table where tenant_id = $tenant_id and zone = 'z3', 0, 200;
+# case 3: 备库增加L副本
+alter tenant tt set locality = 'F@z1,F@z2,L@z3';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id > $job_id, job_id, 1);
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_clog_stat where is_in_sync = 0, 0, 100;
+#case 4: stop zone
+alter system stop zone 'z2';
+alter system start zone 'z2';
+# case 5：减掉L副本
+alter tenant tt set locality = 'F@z1,F@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id > $job_id, job_id, 1);
+ob2.check_until_timeout select count(*) from __all_admin_job where job_id = $job_id and job_status = 'SUCCESS', 1, 100;
+
+
+

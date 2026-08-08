@@ -83,7 +83,7 @@ int ObDasVecScanUtils::get_distance_expr_type(ObExpr &expr,
       break;
   }
 
-  if (OB_SUCC(ret) && ObExprVectorDistance::DisFunc<float>::distance_funcs[dis_type] == nullptr) {
+  if (OB_SUCC(ret) && ObExprVectorDistance::DisFunc<float>::distance_funcs[static_cast<int64_t>(dis_type)] == nullptr) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support dis_type", K(ret), K(dis_type));
   }
@@ -146,11 +146,15 @@ int ObDasVecScanUtils::get_real_search_vec(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
 
   ObDatum *search_vec_datum = NULL;
-  if (OB_ISNULL(sort_rtdef) || OB_ISNULL(origin_vec)) {
+  const ObDatumAccessContext *access_ctx = nullptr;
+  if (OB_ISNULL(sort_rtdef) || OB_ISNULL(sort_rtdef->eval_ctx_)
+      || OB_ISNULL(origin_vec)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ptr is null", K(ret), K(sort_rtdef), K(origin_vec));
   } else if (OB_FAIL(origin_vec->eval(*(sort_rtdef->eval_ctx_), search_vec_datum))) {
     LOG_WARN("eval vec arg failed", K(ret));
+  } else if (OB_FAIL(sort_rtdef->eval_ctx_->get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else if (search_vec_datum->is_null()) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("search vector is null", K(ret));
@@ -158,7 +162,9 @@ int ObDasVecScanUtils::get_real_search_vec(common::ObIAllocator &allocator,
   } else if (0 == real_search_vec.length()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("search vector is empty string", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                               *access_ctx->lob_read_options_,
+                                                               &allocator,
                                                                ObLongTextType,
                                                                CS_TYPE_BINARY,
                                                                origin_vec->obj_meta_.has_lob_header(),
@@ -405,7 +411,7 @@ int ObDasVecScanUtils::init_scan_param(const common::ObTabletID &tablet_id,
       LOG_ERROR("snapshot is null", K(ret));
     }
     if (OB_NOT_NULL(tx_desc)) {
-      scan_param.tx_id_ = tx_desc->get_tx_id();
+      scan_param.tx_id_ = data_plane::tx_desc_id(tx_desc);
     } else {
       scan_param.tx_id_.reset();
     }

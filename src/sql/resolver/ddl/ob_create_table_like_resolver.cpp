@@ -15,7 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_create_table_like_resolver.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

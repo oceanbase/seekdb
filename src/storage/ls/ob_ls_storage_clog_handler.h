@@ -17,7 +17,7 @@
 #ifndef OB_STORAGE_STORAGE_LS_STORAGE_CLOG_HANDLER_H_
 #define OB_STORAGE_STORAGE_LS_STORAGE_CLOG_HANDLER_H_
 
-#include "logservice/ob_log_base_header.h"
+#include "share/log/ob_log_base_header.h"
 #include "share/scn.h"
 namespace oceanbase
 {

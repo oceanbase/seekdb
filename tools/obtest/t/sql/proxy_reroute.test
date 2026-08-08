@@ -1,0 +1,164 @@
+# owner: zongmei.zzm
+# owner group: SQL1
+#
+ob1=OBI(cluster=1:1, proxy_num=1, init_unit_cpu=0);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+--disable_query_log
+--error 0,5157
+ob1.mysql drop tenant if exists xy_tenant_1 force;
+
+let $cpu = 4;
+let $memory = 4500000000;
+let $min_memory = 2073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 5, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 3, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+let $zone_name=deploy_get_value(ob1.select select zone from oceanbase.__all_zone where zone != '' limit 1, zone, 1);
+--echo $zone_name
+let $obs_num = deploy_get_value(ob1.select select count(1) as cnt from oceanbase.__all_server group by zone asc limit 1,cnt, 1);
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+
+--enable_query_log
+--sleep 10
+
+ob_connect(conn1, ob1.proxy0, root@xy_tenant_1,,test,USE_MYSQL_CONNECTOR);
+ob_connect(conn_admin, ob1.z1.obs0, root,,test, USE_OB_CONNECTOR);
+
+connection conn_admin;
+
+--disable_info
+--disable_metadata
+
+connection conn1;
+create table ttt(pk int primary key, a int, b int);
+create table proxy_test (pk int primary key, a int, b int) partition by hash(pk) partitions 2;
+insert into proxy_test values (1, 1, 1), (2, 2, 2);
+insert into ttt values (1, 1, 1), (2, 2, 2);
+
+connection conn_admin;
+
+let $tbl_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'proxy_test' order by table_id desc limit 1, table_id, 1);
+let $ttt_id = query_get_value(select table_id from oceanbase.__all_virtual_table where table_name = 'ttt' order by table_id desc limit 1, table_id, 1);
+let $main_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $tbl_id and role = 1 and partition_id = 0, svr_ip, 1);
+let $backup_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $tbl_id and role = 2 and partition_id = 0, svr_ip, 1);
+let $main_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $tbl_id and role = 1 and partition_id = 0, svr_port, 1);
+let $backup_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $tbl_id and role = 2 and partition_id = 0, svr_port, 1);
+let $ttt_backup_ip = query_get_value(select svr_ip from oceanbase.__all_virtual_meta_table where table_id = $ttt_id and role = 2 and partition_id = 0, svr_ip, 1);
+let $ttt_backup_port = query_get_value(select svr_port from oceanbase.__all_virtual_meta_table where table_id = $ttt_id and role = 2 and partition_id = 0, svr_port, 1);
+
+eval alter system switch replica leader partition_id = '0%2@$tbl_id' server = '$backup_ip:$backup_port';
+--sleep 5
+
+alter system flush plan cache;
+--sleep 3
+connection conn1;
+
+select * from proxy_test;
+select * from ttt;
+--echo
+--echo // CASE#2: multi stmt, first sql can be rerouted, second sql is forbidden
+connection conn_admin;
+alter system flush plan cache;
+--sleep 5
+connection conn1;
+select * from ttt;select * from proxy_test where pk = 2;
+--echo
+--echo // >>>> expect remote and local
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt;';
+
+connection conn_admin;
+alter system flush plan cache;
+--sleep 5
+
+--echo
+connection conn1;
+select * from proxy_test where pk = 2;select * from ttt;
+
+--echo
+--echo // >>>> expect local and remote
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?;';
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+
+
+connection conn_admin;
+alter system flush plan cache;
+--sleep 3
+connection conn1;
+select * from proxy_test;
+--echo
+--echo // CASE#3: Begin transation, can't reroute
+select * from ttt;begin;
+select * from proxy_test where pk = 2;
+commit;
+
+--echo // >>>> expect a remote plan
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt;';
+
+connection conn_admin;
+alter system flush plan cache;
+--sleep 3
+
+connection conn1;
+--echo // CASE#4: Hit remote plan first
+
+select * from ttt; select * from proxy_test where pk = 2;
+
+--echo 
+--echo // >>>> expect a remote plan
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+
+select * from proxy_test where pk = 2;
+--echo // expect 2 plans, one local, one remote
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+
+connection conn_admin;
+alter system flush plan cache;
+--sleep 3
+
+connection conn1;
+--echo // CASE#5: autocommit = 0
+set autocommit = 0;
+
+select * from proxy_test where pk = 2;
+select * from ttt;
+
+commit;
+--echo
+--echo // >>>> expect local and remote plan
+set autocommit = 1;
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+
+
+connection conn_admin;
+alter system flush plan cache;
+--sleep 3
+
+connection conn1;
+set autocommit = 0;
+select * from ttt;
+select * from proxy_test where pk = 2;
+
+commit;
+--echo
+--echo // >>>> expect remote and local plan
+set autocommit = 1;
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from proxy_test where pk = ?';
+select hit_count, type, statement from oceanbase.GV$OB_PLAN_CACHE_PLAN_STAT where statement = 'select * from ttt';
+
+--echo >>>>>>>>>>>>>>>> CLEANUP <<<<<<<<<<<<<<<<
+drop table proxy_test;
+connection conn_admin;
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1 force;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;
+alter system flush plan cache global;

@@ -147,12 +147,3 @@ TEST_F(TestReserveArenaAllocator, test_reuse)
 
 }//end namespace unittest
 }//end namespace oceanbase
-int main(int argc, char **argv)
-{
-  system("rm -f test_reserve_arena_allocator.log*");
-  oceanbase::common::ObLogger::get_logger().set_log_level("DEBUG");
-  OB_LOGGER.set_file_name("test_reserve_arena_allocator.log", true);
-  srand(time(NULL));
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

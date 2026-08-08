@@ -24,7 +24,6 @@
 #include "sql/resolver/prepare/ob_execute_stmt.h"
 #include "sql/resolver/prepare/ob_deallocate_stmt.h"
 #include "sql/plan_cache/ob_plan_cache.h"
-#include "sql/optimizer/ob_optimizer.h"
 #include "sql/rewrite/ob_transform_rule.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "sql/ob_spi.h"
@@ -47,18 +46,57 @@ class ObOutlineInfo;
 namespace common
 {
 class ObOptStatManager;
+class ObISrsProvider;
+class ObILobReadService;
+}
+namespace query
+{
+class ObIPlanCacheAccessService;
+class ObIQueryRuntimeEnvironment;
+class ObIRootCommandService;
+class ObILocalCommandService;
+class ObIChangeStreamService;
+class ObIDdlExecutionLimiter;
 }
 namespace sql
 {
 struct ObStmtPrepareResult;
+struct ObResolverParams;
 class ObSPIService;
 class ObIVirtualTableIteratorFactory;
 struct ObSqlCtx;
 class ObResultSet;
 class ObLogPlan;
+class ObOptimizer;
+
+class ObIPreparedStatementRuntime
+{
+public:
+  virtual ~ObIPreparedStatementRuntime() {}
+  virtual int stmt_prepare(const common::ObString &stmt,
+                           ObSqlCtx &context,
+                           ObResultSet &result,
+                           bool is_inner_sql) = 0;
+  virtual int stmt_execute(ObPsStmtId stmt_id,
+                           stmt::StmtType stmt_type,
+                           const ParamStore &params,
+                           ObSqlCtx &context,
+                           ObResultSet &result,
+                           bool is_inner_sql) = 0;
+};
+
+class ObISqlExecutionIdProvider
+{
+public:
+  virtual ~ObISqlExecutionIdProvider() {}
+  virtual int64_t get_execution_id() = 0;
+  virtual int64_t get_px_sequence_id() = 0;
+};
 
 // this class is the main interface for sql module
-class ObSql
+class ObSql : public ObIPLSqlRuntime,
+              public ObIPreparedStatementRuntime,
+              public ObISqlExecutionIdProvider
 {
 
   static const int64_t max_error_length;
@@ -67,7 +105,19 @@ public:
   /// init SQL module
   int init(common::ObOptStatManager *opt_stat_mgr,
            common::ObITabletScan *vt_partition_service,
-           common::ObAddr &addr);
+           common::ObAddr &addr,
+           ObPlanCache &plan_cache,
+           ObPsCache &ps_cache,
+           pl::ObPL &pl_engine,
+           query::ObIPlanCacheAccessService &plan_cache_access_service,
+           query::ObIQueryRuntimeEnvironment &query_runtime_environment,
+           query::ObIRootCommandService &root_command_service,
+           query::ObILocalCommandService &local_command_service,
+           query::ObIChangeStreamService &change_stream_service,
+           query::ObIDdlExecutionLimiter &ddl_execution_limiter,
+           ObIVirtualTableFactoryProvider &virtual_table_factory_provider,
+           common::ObISrsProvider &srs_provider,
+           common::ObILobReadService &lob_read_service);
   void destroy();
 public:
   /// print statatistics of SQL module
@@ -93,7 +143,7 @@ public:
   virtual int stmt_prepare(const common::ObString &stmt,
                            ObSqlCtx &context,
                            ObResultSet &result,
-                           bool is_inner_sql = true); // Determine if this call is an external request prepare, or internal SQL or PL internal SQL
+                           bool is_inner_sql = true) override; // Determine if this call is an external request prepare, or internal SQL or PL internal SQL
 
   /** Interface of SQL Engine for COM_
    * @param stmt_id [in]
@@ -106,7 +156,7 @@ public:
                            const ParamStore &params,
                            ObSqlCtx &context,
                            ObResultSet &result,
-                           bool is_inner_sql);
+                           bool is_inner_sql) override;
 
   // Interface of SQL Engine for COM_FIELD_LIST request
   //
@@ -124,8 +174,8 @@ public:
 
   int revert_plan_cache();
 
-  int64_t get_execution_id() { return ATOMIC_AAF(&execution_id_, 1); }
-  int64_t get_px_sequence_id() { return ATOMIC_AAF(&px_sequence_id_, 1); }
+  int64_t get_execution_id() override { return ATOMIC_AAF(&execution_id_, 1); }
+  int64_t get_px_sequence_id() override { return ATOMIC_AAF(&px_sequence_id_, 1); }
   //calculate calculable expr
   // stmt full const folding.
   // To rewrite the layer const folding extracted function
@@ -163,6 +213,36 @@ public:
                            ObLogPlan *&logical_plan);
 
   const common::ObAddr &get_addr() const  {return self_addr_; }
+  query::ObIPlanCacheAccessService &get_plan_cache_access_service() const
+  {
+    OB_ASSERT_MSG(NULL != plan_cache_access_service_,
+                  "ObSql is not initialized with plan-cache access");
+    return *plan_cache_access_service_;
+  }
+  query::ObIQueryRuntimeEnvironment &get_query_runtime_environment() const
+  {
+    OB_ASSERT_MSG(NULL != query_runtime_environment_,
+                  "ObSql is not initialized with query runtime environment");
+    return *query_runtime_environment_;
+  }
+  ObPlanCache &get_plan_cache() const
+  {
+    OB_ASSERT_MSG(NULL != plan_cache_, "ObSql is not initialized with plan cache");
+    return *plan_cache_;
+  }
+  ObPsCache &get_ps_cache() const
+  {
+    OB_ASSERT_MSG(NULL != ps_cache_, "ObSql is not initialized with PS cache");
+    return *ps_cache_;
+  }
+
+  // Bind the process-owned SQL services required by resolver entry points
+  // that are created outside ObSql's normal statement-generation path.
+  void bind_resolver_runtime_services(ObResolverParams &resolver_ctx);
+
+  // Bind process-owned SQL services to an execution context created outside
+  // ObSql's normal result-set initialization path.
+  void bind_exec_context_runtime_services(ObExecContext &exec_ctx);
 
   int init_result_set(ObSqlCtx &context, ObResultSet &result_set);
 
@@ -172,18 +252,18 @@ public:
                          ParamStore &params,
                          PlanCacheMode mode);
 
-  int handle_pl_prepare(const ObString &sql,
-                        ObSPIService::PLPrepareCtx &pl_prepare_ctx,
-                        ObSPIService::PLPrepareResult &pl_prepare_result,
-                        ParamStore *params = nullptr);
+  int prepare_pl_sql(const ObString &sql,
+                     ObSPIService::PLPrepareCtx &pl_prepare_ctx,
+                     ObSPIService::PLPrepareResult &pl_prepare_result,
+                     ParamStore *params = nullptr) override;
 
-  int handle_pl_execute(const ObString &sql,
-                        ObSQLSessionInfo &session_info,
-                        ParamStore &params,
-                        ObResultSet &result,
-                        ObSqlCtx &context,
-                        bool is_prepare_protocol,
-                        bool is_dynamic_sql);
+  int execute_pl_sql(const ObString &sql,
+                     ObSQLSessionInfo &session_info,
+                     ParamStore &params,
+                     ObResultSet &result,
+                     ObSqlCtx &context,
+                     bool is_prepare_protocol,
+                     bool is_dynamic_sql) override;
   static int construct_parameterized_params(const ParamStore &params,
                                             ObPlanCacheCtx &phy_ctx);
 
@@ -199,6 +279,18 @@ public:
   : inited_(false),
     opt_stat_mgr_(NULL),
     vt_partition_service_(NULL),
+    plan_cache_(NULL),
+    ps_cache_(NULL),
+    pl_engine_(NULL),
+    plan_cache_access_service_(NULL),
+    query_runtime_environment_(NULL),
+    root_command_service_(NULL),
+    local_command_service_(NULL),
+    change_stream_service_(NULL),
+    ddl_execution_limiter_(NULL),
+    virtual_table_factory_provider_(NULL),
+    srs_provider_(NULL),
+    lob_read_service_(NULL),
     execution_id_(0),
     px_sequence_id_(0)
   {
@@ -335,12 +427,12 @@ private:
                                         ObPhysicalPlan *phy_plan);
 
   //generate physical_plan
-  static int code_generate(ObSqlCtx &sql_ctx,
-                           ObResultSet &result,
-                           ObDMLStmt *stmt,
-                           share::schema::ObStmtNeedPrivs &stmt_need_privs,
-                           ObLogPlan *logical_plan,
-                           ObPhysicalPlan *&phy_plan);
+  int code_generate(ObSqlCtx &sql_ctx,
+                    ObResultSet &result,
+                    ObDMLStmt *stmt,
+                    share::schema::ObStmtNeedPrivs &stmt_need_privs,
+                    ObLogPlan *logical_plan,
+                    ObPhysicalPlan *&phy_plan);
 
   int prepare_outline_for_phy_plan(ObLogPlan *logical_plan,
                                    ObPhysicalPlan *phy_plan);
@@ -454,10 +546,21 @@ public:
                                    const ObIArray<int64_t> &fixed_param_idx);
 private:
   bool inited_;
-  // BEGIN global singleton dependency interface
+  // Process-lifetime collaborators supplied by the Observer composition root.
   common::ObOptStatManager *opt_stat_mgr_;
   common::ObITabletScan *vt_partition_service_;
-  // END global singleton dependency interface
+  ObPlanCache *plan_cache_;
+  ObPsCache *ps_cache_;
+  pl::ObPL *pl_engine_;
+  query::ObIPlanCacheAccessService *plan_cache_access_service_;
+  query::ObIQueryRuntimeEnvironment *query_runtime_environment_;
+  query::ObIRootCommandService *root_command_service_;
+  query::ObILocalCommandService *local_command_service_;
+  query::ObIChangeStreamService *change_stream_service_;
+  query::ObIDdlExecutionLimiter *ddl_execution_limiter_;
+  ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
+  common::ObISrsProvider *srs_provider_;
+  common::ObILobReadService *lob_read_service_;
 
   common::ObAddr self_addr_;
   volatile int64_t execution_id_ CACHE_ALIGNED;

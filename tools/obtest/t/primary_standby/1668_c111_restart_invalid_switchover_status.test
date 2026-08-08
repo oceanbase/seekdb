@@ -1,0 +1,30 @@
+#rs
+#msy
+#测试点：在switchover status不对的情况下，obs的启动不了
+ob1=OBI(cluster=1:1:1, proxy_num = 0);
+
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+#把switchover status的状态改成0
+ob1.z1.obs0.switch_rs;
+sleep 3;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.mysql update oceanbase.__all_core_table set column_value = 0 where table_name = '__all_cluster' and column_name = 'switchover_status';
+ob1.z2.obs0.switch_rs;
+sleep 3;
+ob1.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.z3.obs0.force_stop;
+sleep 10;
+ob1.z3.obs0.start;
+sleep 60;
+ob1.mysql_p select count(*) from oceanbase.__all_server where status = 'active' and start_service_time > 0;
+
+ob1.mysql update oceanbase.__all_core_table set column_value = 1 where table_name = '__all_cluster' and column_name = 'switchover_status';
+ob1.z1.obs0.switch_rs;
+sleep 3;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active' and start_service_time > 0, 3, 100;
+
+
+
+

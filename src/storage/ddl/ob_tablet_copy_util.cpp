@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_tablet_copy_util.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/ob_storage_schema.h"
@@ -114,7 +115,7 @@ int ObTabletCopyUtil::check_need_fill_empty_sstable(
   end_scn.reset();
 
   if (is_minor_sstable) {
-    if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, dst_tablet_id, dst_tablet_handle,
+    if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, dst_tablet_id, dst_tablet_handle,
         ObMDSGetTabletMode::READ_ALL_COMMITED))) {
       LOG_WARN("get tablet failed", K(ret), K(dst_tablet_id));
     } else if (OB_FAIL(dst_tablet_handle.get_obj()->fetch_table_store(table_store_handle))) {

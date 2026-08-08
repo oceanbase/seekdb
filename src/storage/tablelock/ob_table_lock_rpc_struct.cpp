@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "ob_table_lock_rpc_struct.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -294,7 +294,7 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
 int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = share::g_mp->trans_service();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
@@ -307,7 +307,7 @@ int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
 int TxDescHelper::release_tx_desc(ObTxDesc &tx_desc)
 {
   int ret = OB_SUCCESS;
-  ObTransService *txs = share::g_mp->trans_service();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   if (OB_ISNULL(txs)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");

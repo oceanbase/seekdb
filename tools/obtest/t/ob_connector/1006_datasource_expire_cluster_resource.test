@@ -1,0 +1,65 @@
+##############################
+#owner: luyun
+#owner group: java_client1.0
+#description: 验证cluster resource过期删除功能
+###############################
+
+ob1=OBI(cluster=1:1:1,init_unit_cpu=8,proxy_num=0);
+ob1.reboot;
+
+ob1.source include/merge.inc;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.set_ds_global_config serverStateRefreshInterval=1000;
+
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+--disable_result_log
+drop table if exists t1;
+create table t1(id int primary key);
+insert into t1 values(1);
+select * from t1;
+--enable_result_log
+
+## 确保不再使用proxyro
+ob1.set_ds_global_config serverStateRefreshInterval=3600000;
+
+sleep 2;
+
+# 删除cluster resource
+ob1.set_ds_global_config clusterResourceExpiredInterval=1;
+ob1.set_ds_global_config cleanClusterResourceInterval=1000;
+
+sleep 2;
+
+let $deleted_cr_count = deploy_get_value(ob1.get_ds_stat delete_cluster_resource);
+if ($delete_cluster_resource == 0)
+{
+  --echo fail to delete cluster resource
+  --exit
+}
+
+let $create_cr_count1 = deploy_get_value(ob1.get_ds_stat create_cluster_resource);
+
+ob1.set_ds_global_config clusterResourceExpiredInterval=86400000;
+ob1.set_ds_global_config cleanClusterResourceInterval=120000;
+
+# 重建datasource, 新建cluster resource
+sleep 2;
+ob1.create_client tenant=obtest,user=admin,passwd=admin,database=test;
+ob1.set_ds_global_config commonLoggerLevel=DEBUG;
+
+
+let $create_cr_count2 = deploy_get_value(ob1.get_ds_stat create_cluster_resource);
+
+let $count = math($create_cr_count2 - $create_cr_count1);
+
+if ($count < 1)
+{
+  --echo cr is not recreated !!!
+  -- exit
+}
+
+select * from t1;

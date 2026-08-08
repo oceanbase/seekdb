@@ -236,7 +236,7 @@ int ObDMLRunningCtx::init_cmp_funcs()
         precision = col_desc.col_type_.get_stored_precision();
         OB_ASSERT(precision != PRECISION_UNKNOWN_YET);
       }
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
                                                                         col_desc.col_type_.get_collation_type(),
                                                                         col_desc.col_type_.get_scale(),
                                                                         has_lob_header,

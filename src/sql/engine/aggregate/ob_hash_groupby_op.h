@@ -138,7 +138,12 @@ public:
 class ObGroupRowHashTable : public ObExtendHashTable<ObGroupRowItem>
 {
 public:
-  ObGroupRowHashTable() : ObExtendHashTable(), eval_ctx_(nullptr), cmp_funcs_(nullptr) {}
+  ObGroupRowHashTable()
+      : ObExtendHashTable(),
+        eval_ctx_(nullptr),
+        datum_access_ctx_(nullptr),
+        cmp_funcs_(nullptr)
+  {}
 
   OB_INLINE const ObGroupRowItem *get(const ObGroupRowItem &item);
   OB_INLINE void prefetch(const ObBatchRows &brs, uint64_t *hash_vals) const;
@@ -154,6 +159,7 @@ private:
 private:
   const common::ObIArray<ObExpr *> *gby_exprs_;
   ObEvalCtx *eval_ctx_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   const common::ObIArray<ObCmpFunc> *cmp_funcs_;
   static const int64_t HASH_BUCKET_PREFETCH_MAGIC_NUM = 4 * 1024;
 };
@@ -251,6 +257,7 @@ public:
 public:
   ObHashGroupByOp(ObExecContext &exec_ctx, const ObOpSpec &spec, ObOpInput *input)
     : ObGroupByOp(exec_ctx, spec, input),
+      datum_access_ctx_(nullptr),
       curr_group_id_(common::OB_INVALID_INDEX),
       cur_group_item_idx_(0),
       cur_group_item_buf_(nullptr),
@@ -580,6 +587,7 @@ private:
   static const int64_t BATCH_GROUP_ITEM_SIZE = 16;
   const int64_t EXTEND_BKT_NUM_PUSH_DOWN = INIT_L3_CACHE_SIZE / sizeof(ObGroupRowItem);
   ObGroupRowHashTable local_group_rows_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   // Optimization for group by c1, c2. type of c1 and c2 are both char(1).
   // In this case, if all values of c1 and c2 are ascii character,
   // there are only 256 available values of c1 or c2,

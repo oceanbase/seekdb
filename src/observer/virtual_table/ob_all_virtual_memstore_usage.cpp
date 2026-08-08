@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_memstore_usage.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 
 using namespace oceanbase::common;
@@ -60,7 +60,7 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
         int64_t freeze_cnt = 0;
         SERVER_MODULE_SCOPE {
           storage::ObMemstoreFreezer *freezer = nullptr;
-          if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+          if (FALSE_IT(freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>())) {
           } else if (OB_FAIL(freezer->get_memstore_condition(active_span,
                                                                memstore_used,
                                                                freeze_trigger,

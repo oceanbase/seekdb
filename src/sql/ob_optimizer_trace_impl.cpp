@@ -16,6 +16,7 @@
  
 #define USING_LOG_PREFIX SQL
 #include "ob_optimizer_trace_impl.h"
+#include "lib/file/file_directory_utils.h"
 #include "share/ob_version.h"
 #include "sql/optimizer/ob_log_values.h"
 #include "sql/optimizer/ob_skyline_prunning.h"

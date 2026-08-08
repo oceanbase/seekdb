@@ -24,7 +24,7 @@
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
-#include "sql/resolver/ob_stmt_type.h"  // pure enum X-macro header, conf L2(base_stmt_type)
+#include "share/statement/ob_stmt_type.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_simple_batch.h"
 #include "share/ob_schema_version_info.h"
@@ -37,15 +37,13 @@
 #include "share/schema/ob_dependency_info.h"
 #include "share/schema/ob_trigger_info.h"
 #include "share/io/ob_io_calibration.h"
-#include "sql/plan_cache/ob_lib_cache_register.h"
-#include "objit/common/ob_item_type.h"
-#include "ob_i_tablet_scan.h"
-#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"  // ObTabletMdsUserDataType
-#include "storage/tablelock/ob_table_lock_priority.h"  // conf L2
-#include "storage/tx/ob_trans_id.h"  // conf L2
+#include "share/ob_est_row_count_record.h"
+#include "share/tablelock/ob_table_lock_priority.h"
+#include "share/transaction/ob_tx_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "logservice/palf/log_define.h"//INVALID_PROPOSAL_ID
+#include "share/log/palf/log_define.h"
 #include "share/config/ob_config.h" // ObConfigArray
+#include "share/config/ob_config_rpc_types.h"
 #include "share/scn.h"//SCN
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg
 #include "ob_ddl_args.h"
@@ -2030,10 +2028,6 @@ public:
                K_(micro_index_clustered));
 };
 
-// ObBatchCreateTabletArg moved definition to storage/tablet/ob_batch_create_tablet_arg.h
-// (ObSArray<ObCreateTabletSchema*> virtual to_string requires a complete type, share must not depend upward on storage)
-struct ObBatchCreateTabletArg;
-
 struct ObBatchRemoveTabletArg
 {
   OB_UNIS_VERSION(2);
@@ -2766,18 +2760,6 @@ public:
 //----End of structs for managing privileges----
 
 // system admin (alter system ...) rpc argument define
-
-struct ObAdminSetConfigItem
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAdminSetConfigItem() : name_(), value_(), comment_() {}
-  TO_STRING_KV(K_(name), K_(value), K_(comment));
-
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_NAME_LEN> name_;
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_VALUE_LEN> value_;
-  common::ObFixedLengthString<common::OB_MAX_CONFIG_INFO_LEN> comment_;
-};
 
 struct ObAdminSetConfigArg
 {

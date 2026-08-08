@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_datum_cmp_func_def.h"
+#include "share/datum/ob_datum_funcs.h"
 #include "share/ob_lob_access_utils.h"
-#include "share/rc/ob_server_runtime.h"
 
 
 using namespace oceanbase;
@@ -26,7 +26,8 @@ using namespace oceanbase::common;
 using namespace oceanbase::common::datum_cmp;
 
 
-int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, const bool is_lob)
+int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
+                            const bool is_lob, const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -35,11 +36,13 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, co
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObJsonType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObJsonType, CS_TYPE_BINARY, r.get_string(), is_lob);
-  if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
     COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
-  } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+  } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
     COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
@@ -68,7 +71,8 @@ int ObDatumJsonCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, co
   return ret;
 }
 
-int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, const bool is_lob)
+int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
+                           const bool is_lob, const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -77,11 +81,13 @@ int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, con
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObGeometryType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObGeometryType, CS_TYPE_BINARY, r.get_string(), is_lob);
-  if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
     COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
-  } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+  } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
     COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
@@ -92,7 +98,9 @@ int ObDatumGeoCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, con
   return ret;
 }
 
-int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret, const bool is_lob)
+int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
+                                  const bool is_lob,
+                                  const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -101,11 +109,13 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObGeometryType, CS_TYPE_BINARY, l.get_string(), is_lob);
   ObTextStringIter r_instr_iter(ObGeometryType, CS_TYPE_BINARY, r.get_string(), is_lob);
-  if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
     COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
-  } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+  } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
     COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
@@ -120,7 +130,8 @@ int ObDatumCollectionCmpImpl::cmp(const ObDatum &l, const ObDatum &r, int &cmp_r
 }
 
 int ObDatumTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp_ret,
-                                    const ObCollationType cs, const bool with_end_space)
+                                    const ObCollationType cs, const bool with_end_space,
+                                    const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -131,11 +142,13 @@ int ObDatumTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObLongTextType, cs, l.get_string(), true); // longtext only indicates its a lob type
   ObTextStringIter r_instr_iter(ObLongTextType, cs, r.get_string(), true);
-  if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(cs), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
     COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(cs), K(l_instr_iter));
-  } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+  } else if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
     COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(cs), K(r_instr_iter));
@@ -150,14 +163,17 @@ int ObDatumTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp
 
 
 int ObDatumTextStringCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp_ret,
-                                          const ObCollationType cs, const bool with_end_space)
+                                          const ObCollationType cs, const bool with_end_space,
+                                          const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
   ObString l_data;
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter l_instr_iter(ObLongTextType, cs, l.get_string(), true); // longtext only indicates its a lob type
-  if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(l_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(cs), K(l));
   } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
     COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(cs), K(l_instr_iter));
@@ -171,7 +187,9 @@ int ObDatumTextStringCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
 }
 
 int ObDatumStringTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, int &cmp_ret,
-                                  const ObCollationType cs, const bool with_end_space)
+                                           const ObCollationType cs,
+                                           const bool with_end_space,
+                                           const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   cmp_ret = 0;
@@ -179,7 +197,9 @@ int ObDatumStringTextCmpImpl::cmp_out_row(const ObDatum &l, const ObDatum &r, in
   ObString r_data;
   common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObTextStringIter r_instr_iter(ObLongTextType, cs, r.get_string(), true);  // longtext only indicates its a lob type
-  if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+  const ObLobReadOptions *options =
+      OB_ISNULL(access_ctx) ? nullptr : access_ctx->lob_read_options_;
+  if (OB_FAIL(r_instr_iter.init(0, options, &allocator))) {
     COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(ret), K(r));
   } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
     COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(cs), K(r_instr_iter));

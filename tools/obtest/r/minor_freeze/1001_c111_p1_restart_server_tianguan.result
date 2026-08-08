@@ -1,0 +1,19 @@
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=1);
+ob1.reboot;
+create table t1(c1 int primary key, c2 int);
+ob1.mysql alter system suspend merge zone 'z3';
+insert into test.t1 values(1, 2);
+insert into test.t1 values(3, 4);
+ob1.mysql alter system minor freeze;
+ob1.z3.obs0.force_stop;
+ob1.z3.obs0.restart;
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=4;
+count(*)
+0
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0;
+count(*)
+3
+ob1.mysql alter system resume merge zone 'z3';
+insert into t1 values(5, 6);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

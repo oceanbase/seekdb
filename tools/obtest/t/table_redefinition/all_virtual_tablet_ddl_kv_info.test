@@ -1,0 +1,43 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description: test __all_virtual_tablet_ddl_kv_info
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+
+let $cpu = 1;
+let $memory = 2073741824;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@session.ob_query_timeout = 1000000000;
+# mysql tenant
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU=$cpu, MEMORY_SIZE=$memory;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1', 'z2', 'z3');;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;z3' set ob_tcp_invited_nodes='%';
+
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql;
+create table t1(c1 int, c2 int);
+insert into t1 values(1,1);
+ob1.mysql set ob_global_debug_sync = 'BEFORE_RELEASE_DDL_KV wait_for signal execute 10000';
+
+sleep 2;
+send create index i1 on t1(c2);
+sleep 10;
+
+connection conn_sys;
+select count(*) from __all_virtual_tablet_ddl_kv_info;
+
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_RELEASE_DDL_KV clear';
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+sleep 2;
+
+connection conn_mysql;
+reap;
+desc t1;
+select * from t1;

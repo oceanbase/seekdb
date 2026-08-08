@@ -17,7 +17,9 @@
 #define UNITTEST_DEBUG
 
 #include "share/ob_occam_timer.h"
+#include <condition_variable>
 #include <gtest/gtest.h>
+#include <mutex>
 #include <thread>
 
 namespace oceanbase {
@@ -61,9 +63,9 @@ TEST_F(TestObOccamTimer, normal) {
   int a = 1;
   
   ObOccamTimerTaskRAIIHandle task_desc;
-  ret = occam_timer->schedule_task_after(task_desc, 1_s, [&a](){ test(a); return false; });
+  ret = occam_timer->schedule_task_after(task_desc, 20_ms, [&a](){ test(a); return false; });
   
-  this_thread::sleep_for(chrono::milliseconds(1200));
+  this_thread::sleep_for(chrono::milliseconds(50));
   ASSERT_EQ(ret, OB_SUCCESS);
   task_desc.stop_and_wait();
   task_desc.stop_and_wait();
@@ -73,24 +75,39 @@ TEST_F(TestObOccamTimer, normal) {
 TEST_F(TestObOccamTimer, run_2_task_parallel) {
   int ret = OB_SUCCESS;
   int64_t a = 1;
+  int completed = 0;
+  mutex completed_mutex;
+  condition_variable completed_cv;
   vector<ObOccamTimerTaskRAIIHandle> v_task_desc(8);
   for (int i = 0 ; i < 8; ++i) {
     ret = occam_timer->schedule_task_after(v_task_desc[i],
                                           1_ms,
-                                          [&a](){
+                                          [&a, &completed, &completed_mutex, &completed_cv](){
                                             this_thread::sleep_for(chrono::milliseconds(100));
                                             ATOMIC_INC(&a);
+                                            {
+                                              lock_guard<mutex> guard(completed_mutex);
+                                              ++completed;
+                                            }
+                                            completed_cv.notify_one();
                                             OB_LOG(INFO, "inc done", K(ObClockGenerator::getRealClock()));
                                             return false;
                                           });
     ASSERT_EQ(ret, OB_SUCCESS);
   }
   OB_LOG(INFO, "commit done", K(ObClockGenerator::getRealClock()));
-  this_thread::sleep_for(chrono::milliseconds(200));
+  bool all_completed = false;
+  {
+    unique_lock<mutex> lock(completed_mutex);
+    all_completed = completed_cv.wait_for(
+        lock, chrono::seconds(5), [&completed]() { return completed == 8; });
+  }
+  for (auto &task_desc : v_task_desc) {
+    task_desc.stop_and_wait();
+  }
+  ASSERT_TRUE(all_completed);
   OB_LOG(INFO, "read a", K(ObClockGenerator::getRealClock()));
   ASSERT_EQ(ATOMIC_LOAD(&a), 9);
-  for (auto &x : v_task_desc)
-    x.stop_and_wait();
 }
 
 TEST_F(TestObOccamTimer, cancel_task) {
@@ -205,7 +222,7 @@ TEST_F(TestObOccamTimer, hung) {
 
 TEST_F(TestObOccamTimer, stop_and_wait) {
   int ret = OB_SUCCESS;
-  ret = occam_timer->schedule_task_ignore_handle_repeat(20_s, [](){ return false; });
+  ret = occam_timer->schedule_task_ignore_handle_repeat(20_ms, [](){ return false; });
   ASSERT_EQ(ret, OB_SUCCESS);
   occam_timer->destroy();
 }
@@ -256,14 +273,3 @@ TEST_F(TestObOccamTimer, test_function_name) {
 
 }
 }
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_ob_occam_timer.log");
-  oceanbase::common::ObLogger &logger = oceanbase::common::ObLogger::get_logger();
-  logger.set_file_name("test_ob_occam_timer.log", false);
-  logger.set_log_level(OB_LOG_LEVEL_DEBUG);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-

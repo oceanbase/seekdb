@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_create_routine_resolver.h"
 #include "ob_create_routine_stmt.h"
-#include "pl/ob_pl_router.h"
-#include "pl/ob_pl_resolver.h"
-#include "pl/parser/parse_stmt_item_type.h"
+#include "sql/pl/ob_pl_router.h"
+#include "sql/pl/ob_pl_resolver.h"
+#include "sql/pl/parser/parse_stmt_item_type.h"
 
 namespace oceanbase
 {
@@ -89,7 +89,12 @@ int ObCreateRoutineResolver::analyze_router_sql(obcall::ObCreateRoutineArg *crt_
   ObRoutineInfo &routine_info = crt_routine_arg->routine_info_;
   CK(OB_NOT_NULL(schema_checker_), OB_NOT_NULL(params_.sql_proxy_), OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret)) {
-    pl::ObPLRouter router(routine_info, *session_info_, *schema_checker_->get_schema_guard(), *params_.sql_proxy_);
+    pl::ObPLRouter router(routine_info,
+                          *session_info_,
+                          *schema_checker_->get_schema_guard(),
+                          *params_.sql_proxy_,
+                          params_.pl_sql_runtime_,
+                          params_.pl_engine_);
     ObString route_sql;
     if (OB_FAIL(router.analyze(route_sql, crt_routine_arg->dependency_infos_, routine_info, crt_routine_arg))) {
       LOG_WARN("failed to analyze route sql", K(route_sql), K(ret));

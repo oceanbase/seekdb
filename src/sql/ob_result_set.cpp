@@ -16,13 +16,17 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_result_set.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
 #include "rpc/obmysql/ob_mysql_field.h"
 #include "sql/engine/px/ob_px_admission.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "src/sql/plan_cache/ob_plan_cache.h"
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
+#include "sql/engine/table/ob_table_scan_op.h"
+#include "share/ob_ddl_checksum.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -31,15 +35,80 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 using namespace oceanbase::transaction;
 
+namespace oceanbase
+{
+namespace sql
+{
+namespace
+{
+int find_table_scan_table_id(const ObOpSpec *spec, uint64_t &table_id)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(spec) || OB_INVALID_ID != table_id) {
+    // The first table scan determines the checksum identity.
+  } else if (spec->is_table_scan()) {
+    table_id = static_cast<const ObTableScanSpec *>(spec)->get_ref_table_id();
+  } else {
+    for (uint32_t i = 0; OB_SUCC(ret) && i < spec->get_child_cnt(); ++i) {
+      if (OB_FAIL(SMART_CALL(find_table_scan_table_id(spec->get_child(i), table_id)))) {
+        LOG_WARN("failed to find table scan in DDL plan", K(ret));
+      }
+    }
+  }
+  return ret;
+}
+}
+
+int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(physical_plan) || OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("DDL plan or SQL proxy is null",
+             K(ret), KP(physical_plan), KP(GCTX.sql_proxy_));
+  } else {
+    uint64_t table_scan_table_id = OB_INVALID_ID;
+    if (OB_FAIL(find_table_scan_table_id(
+            physical_plan->get_root_op_spec(), table_scan_table_id))) {
+      LOG_WARN("failed to get DDL table scan id", K(ret));
+    } else if (OB_FAIL(ObDDLChecksumOperator::delete_checksum(
+                   physical_plan->get_ddl_execution_id(),
+                   table_scan_table_id,
+                   physical_plan->get_ddl_table_id(),
+                   physical_plan->get_ddl_task_id(),
+                   *GCTX.sql_proxy_))) {
+      LOG_WARN("failed to clear DDL checksum", K(ret));
+    }
+  }
+  return ret;
+}
+} // namespace sql
+} // namespace oceanbase
+
+ObPhysicalPlan *ObResultSet::get_physical_plan()
+{
+  return static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
+}
+
+void ObResultSet::reset_implicit_cursor_idx()
+{
+  if (get_exec_context().get_physical_plan_ctx() != nullptr) {
+    get_exec_context().get_physical_plan_ctx()->set_cur_stmt_id(0);
+  }
+}
+
 ObResultSet::~ObResultSet()
 {
+  // The execution context owns the explicit plan-cache dependency. Preserve it
+  // before destroying the inline context because the cache-object guard still
+  // needs it to release the guarded plan.
+  ObPlanCache *pc = get_exec_context().get_plan_cache();
   // when ObExecContext is destroyed, it also depends on the physical plan, so need to ensure
   // that inner_exec_ctx_ is destroyed before cache_obj_guard_
   if (NULL != inner_exec_ctx_) {
     inner_exec_ctx_->~ObExecContext();
     inner_exec_ctx_ = NULL;
   }
-  ObPlanCache *pc = my_session_.get_plan_cache_directly();
   if (OB_NOT_NULL(pc)) {
     cache_obj_guard_.force_early_release(pc);
   }
@@ -418,7 +487,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   }
 
   if (OB_SUCC(ret) && my_session_.get_ddl_info().is_ddl() && stmt::T_INSERT == get_stmt_type()) {
-    if (OB_FAIL(ObDDLUtil::clear_ddl_checksum(physical_plan_))) {
+    if (OB_FAIL(clear_ddl_checksum(physical_plan_))) {
       LOG_WARN("fail to clear ddl checksum", K(ret));
     }
   }
@@ -905,7 +974,8 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
                                                           reset_tx_variable))) {
           if (OB_REPLICA_NOT_READABLE != ret) {
               LOG_WARN("sync end trans callback return an error!", K(ret),
-                       K(is_rollback), KPC(my_session_.get_tx_desc()));
+                       K(is_rollback), "tx_desc",
+                       data_plane::ObTxDescLogView(my_session_.get_tx_desc()));
             }
         }
         ret = OB_SUCCESS != save_ret? save_ret : ret;

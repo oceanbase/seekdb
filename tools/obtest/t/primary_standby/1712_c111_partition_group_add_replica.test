@@ -1,0 +1,59 @@
+#owner: zhengshi
+#owner group: rs
+#功能：partition table 对齐补副本，验证
+
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool pool_1 unit_num=2, zone_list=('z1','z2','z3'), unit='unit_1';
+ob1.mysql create tenant tenant_1 RESOURCE_POOL_LIST = ('pool_1') set ob_tcp_invited_nodes='%';
+
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(sys_conn, $proxy_ip, root@sys,,test, $proxy_port);
+connection sys_conn;
+
+let $svr_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $svr_port0 = deploy_get_value(ob1.z1.obs0.port);
+
+let $svr_ip1 = deploy_get_value(ob1.z2.obs0.ip);
+let $svr_port1 = deploy_get_value(ob1.z2.obs0.port);
+
+let $svr_ip2 = deploy_get_value(ob1.z3.obs0.ip);
+let $svr_port2 = deploy_get_value(ob1.z3.obs0.port);
+
+
+create table t1(c1 int primary key) partition by hash(c1) partitions 10;
+create table t2(c1 int primary key) partition by hash(c1) partitions 10;
+create table t3(c1 int primary key) partition by hash(c1) partitions 10;
+
+let $t1_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1', table_id, 1);
+let $t2_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't2', table_id, 1);
+let $t3_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't3', table_id, 1);
+
+#case1 add paxos replica,删除单个replica，并对齐补副本
+ob1.mysql alter system drop replica partition_id = '0%0@$t1_id' server = '$svr_ip1:$svr_port1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = '$t1_id' and svr_ip = "$svr_ip1" and svr_port = "$svr_port1" and length(member_list)-length(replace(member_list,',','')) = 1, 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = '$t1_id' and svr_ip = "$svr_ip1" and svr_port = "$svr_port1" and length(member_list)-length(replace(member_list,',','')) = 1, 0, 360;
+
+#case2 杀掉一台server，缺失所有副本，采用随机补副本方法
+#ob1.z1.obs0.force_stop;
+#ob1.mysql set @@ob_query_timeout = 60000000;
+#sleep 100;
+#let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+#ob1.check_until_timeout select count(*) from __all_root_table where tenant_id = '$tenant1_id' and role = 1 and length(member_list)-length(replace(member_list,',','')) = 2, 0, 480;
+#sleep 100;
+##进行补副本操作
+#ob1.mysql alter system enable_rereplication = true;
+#ob1.check_until_timeout select count(*) from __all_root_table where tenant_id = '$tenant1_id' and role = 1 and length(member_list)-length(replace(member_list,',','')) = 1, 0, 480;

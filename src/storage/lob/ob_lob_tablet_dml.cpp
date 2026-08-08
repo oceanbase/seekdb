@@ -18,7 +18,7 @@
 
 #include "ob_lob_tablet_dml.h"
 #include "storage/ob_table_dml_param.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_table_dml_param.h"
 #include "storage/lob/ob_lob_manager.h"
 #include "storage/lob/ob_lob_locator_struct.h"
@@ -241,7 +241,7 @@ int ObLobTabletDmlHelper::insert_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   ObLobAccessParam lob_param;
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
@@ -294,7 +294,7 @@ int ObLobTabletDmlHelper::delete_lob_col(
     const bool try_flush_redo)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -374,7 +374,7 @@ int ObLobTabletDmlHelper::process_delta_lob(
     blocksstable::ObStorageDatum &datum)
 {
   int ret = OB_SUCCESS;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   const ObColDesc &column = run_ctx.col_descs_->at(col_idx);
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -431,7 +431,7 @@ int ObLobTabletDmlHelper::prepare_lob_write(
     bool is_outrow = false;
     ObLobAccessParam lob_param;
     ObLobDataInsertTask info;
-    ObLobManager *lob_mngr = share::g_mp->lob_manager();
+    ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
     info.src_data_locator_ = src_data_locator;
     bool skip_task = run_ctx.relative_table_.is_index_table() || col_idx < run_ctx.relative_table_.get_rowkey_column_num();
     if (OB_FAIL(build_common_lob_param_for_dml(run_ctx, data_row, col_idx, old_disk_locator, lob_param))) {

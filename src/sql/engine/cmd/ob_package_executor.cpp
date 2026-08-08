@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_package_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 #include "sql/resolver/ddl/ob_create_package_stmt.h"
 #include "sql/resolver/ddl/ob_drop_package_stmt.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 
 namespace oceanbase
 {
@@ -46,7 +46,8 @@ int ObCreatePackageExecutor::execute(ObExecContext &ctx, ObCreatePackageStmt &st
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_package(arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call(
+                 [&]{ return ctx.root_command_service().create_package(arg); }))) {
     LOG_WARN("rpc proxy create package failed", K(ret),
              "dst", GCTX.self_addr());
   }
@@ -69,7 +70,8 @@ int ObDropPackageExecutor::execute(ObExecContext &ctx, ObDropPackageStmt &stmt)
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
-  } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_package(arg); }))) {
+  } else if (OB_FAIL(query::serialize_root_service_call(
+                 [&]{ return ctx.root_command_service().drop_package(arg); }))) {
     LOG_WARN("rpc proxy drop package failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;

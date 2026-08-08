@@ -56,7 +56,7 @@ int ObExprSTOverlaps::calc_result_type2(ObExprResType &type, ObExprResType &type
   return ret;
 }
 
-int ObExprSTOverlaps::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx,
+int ObExprSTOverlaps::process_input_geometry(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx,
     MultimodeAlloctor &allocator, ObGeometry *&geo1, ObGeometry *&geo2, bool &is_null_res,
     const ObSrsItem *&srs)
 {
@@ -86,13 +86,13 @@ int ObExprSTOverlaps::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, co
     ObString wkb2 = gis_datum2->get_string();
     bool is_geo1_valid = false;
     bool is_geo2_valid = false;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
             *gis_datum1,
             gis_arg1->datum_meta_,
             gis_arg1->obj_meta_.has_lob_header(),
             wkb1))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
                    *gis_datum2,
                    gis_arg2->datum_meta_,
                    gis_arg2->obj_meta_.has_lob_header(),
@@ -135,7 +135,7 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObGeometry *geo2 = NULL;
   bool is_null_res = false;
   bool result = false;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   

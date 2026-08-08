@@ -143,18 +143,24 @@ DEF_TO_STRING(ObWindowFunctionSpec)
 int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
+  if (OB_FAIL(ctx.exec_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   // sort by (PBY, OBY, SQC_ID, THREAD_ID)
-  lib::ob_sort(ctx.infos_.begin(), ctx.infos_.end(),
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(ctx.infos_.begin(), ctx.infos_.end(),
             [&](ObRDWFPartialInfo *l, ObRDWFPartialInfo *r) {
               int cmp = 0;
-              (void)rd_pby_oby_cmp(l->first_row_, r->first_row_, cmp);
+              (void)rd_pby_oby_cmp(l->first_row_, r->first_row_, cmp, access_ctx);
               if (0 == cmp) {
-                (void)rd_pby_oby_cmp(l->last_row_, r->last_row_, cmp);
+                (void)rd_pby_oby_cmp(l->last_row_, r->last_row_, cmp, access_ctx);
               }
               return (0 == cmp)
               ? (std::tie(l->sqc_id_, l->thread_id_) < std::tie(r->sqc_id_, r->thread_id_))
               : (cmp < 0);
             });
+  }
   LOG_TRACE("before generate patch", K(ctx.infos_));
   auto frame_offset = [](ObStoredDatumRow *f)->ObRDWFPartialInfo::RowExtType & {
     return f->extra_payload<ObRDWFPartialInfo::RowExtType>();
@@ -170,7 +176,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     }
     bool prev_same_part = NULL != prev;
     if (prev_same_part) {
-      if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
+      if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
         LOG_WARN("compare failed", K(ret));
       } else {
         prev_same_part = prev_same_part && (cmp_ret == 0);
@@ -179,7 +185,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
     if (OB_FAIL(ret)) {
     } else if (prev_same_part) {
       frame_offset(cur->first_row_) = frame_offset(prev->last_row_) + 1;
-      if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
+      if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
         LOG_WARN("compare failed", K(ret));
       } else if (0 == cmp_ret) {
         frame_offset(cur->last_row_) += frame_offset(prev->last_row_) + 1;
@@ -206,7 +212,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
       bool prev_same_part = NULL != prev;
       if (prev_same_part) {
-        if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
+        if (OB_FAIL(rd_pby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
           LOG_WARN("compare failed", K(ret));
         } else {
           prev_same_part = prev_same_part && (cmp_ret == 0);
@@ -222,7 +228,7 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
         ObDatum prev_last;
         prev_last.set_null();
         bool prev_same_order = false;
-        if (OB_FAIL(rd_oby_cmp(prev->last_row_, cur->first_row_, cmp_ret))) {
+        if (OB_FAIL(rd_oby_cmp(prev->last_row_, cur->first_row_, cmp_ret, access_ctx))) {
           LOG_WARN("compare failed", K(ret));
         } else {
           prev_same_order = (0 == cmp_ret);
@@ -235,11 +241,14 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
             for (int64_t j = i + 1; OB_SUCC(ret) && j < ctx.infos_.count(); j++) {
               ObRDWFPartialInfo *partial_info = ctx.infos_.at(j);
               cmp_ret = 1;
-              if (NULL != partial_info->first_row_ && OB_FAIL(rd_pby_oby_cmp(cur->first_row_, partial_info->first_row_, cmp_ret))) {
+              if (NULL != partial_info->first_row_
+                  && OB_FAIL(rd_pby_oby_cmp(
+                      cur->first_row_, partial_info->first_row_, cmp_ret, access_ctx))) {
                 LOG_WARN("compare failed", K(ret));
               } else if (cmp_ret == 0) {
                 OZ(OP::merge_aggregated_result(prev_last, info, ctx.arena_alloc_,
-                                               prev_last, res_datum(partial_info->first_row_)));
+                                               prev_last, res_datum(partial_info->first_row_),
+                                               access_ctx));
               } else {
                 break;
               }
@@ -271,12 +280,12 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
       }
 
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
+        if (OB_FAIL(rd_pby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
           LOG_WARN("compare failed", K(ret));
         } else if (cmp_ret == 0) {
           bool do_rank_add = false;
           if (is_rank) {
-            if (OB_FAIL(rd_oby_cmp(cur->first_row_, cur->last_row_, cmp_ret))) {
+            if (OB_FAIL(rd_oby_cmp(cur->first_row_, cur->last_row_, cmp_ret, access_ctx))) {
               LOG_WARN("compare failed", K(ret));
             } else if (cmp_ret != 0) {
               do_rank_add = true;
@@ -288,7 +297,8 @@ int ObWindowFunctionSpec::rd_generate_patch(ObRDWFPieceMsgCtx &ctx) const
                             res_datum(cur->last_row_), frame_offset(cur->first_row_)));
           } else {
             OZ(OP::merge_aggregated_result(res_datum(cur->last_row_), info, ctx.arena_alloc_,
-                                          res_datum(cur->last_row_), res_datum(cur->first_row_)));
+                                          res_datum(cur->last_row_), res_datum(cur->first_row_),
+                                          access_ctx));
           }
         }
       }
@@ -853,13 +863,16 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
                                                ObDatum &val)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   UNUSED(row_reader);
   UNUSED(row_idx);
   UNUSED(row);
   UNUSED(frame);
   UNUSED(val);
   bool equal_with_prev_row = false;
-  if (row_idx != frame.head_) {
+  if (OB_FAIL(op_.eval_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (row_idx != frame.head_) {
     equal_with_prev_row = true;
     ExprFixedArray &sort_cols = wf_info_.sort_exprs_;
     ObSortCollations &sort_collations = wf_info_.sort_collations_;
@@ -874,7 +887,7 @@ int ObWindowFunctionOp::NonAggrCellRankLike::eval(RowsReader &row_reader,
         const ObDatum &l_datum = tmp_row->cells()[idx];
         const ObDatum &r_datum = row.cells()[idx];
         int match = 0;
-        if (OB_FAIL(cmp_func(l_datum, r_datum, match))) {
+        if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
           LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match));
         } else {
           LOG_DEBUG("cmp ", K(idx), K(l_datum), K(r_datum), K(match));
@@ -965,6 +978,7 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
                                                ObDatum &val)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   UNUSED(row_reader);
   UNUSED(row_idx);
   UNUSED(row);
@@ -976,6 +990,9 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
   ExprFixedArray &sort_cols = wf_info_.sort_exprs_;
   ObSortCollations &sort_collations = wf_info_.sort_collations_;
   ObSortFuncs &sort_cmp_funcs = wf_info_.sort_cmp_funcs_;
+  if (OB_FAIL(op_.eval_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  }
   while (should_continue && OB_SUCC(ret) && same_idx < frame.tail_) {
     const ObRADatumStore::StoredRow *a_row = NULL;
     if (OB_FAIL(row_reader.get_row(same_idx + 1, a_row))) {
@@ -988,7 +1005,7 @@ int ObWindowFunctionOp::NonAggrCellCumeDist::eval(RowsReader &row_reader,
         const ObDatum &l_datum = ref_row.cells()[idx];
         const ObDatum &r_datum = iter_row.cells()[idx];
         int match = 0;
-        if (OB_FAIL(cmp_func(l_datum, r_datum, match))) {
+        if (OB_FAIL(cmp_func(l_datum, r_datum, match, access_ctx))) {
           LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match));
         } else {
           LOG_DEBUG("cmp ", K(idx), K(l_datum), K(r_datum), K(match));
@@ -1047,9 +1064,12 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
 {
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
+  const ObDatumAccessContext *access_ctx = nullptr;
   same = true;
   const auto &exprs = cell.wf_info_.partition_exprs_;
-  if (!exprs.empty()) {
+  if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (!exprs.empty()) {
     if (NULL == cell.part_values_.store_row_
         || cell.part_values_.store_row_->cnt_ != exprs.count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -1060,8 +1080,9 @@ int ObWindowFunctionOp::check_same_partition(WinFuncCell &cell, bool &same)
       for (int64_t i = 0; OB_SUCC(ret) && same && i < exprs.count(); i++) {
         if (OB_FAIL(exprs.at(i)->eval(eval_ctx_, val))) {
           LOG_WARN("expression evaluate failed", K(ret));
-        } else if (OB_FAIL(exprs.at(i)->basic_funcs_->null_first_cmp_(*val,
-                           cell.part_values_.store_row_->cells()[i], cmp_ret))) {
+        } else if (OB_FAIL(exprs.at(i)->basic_funcs_->null_first_cmp_(
+                       *val, cell.part_values_.store_row_->cells()[i],
+                       cmp_ret, access_ctx))) {
           LOG_WARN("compare failed", K(ret));
         } else if (0 != cmp_ret) {
           same = false;
@@ -2332,7 +2353,7 @@ bool ObWindowFunctionOp::first_row_same_order(const ObRADatumStore::StoredRow *r
 {
   if (SAME_ORDER_CACHE_DEFAULT == first_row_same_order_cache_) {
     int cmp_ret = 0;
-    MY_SPEC.rd_oby_cmp(rd_patch_->first_row_, row, cmp_ret);
+    MY_SPEC.rd_oby_cmp(rd_patch_->first_row_, row, cmp_ret, datum_access_ctx_);
     first_row_same_order_cache_ = cmp_ret;
   }
   return 0 == first_row_same_order_cache_;
@@ -2342,7 +2363,7 @@ bool ObWindowFunctionOp::last_row_same_order(const ObRADatumStore::StoredRow *ro
 {
   if (SAME_ORDER_CACHE_DEFAULT == last_row_same_order_cache_) {
     int cmp_ret = 0;
-    MY_SPEC.rd_oby_cmp(rd_patch_->last_row_, row, cmp_ret);
+    MY_SPEC.rd_oby_cmp(rd_patch_->last_row_, row, cmp_ret, datum_access_ctx_);
     last_row_same_order_cache_ = cmp_ret;
   }
   return 0 == last_row_same_order_cache_;
@@ -2424,7 +2445,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
             LOG_DEBUG("after patch rank value",
                       K(patch_val), "res", number::ObNumber(res.get_number()));
           } else {
-            OZ(merge_aggregated_result(res, info, patch_alloc_, res, patch_datum));
+            OZ(merge_aggregated_result(
+                res, info, patch_alloc_, res, patch_datum, datum_access_ctx_));
           }
         }
       }
@@ -2437,7 +2459,8 @@ int ObWindowFunctionOp::rd_output_final_row(const int64_t idx,
             MY_SPEC.rd_sort_collations_.count() + wf_idx];
         if (!patch_datum.is_null() && last_row_same_order(cur_row)) {
           ObDatum &res = info.expr_->locate_expr_datum(eval_ctx_);
-          OZ(merge_aggregated_result(res, info, patch_alloc_, res, patch_datum));
+          OZ(merge_aggregated_result(
+              res, info, patch_alloc_, res, patch_datum, datum_access_ctx_));
         }
       }
     }
@@ -2713,7 +2736,8 @@ int ObWindowFunctionOp::parallel_winbuf_process()
             ObDatum &l_datum = new_row->cells()[idx];
             const ObDatum &r_datum = row->cells()[idx];
             if (OB_FAIL(merge_aggregated_result(
-                        l_datum, wf_node->wf_info_, ctx_.get_allocator(), l_datum, r_datum))) {
+                        l_datum, wf_node->wf_info_, ctx_.get_allocator(), l_datum, r_datum,
+                        datum_access_ctx_))) {
               LOG_WARN("binary aggregated result failed", K(ret));
             } else {
               idx += 1;
@@ -2737,7 +2761,8 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
                                                 const WinFuncInfo &wf_info,
                                                 common::ObIAllocator &alloc,
                                                 const ObDatum &src0,
-                                                const ObDatum &src1)
+                                                const ObDatum &src1,
+                                                const ObDatumAccessContext *access_ctx)
 {
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
@@ -2756,7 +2781,8 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
       break;
     }
     case T_FUN_MAX: {
-      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_first_cmp_(src1, src0, cmp_ret))) {
+      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_first_cmp_(
+              src1, src0, cmp_ret, access_ctx))) {
         LOG_WARN("fail to compare", K(ret));
       } else {
         res = cmp_ret > 0 ? src1 : src0;
@@ -2764,7 +2790,8 @@ int ObWindowFunctionOp::merge_aggregated_result(ObDatum &res,
       break;
     }
     case T_FUN_MIN: {
-      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_last_cmp_(src1, src0, cmp_ret))) {
+      if (OB_FAIL(wf_info.expr_->basic_funcs_->null_last_cmp_(
+              src1, src0, cmp_ret, access_ctx))) {
         LOG_WARN("fail to compare", K(ret));
       } else {
         res = cmp_ret < 0 ? src1 : src0;
@@ -2853,9 +2880,12 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
             "part end row",  input_rows_.cur_->count() -1,
             "order by cnt", wf_cell.wf_info_.sort_exprs_.count());
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   pos = -1;
   got_null_val = false;
-  if (NULL == between_value_expr && is_unbounded) {
+  if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
+  } else if (NULL == between_value_expr && is_unbounded) {
     // no care rows or range
     pos = is_preceding ? wf_cell.part_first_row_idx_ : get_part_end_idx();
   } else if (NULL == between_value_expr && !is_unbounded) {
@@ -2891,7 +2921,7 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
             const int64_t idx = sort_collations.at(i).field_idx_;
             const ObDatum &l_datum = a_row->cells()[idx];
             const ObDatum &r_datum = row.cells()[idx];
-            if (OB_FAIL(cmp_func(l_datum, r_datum, cmp_ret))) {
+            if (OB_FAIL(cmp_func(l_datum, r_datum, cmp_ret, access_ctx))) {
               LOG_WARN("cmp failed", K(ret), K(idx), K(l_datum), K(r_datum), K(match), K(step),
                         K(is_upper), K(pos));
             } else {
@@ -3026,7 +3056,7 @@ int ObWindowFunctionOp::get_pos(RowsReader &row_reader,
           // will not reach here
         } else {
           int cmp_result = 0;
-          int tmp_ret = cmp_func(cur_val, *cmp_val, cmp_result);
+          int tmp_ret = cmp_func(cur_val, *cmp_val, cmp_result, access_ctx);
           match = ((cmp_mode & L) && cmp_result < 0)
                   || ((cmp_mode & LE) && cmp_result <= 0)
                   || ((cmp_mode & G) && cmp_result > 0)
@@ -3321,10 +3351,13 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
     uint64_t &hash_value)
 {
   int ret = OB_SUCCESS;
+  const ObDatumAccessContext *access_ctx = nullptr;
   hash_value = 99194853094755497L;
   if (OB_ISNULL(exprs_) || OB_ISNULL(row_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exprs_ or row_ is null", K(ret), K(exprs_), K(row_));
+  } else if (OB_FAIL(eval_ctx_.get_datum_access_ctx(access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else {
     ObExpr *expr = NULL;
     ObDatum *datum = NULL;
@@ -3339,7 +3372,8 @@ int ObWindowFunctionOp::calc_part_exprs_hash(
           datum = const_cast<ObDatum *>(&row_->cells()[i]);
         }
         if (OB_SUCC(ret)) {
-          if (OB_FAIL(expr->basic_funcs_->murmur_hash_v2_(*datum, hash_value, hash_value))) {
+          if (OB_FAIL(expr->basic_funcs_->murmur_hash_v2_(
+                  *datum, hash_value, hash_value, access_ctx))) {
             LOG_WARN("do hash failed", K(ret), KPC(expr));
           }
         }

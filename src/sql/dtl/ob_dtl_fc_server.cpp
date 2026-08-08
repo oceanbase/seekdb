@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include "observer/omt/ob_server_runtime_controller.h"
 #include "ob_dtl_fc_server.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -59,7 +58,6 @@ int ObDfc::server_module_init(ObDfc *&dfc_manager)
     dfc_manager->max_parallel_cnt_ = 0;
     dfc_manager->max_blocked_buffer_size_ = 0;
     dfc_manager->max_buffer_size_ = 0;
-    
     if (OB_FAIL(dfc_manager->mem_mgr_.init())) {
       LOG_WARN("failed to init DTL memory manager", K(ret));
     }
@@ -93,12 +91,9 @@ void ObDfc::check_dtl_buffer_size()
   int ret = OB_SUCCESS;
   double min_cpu = 0;
   double max_cpu = 0;
-  if (OB_ISNULL(GCTX.server_runtime_controller_)) {
-  } else if (OB_FAIL(GCTX.server_runtime_controller_->get_server_cpu(min_cpu, max_cpu))) {
-    LOG_WARN("fail to get CPU capacity", K(ret));
-  } else {
-    calc_max_buffer(lround(max_cpu) * DFC_CPU_RATIO);
-  }
+  min_cpu = share::server_runtime()->min_cpu();
+  max_cpu = share::server_runtime()->max_cpu();
+  calc_max_buffer(lround(max_cpu) * DFC_CPU_RATIO);
 }
 
 int ObDfc::clean_on_timeout()
@@ -312,7 +307,7 @@ int ObDfcServer::get_current_dfc(ObDfc *&dfc_manager)
 {
   int ret = OB_SUCCESS;
   dfc_manager = nullptr;
-  dfc_manager = share::g_mp->dfc_manager();
+  dfc_manager = ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDfc>();
   if (nullptr == dfc_manager) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to create DFC manager", K(ret));

@@ -20,13 +20,18 @@
 #include "lib/objectpool/ob_resource_pool.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "storage/tx/ob_trans_service.h"
 #include "share/ob_time_utility2.h"
 #include "observer/ob_server.h"
+#include "observer/ob_server_runtime_access.h"
 #include "share/ob_structured_event_logger.h"
 #include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
+#include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 namespace oceanbase
 {
@@ -137,7 +142,7 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
 {
   if (OB_NOT_NULL(inner_session_) && OB_NOT_NULL(inner_session_->get_tx_desc())) {
     if (OB_SUCCESS == share::check_server_runtime_ready()) {
-      share::g_mp->trans_service()->release_tx(*inner_session_->get_tx_desc());
+      ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->release_tx(*inner_session_->get_tx_desc());
     }
     {
       ObSQLSessionInfo::LockGuard guard(inner_session_->get_thread_data_lock());
@@ -193,10 +198,11 @@ int ObInnerSQLConnection::create_impl(
   int ret = OB_SUCCESS;
   ObInnerSQLConnection *new_conn = NULL;
   conn.reset();
-  if (OB_ISNULL(GCTX.sql_engine_) || OB_ISNULL(GCTX.vt_iter_creator_)) {
+  sql::ObSql *sql_engine = get_observer_sql_engine();
+  if (OB_ISNULL(sql_engine) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObVTIterCreator>())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("inner sql dependency is null", K(ret), KP(GCTX.sql_engine_),
-             KP(GCTX.vt_iter_creator_));
+    LOG_WARN("inner sql dependency is null", K(ret), KP(sql_engine),
+             KP(::oceanbase::share::server_service<::oceanbase::observer::ObVTIterCreator>()));
   } else if (use_spi_allocator) {
     if (OB_ISNULL(new_conn = rp_alloc(ObInnerSQLConnection,
                                       ObInnerSQLConnection::LABEL))) {
@@ -214,8 +220,8 @@ int ObInnerSQLConnection::create_impl(
     }
   }
 
-  if (OB_SUCC(ret) && OB_FAIL(new_conn->init(GCTX.sql_engine_,
-                                              GCTX.vt_iter_creator_,
+  if (OB_SUCC(ret) && OB_FAIL(new_conn->init(sql_engine,
+                                              ::oceanbase::share::server_service<::oceanbase::observer::ObVTIterCreator>(),
                                               extern_session,
                                               NULL,
                                               use_static_engine,
@@ -442,7 +448,7 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
   int ret = OB_SUCCESS;
   if (NULL == extern_session) {
     const bool is_extern_session = false;
-    const bool is_create_session_mgr = OB_NOT_NULL(GCTX.session_mgr_);
+    const bool is_create_session_mgr = OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
     if (is_create_session_mgr && is_inner_session_mgr_enable()) {
       if (OB_FAIL(create_session_by_mgr())) {
         LOG_WARN("failed to create inner session by GCTX.session_mgr, will create default session", K(ret));
@@ -808,7 +814,9 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
         if (retry_cnt > 0) { // reset result set
           bool is_user_sql = res.result_set().is_user_sql();
           res.~ObInnerSQLResult();
-          new (&res) ObInnerSQLResult(get_session(), is_inner_session());
+          new (&res) ObInnerSQLResult(
+              get_session(), ob_sql_->get_plan_cache_access_service(),
+              is_inner_session());
           if (OB_FAIL(res.init())) {
             LOG_WARN("fail to init result set", K(ret));
           } else {
@@ -834,7 +842,8 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           }
 
           if (enable_sqlstat) {
-            sqlstat_record.record_sqlstat_start_value();
+            sqlstat_record.record_sqlstat_start_value(
+                ob_sql_->get_query_runtime_environment());
             sqlstat_record.set_is_in_retry(retry_cnt > 0);
             if (is_inner_session()) {
               get_session().sql_sess_record_sql_stat_start_value(sqlstat_record);
@@ -900,11 +909,14 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           }
 
           if (enable_sqlstat) {
-            sqlstat_record.record_sqlstat_end_value();
+            sqlstat_record.record_sqlstat_end_value(
+                ob_sql_->get_query_runtime_environment());
             sqlstat_record.set_rows_processed(res.result_set().get_affected_rows() + res.result_set().get_return_rows());
             sqlstat_record.set_partition_cnt(res.result_set().get_exec_context().get_das_ctx().get_related_tablet_cnt());
             sqlstat_record.set_is_plan_cache_hit(res.sql_ctx().plan_cache_hit_);
             sqlstat_record.move_to_sqlstat_cache(get_session(),
+                                                ob_sql_->get_plan_cache(),
+                                                ob_sql_->get_plan_cache_access_service(),
                                                 res.sql_ctx().cur_sql_,
                                                 res.result_set().get_physical_plan());
           }
@@ -976,7 +988,8 @@ int ObInnerSQLConnection::start_transaction_inner(
     sql = ObString::make_string("START TRANSACTION");
   }
   ObSqlQueryExecutor executor(sql);
-  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session()) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(),
+            ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("connection not inited", K(ret));
@@ -1012,7 +1025,8 @@ int ObInnerSQLConnection::register_multi_data_source(
   int ret = OB_SUCCESS;
   transaction::ObTxDesc *tx_desc = nullptr;
 
-  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session())
+  SMART_VAR(ObInnerSQLResult, res, get_session(),
+            ob_sql_->get_plan_cache_access_service(), is_inner_session())
   {
     if (!inited_) {
       ret = OB_NOT_INIT;
@@ -1031,7 +1045,7 @@ int ObInnerSQLConnection::register_multi_data_source(
       } else {
         SERVER_MODULE_SCOPE
         {
-          if (OB_FAIL(share::g_mp->trans_service()->register_mds_into_tx(*tx_desc,
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->register_mds_into_tx(*tx_desc,
                                                                          type,
                                                                          buf,
                                                                          buf_len,
@@ -1062,7 +1076,8 @@ int ObInnerSQLConnection::rollback()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner conn is not in trans", K(ret));
   } else {
-    SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session()) {
+    SMART_VAR(ObInnerSQLResult, res, get_session(),
+              ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
       if (!inited_) {
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
@@ -1090,7 +1105,8 @@ int ObInnerSQLConnection::commit()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner conn is not in trans", K(ret));
   } else {
-    SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session()) {
+    SMART_VAR(ObInnerSQLResult, res, get_session(),
+              ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
       if (!inited_) {
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
@@ -1139,7 +1155,8 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
 {
   int ret = OB_SUCCESS;
   ObSqlQueryExecutor executor(sql);
-  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session()) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(),
+            ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("connection not inited", K(ret));
@@ -1233,7 +1250,8 @@ int ObInnerSQLConnection::execute(
     sqlclient::ObIExecutor &executor)
 {
   int ret = OB_SUCCESS;
-  SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session()) {
+  SMART_VAR(ObInnerSQLResult, res, get_session(),
+            ob_sql_->get_plan_cache_access_service(), is_inner_session()) {
     if (OB_FAIL(res.init())) {
       LOG_WARN("init result set", K(ret));
     } else if (!inited_) {
@@ -1430,7 +1448,7 @@ int ObInnerSQLConnection::begin_nested_session(ObSQLSessionInfo::StmtSavedValue 
   } else if (OB_FAIL(extern_session_->begin_nested_session(saved_session, skip_cur_stmt_tables))) {
     LOG_WARN("failed to begin nested session", K(ret));
   } else {
-    saved_conn.ref_ctx_ = ref_ctx_;
+    saved_conn.read_context_ = ref_ctx_;
     saved_conn.execute_start_timestamp_ = execute_start_timestamp_;
     saved_conn.execute_end_timestamp_ = execute_end_timestamp_;
   }
@@ -1447,7 +1465,7 @@ int ObInnerSQLConnection::end_nested_session(ObSQLSessionInfo::StmtSavedValue &s
   } else if (OB_FAIL(extern_session_->end_nested_session(saved_session))) {
     LOG_WARN("failed to end nested session", K(ret));
   } else {
-    ref_ctx_ = saved_conn.ref_ctx_;
+    ref_ctx_ = static_cast<ObInnerSQLReadContext *>(saved_conn.read_context_);
     execute_start_timestamp_ = saved_conn.execute_start_timestamp_;
     execute_end_timestamp_ = saved_conn.execute_end_timestamp_;
     saved_conn.reset();
@@ -1460,12 +1478,12 @@ int ObInnerSQLConnection::create_session_by_mgr()
   int ret = OB_SUCCESS;
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
   
-  if (OB_ISNULL(GCTX.session_mgr_) || OB_ISNULL(GCTX.server_runtime_controller_)) {
+  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::omt::ObServerRuntimeController>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_mgr_ or runtime_controller_ is NULL", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_sessid(sid))) {
     LOG_WARN("alloc session id failed", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, inner_session_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_session(sid, inner_session_))) {
     inner_session_ = NULL;
     LOG_WARN("create session failed", K(ret), K(sid));
   } else {
@@ -1510,16 +1528,22 @@ int ObInnerSQLConnection::destroy_inner_session()
   if (NULL != inner_session_) {
     try_release_query_lock();
     if (INNER_SQL_SESS_ID == free_session_ctx_.sessid_) {
+      if (OB_NOT_NULL(ob_sql_)) {
+        const int close_ret = inner_session_->close_all_ps_stmt(ob_sql_->get_ps_cache());
+        if (OB_UNLIKELY(OB_SUCCESS != close_ret)) {
+          LOG_WARN("failed to close prepared statements for inner session", K(close_ret));
+        }
+      }
       inner_session_->set_session_sleep();
       inner_session_->~ObSQLSessionInfo();
       ob_free(inner_session_);
-    } else if (OB_ISNULL(GCTX.session_mgr_)) {
+    } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("session mgr is null", K(ret));
     } else {
       inner_session_->set_session_sleep();
-      GCTX.session_mgr_->revert_session(inner_session_);
-      GCTX.session_mgr_->free_session(free_session_ctx_);
+      ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(inner_session_);
+      ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(free_session_ctx_);
     }
     inner_session_ = NULL;
   }
@@ -1570,4 +1594,71 @@ int create_inner_sql_connection_for_proxy(
 }
 
 } // end of namespace common
+
+namespace query
+{
+
+int ObInnerSQLConnectionAccess::create_connection_with_external_session(
+    sql::ObSQLSessionInfo *session,
+    common::sqlclient::ObISQLConnectionGuard &connection)
+{
+  return observer::ObInnerSQLConnection::create_connection_with_external_session(
+      session, connection);
+}
+
+int ObInnerSQLConnectionAccess::create_spi_connection_with_external_session(
+    sql::ObSQLSessionInfo *session,
+    common::sqlclient::ObISQLConnectionGuard &connection)
+{
+  return observer::ObInnerSQLConnection::
+      create_spi_connection_with_external_session(session, connection);
+}
+
+sql::ObSQLSessionInfo *ObInnerSQLConnectionAccess::get_session(
+    common::sqlclient::ObISQLConnection *connection)
+{
+  observer::ObInnerSQLConnection *native_connection =
+      static_cast<observer::ObInnerSQLConnection *>(connection);
+  return nullptr == native_connection ? nullptr
+                                      : &native_connection->get_session();
+}
+
+int ObInnerSQLConnectionAccess::lock_obj(
+    const transaction::tablelock::ObLockObjRequest &request,
+    common::sqlclient::ObISQLConnection *connection)
+{
+  return nullptr == connection
+      ? common::OB_INVALID_ARGUMENT
+      : transaction::tablelock::ObInnerConnectionLockUtil::lock_obj(
+            request, connection);
+}
+
+int ObInnerSQLConnectionAccess::register_multi_data_source(
+    common::sqlclient::ObISQLConnection *connection,
+    const transaction::ObTxDataSourceType type,
+    const char *buffer,
+    const int64_t buffer_size)
+{
+  return register_multi_data_source(
+      connection,
+      type,
+      buffer,
+      buffer_size,
+      transaction::ObRegisterMdsFlag());
+}
+
+int ObInnerSQLConnectionAccess::register_multi_data_source(
+    common::sqlclient::ObISQLConnection *connection,
+    const transaction::ObTxDataSourceType type,
+    const char *buffer,
+    const int64_t buffer_size,
+    const transaction::ObRegisterMdsFlag &flag)
+{
+  return nullptr == connection
+      ? common::OB_INVALID_ARGUMENT
+      : static_cast<observer::ObInnerSQLConnection *>(connection)
+            ->register_multi_data_source(type, buffer, buffer_size, flag);
+}
+
+} // end of namespace query
 } // end of namespace oceanbase

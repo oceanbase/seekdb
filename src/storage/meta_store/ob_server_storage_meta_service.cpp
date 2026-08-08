@@ -18,8 +18,8 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
-#include "observer/omt/ob_server_runtime_controller.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "share/ob_force_print_log.h"
 #include "share/ob_local_device.h"
@@ -44,7 +44,7 @@ ObServerStorageMetaService::ObServerStorageMetaService()
     ckpt_slog_handler_(),
     need_reserved_(false) {}
 
-int ObServerStorageMetaService::init()
+int ObServerStorageMetaService::init(ObIServerRuntime &server_runtime)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -60,11 +60,11 @@ int ObServerStorageMetaService::init()
         OB_FILE_SYSTEM_ROUTER.get_slog_file_spec(),
         true /*is_server*/))) {
     LOG_WARN("fail to init server slogger", K(ret));
-  } else if (OB_FAIL(ckpt_slog_handler_.init(&server_slogger_))) {
+  } else if (OB_FAIL(ckpt_slog_handler_.init(&server_slogger_, server_runtime))) {
     LOG_WARN("fail to init server checkpoint slog hander", K(ret));
   } else if (OB_FAIL(persister_.init(&server_slogger_))) {
     LOG_WARN("fail to init persister", K(ret));
-  } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
+  } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_, server_runtime))) {
     LOG_WARN("fail to init replayer", K(ret));
   } else {
     is_inited_ = true;
@@ -215,19 +215,15 @@ int ObServerStorageMetaService::check_log_disk(
 int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntimeController *omt = GCTX.server_runtime_controller_;
   using_space = 0;
   if (OB_FAIL(server_slogger_.get_using_disk_space(using_space))) {
     LOG_WARN("fail to get using disk space", K(ret), K(using_space));
-  } else if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, omt is nullptr", K(ret), KP(omt));
   } else {
     if (OB_FAIL(share::check_server_runtime_ready())) {
       LOG_WARN("server runtime is not ready", K(ret));
     } else {
       int64_t local_storage_using_size = 0;
-      if (OB_FAIL(share::g_mp->local_storage_meta_service()->get_slogger().get_using_disk_space(local_storage_using_size))) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_slogger().get_using_disk_space(local_storage_using_size))) {
         LOG_WARN("fail to get the disk space that slog used", K(ret));
       } else {
         using_space += local_storage_using_size;
@@ -242,40 +238,3 @@ int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
 
 } // namespace storage
 } // namespace oceanbase
-
-// ===== definition moved from src/share/ob_local_device.cpp =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObLocalDevice::get_data_disk_used_percentage_(
-    const int64_t required_size,
-    int64_t &percent) const
-{
-  int ret = OB_SUCCESS;
-  int64_t reserved_size = storage::ObServerStorageMetaService::SLOG_RESERVED_DISK_SIZE;
-
-  if (OB_UNLIKELY(!is_marked_)) {
-    ret = OB_NOT_INIT;
-    SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
-  } else if (OB_UNLIKELY(required_size < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid argument", K(ret), K(required_size));
-  } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-    SHARE_LOG(WARN, "Fail to get reserved size", K(ret));
-  } else {
-    int64_t max_block_cnt = get_max_block_count(reserved_size);
-    int64_t actual_free_block_cnt = free_block_cnt_;
-    if (max_block_cnt > total_block_cnt_) {  // auto extend is on
-      actual_free_block_cnt = max_block_cnt - total_block_cnt_ + free_block_cnt_;
-    }
-    const int64_t required_count = required_size / block_size_;
-    const int64_t free_count = actual_free_block_cnt - required_count;
-    percent = 100 - 100 * free_count / total_block_cnt_;
-  }
-  return ret;
-}
-
-}  // namespace share
-}  // namespace oceanbase

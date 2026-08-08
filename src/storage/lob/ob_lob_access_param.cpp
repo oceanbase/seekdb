@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_access_param.h"
 #include "storage/tx_storage/ob_access_service.h"
-#include "observer/ob_server.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

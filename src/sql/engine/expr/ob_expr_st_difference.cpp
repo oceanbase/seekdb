@@ -80,16 +80,16 @@ int ObExprSTDifference::process_input_geometry(const ObExpr &expr, ObEvalCtx &ct
     uint32_t srid2;
     ObString wkb1 = gis_datum1->get_string();
     ObString wkb2 = gis_datum2->get_string();
-    omt::ObSrsCacheGuard srs_guard;
+    common::ObSrsCacheGuard srs_guard;
     bool is_geo1_valid = false;
     bool is_geo2_valid = false;
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
             *gis_datum1,
             gis_arg1->datum_meta_,
             gis_arg1->obj_meta_.has_lob_header(),
             wkb1))) {
       LOG_WARN("fail to get real string data", K(ret), K(wkb1));
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, allocator,
                    *gis_datum2,
                    gis_arg2->datum_meta_,
                    gis_arg2->obj_meta_.has_lob_header(),

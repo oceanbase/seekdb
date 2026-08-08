@@ -16,7 +16,7 @@
 
 #include "ob_tx_data_op.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
@@ -321,7 +321,7 @@ int ObTxOp::deserialize(const char *buf, const int64_t data_len, int64_t &pos, O
 
 void ObTxOp::release()
 {
-  ObIAllocator &allocator = share::g_mp->shared_mem_alloc_mgr()->tx_data_op_allocator();
+  ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
   #define RELEASE_TX_OP_TMP(OP_CODE, OP_TYPE)                  \
   if (OB_NOT_NULL(op_val_) && op_code_ ==  OP_CODE             \
       && op_val_ != &DEFAULT_TX_DUMMY_OP) {                    \

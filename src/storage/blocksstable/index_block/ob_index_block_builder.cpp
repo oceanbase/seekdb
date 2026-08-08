@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_index_block_builder.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
 #include "share/ob_io_device_helper.h"
 
@@ -1666,7 +1666,7 @@ int ObSSTableIndexBuilder::rewrite_small_sstable(ObSSTableMergeRes &res)
   } else if (OB_FAIL(read_handle.wait())) {
     STORAGE_LOG(WARN, "fail to wait macro block read", K(ret), K(read_info));
   } else {
-    ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
+    ObSharedMacroBlockMgr *shared_block_mgr = ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>();
     if (OB_ISNULL(shared_block_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "shared macro block manager is null", K(ret));
@@ -1730,7 +1730,7 @@ int ObSSTableIndexBuilder::do_check_and_rewrite_sstable(ObBlockInfo &block_info)
         roots_[0]->meta_block_offset_ + roots_[0]->meta_block_size_,
         DIO_READ_ALIGN_SIZE);
     if (aligned_size < SMALL_SSTABLE_THRESHOLD) {
-      ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
+      ObSharedMacroBlockMgr *shared_block_mgr = ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>();
       if (OB_ISNULL(shared_block_mgr)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "shared macro block manager is null", K(ret));

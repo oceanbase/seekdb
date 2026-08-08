@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
 #include "ob_partition_merge_fuser.h"
+#include "data_plane/lob/ob_lob_value.h"
 #include "ob_tablet_merge_ctx.h"
 #include "storage/lob/ob_lob_manager.h"
 
@@ -255,7 +256,7 @@ int ObMajorPartitionMergeFuser::inner_init(const ObMergeParameter &merge_param)
     STORAGE_LOG(WARN, "Failed to init datum row", K(ret), K_(column_cnt));
   } else if (OB_FAIL(schema->get_orig_default_row(multi_version_column_ids, need_trim_default_row, default_row_))) {
     STORAGE_LOG(WARN, "Failed to get default row from table schema", K(ret), K(multi_version_column_ids));
-  } else if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, multi_version_column_ids, default_row_))) {
+  } else if (OB_FAIL(data_plane::fill_lob_header(allocator_, multi_version_column_ids, default_row_))) {
     STORAGE_LOG(WARN, "fail to fill lob header for default row", K(ret), K(multi_version_column_ids));
   } else if (FALSE_IT(default_row_.row_flag_.set_flag(ObDmlFlag::DF_UPDATE))) {
   } else if (OB_FAIL(generated_cols_.init(column_cnt_))) {

@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter tenant sys set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from DBA_OB_LS_LOCATIONS where ls_id = 1 and role = 'LEADER' and zone = 'z1', 1, 60;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 10, MEMORY_SIZE '10G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z3;z2;z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) from CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = 1 and role = 'LEADER' and zone = 'z3', 1, 60;
+ob1.mysql alter system set debug_sync_timeout = '30s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FETCH_SIMPLE_TABLES wait_for signal execute 1000000';
+set recyclebin = on;
+set @@session.ob_query_timeout = 240000000;
+drop database test;

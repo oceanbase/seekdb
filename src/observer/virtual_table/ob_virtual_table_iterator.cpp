@@ -492,7 +492,8 @@ int ObVirtualTableIterator::get_next_row()
       if (OB_FAIL(datum.from_obj(row->cells_[i], expr->obj_datum_map_))) {
         LOG_WARN("convert ObObj to ObDatum failed", K(ret));
       } else if (is_lob_storage(row->cells_[i].get_type()) &&
-                 OB_FAIL(ob_adjust_lob_datum(row->cells_[i], expr->obj_meta_,
+                 OB_FAIL(ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
+                                             row->cells_[i], expr->obj_meta_,
                                              expr->obj_datum_map_, *allocator_, datum))) {
         LOG_WARN("adjust lob datum failed", K(ret), K(i), K(row->cells_[i].get_meta()), K(expr->obj_meta_));
       }

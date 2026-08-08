@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_vector_mem_info.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/alloc/memory_dump.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
@@ -76,8 +76,8 @@ int ObAllVirtualVectorMemInfo::inner_get_next_row(ObNewRow *&row)
         int64_t vector_hold = 0;
         int64_t vector_limit = 0;
         SERVER_MODULE_SCOPE {
-          ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
-          ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
+          ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
+          ObSharedMemAllocMgr *shared_mem_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
           manage_used = service->get_allocator().used();
           vector_hold = shared_mem_mgr->vector_allocator().hold();
           int64_t rb_used = shared_mem_mgr->vector_allocator().get_rb_mem_used();

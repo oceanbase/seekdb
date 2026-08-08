@@ -1,0 +1,31 @@
+ob1=OBI(cluster=2:2:2, init_unit_cpu=2, proxy_num=0, ct_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.mysql alter system set debug_sync_timeout = '10000s';
+ob1.mysql create table oceanbase.test(c1 int primary key) partition by hash(c1) partitions 20;
+set ob_global_debug_sync = 'BEFORE_START_RS wait_for begin execute 100000000';
+select * from oceanbase.test;
+c1
+set ob_global_debug_sync = 'BEFORE_START_RS wait_for begin execute 100000000';
+select * from oceanbase.test;
+c1
+'success'
+'success'
+ob1.mysql insert into oceanbase.test values(2);
+ob1.z1.obs1.mysql insert into oceanbase.test values(3);
+ob1.z2.obs0.mysql insert into oceanbase.test values(4);
+ob1.z2.obs1.mysql insert into oceanbase.test values(6);
+ob1.z3.obs0.mysql insert into oceanbase.test values(5);
+ob1.z3.obs1.mysql insert into oceanbase.test values(7);
+ob1.z1.obs1.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z2.obs0.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z2.obs1.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z3.obs0.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z3.obs1.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z1.obs1.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z2.obs0.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z2.obs1.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z3.obs0.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z3.obs1.mysql select count(*) from oceanbase.__all_root_table;
+create table oceanbase.t(c1 int);
+ERROR HY000: The RootServer is not the master

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+PID_FILE=appserver.pid
+
+jar=`ls client/*.jar`
+
+echo $VERSION  $DATAID $DIAMOND 
+
+start()
+{
+      java -cp $jar com.etao.mytest.main.App $VERSION  $DATAID $DIAMOND &
+      echo $! > $PID_FILE
+}
+
+stop()
+{
+     if [ -f $PID_FILE ];then
+	 PID=$(cat $PID_FILE)
+         kill -9 $PID
+     else
+         kill -9 `ps uxf|grep com.etao.mytest.main.App|grep -v grep|awk '{print $2}'`
+     fi
+}
+
+status()
+{
+    count=`ps uxf | grep com.etao.mytest.main.App | grep -v grep | wc -l`
+    if [ $count  -gt 0 ];then
+	echo "running"
+    else
+	echo "stop"
+    fi
+}
+
+case "$1" in
+	start)
+		start
+		;;
+	stop)
+		stop
+		;;
+	status)
+		status
+		;;
+	*)
+		echo "Usage: $0 {start|stop|status}"
+		exit 2		
+esac
+

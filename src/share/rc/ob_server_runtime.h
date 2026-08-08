@@ -41,6 +41,16 @@ class ObServerModuleInitCtx;
 
 using ObTableScanIteratorObjPool = common::ObServerObjectPool<storage::ObTableScanIterator>;
 
+// Narrow process-memory seam used by LogService.  The implementation remains
+// owned by Observer; the lower module depends only on this Share interface.
+class ObIMemstoreRuntime
+{
+public:
+  virtual ~ObIMemstoreRuntime() = default;
+  virtual int get_memstore_limit_percentage(int64_t &limit_percent) = 0;
+  virtual int set_memstore_threshold() = 0;
+};
+
 // Process-wide runtime state for the one local database.  It deliberately has
 // no registry, routing key, or per-request switch operation.
 class ObServerRuntimeState : public lib::IRunWrapper
@@ -95,6 +105,53 @@ inline bool g_server_modules_ready = false;
 inline ObServerRuntimeState *server_runtime()
 {
   return g_server_runtime;
+}
+
+// Process-wide service slots for the single SeekDB runtime.  The Observer
+// composition root binds each concrete service after constructing the module
+// graph and clears the slots after the graph is destroyed.  Share does not
+// know any upper-layer service type: the slot is instantiated only at the
+// binding and consuming sites that already own those type dependencies.
+template <typename Service>
+struct ObServerServiceSlot
+{
+  inline static Service *service_ = nullptr;
+};
+
+template <typename Service>
+inline void bind_server_service(Service *service)
+{
+  ObServerServiceSlot<Service>::service_ = service;
+}
+
+template <typename Service>
+inline Service *server_service()
+{
+  return ObServerServiceSlot<Service>::service_;
+}
+
+template <typename Service>
+inline void unbind_server_service()
+{
+  ObServerServiceSlot<Service>::service_ = nullptr;
+}
+
+template <typename T>
+inline common::ObServerObjectPool<T> *server_obj_pool()
+{
+  return server_service<common::ObServerObjectPool<T>>();
+}
+
+template <typename T>
+inline T *borrow_server_object()
+{
+  return server_obj_pool<T>()->borrow_object();
+}
+
+template <typename T>
+inline void return_server_object(T *object)
+{
+  server_obj_pool<T>()->return_object(object);
 }
 
 inline lib::IRunWrapper *server_run_wrapper()

@@ -29,7 +29,7 @@ namespace oceanbase
 namespace sql
 {
 
-const ObLabel MEMORY_LABEL = ObLabel("LoadDataReader");
+const lib::ObLabel MEMORY_LABEL = lib::ObLabel("LoadDataReader");
 
 #define MEMORY_ATTR ObMemAttr(MEMORY_LABEL)
 
@@ -293,7 +293,7 @@ ObPacketStreamFileReader::~ObPacketStreamFileReader()
 }
 
 int ObPacketStreamFileReader::open(const ObString &filename,
-                                   observer::ObIMPPacketSender &packet_handle,
+                                   ObIClientPacketChannel &packet_handle,
                                    ObSQLSessionInfo *session,
                                    int64_t timeout_ts)
 {

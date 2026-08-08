@@ -31,7 +31,7 @@ class ObMPQuit
 public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_QUIT;
 
-  explicit ObMPQuit(const ObGlobalContext &gctx)
+  explicit ObMPQuit(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx)
   {}
   virtual ~ObMPQuit() {}

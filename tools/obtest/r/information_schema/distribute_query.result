@@ -1,0 +1,37 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+ob1.reboot;
+alter system set enable_auto_leader_switch=False;
+$follow.switch_partition sys:oceanbase:__all_database;
+$follow.switch_partition sys:oceanbase:__all_table;
+$follow.switch_partition sys:oceanbase:__all_column;
+$follow.switch_partition sys:oceanbase:__all_tenant_meta_table;
+$follow.switch_partition sys:oceanbase:__all_sequence;
+$follow.switch_partition sys:oceanbase:__all_sys_variable;
+select count(*) as num  from oceanbase.__all_root_table where table_id = 1099511627880 and role =1 group by svr_ip,svr_port order by num;
+num
+1
+15
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627779 and role =1 group by svr_ip,svr_port order by num ;
+num
+1
+15
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627780 and role =1 group by svr_ip,svr_port order by num;
+num
+1
+15
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627877 and role =1 group by svr_ip,svr_port order by num;
+num
+16
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627903 and role =1 group by svr_ip,svr_port order by num;
+num
+1
+15
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627896 and role =1 group by svr_ip,svr_port order by num;
+num
+1
+15
+select * from information_schema.global_variables;
+select * from information_schema.schemata;
+select * from information_schema.tables;
+select * from information_schema.views;
+select * from information_schema.key_column_usage;

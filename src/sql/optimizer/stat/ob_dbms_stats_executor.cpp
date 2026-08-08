@@ -20,17 +20,18 @@
 #include "sql/optimizer/stat/ob_dbms_stats_history_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_lock_unlock.h"
 #include "sql/optimizer/stat/ob_index_stats_estimator.h"
-#include "pl/sys_package/ob_dbms_stats.h"
+#include "sql/pl/sys_package/ob_dbms_stats.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/optimizer/stat/ob_dbms_stats_gather.h"
-#include "observer/omt/ob_server_runtime.h"
-#include "observer/ob_server.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "query/runtime/ob_query_runtime_environment.h"
+#include "share/ob_server_struct.h"
 #include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "lib/random/ob_random.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "sql/session/ob_inner_sql_connection.h"
 
 namespace oceanbase {
 using namespace pl;
@@ -712,7 +713,7 @@ int ObDbmsStatsExecutor::prepare_gather_stats(ObExecContext &ctx,
                                                   param.table_id_,
                                                   gather_helper.batch_part_size_))) {
     LOG_WARN("failed to get auto stats collect batch size", K(ret));
-  } else if (OB_FAIL(check_need_split_gather(param, gather_helper))) {
+  } else if (OB_FAIL(check_need_split_gather(ctx, param, gather_helper))) {
     LOG_WARN("failed to check need split gather", K(ret));
   } else {
     LOG_TRACE("succeed to prepare gather stats", K(param), K(gather_helper));
@@ -832,7 +833,10 @@ int ObDbmsStatsExecutor::do_gather_stats(ObExecContext &ctx,
 }
 
 // Get the maximum number of partitions and columns for each stat gather and check need split gather
-int ObDbmsStatsExecutor::check_need_split_gather(const ObTableStatParam &param, GatherHelper &gather_helper)
+int ObDbmsStatsExecutor::check_need_split_gather(
+    ObExecContext &ctx,
+    const ObTableStatParam &param,
+    GatherHelper &gather_helper)
 {
   int ret = OB_SUCCESS;
   bool random_split_part = ERRSIM_RANDOM_GATHER_STATS_OPTION;
@@ -844,7 +848,13 @@ int ObDbmsStatsExecutor::check_need_split_gather(const ObTableStatParam &param, 
 
   if (param.is_auto_gather_ || param.is_async_gather_) {
     int64_t max_wa_memory_size = MIN_GATHER_WORK_ARANA_SIZE;
-    if (OB_FAIL(ObDbmsStatsUtils::get_max_work_area_size(max_wa_memory_size))) {
+    query::ObIQueryRuntimeEnvironment *runtime =
+        ctx.get_query_runtime_environment();
+    if (OB_ISNULL(runtime)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("query runtime environment is not bound", K(ret));
+    } else if (OB_FAIL(ObDbmsStatsUtils::get_max_work_area_size(
+        *runtime, max_wa_memory_size))) {
       LOG_WARN("failed to get max work area size", K(ret));
     } else {
       int64_t max_gather_col_cnt = max_wa_memory_size >= 1 * 1024L * 1024L * 1024L /*1G*/
@@ -1583,7 +1593,7 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(session), KP(schema_guard));
+    LOG_WARN("get unexpected error", K(ret), K(session));
   //1.save session info
   } else if (OB_FAIL(session->save_session(saved_value))) {
     LOG_WARN("failed to saved value", K(ret));
@@ -1609,8 +1619,9 @@ int ObDbmsStatsExecutor::prepare_conn_and_store_session_for_online_stats(sql::Ob
       } else {
         need_reset_trx_lock_timeout = true;
         //3.get conn to update stats
-        if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
-                        session, conn))) {
+        if (OB_FAIL(
+                query::ObInnerSQLConnectionAccess::
+                    create_connection_with_external_session(session, conn))) {
           LOG_WARN("failed to acquire conn", K(ret));
         }
       }
@@ -1707,13 +1718,22 @@ int ObDbmsStatsExecutor::cancel_gather_stats(ObExecContext &ctx, ObString &task_
 int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
-  int64_t cpu_mhz = OBSERVER.get_cpu_frequency_khz()/1000;
-  int64_t network_speed = OBSERVER.get_network_speed() / 1024.0 / 1024.0;
+  query::ObIQueryRuntimeEnvironment *runtime_environment =
+      ctx.get_query_runtime_environment();
+  int64_t cpu_mhz = 0;
+  int64_t network_speed = 0;
   int64_t disk_seq_read_speed = 0;
   int64_t disk_rnd_read_speed = 0;
   OptSystemIoBenchmark &io_benchmark = OptSystemIoBenchmark::get_instance();
-  if (io_benchmark.is_init()) {
+  if (OB_ISNULL(runtime_environment)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("query runtime environment is not bound", K(ret));
+  } else if (OB_FALSE_IT(cpu_mhz =
+                 query::query_cpu_frequency_khz(runtime_environment) / 1000)) {
+  } else if (OB_FALSE_IT(network_speed =
+                 query::query_network_speed_bytes_per_second(runtime_environment)
+                 / 1024.0 / 1024.0)) {
+  } else if (io_benchmark.is_init()) {
     disk_seq_read_speed = io_benchmark.get_disk_seq_read_speed();
     disk_rnd_read_speed = io_benchmark.get_disk_rnd_read_speed();
   } else if (OB_FAIL(io_benchmark.run_benchmark(ctx.get_allocator()))) {

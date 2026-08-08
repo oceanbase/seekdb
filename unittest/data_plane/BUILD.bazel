@@ -1,0 +1,11 @@
+load("//bazel:defs.bzl", "seekdb_module_cc_test")
+
+package(default_visibility = ["//visibility:private"])
+
+seekdb_module_cc_test(
+    name = "data_plane_tests",
+    srcs = glob(["**/*.cpp"]),
+    test_hdrs = glob(["**/*.h"], allow_empty = True),
+    module_interface = "//src/data_plane:data_plane_unit_test_interface",
+    shard_count = 4,
+)

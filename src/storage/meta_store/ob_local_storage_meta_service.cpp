@@ -16,12 +16,12 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_local_storage_meta_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/tablet/ob_tablet_macro_info_iterator.h"
-#include "observer/omt/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 
 namespace oceanbase
@@ -81,7 +81,7 @@ int ObLocalStorageMetaService::init()
 int ObLocalStorageMetaService::start()
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
 
   if (IS_NOT_INIT) {
@@ -210,7 +210,7 @@ int ObLocalStorageMetaService::swap_snapshot(const ObServerSnapshotMeta &snapsho
 }
 
 int ObLocalStorageMetaService::clone_ls(
-    observer::ObStartupAccelTaskHandler* startup_accel_handler,
+    ObStartupAccelTaskHandler* startup_accel_handler,
     const blocksstable::MacroBlockId &tablet_meta_entry)
 {
   int ret = OB_SUCCESS;

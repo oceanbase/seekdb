@@ -34,6 +34,11 @@ namespace blocksstable
 {
 struct ObStorageDatum;
 }
+namespace common
+{
+struct ObLobDiffHeader;
+}
+
 namespace storage
 {
 
@@ -76,7 +81,9 @@ public:
 
   // Only use for default lob col val
   static int fill_lob_header(ObIAllocator &allocator, ObString &data, ObString &out);
-  static int fill_lob_header(ObIAllocator &allocator, blocksstable::ObStorageDatum &datum);
+  static int fill_lob_header(
+      ObIAllocator &allocator,
+      blocksstable::ObStorageDatum &datum);
   static int fill_lob_header(ObIAllocator &allocator,
                              const ObIArray<share::schema::ObColDesc> &column_ids,
                              blocksstable::ObDatumRow &datum_row);
@@ -223,7 +230,9 @@ private:
 
   int query_outrow(ObLobAccessParam& param, ObLobQueryIter *&result);
   int query_outrow(ObLobAccessParam& param, ObString &data);
-  int process_diff(ObLobAccessParam& param, ObLobLocatorV2& lob_locator, ObLobDiffHeader *diff_header);
+  int process_diff(ObLobAccessParam& param,
+                   ObLobLocatorV2& lob_locator,
+                   common::ObLobDiffHeader *diff_header);
   int prepare_outrow_locator(ObLobAccessParam& param, ObLobDataInsertTask &task);
   int prepare_char_len(ObLobAccessParam& param, ObLobDiskLocatorBuilder &locator_builder, ObLobDataInsertTask &task);
   int prepare_lob_id(ObLobAccessParam& param, ObLobDiskLocatorBuilder &locator_builder);

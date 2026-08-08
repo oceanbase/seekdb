@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_medium_compaction_mgr.h"
-#include "src/logservice/replayservice/ob_tablet_replay_executor.h"
+#include "storage/tablet/ob_tablet_replay_executor.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
 
 namespace oceanbase
@@ -27,7 +27,7 @@ using namespace common;
 
 namespace compaction
 {
-class ObTabletMediumClogReplayExecutor final : public logservice::ObTabletReplayExecutor
+class ObTabletMediumClogReplayExecutor final : public storage::ObTabletReplayExecutor
 {
 public:
   ObTabletMediumClogReplayExecutor(ObMediumCompactionInfo &medium_info);

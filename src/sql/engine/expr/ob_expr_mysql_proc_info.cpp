@@ -21,7 +21,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_spi.h"
-#include "pl/ob_pl_stmt.h"
+#include "sql/pl/ob_pl_stmt.h"
 #include "sql/printer/ob_schema_printer.h"
 #include "common/object/ob_obj_type.h"
 #include "sql/resolver/ob_resolver_utils.h"

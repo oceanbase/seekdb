@@ -69,7 +69,7 @@ private:
   common::ObAddr addr_;
   storage::ObTabletIterator *tablet_iter_;
   common::ObArenaAllocator tablet_allocator_;
-  ObTabletHandle tablet_handle_;
+  storage::ObTabletHandle tablet_handle_;
   storage::ObTableStoreIterator table_store_iter_;
   void *iter_buf_;
 private:

@@ -14,48 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef SRC_PL_OB_PL_PACKAGE_GUARD_H_
-#define SRC_PL_OB_PL_PACKAGE_GUARD_H_
+#pragma once
 
-#include "sql/plan_cache/ob_cache_object_factory.h"
-#include "observer/ob_req_time_service.h"
-
-namespace oceanbase
-{
-
-namespace pl
-{
-class ObPLPackageGuard
-{
-public:
-  ObPLPackageGuard()
-    : alloc_(),
-      req_time_guard_()
-  {
-    lib::ObMemAttr attr;
-    attr.label_ = "PLPKGGuard";
-    
-    attr.ctx_id_ = common::ObCtxIds::EXECUTE_CTX_ID;
-    alloc_.set_attr(attr);
-  }
-  virtual ~ObPLPackageGuard();
-
-  int init();
-  inline bool is_inited() { return map_.created(); }
-  inline int put(uint64_t package_id, sql::ObCacheObjGuard *package)
-  {
-    return map_.set_refactored(package_id, package);
-  }
-  inline int get(uint64_t package_id, sql::ObCacheObjGuard *&package)
-  {
-    return map_.get_refactored(package_id, package);
-  }
-  common::ObArenaAllocator alloc_;
-private:
-  common::hash::ObHashMap<uint64_t, sql::ObCacheObjGuard*> map_;
-  observer::ObReqTimeGuard req_time_guard_;
-};
-
-}
-}
-#endif
+// Compatibility path during the SQL/PL ownership migration.
+#include "sql/pl/ob_pl_package_guard.h"

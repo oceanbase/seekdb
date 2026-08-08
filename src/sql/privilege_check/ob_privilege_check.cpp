@@ -1625,7 +1625,7 @@ int get_merge_table_stmt_need_privs(
 const ObGetStmtNeedPrivsFunc ObPrivilegeCheck::priv_check_funcs_[] =
 {
 #define OB_STMT_TYPE_DEF(stmt_type, priv_check_func, id, action_type) priv_check_func,
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #undef OB_STMT_TYPE_DEF
 };
 

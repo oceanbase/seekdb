@@ -1,0 +1,84 @@
+# owner: msy164651
+# description: 本case是为了测试主库上索引未生效，不会卡住备库的合并
+# case 2: 测试备库拷贝局部索引sstable任务的正确性
+# case 3: 测试备库拷贝全局索引sstable任务的正确性
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+source include/create_tenant_1.inc;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for continue_signal'; 
+
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for continue_signal';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+##在主库上创建全局索引，但是不让其生效
+#在主库上合并，但是不让备库同步到合并信息
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+set ob_query_timeout = 1000000000;
+send create index t_index on t(c2) global partition by hash(c2) partitions 3;
+
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_version 2;
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't', table_id, 1);
+ob2.check_until_timeout select index_status from oceanbase.__all_virtual_table where data_table_id=$table_id, 1, 3;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+#让索引生效
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_version 3;
+ob2.check_until_timeout select index_status from oceanbase.__all_virtual_table where data_table_id=$table_id, 2, 30;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob2.mysql alter system commit to switchover to primary;
+
+#case 2
+ob_connect(tt1_conn2, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn2;
+#建局部索引表
+create index il on t_t(c2) local;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+
+#case 3
+#卡住全局索引的构建
+ob2.mysql set ob_global_debug_sync = 'AFTER_GLOBAL_INDEX_GET_SNAPSHOT wait_for continue_signal';
+send create index t_index on t_t_t(c2) global partition by hash(c2) partitions 3;
+sleep 2;
+#等待备库做完restore
+let $table_id = deploy_get_value(ob2.select select table_id from __all_virtual_table where table_name = 't_t_t', table_id, 1);
+let $index_id =  deploy_get_value(ob2.select select table_id from __all_virtual_table where data_table_id=$table_id, table_id, 1);
+ob1.check_until_timeout select count(*) from __all_virtual_meta_table where table_id = $index_id, 3, 60;
+#完成构建
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob1.mysql alter system commit to switchover to primary;

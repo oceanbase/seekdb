@@ -1,0 +1,88 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，协调者宕机（事务回滚）
+# 测试场景：开启事务，执行SQL, 协调者宕机，commit/rollback
+##
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=11,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $ip=deploy_get_value(ob1.z1.obs1.ip);
+let $port=deploy_get_value(ob1.z1.obs1.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connection conn1;
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+
+ob1.z3.obs1.switch_partition obtest:obtest:t1;
+sleep 3;
+
+##commit
+set autocommit=0;
+insert into t1 values(0,0,'a');
+insert into t1 values(1,1,'b');
+
+##coordinator 宕机
+ob1.z3.obs1.force_stop;
+
+##等待无主选举的最长时间间隔
+sleep 20;
+
+--error 6002,4012
+update t1 set c2='aa' where pk=1;
+
+--error 6002
+commit;
+
+rollback;
+
+set autocommit=1;
+select * from t1;
+
+ob1.z3.obs1.nstart;
+
+#等待日志回放完成并且租户信息加载完成
+sleep 20;
+
+ob1.z3.obs1.switch_partition obtest:obtest:t1;
+sleep 3;
+update t1 set c2='aaa' where pk=1;
+select * from t1;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+
+##coordinator 宕机
+ob1.z3.obs1.force_stop;
+
+sleep 15;
+
+--error 6002,4012
+update t1 set c2='aa' where pk=1;
+
+rollback;
+
+commit;
+
+set autocommit=1;
+select * from t1;
+
+ob1.z3.obs1.nstart;
+sleep 12;
+ob1.z3.obs1.switch_partition obtest:obtest:t1;
+sleep 3;
+update t1 set c2='aaa' where pk=1;
+select * from t1;
+

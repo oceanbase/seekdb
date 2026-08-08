@@ -17,6 +17,7 @@
 #ifndef OB_DAS_MATCH_ITER_H_
 #define OB_DAS_MATCH_ITER_H_
 
+#include "lib/container/ob_loser_tree.h"
 #include "ob_das_tr_merge_iter.h"
 
 namespace oceanbase
@@ -26,6 +27,31 @@ namespace sql
 struct ObDASIRScanCtDef;
 struct ObDASIRScanRtDef;
 class ObDocIdExt;
+
+struct ObDASMatchMergeItem
+{
+  ObDASMatchMergeItem()
+    : relevance_(0.0), iter_idx_(-1), equal_with_next_(false)
+  {}
+  ~ObDASMatchMergeItem() = default;
+  TO_STRING_KV(K_(iter_idx), K_(relevance), K_(equal_with_next));
+
+  double relevance_;
+  int64_t iter_idx_;
+  bool equal_with_next_;
+};
+
+class ObDASMatchRelevanceCollector
+{
+public:
+  ObDASMatchRelevanceCollector() = default;
+  virtual ~ObDASMatchRelevanceCollector() = default;
+
+  virtual void reset() = 0;
+  virtual void reuse() = 0;
+  virtual int collect_one_dim(int64_t dim_idx, double relevance) = 0;
+  virtual int get_result(double &relevance, bool &is_valid) = 0;
+};
 
 struct ObDASMatchIterParam : public ObDASIterParam
 {
@@ -55,8 +81,14 @@ struct ObDASMatchMergeCmp
   ObDASMatchMergeCmp();
   virtual ~ObDASMatchMergeCmp() {}
 
-  int init(ObDatumMeta id_meta, const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids);
-  int cmp(const ObSRMergeItem &l, const ObSRMergeItem &r, int64_t &cmp_ret);
+  int init(
+      ObDatumMeta id_meta,
+      const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids,
+      const common::ObDatumAccessContext *datum_access_ctx);
+  int cmp(
+      const ObDASMatchMergeItem &l,
+      const ObDASMatchMergeItem &r,
+      int64_t &cmp_ret);
 private:
   inline const ObDatum &get_id_datum(const int64_t iter_idx)
   {
@@ -65,24 +97,12 @@ private:
 private:
   common::ObDatumCmpFuncType cmp_func_;
   const ObFixedArray<ObDocIdExt, ObIAllocator> *iter_ids_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   bool is_inited_;
 };
 
-struct ObDasBestfieldCollector : ObSRDaaTRelevanceCollector
-{
-  ObDasBestfieldCollector() : ObSRDaaTRelevanceCollector(), max_relevance_() {}
-  virtual ~ObDasBestfieldCollector() {};
-
-  int init();
-  virtual void reset() override;
-  virtual void reuse() override;
-  virtual int collect_one_dim(const int64_t dim_idx, const double) override;
-  virtual int get_result(double &relevance, bool &is_valid) override;
-private:
-  double max_relevance_;
-};
-
-typedef common::ObLoserTree<ObSRMergeItem, ObDASMatchMergeCmp> ObDASMatchMergeLoserTree;
+typedef common::ObLoserTree<ObDASMatchMergeItem, ObDASMatchMergeCmp>
+    ObDASMatchMergeLoserTree;
 
 class ObDASMatchIter : public ObDASIter
 {
@@ -124,7 +144,7 @@ private:
   ObEvalCtx *eval_ctx_;
   ObExpr *domain_id_expr_;
   void (*set_datum_func_)(ObDatum &, const ObDocIdExt &);
-  ObSRDaaTRelevanceCollector *relevance_collector_;
+  ObDASMatchRelevanceCollector *relevance_collector_;
   ObFixedArray<ObExpr *, ObIAllocator> children_relevance_exprs_;
   ObFixedArray<ObExpr *, ObIAllocator> children_domain_id_exprs_;
   ObFixedArray<ObDocIdExt, ObIAllocator> iter_domain_ids_; //cache from lose tree

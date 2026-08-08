@@ -1,0 +1,62 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：单partition，Participant（参与者 ）出现主备切换（由于redolog没有持久化，事务会回滚）
+# 测试场景：开启事务，执行SQL, 参与者发生主备切换，commit
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+ob_connect(conn_obtest, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+sleep 10;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.z3.obs0.switch_partition obtest:test:t1;
+sleep 15;
+
+##commit
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+##切换partition t1 的leader
+ob1.z2.obs0.switch_partition obtest:test:t1;
+sleep 5;
+
+update t1 set c2='aa' where pk=1;
+
+commit;
+
+#rollback;
+
+connect (conn1,$ip,admin@obtest,admin,obtest,$port);
+connection conn1;
+
+set autocommit=1;
+select * from t1;
+
+
+##rollback
+set autocommit=0;
+insert into t1 values(3,1,'a');
+insert into t1 values(4,2,'b');
+
+
+##切换partition t1 的leader
+ob1.z3.obs0.switch_partition obtest:test:t1;
+sleep 5;
+
+update t1 set c2='aa' where pk=3;
+
+rollback;
+
+commit;
+
+set autocommit=1;
+select * from t1;
+

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/obmp_init_db.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 using namespace oceanbase::rpc;
 using namespace oceanbase::obmysql;

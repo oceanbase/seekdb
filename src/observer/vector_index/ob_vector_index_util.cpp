@@ -20,16 +20,20 @@
 #include <string>
 
 #include "ob_vector_index_util.h"
-#include "share/rc/ob_module_provider.h"
-#include "storage/vector_index/ob_vector_index_sched_job_utils.h"
+#include "share/rc/ob_server_runtime.h"
+#include "observer/vector_index/ob_vector_index_sched_job_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "rootserver/ob_ddl_operator.h"
+#include "rootserver/ob_ddl_service.h"
+#include "query/vector/ob_vector_query_result.h"
+#include "query/vector/ob_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/vector_index/ob_plugin_vector_index_adaptor.h"
+#include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "lib/file/ob_string_util.h"
@@ -42,6 +46,26 @@ using namespace sql;
 using namespace common;
 namespace share
 {
+using schema::ObColumnSchemaV2;
+using schema::ObIndexType;
+using schema::ObPartitionLevel;
+using schema::ObSchemaGetterGuard;
+using schema::ObTableSchema;
+
+int ObVectorIndexUtil::get_vector_index_prefix(
+    const schema::ObTableSchema &index_table_schema,
+    ObString &prefix)
+{
+  return ObPluginVectorIndexUtils::get_vector_index_prefix(index_table_schema, prefix);
+}
+
+bool ObVectorIndexUtil::rowexpr_asc_compare(sql::ObRawExpr *lhs,
+                                            sql::ObRawExpr *rhs)
+{
+  return static_cast<sql::ObColumnRefRawExpr *>(lhs)->get_column_id() <
+         static_cast<sql::ObColumnRefRawExpr *>(rhs)->get_column_id();
+}
+
 static int get_vsag_metric_from_distance(const ObString &distance_name, const char *&metric)
 {
   int ret = OB_SUCCESS;
@@ -753,7 +777,7 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     ObString endpoint_str(param.endpoint_);
     ObAIFuncExprInfo *ai_fun_info = nullptr;
     omt::ObAiServiceGuard ai_service_guard;
-    omt::ObAiService *ai_service = share::g_mp->ai_service();
+    omt::ObAiService *ai_service = ::oceanbase::share::server_service<::oceanbase::omt::ObAiService>();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, ai_fun_info))) {
       LOG_WARN("failed to get ai fun info", K(ret), K(param_str));
@@ -3020,15 +3044,18 @@ int ObVectorIndexUtil::get_vec_dis_type_from_dis_algorithm(ObVectorIndexDistAlgo
   int ret = OB_SUCCESS;
   switch (dis_Algorithm) {
     case ObVectorIndexDistAlgorithm::VIDA_L2: {
-      vec_dis_type = ObExprVectorDistance::ObVecDisType::EUCLIDEAN;
+      vec_dis_type = static_cast<int64_t>(
+          ObExprVectorDistance::ObVecDisType::EUCLIDEAN);
       break;
     }
     case ObVectorIndexDistAlgorithm::VIDA_COS: {
-      vec_dis_type = ObExprVectorDistance::ObVecDisType::COSINE;
+      vec_dis_type = static_cast<int64_t>(
+          ObExprVectorDistance::ObVecDisType::COSINE);
       break;
     }
     case ObVectorIndexDistAlgorithm::VIDA_IP: {
-      vec_dis_type = ObExprVectorDistance::ObVecDisType::DOT;
+      vec_dis_type = static_cast<int64_t>(
+          ObExprVectorDistance::ObVecDisType::DOT);
       break;
     }
     default: {
@@ -4753,12 +4780,12 @@ int ObVectorIndexUtil::add_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                             const common::ObString &exec_env)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
+  if (OB_FAIL(observer::ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
                       sql_client,
                       vidx_table_id,
                       exec_env))) {
     LOG_WARN("fail to add vector index refresh job", KR(ret), K(vidx_table_id), K(exec_env));
-  } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(
+  } else if (OB_FAIL(observer::ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(
                       sql_client,
                       vidx_table_id,
                       exec_env))) {
@@ -4771,11 +4798,11 @@ int ObVectorIndexUtil::remove_dbms_vector_jobs(common::ObISQLClient &sql_client,
                                                const uint64_t vidx_table_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObVectorIndexSchedJobUtils::remove_vector_index_refresh_job(
+  if (OB_FAIL(observer::ObVectorIndexSchedJobUtils::remove_vector_index_refresh_job(
                      sql_client, vidx_table_id))) {
     LOG_WARN("failed to remove vector index refresh job",
             KR(ret), K(vidx_table_id));
-  } else if (OB_FAIL(ObVectorIndexSchedJobUtils::remove_vector_index_rebuild_job(
+  } else if (OB_FAIL(observer::ObVectorIndexSchedJobUtils::remove_vector_index_rebuild_job(
                      sql_client, vidx_table_id))) {
     LOG_WARN("failed to remove vector index rebuild job",
             KR(ret), K(vidx_table_id));
@@ -4790,7 +4817,7 @@ int ObVectorIndexUtil::get_dbms_vector_job_info(common::ObISQLClient &sql_client
                                                     dbms_scheduler::ObDBMSSchedJobInfo &job_info)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObVectorIndexSchedJobUtils::get_vector_index_job_info(sql_client,
+  if (OB_FAIL(observer::ObVectorIndexSchedJobUtils::get_vector_index_job_info(sql_client,
                                                                     vidx_table_id,
                                                                     allocator,
                                                                     schema_guard,
@@ -4810,7 +4837,7 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *orig_index_schema = nullptr;
-  ObDropIndexArg tmp_drop_arg;
+  obcall::ObDropIndexArg tmp_drop_arg;
   
   
   tmp_drop_arg.index_name_ = ori_index_name;
@@ -5729,7 +5756,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected distance algo", K(ret), K(dis_algo));
     } else {
-      ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+      ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
       ObExprVecIvfCenterIdCache *cache = get_ivf_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_);
       if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, allocator, centers, center_prefix, 0))) {
         LOG_WARN("failed to get ivf aux info", K(ret));
@@ -5905,7 +5932,7 @@ void ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(const uint64_t& id, sql::
   }
 }
 
-int ObVectorIndexUtil::get_ivf_aux_info(share::ObPluginVectorIndexService *service,
+int ObVectorIndexUtil::get_ivf_aux_info(query::ObIVectorIndexService *service,
                                             ObExprVecIvfCenterIdCache *cache,
                                             const ObTableID &table_id,
                                             const ObTabletID &tablet_id,
@@ -6058,8 +6085,8 @@ bool ObVectorIndexUtil::check_vector_index_memory(
   bool is_satisfied = true;
   const static double VEC_MEMORY_HOLD_FACTOR = 1.2;
   SERVER_MODULE_SCOPE {
-    ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
-    ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
+    ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
+    ObSharedMemAllocMgr *shared_mem_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
     if (OB_ISNULL(service) || OB_ISNULL(shared_mem_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("service or manager is nullptr", K(ret), K(service), K(shared_mem_mgr));
@@ -6070,7 +6097,7 @@ bool ObVectorIndexUtil::check_vector_index_memory(
       int64_t estimate_memory = 0;
       int64_t all_vsag_mem_used = ATOMIC_LOAD(service->get_all_vsag_use_mem());
       int64_t hold_mem = shared_mem_mgr->vector_allocator().hold();
-      if (OB_ISNULL(mem_mgr = share::g_mp->rb_mem_mgr())) {
+      if (OB_ISNULL(mem_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>())) {
       } else {
         bitmap_mem_used = mem_mgr->get_vec_idx_used();
       }
@@ -6097,7 +6124,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
   uint64_t construct_mem = 0;
   uint64_t buff_mem = 0;
   int64_t mem_limited_size = 0;
-  ObSharedMemAllocMgr *shared_mem_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *shared_mem_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   const ObTableSchema *data_table_schema = nullptr;
   ObVectorIndexParam param;
   int64_t dim = 0;
@@ -6809,3 +6836,152 @@ OB_SERIALIZE_MEMBER(ObDasSemanticIndexInfo,
 
 }
 }
+
+namespace oceanbase
+{
+namespace data_plane
+{
+
+int resolve_vector_index_build_schema(
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    const share::schema::ObTableSchema &index_table_schema,
+    const share::schema::ObTableSchema *&data_table_schema,
+    common::ObString &index_params,
+    int64_t &dimension)
+{
+  using namespace common;
+  using namespace share;
+  using namespace share::schema;
+
+  int ret = OB_SUCCESS;
+  ObSEArray<uint64_t, 1> column_ids;
+  uint64_t parameter_table_id = OB_INVALID_ID;
+  const ObTableSchema *parameter_table_schema = nullptr;
+  ObIndexType parameter_table_type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
+  data_table_schema = nullptr;
+  index_params.reset();
+  dimension = 0;
+
+  if (index_table_schema.is_vec_ivfflat_index()) {
+    parameter_table_type = INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL;
+  } else if (index_table_schema.is_vec_ivfsq8_index()) {
+    parameter_table_type = INDEX_TYPE_VEC_IVFSQ8_CENTROID_LOCAL;
+  } else if (index_table_schema.is_vec_ivfpq_index()) {
+    parameter_table_type = INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
+  }
+
+  if (OB_FAIL(schema_guard.get_table_schema(
+          index_table_schema.get_data_table_id(), data_table_schema))) {
+    LOG_WARN("failed to get vector-index data table schema", K(ret),
+        "data_table_id", index_table_schema.get_data_table_id());
+  } else if (OB_ISNULL(data_table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("vector-index data table does not exist", K(ret),
+        "data_table_id", index_table_schema.get_data_table_id());
+  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(
+                 *data_table_schema, index_table_schema, column_ids))) {
+    LOG_WARN("failed to resolve vector-index column", K(ret));
+  } else if (OB_UNLIKELY(1 != column_ids.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected vector-index column count", K(ret), K(column_ids));
+  } else if (INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL == parameter_table_type) {
+    ObString index_prefix;
+    if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(
+            index_table_schema, index_prefix))) {
+      LOG_WARN("failed to resolve vector-index prefix", K(ret));
+    } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
+                   &schema_guard,
+                   *data_table_schema,
+                   parameter_table_type,
+                   column_ids.at(0),
+                   index_prefix,
+                   parameter_table_id))) {
+      LOG_WARN("failed to resolve vector-index parameter table", K(ret), K(index_prefix));
+    }
+  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid(
+                 &schema_guard,
+                 *data_table_schema,
+                 parameter_table_type,
+                 column_ids.at(0),
+                 parameter_table_id))) {
+    LOG_WARN("failed to resolve vector-index parameter table", K(ret), K(column_ids));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(
+                 parameter_table_id, parameter_table_schema))) {
+    LOG_WARN("failed to get vector-index parameter table schema", K(ret), K(parameter_table_id));
+  } else if (OB_ISNULL(parameter_table_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+    LOG_WARN("vector-index parameter table does not exist", K(ret), K(parameter_table_id));
+  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(
+                 *parameter_table_schema, *data_table_schema, dimension))) {
+    LOG_WARN("failed to resolve vector dimension", K(ret));
+  } else if (OB_UNLIKELY(0 == dimension)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("resolved vector dimension is zero", K(ret), K(dimension));
+  } else {
+    index_params = parameter_table_schema->get_index_params();
+  }
+  return ret;
+}
+
+int resolve_vector_index_column_name(
+    const share::schema::ObTableSchema &data_table_schema,
+    const share::schema::ObTableSchema &index_table_schema,
+    common::ObString &column_name)
+{
+  using namespace common;
+  using share::ObVectorIndexUtil;
+
+  int ret = OB_SUCCESS;
+  ObSEArray<ObString, 1> column_names;
+  column_name.reset();
+  if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_name(
+          data_table_schema, index_table_schema, column_names))) {
+    LOG_WARN("failed to resolve vector-index column name", K(ret));
+  } else if (OB_UNLIKELY(column_names.empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vector index has no user column", K(ret));
+  } else {
+    column_name = column_names.at(0);
+  }
+  return ret;
+}
+
+int resolve_vector_index_column_dimension(
+    const share::schema::ObTableSchema &index_table_schema,
+    int64_t &dimension)
+{
+  return share::ObVectorIndexUtil::get_vector_index_column_dim(
+      index_table_schema, dimension);
+}
+
+int construct_vector_index_rebuild_parameters(
+    const share::schema::ObTableSchema &data_table_schema,
+    const common::ObString &old_index_parameters,
+    common::ObString &new_index_parameters,
+    common::ObIAllocator &allocator)
+{
+  return share::ObVectorIndexUtil::construct_rebuild_index_param(
+      data_table_schema,
+      old_index_parameters,
+      new_index_parameters,
+      &allocator);
+}
+
+int vector_index_rebuild_requires_embedding(
+    const common::ObString &old_index_parameters,
+    const common::ObString &new_index_parameters,
+    const share::schema::ObTableSchema &index_table_schema,
+    bool &requires_embedding)
+{
+  return share::ObVectorIndexUtil::check_need_embedding_when_rebuild(
+      old_index_parameters,
+      new_index_parameters,
+      index_table_schema,
+      requires_embedding);
+}
+
+} // namespace data_plane
+} // namespace oceanbase

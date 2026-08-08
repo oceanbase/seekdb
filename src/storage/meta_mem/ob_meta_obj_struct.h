@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_constants.h"
 #include "lib/time/ob_clock_generator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_define.h"
 #include "storage/meta_mem/ob_storage_meta_obj_pool.h"
 #include "storage/blocksstable/ob_macro_block_handle.h"
@@ -201,7 +201,7 @@ ObMetaObj<T>::ObMetaObj()
   : pool_(nullptr),
     allocator_(nullptr),
     ptr_(nullptr),
-    t3m_(share::g_mp->storage_meta_mem_mgr())
+    t3m_(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>())
 {
 }
 

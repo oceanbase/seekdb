@@ -15,8 +15,10 @@
  */
 #define USING_LOG_PREFIX SHARE
 #include "ob_vector_index_i_task_executor.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_ddl_task_executor.h"
+#include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "storage/ls/ob_ls.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 
@@ -28,7 +30,7 @@ namespace share
 int ObVecITaskExecutor::init(storage::ObLS *ls)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED; 
     LOG_WARN("vector index load task failed", K(ret), KP(vector_index_service), KP(ls));

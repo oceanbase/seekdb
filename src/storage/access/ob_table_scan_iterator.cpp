@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/access/ob_table_scan_access.h"
 #include "storage/access/ob_table_scan_iterator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/access/ob_sample_iter_helper.h"
 
 namespace oceanbase
@@ -73,7 +74,7 @@ void ObTableScanIterator::reset()
   reset_scan_iter(ddl_block_sample_iterator_);
   // reset_scan_iter(i_sample_iter_);
   if (nullptr != cached_iter_node_) {
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     iter_pool->release(cached_iter_node_);
   }
 
@@ -153,7 +154,7 @@ bool ObTableScanIterator::can_use_global_iter_pool(const ObQRIterType iter_type)
     int64_t col_cnt = MAX(scan_param_->table_param_->get_read_info().get_schema_column_count(),
                           get_table_param_.tablet_iter_.get_tablet()->get_rowkey_read_info().get_schema_column_count());
     col_cnt += scan_param_->table_param_->get_access_virtual_col_cnt();
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     if (OB_NOT_NULL(iter_pool)) {
        use_pool = iter_pool->can_use_iter_pool(table_cnt, col_cnt, iter_type);
     }
@@ -168,7 +169,7 @@ int ObTableScanIterator::prepare_cached_iter_node()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not null cached iter node", K(ret), KP(cached_iter_node_));
   } else if (can_use_global_iter_pool(current_iter_type_)) {
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     if (OB_FAIL(iter_pool->get(current_iter_type_, cached_iter_node_))) {
       STORAGE_LOG(WARN, "Failed to get from iter pool", K(ret));
     } else if (nullptr != cached_iter_node_) {
@@ -186,14 +187,14 @@ void ObTableScanIterator::try_release_cached_iter_node(const ObQRIterType rescan
     const int64_t table_cnt = get_table_param_.tablet_iter_.table_iter()->count();
     const int64_t col_cnt = get_table_param_.tablet_iter_.get_tablet()->get_rowkey_read_info().get_request_count();
     bool use_pool = current_iter_type_ == rescan_iter_type &&
-                    share::g_mp->global_iterator_pool()->can_use_iter_pool(table_cnt, col_cnt, rescan_iter_type);
+                    ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>()->can_use_iter_pool(table_cnt, col_cnt, rescan_iter_type);
     if (!use_pool) {
       STORAGE_LOG(INFO, "iter type/table cnt/col cnt is changed in rescan, disable global cache", KPC(cached_iter_node_),
         K(table_cnt), K(col_cnt), K(current_iter_type_), K(rescan_iter_type), KP(cached_iter_),
         KP(single_merge_), KP(get_merge_), KP(scan_merge_), KP(multi_scan_merge_));
       main_table_param_.diable_use_global_iter_pool();
       main_table_ctx_.reset_cached_iter_node();
-      share::g_mp->global_iterator_pool()->release(cached_iter_node_);
+      ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>()->release(cached_iter_node_);
       cached_iter_node_ = nullptr;
       current_iter_type_ = T_INVALID_ITER_TYPE;
       if (nullptr != cached_iter_) {
@@ -738,4 +739,39 @@ int ObTableScanIterator::check_advance_scan_supported()
 }
 
 } // namespace storage
+
+namespace data_plane
+{
+
+int table_scan_next_datum_row(
+    common::ObNewRowIterator *iterator,
+    blocksstable::ObDatumRow *&row)
+{
+  int ret = OB_SUCCESS;
+  storage::ObTableScanIterator *table_scan_iterator =
+      dynamic_cast<storage::ObTableScanIterator *>(iterator);
+  if (OB_ISNULL(table_scan_iterator)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = table_scan_iterator->get_next_row(row);
+  }
+  return ret;
+}
+
+int table_scan_rescan(
+    common::ObNewRowIterator *iterator,
+    storage::ObTableScanParam &scan_param)
+{
+  int ret = OB_SUCCESS;
+  storage::ObTableScanIterator *table_scan_iterator =
+      dynamic_cast<storage::ObTableScanIterator *>(iterator);
+  if (OB_ISNULL(table_scan_iterator)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    ret = table_scan_iterator->rescan(scan_param);
+  }
+  return ret;
+}
+
+} // namespace data_plane
 } // namespace oceanbase

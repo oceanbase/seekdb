@@ -484,7 +484,7 @@ int ObRelativeTable::prepare_truncate_part_filter(
     const int64_t major_table_version = nullptr != table_ptr && table_ptr->is_major_sstable() ?
                                         table_ptr->get_snapshot_version() : 0;
     ObVersionRange read_version_range(major_table_version, read_snapshot);
-    const storage::ObTableReadInfo &read_info = schema_param_->get_read_info();
+    const storage::ObITableReadInfo &read_info = schema_param_->get_read_info();
     if (OB_UNLIKELY(!read_version_range.is_valid())) {
       LOG_DEBUG("[TRUNCATE INFO] invalid version range, filter is empty", K(ret), K(read_version_range), KPC_(truncate_part_filter));
     } else if (OB_UNLIKELY(nullptr != table_ptr && table_ptr->is_major_sstable() && major_table_version <= 0)) {

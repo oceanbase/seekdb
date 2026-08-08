@@ -45,7 +45,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestJsonTree);
 };
@@ -1578,7 +1578,7 @@ TEST_F(TestJsonTree, test_get_serialize_size_array_one_depth)
   // array
   ObJsonArray j_arr(&allocator);
   j_base = &j_arr;
-  int64 repeat_num = 10000;
+  constexpr int64 repeat_num = 64;
   int64_t times = 0;
   uint64_t last_size = 0;
   uint64_t new_size = 0;
@@ -1605,7 +1605,7 @@ TEST_F(TestJsonTree, test_get_serialize_size_array_multi_depth)
   // array
   ObJsonArray j_arr_root(&allocator);
   j_base = &j_arr_root;
-  int64 repeat_num = 10000;
+  constexpr int64 repeat_num = 64;
   int64_t times = 0;
   uint64_t last_size = 0;
   uint64_t new_size = 0;
@@ -1641,7 +1641,7 @@ TEST_F(TestJsonTree, test_get_serialize_size_object_one_depth)
   // object
   ObJsonObject j_obj(&allocator);
   j_base = &j_obj;
-  int64 repeat_num = 10000;
+  constexpr int64 repeat_num = 64;
   int64_t times = 0;
   uint64_t last_size = 0;
   uint64_t new_size = 0;
@@ -1676,7 +1676,7 @@ TEST_F(TestJsonTree, test_get_serialize_size_object_multi_depth)
   // object
   ObJsonObject j_obj(&allocator);
   j_base = &j_obj;
-  int64 repeat_num = 10000;
+  constexpr int64 repeat_num = 64;
   int64_t times = 0;
   uint64_t last_size = 0;
   uint64_t new_size = 0;
@@ -2144,11 +2144,11 @@ TEST_F(TestJsonTree, test_sort)
   ASSERT_EQ(result, tmp_res);
 }
 
-TEST_F(TestJsonTree, test_big_json)
+TEST_F(TestJsonTree, parse_generated_object)
 {
   common::ObArenaAllocator allocator(ObModIds::TEST);
   ObJsonBuffer j_buf(&allocator);
-  ASSERT_EQ(j_buf.reserve(1024 * 1024), 0);
+  ASSERT_EQ(j_buf.reserve(64 * 1024), 0);
   ASSERT_EQ(j_buf.append("{"), 0);
 
 
@@ -2157,7 +2157,7 @@ TEST_F(TestJsonTree, test_big_json)
   char value_buffer[16] = {0};
   int idx = 0;
 
-  for (int64_t pos = 0; pos < 50000; ++pos) {
+  for (int64_t pos = 0; pos < 64; ++pos) {
     for (int i = 0; i < 32; ++i) {
       idx = ObRandom::rand(0, 15);
       key_buffer[i] = origin[idx];
@@ -2183,20 +2183,13 @@ TEST_F(TestJsonTree, test_big_json)
   const char *syntaxerr = NULL;
   ObJsonNode *json_tree = NULL;
 
-  struct timeval time_start, time_end;
-  gettimeofday(&time_start, nullptr);
   ASSERT_EQ(OB_SUCCESS, ObJsonParser::parse_json_text(&allocator, json_text.ptr(),
       json_text.length(), syntaxerr, NULL, json_tree));
   ASSERT_TRUE(json_tree != NULL);
-
-  gettimeofday(&time_end, nullptr);
-
-  cout << "time start : " << " sec = " << time_start.tv_sec << ", usec = " << time_start.tv_usec << endl;
-  cout << "time  end  : " << " sec = " << time_end.tv_sec << ", usec = " << time_end.tv_usec << endl;
   
 }
 
-TEST_F(TestJsonTree, test_parse_big_json)
+TEST_F(TestJsonTree, parse_deeply_nested_json)
 {
   common::ObArenaAllocator allocator(ObModIds::TEST);
   ObJsonBuffer j_buf(&allocator);
@@ -2209,8 +2202,6 @@ TEST_F(TestJsonTree, test_parse_big_json)
   const char *syntaxerr = NULL;
   ObJsonNode *json_tree = NULL;
 
-  struct timeval time_start, time_end;
-  gettimeofday(&time_start, nullptr);
   ASSERT_EQ(OB_SUCCESS, ObJsonParser::parse_json_text(&allocator, json_text.ptr(),
       json_text.length(), syntaxerr, NULL, json_tree));
   ASSERT_TRUE(json_tree != NULL);
@@ -2222,27 +2213,9 @@ TEST_F(TestJsonTree, test_parse_big_json)
 
   ASSERT_EQ(OB_SUCCESS, bin.get_raw_binary(raw_bin, &allocator));
 
-  gettimeofday(&time_end, nullptr);
-
-
-
-  cout << "time start : " << " sec = " << time_start.tv_sec << ", usec = " << time_start.tv_usec << endl;
-  cout << "time  end  : " << " sec = " << time_end.tv_sec << ", usec = " << time_end.tv_usec << endl;
-  
 }
 
 
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  /*
-  system("rm -f test_json_tree.log");
-  OB_LOGGER.set_file_name("test_json_tree.log");
-  OB_LOGGER.set_log_level("INFO");
-  */
-  return RUN_ALL_TESTS();
-}

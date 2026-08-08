@@ -692,12 +692,17 @@ int ObSelectIntoOp::print_str_or_json_with_escape(const ObObj &obj, ObCsvFileWri
   ObString str_to_escape;
   ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx_);
   common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
+  const common::ObLobReadOptions *lob_read_options = nullptr;
   if (OB_FAIL(get_buf(escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_, data_writer))) {
     LOG_WARN("failed to get buffer", K(ret));
   } else if (obj.is_json() || obj.is_collection_sql_type()) {
     ObObj inrow_obj = obj;
     if (obj.is_lob_storage()
-        && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(obj, inrow_obj, NULL, &temp_allocator))) {
+        && OB_FAIL(get_exec_ctx().get_lob_read_options(lob_read_options))) {
+      LOG_WARN("failed to get LOB read options", K(ret));
+    } else if (obj.is_lob_storage()
+        && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                       obj, inrow_obj, lob_read_options, &temp_allocator))) {
       LOG_WARN("failed to convert outrow lobs", K(ret), K(obj));
     } else if (obj.is_collection_sql_type()) {
       ObSubSchemaValue sub_meta;
@@ -860,7 +865,8 @@ int ObSelectIntoOp::write_lob_to_file(const ObObj &obj,
   common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
   int64_t truncated_len = 0;
   bool stop_when_truncated = false;
-  OZ(lob_iter.init(0, NULL, &temp_allocator));
+  OZ(ObTextStringHelper::build_text_iter(
+      lob_iter, eval_ctx_.exec_ctx_, &temp_allocator));
   OZ(get_buf(escape_printer_.buf_, escape_printer_.buf_len_, escape_printer_.pos_, data_writer));
   // When truncated_len == src_block_data.length() when truncated length equals source block data length
   // Indicates that the current foreach_char is processing only invalid data at the end of the lob, i.e., truncated data from the previous round, to avoid infinite loops
@@ -1181,6 +1187,7 @@ int ObSelectIntoOp::into_varlist()
   const ObIArray<ObExpr*> &select_exprs = MY_SPEC.select_exprs_;
   const ObIArray<ObString> &user_vars = MY_SPEC.user_vars_;
   ObArenaAllocator lob_tmp_allocator("LobTmp", OB_MALLOC_NORMAL_BLOCK_SIZE);
+  const common::ObLobReadOptions *lob_read_options = nullptr;
   if (select_exprs.count() != user_vars.count()) {
     ret = OB_ERR_COLUMN_SIZE;
     LOG_WARN("user vars count should be equal to select exprs count" , K(ret),
@@ -1195,9 +1202,14 @@ int ObSelectIntoOp::into_varlist()
       } else if (OB_FAIL(datum->to_obj(obj, select_exprs.at(i)->obj_meta_))) {
         LOG_WARN("convert datum to obj failed", K(ret), KPC(select_exprs.at(i)));
       } else if (obj.is_lob_storage()
+          && OB_FAIL(ctx_.get_lob_read_options(lob_read_options))) {
+        LOG_WARN("failed to get LOB read options", K(ret));
+      } else if (obj.is_lob_storage()
           // outrow lob can not be assigned to user var, so convert outrow to inrow lob
           // user var has independent memory, so using temporary memory here is fine
-          && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(obj, obj, nullptr, &lob_tmp_allocator, true/*allow_persist_inrow*/))) {
+          && OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                         obj, obj, lob_read_options, &lob_tmp_allocator,
+                         true/*allow_persist_inrow*/))) {
         LOG_WARN("convert outrow to inrow lob failed", K(ret), K(obj));
       } else if (OB_FAIL(ObVariableSetExecutor::set_user_variable(obj, var_name,
                   ctx_.get_my_session()))) {
@@ -1330,7 +1342,8 @@ int ObSelectIntoOp::check_secure_file_path(ObString file_name)
 #endif
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("file not exist", K(ret), K(sql_str));
-  } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(SYS_VAR_SECURE_FILE_PRIV,
+  } else if (OB_FAIL(ObSchemaUtils::get_runtime_varchar_variable(*GCTX.schema_service_,
+                                                                SYS_VAR_SECURE_FILE_PRIV,
                                                                 ctx_.get_allocator(),
                                                                 secure_file_priv))) {
     LOG_WARN("fail to get runtime variable", K(secure_file_priv), K(ret));

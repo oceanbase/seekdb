@@ -21,7 +21,7 @@
 #include "lib/container/ob_array_serialization.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/lock/ob_bucket_lock.h"
-#include "logservice/ob_log_base_type.h"
+#include "share/log/ob_log_base_type.h"
 #include "logservice/palf/palf_callback.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/ob_dml_common.h"

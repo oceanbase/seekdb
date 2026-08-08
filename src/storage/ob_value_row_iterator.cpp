@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "storage/ob_table_dml_param.h"
 #include "storage/ob_table_dml_param.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_relative_table.h"
 #include "storage/access/ob_single_merge.h"
 #include "storage/access/ob_multiple_get_merge.h"
@@ -172,7 +172,7 @@ ObRowGetter::~ObRowGetter()
     multi_get_merge_ = nullptr;
   }
   if (nullptr != cached_iter_node_) {
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     iter_pool->release(cached_iter_node_);
   }
 }
@@ -258,7 +258,7 @@ int ObRowGetter::prepare_cached_iter_node(const ObDMLBaseParam &dml_param,
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected not null cached iter node", K(ret), KP(cached_iter_node_));
   } else if (can_use_global_iter_pool(dml_param)) {
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     if (OB_FAIL(iter_pool->get(iter_type_, cached_iter_node_))) {
       STORAGE_LOG(WARN, "Failed to get from iter pool", K(ret));
     } else if (nullptr != cached_iter_node_) {
@@ -372,7 +372,7 @@ bool ObRowGetter::can_use_global_iter_pool(const ObDMLBaseParam &dml_param) cons
   } else {
     const int64_t table_cnt = get_table_param_.tablet_iter_.table_iter()->count();
     const int64_t col_cnt = dml_param.table_param_->get_data_table().get_read_info().get_schema_column_count();
-    ObGlobalIteratorPool *iter_pool = share::g_mp->global_iterator_pool();
+    ObGlobalIteratorPool *iter_pool = ::oceanbase::share::server_service<::oceanbase::storage::ObGlobalIteratorPool>();
     if (OB_NOT_NULL(iter_pool)) {
       use_pool = iter_pool->can_use_iter_pool(table_cnt, col_cnt, iter_type_);
     }

@@ -574,12 +574,14 @@ static int text_trim2(ObTextStringIter &str_iter, ResType &output_result, int64_
 template <typename ResType>
 static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_iter,
     ObIAllocator &calc_alloc, ResType &output_result, int64_t trim_type,
-    const common::ObString &pattern, const int64_t &idx = 0, bool is_vec = false)
+    const common::ObString &pattern,
+    const common::ObLobReadOptions &lob_options,
+    const int64_t &idx = 0, bool is_vec = false)
 {
   int ret = OB_SUCCESS;
   ObString output;
   int64_t total_byte_len = 0;
-  if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
+  if (OB_FAIL(str_iter.init(0, &lob_options, &calc_alloc))) {
     LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
   } else if (OB_FAIL(str_iter.get_byte_len(total_byte_len))) {
     LOG_WARN("get str_iter byte len failed", K(ret));
@@ -691,7 +693,8 @@ static int text_trim(ObTextStringIter &str_iter, ObTextStringIter &str_backward_
         OB_ASSERT(found_start);
         // find end
         ObTextStringIterState back_state;
-        if (OB_FAIL(str_backward_iter.init(0, NULL, &calc_alloc))) {
+        if (OB_FAIL(str_backward_iter.init(
+                0, &lob_options, &calc_alloc))) {
           LOG_WARN("init str_iter failed ", K(ret), K(str_backward_iter));
         } else {
           ObString backward_str_data;
@@ -802,11 +805,24 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
     } else { // is text tc, trim left or right
       ObTextStringIter str_iter(str_meta.type_, str_meta.cs_type_, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      if (OB_FAIL(str_iter.init(0, NULL, &calc_alloc))) {
-        LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
-      } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type, pattern, pattern_len_in_char, 
-                                    cs_type, pattern_byte_num,  pattern_byte_offset))) {
-        LOG_WARN("text_trim2 failed", K(ret));
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+        LOG_WARN("get datum access context failed", K(ret));
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        // TRIM may open independent scans for one LOB.  Keep their cursors
+        // isolated, as the legacy path did, while retaining the explicit
+        // read service and deadline required by the Share interface.
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(str_iter.init(0, &trim_options, &calc_alloc))) {
+          LOG_WARN("init str_iter failed ", K(ret), K(str_iter));
+        } else if (OB_FAIL(text_trim2(str_iter, output_result, trim_type,
+                                     pattern, pattern_len_in_char, cs_type,
+                                     pattern_byte_num, pattern_byte_offset))) {
+          LOG_WARN("text_trim2 failed", K(ret));
+        }
       }
     }
   } else {
@@ -824,13 +840,23 @@ static int eval_trim_inner(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
       ObTextStringIter str_forward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringIter str_backward_iter(str_meta.type_, CS_TYPE_BINARY, str_datum.get_string(), str_has_lob_header);
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
-      if (OB_FAIL(text_trim(str_forward_iter,
-              str_backward_iter,
-              calc_alloc,
-              output_result,
-              trim_type,
-              pattern))) {
-        LOG_WARN("text_trim failed", K(ret));
+      const ObDatumAccessContext *access_ctx = nullptr;
+      if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+        LOG_WARN("get datum access context failed", K(ret));
+      } else {
+        const common::ObLobReadOptions &shared_options =
+            *access_ctx->lob_read_options_;
+        const common::ObLobReadOptions trim_options(
+            *shared_options.read_service_, shared_options.timeout_ts_);
+        if (OB_FAIL(text_trim(str_forward_iter,
+                str_backward_iter,
+                calc_alloc,
+                output_result,
+                trim_type,
+                pattern,
+                trim_options))) {
+          LOG_WARN("text_trim failed", K(ret));
+        }
       }
     }
   }
@@ -897,7 +923,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
         const ObDatum &pattern_datum = expr.locate_param_datum(ctx, expr.arg_cnt_ - 1);
-        if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
+        if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                               pattern_meta, pattern_has_lob_header, pattern))) {
           LOG_WARN("failed to read real pattern", K(ret), K(pattern));
         } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,
@@ -922,7 +948,7 @@ int ObExprTrim::eval_trim(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
           ObEvalCtx::TempAllocGuard alloc_guard(ctx);
           ObIAllocator &calc_alloc = alloc_guard.get_allocator();
           const ObDatum &pattern_datum = expr.locate_param_datum(ctx, 1);
-          if (OB_FAIL(ObTextStringHelper::read_real_string_data(calc_alloc, pattern_datum,
+          if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, calc_alloc, pattern_datum,
                                                                 pattern_meta, pattern_has_lob_header, pattern))) {
             LOG_WARN("failed to read real pattern", K(ret), K(pattern));
           } else if (OB_FAIL(eval_trim_inner(expr, ctx, expr_datum, trim_type, pattern,

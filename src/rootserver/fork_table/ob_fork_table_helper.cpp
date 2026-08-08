@@ -18,14 +18,13 @@
 
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "common/mysqlclient/ob_isql_connection.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_autoincrement_service.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector/ob_vector_index_mode.h"
 #include "share/schema/ob_schema_utils.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "storage/tablet/ob_tablet_fork_mds_helper.h"
@@ -85,7 +84,7 @@ static int check_table_index_features(const ObTableSchema &table_schema,
         }
         if (!has_async_vec_index && index_schema->is_vec_hnsw_index()) {
           const common::ObString &index_params = index_schema->get_index_params();
-          if (share::ObVectorIndexUtil::is_sync_mode_async(index_params, is_heap_table)) {
+          if (share::is_vector_index_sync_mode_async(index_params, is_heap_table)) {
             has_async_vec_index = true;
           }
         }
@@ -119,7 +118,7 @@ int check_has_async_vector_index(const ObTableSchema &src_table_schema,
 
 int check_fork_table_supported(const ObTableSchema &src_table_schema,
                                ObSchemaGetterGuard &schema_guard,
-                               const ObForkTableArg *fork_table_arg)
+                               const obcall::ObForkTableArg *fork_table_arg)
 {
   int ret = OB_SUCCESS;
   bool has_semantic_index = false;
@@ -202,7 +201,7 @@ K(fork_table_info_.get_fork_src_table_id()));
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("dst table schema is null", KR(ret));
   } else if (FALSE_IT(dst_table_id_ = dst_table_schema_->get_table_id())) {
-  } else if (OB_FAIL(share::ObForkTableUtil::collect_tablet_ids_from_table(
+  } else if (OB_FAIL(ObForkTableUtil::collect_tablet_ids_from_table(
                  schema_guard_, *src_table_schema_,
                  src_tablet_ids_))) {
     LOG_WARN("failed to collect src tablet ids", KR(ret),
@@ -388,7 +387,7 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
       } else {
         storage::ObTabletForkMdsArg fork_mds_arg;
         
-        rootserver::ObTruncateTabletArg truncate_arg;
+        storage::ObTruncateTabletArg truncate_arg;
         truncate_arg.index_tablet_id_ = dst_tablet_id;
         if (OB_FAIL(truncate_arg.truncate_info_.assign(
                 allocator, *latest_truncate_info))) {
@@ -632,7 +631,7 @@ int ObForkTableHelper::get_tablet_handle_(
   storage::ObLSService *ls_service = nullptr;
 
   SERVER_MODULE_SCOPE {
-    if (OB_ISNULL(ls_service = share::g_mp->ls_service())) {
+    if (OB_ISNULL(ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls))) {

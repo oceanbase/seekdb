@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_table_insert_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 namespace oceanbase
 {
@@ -256,7 +256,7 @@ int ObTempTableInsertOp::init_chunk_row_store(ObDTLIntermResultInfo *&chunk_row_
     
     ObMemAttr mem_attr("TempTableInsert", ObCtxIds::WORK_AREA);
     dtl::ObDTLIntermResultInfoGuard result_info_guard;
-    if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->create_interm_result_info(
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->create_interm_result_info(
                                           mem_attr,
                                           result_info_guard,
                                           dtl::ObDTLIntermResultMonitorInfo(
@@ -329,12 +329,12 @@ int ObTempTableInsertOp::insert_chunk_row_store()
       row_store->set_eof(true);
       // chunk row store does not need to manage dump logic
       row_store->is_read_ = true;
-      if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->insert_interm_result_info(
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->insert_interm_result_info(
                                         dtl_int_key, row_store))) {
         LOG_WARN("failed to insert row store.", K(ret), K(dtl_int_key.channel_id_));
       } else if (OB_FAIL(keys_insert.push_back(dtl_int_key))) {
         LOG_WARN("failed to push back key", K(ret));
-        share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(dtl_int_key);
+        ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(dtl_int_key);
       } else {
         row_store->datum_store_->reset_callback();
       }
@@ -343,7 +343,7 @@ int ObTempTableInsertOp::insert_chunk_row_store()
   if (OB_FAIL(ret)) {
     // Exception handling
     for (int64_t i = 0; i < keys_insert.count(); ++i) {
-      share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(keys_insert.at(i));
+      ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(keys_insert.at(i));
     }
   } else {
     clear_all_datum_store();
@@ -358,7 +358,7 @@ int ObTempTableInsertOp::clear_all_datum_store()
   for (int64_t i = 0; OB_SUCC(ret) && i < all_datum_store_.count(); ++i) {
     ObDTLIntermResultInfo *datum_store = all_datum_store_.at(i);
     if (NULL != datum_store) {
-      share::g_mp->dtl_interm_result_manager()->dec_interm_result_ref_count(datum_store);
+      ::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->dec_interm_result_ref_count(datum_store);
     }
   }
   all_datum_store_.reset();

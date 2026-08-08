@@ -756,10 +756,10 @@ int ObObjectReaderWriter::ensure_data_buffer_for_write_(ObObjectWriteSession &wr
 {
   int ret = OB_SUCCESS;
   if (!write_session.data_.is_valid()
-      && OB_FAIL(write_session.data_.ensure_space(DEFAULT_MACRO_BLOCK_SIZE))) {
+      && OB_FAIL(write_session.data_.ensure_space(OB_DEFAULT_MACRO_BLOCK_SIZE))) {
     LOG_WARN("Fail to ensure space", K(ret));
   } else if (OB_SUCC(ret)
-      && DEFAULT_MACRO_BLOCK_SIZE == write_session.data_.capacity()
+      && OB_DEFAULT_MACRO_BLOCK_SIZE == write_session.data_.capacity()
       && 0 == write_session.data_.pos()
       && OB_FAIL(write_session.data_.clean())) {
     LOG_WARN("fail to memset 0 data_", KR(ret));
@@ -1046,7 +1046,7 @@ int ObObjectReaderWriter::calc_store_size(
   if (need_align) {
     store_size = next_align_offset - offset_;
   }
-  if (OB_UNLIKELY(store_size > DEFAULT_MACRO_BLOCK_SIZE)) {
+  if (OB_UNLIKELY(store_size > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
   }
@@ -1062,7 +1062,7 @@ int ObObjectReaderWriter::check_object_size_(
   const int64_t header_size = common_header.get_serialize_size();
   const int64_t next_align_offset = upper_align(header_size + total_size, write_align_size_);
   const int64_t store_size = need_align ? next_align_offset - header_size : total_size;
-  if (OB_UNLIKELY(header_size + store_size > DEFAULT_MACRO_BLOCK_SIZE)) {
+  if (OB_UNLIKELY(header_size + store_size > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported object size", K(ret), K(total_size), K(need_align),
         K(header_size), K(store_size));
@@ -1095,7 +1095,7 @@ int ObObjectReaderWriter::inner_write_block(
   } else if (!object_handle_.get_macro_id().is_valid()
       && OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(write_args.object_opt_, object_handle_))) {
     LOG_WARN("fail to alloc new object", K(ret));
-  } else if (store_size + offset_ > DEFAULT_MACRO_BLOCK_SIZE) {
+  } else if (store_size + offset_ > OB_DEFAULT_MACRO_BLOCK_SIZE) {
     if (OB_FAIL(switch_object(write_session, object_handle, write_ctx.next_opt_))) {
       LOG_WARN("Fail to switch new block", K(ret));
     } else {
@@ -1106,7 +1106,7 @@ int ObObjectReaderWriter::inner_write_block(
         LOG_WARN("fail to ensure object data buffer", K(ret), K_(offset), K_(align_offset));
       } else if (OB_FAIL(calc_store_size(blk_size, need_align, store_size, align_store_size))) {
         LOG_WARN("fail to calc store size", K(ret));
-      } else if (OB_UNLIKELY(store_size + offset_ > DEFAULT_MACRO_BLOCK_SIZE)) {
+      } else if (OB_UNLIKELY(store_size + offset_ > OB_DEFAULT_MACRO_BLOCK_SIZE)) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("Not supported object size", K(ret), K_(offset), K_(align_offset), K(store_size));
       }

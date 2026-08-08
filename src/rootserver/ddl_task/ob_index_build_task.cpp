@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_index_build_task.h"
+#include "share/rc/ob_server_runtime.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "share/ob_ddl_checksum.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -48,7 +50,7 @@ int ObIndexSSTableBuildTask::process()
   int ret = OB_SUCCESS;
   ObArenaAllocator arena("index_sst_build");
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObDDLEventInfo ddl_event_info;
+  ObDDLEventInfo ddl_event_info(GCTX.self_addr());
   ddl_event_info.set_inner_sql_id(execution_id_);
   ObSqlString sql_string;
   ObSchemaGetterGuard schema_guard;
@@ -95,7 +97,7 @@ int ObIndexSSTableBuildTask::process()
     LOG_WARN("error unexpected, index schema must not be nullptr", K(ret), K(dest_table_id_));
   } else {
     #ifdef ERRSIM
-      if ((index_schema->is_vec_ivfflat_rowkey_cid_index() 
+      if ((index_schema->is_vec_ivfflat_rowkey_cid_index()
             || index_schema->is_vec_ivfpq_rowkey_cid_index()
             || index_schema->is_vec_ivfsq8_rowkey_cid_index())) {
         ret = OB_E(EventTable::EN_VEC_INDEX_IVF_ROWKEY_CID_BUILD_ERR) OB_SUCCESS;
@@ -111,15 +113,18 @@ int ObIndexSSTableBuildTask::process()
     #endif
     if (OB_FAIL(ret)) {
     } else if (is_partitioned_local_index_task()) {
-      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(data_table_id_, dest_table_id_, addition_info_.partition_ids_, arena, batch_partition_names))) {
+      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(
+              *GCTX.schema_service_, data_table_id_, dest_table_id_,
+              addition_info_.partition_ids_, arena, batch_partition_names))) {
         LOG_WARN("fail to get index table batch partition names", K(ret), K(data_table_id_), K(dest_table_id_), K(addition_info_.partition_ids_), K(batch_partition_names));
-      } else if (OB_FAIL(ObDDLUtil::generate_partition_names(batch_partition_names, arena, partition_names))) {
+      } else if (OB_FAIL(ObDDLTaskUtil::generate_partition_names(
+                     batch_partition_names, arena, partition_names))) {
         LOG_WARN("fail to generate partition names", K(ret), K(batch_partition_names), K(partition_names));
       }
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDDLUtil::generate_local_build_sql(data_table_id_,
+      if (OB_FAIL(ObDDLTaskUtil::generate_build_replica_sql(data_table_id_,
                                                             dest_table_id_,
                                                             data_schema->get_schema_version(),
                                                             snapshot_version_,
@@ -151,7 +156,7 @@ int ObIndexSSTableBuildTask::process()
         ObTimeoutCtx timeout_ctx;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
         add_event_info(ret, "index sstable build task send innersql");
-        LOG_INFO("execute sql" , K(sql_string), K(data_table_id_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo());
+        LOG_INFO("execute sql" , K(sql_string), K(data_table_id_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
           LOG_WARN("set trx timeout failed", K(ret));
         } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
@@ -166,13 +171,16 @@ int ObIndexSSTableBuildTask::process()
         if (OB_SUCC(ret)) {
           if (is_partitioned_local_index_task()) {
             bool is_checksums_all_report = false;
-            if (OB_FAIL(ObCheckTabletDataComplementOp::check_tablet_checksum_update_status(dest_table_id_, task_id_, execution_id_, addition_info_.partition_ids_, is_checksums_all_report))) {
+            if (OB_FAIL(ObCheckTabletDataComplementOp::check_tablet_checksum_update_status(
+                *GCTX.sql_proxy_, dest_table_id_, task_id_, execution_id_,
+                addition_info_.partition_ids_, is_checksums_all_report))) {
               LOG_WARN("fail to check tablet checksum update status, maybe EAGAIN", K(ret), K(dest_table_id_), K(task_id_), K(execution_id_), K(addition_info_.partition_ids_), K(is_checksums_all_report));
             } else if (!is_checksums_all_report) {
               ret = OB_EAGAIN;
               LOG_ERROR("tablets checksum not all report!",K(ret), K(is_checksums_all_report));
             }
-          } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(dest_table_id_, execution_id_, task_id_))) {
+          } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(*GCTX.schema_service_,
+              *GCTX.sql_proxy_, dest_table_id_, execution_id_, task_id_))) {
             LOG_WARN("fail to check sstable checksum_report_finish",
               K(ret), K(dest_table_id_), K(execution_id_), K(task_id_));
           }
@@ -189,7 +197,7 @@ int ObIndexSSTableBuildTask::process()
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }
   add_event_info(ret, "index sstable build task finish");
-  LOG_INFO("build index sstable finish", K(ret), "ddl_event_info", ObDDLEventInfo(), K(*this), K(sql_string));
+  LOG_INFO("build index sstable finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(*this), K(sql_string));
   return ret;
 }
 
@@ -316,7 +324,7 @@ int ObIndexBuildTask::process()
     } // end switch
     if (OB_FAIL(ret)) {
       add_event_info("index build task process fail");
-      LOG_INFO("index build task process fail", "ddl_event_info", ObDDLEventInfo());
+      LOG_INFO("index build task process fail", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     }
   }
   return ret;
@@ -342,7 +350,7 @@ int ObIndexBuildTask::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -368,12 +376,12 @@ int ObIndexBuildTask::init(
     task_type_ = task_type;
     is_global_index_ = index_schema->is_global_index_table();
     is_unique_index_ = index_schema->is_unique_index();
-    
+
     object_id_ = data_table_schema->get_table_id();
     index_table_id_ = index_schema->get_table_id();
     schema_version_ = schema_version;
     parallelism_ = parallelism;
-    
+
     if (snapshot_version > 0) {
       snapshot_version_ = snapshot_version;
     }
@@ -423,7 +431,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_ISNULL(local_management_service_ = GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", KR(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -439,7 +447,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   }
   if (OB_SUCC(ret)) {
     task_type_ = task_record.ddl_type_;
-    
+
     object_id_ = data_table_id;
     index_table_id_ = index_table_id;
     schema_version_ = schema_version;
@@ -456,7 +464,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
     ret_code_ = task_record.ret_code_;
     start_time_ = ObTimeUtility::current_time();
 
-    
+
     dst_schema_version_ = schema_version_;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_ddl_task_monitor_info(index_table_id))) {
@@ -623,7 +631,7 @@ int ObIndexBuildTask::wait_trans_end()
       LOG_WARN("update snapshot version failed", K(ret), K(task_id_), K(new_fetched_snapshot), K(persisted_snapshot));
     } else if (persisted_snapshot > 0) {
       // a persisted snapshot found, do not hold the new one repeatedly.
-      FLOG_INFO("found a persisted snapshot in inner table", K(task_id_), K(index_table_id_), 
+      FLOG_INFO("found a persisted snapshot in inner table", K(task_id_), K(index_table_id_),
           K(persisted_snapshot), K(new_fetched_snapshot));
     } else if (OB_FAIL(hold_snapshot(trans, new_fetched_snapshot))) {
       if (OB_SNAPSHOT_DISCARDED == ret) {
@@ -685,25 +693,29 @@ int ObIndexBuildTask::hold_snapshot(
     } else if (OB_ISNULL(data_table_schema) || OB_ISNULL(index_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", K(ret), K(object_id_), K(target_object_id_), KP(data_table_schema), KP(index_table_schema));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(object_id_, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, object_id_, tablet_ids))) {
       LOG_WARN("failed to get data table snapshot", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(target_object_id_, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, target_object_id_, tablet_ids))) {
       LOG_WARN("failed to get dest table snapshot", K(ret));
     } else if (OB_FAIL(ObDDLUtil::check_need_acquire_lob_snapshot(data_table_schema, index_table_schema, need_acquire_lob))) {
       LOG_WARN("failed to check if need to acquire lob snapshot", K(ret));
     } else if (need_acquire_lob && data_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob meta table snapshot", K(ret));
     } else if (need_acquire_lob && data_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
-    } else if (OB_ISNULL(GCTX.local_management_service_)) {
+    } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
-    } else if (OB_UNLIKELY(!GCTX.local_management_service_->get_ddl_service().is_inited())) {
+      LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
+    } else if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().is_inited())) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().get_snapshot_mgr().batch_acquire_snapshot(
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().get_snapshot_mgr().batch_acquire_snapshot(
             trans, SNAPSHOT_FOR_DDL, schema_version_, snapshot_scn, nullptr, tablet_ids))) {
       LOG_WARN("batch acquire snapshot failed", K(ret), K(tablet_ids));
     }
@@ -726,13 +738,15 @@ int ObIndexBuildTask::release_snapshot(const int64_t snapshot)
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *data_table_schema = nullptr;
     ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-    if (OB_FAIL(ObDDLUtil::get_tablets(object_id_, tablet_ids))) {
+    if (OB_FAIL(ObDDLUtil::get_tablets(
+            *GCTX.schema_service_, object_id_, tablet_ids))) {
       if (OB_TABLE_NOT_EXIST == ret || OB_RUNTIME_SCHEMA_NOT_READY == ret) {
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("failed to get data table snapshot", K(ret));
       }
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(target_object_id_, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(
+                   *GCTX.schema_service_, target_object_id_, tablet_ids))) {
       if (OB_TABLE_NOT_EXIST == ret || OB_RUNTIME_SCHEMA_NOT_READY == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -748,14 +762,14 @@ int ObIndexBuildTask::release_snapshot(const int64_t snapshot)
       // ignore ret
       LOG_INFO("table not exist", K(ret), K(object_id_), K(target_object_id_), KP(data_table_schema));
     } else if (data_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-                OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+                OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       if (OB_TABLE_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("failed to get data lob meta table snapshot", K(ret));
       }
     } else if ( data_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-                OB_FAIL(ObDDLUtil::get_tablets(data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+                OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       if (OB_TABLE_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
@@ -796,7 +810,8 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
     const int old_ret_code = OB_SUCCESS;
     if (old_execution_id < 0) {
       need_exec_new_inner_sql = true;
-    } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(dest_table_id,
+    } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(
+        *GCTX.schema_service_, *GCTX.sql_proxy_, dest_table_id,
         task_id_, old_execution_id, trace_id_,
         table_schema->get_schema_version(), snapshot_version_, need_exec_new_inner_sql))) {
       if (OB_EAGAIN != ret) {
@@ -977,7 +992,7 @@ int ObIndexBuildTask::wait_data_complement()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected snapshot", K(ret), KPC(this));
   }
-  
+
   // submit a job to complete sstable for the index table on snapshot_version
   if (OB_SUCC(ret) && !state_finished && !is_sstable_complete_task_submitted()) {
     bool need_exec_new_inner_sql = false;
@@ -1141,7 +1156,7 @@ int ObIndexBuildTask::wait_local_index_data_complement()
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (need_verify_checksum && OB_FAIL(ObDDLChecksumOperator::check_column_checksum_without_execution_id(object_id_, index_table_id_, task_id_, false/*index build*/, ignore_col_ids, dummy_equal, *GCTX.sql_proxy_))) {
+    } else if (need_verify_checksum && OB_FAIL(ObDDLChecksumOperator::check_column_checksum_without_execution_id(*GCTX.schema_service_, object_id_, index_table_id_, task_id_, false/*index build*/, ignore_col_ids, dummy_equal, *GCTX.sql_proxy_))) {
       if (OB_ITER_END != ret) {
         LOG_ERROR("fail to check column checksum", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
       } else if (REACH_TIME_INTERVAL(1000L * 1000L)) {
@@ -1170,7 +1185,7 @@ int ObIndexBuildTask::create_schedule_queue()
             task_id_ == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("the parameters is invalid", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(index_table_id_, index_tablet_ids))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, index_table_id_, index_tablet_ids))) {
     LOG_WARN("failed to get index table tablet ids", K(ret), K(index_table_id_), K(index_tablet_ids));
   } else if (OB_FAIL(tablet_scheduler_.init(
     index_table_id_,
@@ -1412,8 +1427,8 @@ int ObIndexBuildTask::enable_index()
     const ObTableSchema *index_schema = NULL;
     bool index_table_exist = false;
     ObRefreshSchemaStatus schema_status;
-    
-    
+
+
     int64_t version_in_inner_table = OB_INVALID_VERSION;
     int64_t local_schema_version = OB_INVALID_VERSION;
     bool is_standby = false;
@@ -1482,7 +1497,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     obcall::ObUpdateIndexStatusArg arg;
     arg.index_table_id_ = index_schema.get_table_id();
     arg.status_ = new_status;
-    
+
     arg.in_offline_ddl_white_list_ = true;
     arg.task_id_ = task_id_;
     arg.data_table_id_ = index_schema.get_data_table_id();
@@ -1509,7 +1524,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     DEBUG_SYNC(BEFORE_UPDATE_GLOBAL_INDEX_STATUS);
     if (FAILEDx(ObDDLUtil::get_ddl_rpc_timeout(index_schema.get_all_part_num(), ddl_rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout fail", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(index_schema.get_data_table_id(), tmp_timeout))) {
+    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(*GCTX.schema_service_, index_schema.get_data_table_id(), tmp_timeout))) {
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else if (OB_FALSE_IT(ddl_rpc_timeout += tmp_timeout)) {
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
@@ -1517,7 +1532,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
     } else {
       const bool is_parallel = create_index_arg_.is_parallel_;
       if (!is_parallel) {
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->update_index_status(arg); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
           LOG_WARN("update index status failed", K(ret), K(arg));
         }
       } else {
@@ -1525,7 +1540,7 @@ int ObIndexBuildTask::update_index_status_in_schema(const ObTableSchema &index_s
         ObTimeoutCtx ctx;
         if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF._ob_ddl_timeout))) {
           LOG_WARN("fail to set timeout ctx", KR(ret));
-        } else if (OB_FAIL(GCTX.local_management_service_->parallel_update_index_status(arg, res))) {
+        } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->parallel_update_index_status(arg, res))) {
           LOG_WARN("fail to parallel update index status", KR(ret), K(arg));
         } else {
           published_schema_version_ = res.schema_version_;
@@ -1632,8 +1647,8 @@ int ObIndexBuildTask::clean_on_failed()
           int64_t ddl_rpc_timeout = 0;
           obcall::ObDropIndexArg drop_index_arg;
           obcall::ObDropIndexRes drop_index_res;
-          
-          
+
+
           drop_index_arg.index_table_id_    = index_table_id_;
           drop_index_arg.session_id_        = create_index_arg_.session_id_;
           drop_index_arg.index_name_        = index_name;
@@ -1648,7 +1663,7 @@ int ObIndexBuildTask::clean_on_failed()
           drop_index_arg.task_id_ = task_id_;
           if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
             LOG_WARN("get ddl rpc timeout fail", K(ret));
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
+          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
             LOG_WARN("drop index failed", K(ret));
           }
           LOG_INFO("drop index when build failed", K(ret), K(drop_index_arg));

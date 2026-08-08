@@ -21,7 +21,6 @@
 #include "lib/utility/ob_print_utils.h"
 #include "share/scn.h"
 #include "storage/tablet/ob_tablet_status.h"
-#include "storage/tablet/ob_tablet_common.h"
 
 namespace oceanbase
 {

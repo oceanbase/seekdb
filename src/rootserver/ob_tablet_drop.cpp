@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_tablet_drop.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "share/ob_share_util.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
+#include "storage/tx/ob_multi_data_source.h"
 
 namespace oceanbase
 {
@@ -236,12 +240,11 @@ int ObTabletDrop::execute()
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
   const int64_t SLEEP_INTERVAL = 100 * 1000L; // 100ms
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletCreator not init", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans_.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans_.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else if (OB_ISNULL(tablet_ids_) || OB_UNLIKELY(tablet_ids_->count() < 1)) {
@@ -273,7 +276,11 @@ int ObTabletDrop::execute()
           if (ctx.is_timeouted()) {
             ret = OB_TIMEOUT;
             LOG_WARN("already timeout", KR(ret), K(ctx));
-          } else if (OB_FAIL(conn->register_multi_data_source(transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS, buf, buf_len))) {
+          } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                                 conn,
+                                 transaction::ObTxDataSourceType::DELETE_TABLET_NEW_MDS,
+                                 buf,
+                                 buf_len))) {
             LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));
             if (OB_LS_LOCATION_LEADER_NOT_EXIST == ret || OB_NOT_MASTER == ret) {
               LOG_INFO("fail to find leader, try again", K(arg));

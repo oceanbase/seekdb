@@ -80,7 +80,8 @@ int ObExprPrivSTGeometryType::eval_priv_st_geometrytype(const ObExpr &expr, ObEv
     ObGeoType gtype = ObGeoType::GEOTYPEMAX;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
-            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
+            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
+            arg1->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_from_wkb(wkb, gtype))) {
       LOG_WARN("fail to get geo type from wkb", K(ret), K(gtype));

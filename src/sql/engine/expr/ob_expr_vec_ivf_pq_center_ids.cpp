@@ -17,13 +17,12 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_ivf_pq_center_ids.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/engine/expr/ob_expr_calc_partition_id.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "observer/vector_index/ob_vector_index_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "data_plane/vector/ob_vector_common_util.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -209,7 +208,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       // need get center prefix
       uint64_t center_prefix = 0;
       ObSEArray<float *, 64> pq_centers;
-      share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+      query::ObIVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
       ObExprVecIvfCenterIdCache *cache = nullptr;
       ObExprVecIvfCenterIdCache *pq_cache = nullptr;
       ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
@@ -242,7 +241,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     // 3. calc residul vec
     int64_t center_idx = 0;
     float *residual_vec = nullptr;
-    share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
+    query::ObIVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
     ObVectorNormalizeInfo norm_info;
     ObArray<float *> splited_residual;
     ObExprVecIvfCenterIdCache *cache = nullptr;
@@ -329,4 +328,3 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
 
 }  // namespace sql
 }  // namespace oceanbase
-

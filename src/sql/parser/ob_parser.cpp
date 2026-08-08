@@ -21,7 +21,7 @@
 #include "parse_malloc.h"
 #include "parse_node.h"
 #include "ob_sql_parser.h"
-#include "pl/parser/ob_pl_parser.h"
+#include "sql/pl/parser/ob_pl_parser.h"
 using namespace oceanbase::pl;
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

@@ -1,0 +1,97 @@
+##############################
+# owner: rongxuan.lc
+# owner group: proxy
+#功能点：
+# 错峰合并，partition leader 切换
+#
+#用例场景：
+#1、partition任意切换
+#2、partition切换到正在合并的zone
+#3、rs切换
+#
+###############################
+
+ob1=OBI(cluster=2:2:2,init_unit_cpu=2);
+ob1.reboot;
+
+ob1.source include/merge.inc;
+
+# 并发合并zone的数量，设置成错峰合并
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+ob1.create_client;
+ob1.prepare;
+ob1.start_check;
+
+--disable_query_log
+--disable_result_log
+# 创建3个table:obtest1,obtest2,obtest3
+let $tablenum = 3;
+source sql/init_table.sql;
+
+###########
+#case1: 发起合并，多个partiton切换
+############
+let $f1obtest2 = deploy_get_value(ob1.get_follower obtest:test:obtest2,1);
+let $f2obtest2 = deploy_get_value(ob1.get_follower obtest:test:obtest2,2);
+let $fobtest3 = deploy_get_value(ob1.get_follower obtest:test:obtest3,1);
+
+source sql/big_table_3.sql;
+sleep 10;
+ob1.mysql alter system major freeze;
+
+$f1obtest2.switch_partition obtest:test:obtest2;
+$fobtest3.switch_partition obtest:test:obtest3;
+sleep 15;
+$f2obtest2.switch_partition obtest:test:obtest2;
+
+ob1.check_version 2;
+
+#########
+#case2: 发起合并，partition切换到正在合并的zone
+############
+ob1.mysql alter system major freeze;
+
+let $timeout=60;
+while($timeout > 0)
+{
+  sleep 1;
+  let $bv = deploy_get_value(ob1.select select value from oceanbase.__all_zone where zone='z2' and name='broadcast_version',value,1);
+  if ($bv==4)
+  {
+    ob1.mysql alter system suspend merge zone='z2';
+    let $timeout =0;
+  }
+  dec $timeout;
+}
+
+ob1.z2.obs1.switch_partition obtest:test:obtest1;
+ob1.z2.obs0.switch_partition sys:oceanbase:__all_database;
+ob1.z2.obs0.switch_partition sys:oceanbase:__all_core_table;
+
+ob1.check_version 3;
+sleep 5;
+source sql/check_ddl.sql;
+
+###########
+#case3: 发起合并，rs切换,连续切2次
+###############
+--disable_query_log
+--disable_result_log
+source sql/big_table_3.sql;
+--enable_query_log
+--enable_result_log
+
+let $f1 = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table,1);
+let $f2 = deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table,2);
+
+ob1.mysql alter system major freeze;
+
+$f1.switch_partition sys:oceanbase:__all_core_table;
+sleep 15;
+$f2.switch_partition sys:oceanbase:__all_core_table;
+
+sleep 10;
+ob1.check_version 4;
+
+source sql/check_ddl.sql;

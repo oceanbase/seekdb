@@ -19,7 +19,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
 #include "rootserver/ob_runtime_ddl_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_table_creator.h"
@@ -32,7 +32,6 @@
 #include "lib/hash/ob_hashset.h"
 #include "rootserver/ob_partition_creator.h"
 #include "share/ob_version.h" // for get_package_and_svn
-#include "observer/ob_service.h" // for ObService
 #include "share/ob_server_struct.h" // GCTX
 
 namespace oceanbase
@@ -94,7 +93,7 @@ int ObPreBootstrap::create_ls()
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    ObLSService *ls_svr = share::g_mp->ls_service();
+    ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_FAIL(check_inner_stat())) {
       LOG_WARN("fail to check inner stat", KR(ret));
     } else if (OB_ISNULL(ls_svr)) {
@@ -117,10 +116,10 @@ int ObPreBootstrap::check_server_is_empty()
 
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", K(ret));
-  } else if (OB_ISNULL(GCTX.ob_service_)) {
+  } else if (OB_ISNULL(rootserver_local_runtime())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.ob_service_));
-  } else if (OB_FAIL(GCTX.ob_service_->check_server_empty(is_server_empty))) {
+    LOG_WARN("rootserver local runtime is null", KR(ret));
+  } else if (OB_FAIL(rootserver_local_runtime()->check_server_empty(is_server_empty))) {
     LOG_WARN("failed to check if server is empty", KR(ret));
   } else if (!is_server_empty) {
     ret = OB_INIT_TWICE;

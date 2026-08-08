@@ -21,7 +21,7 @@
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_data_buffer.h"
 #include "storage/ob_storage_util.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 #include "lib/container/ob_bitmap.h"
 #include "ob_bit_stream.h"
 #include "ob_encoding_util.h"

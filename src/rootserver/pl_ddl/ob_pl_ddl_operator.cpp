@@ -23,6 +23,7 @@
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_dependency_info.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
+#include "sql/resolver/ddl/ob_trigger_source_builder.h"
 
 namespace oceanbase
 {
@@ -630,12 +631,17 @@ int ObPLDDLOperator::restore_trigger(const share::schema::ObTriggerInfo &trigger
                                                                     trans),
         new_trigger_info.get_trigger_id());
   } else {
-    OZ (schema_service->get_trigger_sql_service().rebuild_trigger_on_rename(new_trigger_info,
-                                                                            database_schema->get_database_name(),
-                                                                            new_table_name,
-                                                                            new_schema_version,
-                                                                            trans,
-                                                                            OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN),
+    OZ (sql::ObTriggerSourceBuilder::replace_table_name_in_body(
+            new_trigger_info,
+            allocator,
+            database_schema->get_database_name(),
+            new_table_name),
+        database_schema->get_database_name(), new_table_name);
+    OZ (schema_service->get_trigger_sql_service().update_trigger_on_rename(
+            new_trigger_info,
+            new_schema_version,
+            trans,
+            OB_DDL_RESTORE_TRIGGER_FROM_RECYCLEBIN),
         database_schema->get_database_name(), new_table_name);
   }
   return ret;
@@ -685,16 +691,19 @@ int ObPLDDLOperator::rebuild_trigger_on_rename(const share::schema::ObTriggerInf
 {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_.get_schema_service();
-  
+  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
+  ObTriggerInfo rebuilt_trigger(&allocator);
   int64_t new_schema_version = OB_INVALID_VERSION;
   OV (OB_NOT_NULL(schema_service));
+  OZ (rebuilt_trigger.deep_copy(trigger_info));
+  OZ (sql::ObTriggerSourceBuilder::replace_table_name_in_body(
+          rebuilt_trigger, allocator, database_name, table_name));
   OZ (schema_service_.gen_new_schema_version(new_schema_version),
       trigger_info.get_trigger_name());
-  OZ (schema_service->get_trigger_sql_service().rebuild_trigger_on_rename(trigger_info,
-                                                                          database_name,
-                                                                          table_name,
-                                                                          new_schema_version,
-                                                                          trans),
+  OZ (schema_service->get_trigger_sql_service().update_trigger_on_rename(
+          rebuilt_trigger,
+          new_schema_version,
+          trans),
       trigger_info.get_trigger_name());
   return ret;
 }

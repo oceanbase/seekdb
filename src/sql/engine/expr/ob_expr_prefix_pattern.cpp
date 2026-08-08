@@ -18,6 +18,7 @@
 #include "ob_expr_prefix_pattern.h"
 #include "share/interrupt/ob_interrupt_message.h"
 #include "sql/engine/expr/ob_expr_substr.h"
+#include "data_plane/encoding/ob_ascii_util.h"
 
 namespace oceanbase
 {

@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_update_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/blocksstable/ob_datum_row_factory.h"
+#include "data_plane/ob_i_dml_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_das_domain_utils.h"
 #include "src/sql/engine/px/ob_dfo.h"
 #include "sql/engine/dml/ob_dml_service.h"
-#include "storage/blocksstable/ob_datum_row_utils.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 
 namespace oceanbase
@@ -52,7 +53,9 @@ class ObDASUpdIterator : public blocksstable::ObDatumRowIterator
 public:
   ObDASUpdIterator(const ObDASUpdCtDef *das_ctdef,
                    ObDASWriteBuffer &write_buffer,
-                   ObIAllocator &alloc)
+                   ObIAllocator &alloc,
+                   common::ObISrsProvider *srs_provider,
+                   const common::ObLobReadOptions *lob_read_options)
     : das_ctdef_(das_ctdef),
       write_buffer_(write_buffer),
       old_row_(nullptr),
@@ -65,7 +68,9 @@ public:
       got_old_row_(false),
       iter_has_built_(false),
       is_main_table_in_fts_ddl_(das_ctdef->is_main_table_in_fts_ddl_),
-      allocator_(alloc)
+      allocator_(alloc),
+      srs_provider_(srs_provider),
+      lob_read_options_(lob_read_options)
   {
     batch_size_ = MIN(write_buffer_.get_row_cnt(), DEFAULT_BATCH_SIZE);
   }
@@ -75,6 +80,11 @@ public:
   virtual int get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &row_count) override;
 
   ObDASWriteBuffer &get_write_buffer() { return write_buffer_; }
+  common::ObISrsProvider *get_srs_provider() const { return srs_provider_; }
+  const common::ObLobReadOptions *get_lob_read_options() const
+  {
+    return lob_read_options_;
+  }
   int rewind(const ObDASDMLBaseCtDef *das_ctdef, const ObFTDocWordInfo *ft_doc_word_info)
   {
     int ret = common::OB_SUCCESS;
@@ -139,6 +149,8 @@ private:
   bool iter_has_built_;
   bool is_main_table_in_fts_ddl_;
   common::ObIAllocator &allocator_;
+  common::ObISrsProvider *srs_provider_;
+  const common::ObLobReadOptions *lob_read_options_;
   int64_t batch_size_;
 };
 
@@ -156,7 +168,7 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
   } else if (!got_old_row_) {
     got_old_row_ = true;
     if (OB_ISNULL(old_row_)) {
-      if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, das_ctdef_->old_row_projector_.count(), old_row_))) {
+      if (OB_FAIL(data_plane::create_datum_row(allocator_, das_ctdef_->old_row_projector_.count(), old_row_))) {
         LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
         LOG_WARN("begin datum result iterator failed", K(ret));
@@ -164,7 +176,7 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_row_)) {
-      if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, das_ctdef_->new_row_projector_.count(), new_row_))) {
+      if (OB_FAIL(data_plane::create_datum_row(allocator_, das_ctdef_->new_row_projector_.count(), new_row_))) {
         LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
@@ -233,7 +245,7 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
   } else if (!got_old_row_) {
     got_old_row_ = true;
     if (OB_ISNULL(old_rows_)) {
-      if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_rows(allocator_, batch_size_, das_ctdef_->old_row_projector_.count(), old_rows_))) {
+      if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, das_ctdef_->old_row_projector_.count(), old_rows_))) {
         LOG_WARN("create old rows buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
         LOG_WARN("begin datum result iterator failed", K(ret));
@@ -241,7 +253,7 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_rows_)) {
-      if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_rows(allocator_, batch_size_, das_ctdef_->new_row_projector_.count(), new_rows_))) {
+      if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, das_ctdef_->new_row_projector_.count(), new_rows_))) {
         LOG_WARN("create new rows buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
@@ -313,7 +325,9 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(domain_iter_)){
       const IntFixedArray &cur_proj = got_old_row_ ? das_ctdef_->new_row_projector_ : das_ctdef_->old_row_projector_;
-      ObDomainDMLParam param(allocator_, &cur_proj, result_iter_, das_ctdef_, nullptr/*main_ctdef*/);
+      ObDomainDMLParam param(
+          allocator_, &cur_proj, result_iter_, das_ctdef_,
+          nullptr/*main_ctdef*/, srs_provider_, lob_read_options_);
       if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !got_old_row_) {
         param.mode_ = is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
         param.ft_doc_word_info_ = ft_doc_word_info_;
@@ -360,7 +374,9 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(domain_iter_)) {
       const IntFixedArray &cur_proj = got_old_row_ ? das_ctdef_->new_row_projector_ : das_ctdef_->old_row_projector_;
-      ObDomainDMLParam param(allocator_, &cur_proj, result_iter_, das_ctdef_, nullptr/*main_ctdef*/);
+      ObDomainDMLParam param(
+          allocator_, &cur_proj, result_iter_, das_ctdef_,
+          nullptr/*main_ctdef*/, srs_provider_, lob_read_options_);
       if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !got_old_row_) {
         param.mode_ = is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
         param.ft_doc_word_info_ = ft_doc_word_info_;
@@ -402,24 +418,24 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *as = share::g_mp->access_service();
+  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
   if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
                   ctdef.table_param_.get_data_table().is_hybrid_vector_index_log()) &&
                   !ctdef.is_access_main_table_)) {
     // for vector delta buffer/hybrid log table, only do insert when DML with main table
-    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
         LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
       }
     }
   } else if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_domain_index())) {
-    if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_param_,
+    if (OB_FAIL(as->delete_rows(tablet_id, *tx_desc_, dml_execution_,
                                 ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
         LOG_WARN("delete rows to access service failed", K(ret), K(tablet_id));
       }
-    } else if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_param_,
+    } else if (OB_FAIL(as->insert_rows(tablet_id, *tx_desc_, dml_execution_,
                                        ctdef.column_ids_, &iter, affected_rows))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
         LOG_WARN("insert rows to access service failed", K(ret), K(tablet_id));
@@ -427,7 +443,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
     }
   } else if (OB_FAIL(as->update_rows(tablet_id,
                                      *tx_desc_,
-                                     dml_param_,
+                                     dml_execution_,
                                      ctdef.column_ids_,
                                      ctdef.updated_column_ids_,
                                      &iter,
@@ -459,7 +475,9 @@ int ObDASUpdateOp::open_op()
   int64_t affected_rows = 0;
   common::ObSEArray<ObFTDocWordInfo, 4> doc_word_infos;
   doc_word_infos.set_attr(lib::ObMemAttr("FTDocWInfo"));
-  ObDASUpdIterator upd_iter(upd_ctdef_, write_buffer_, op_alloc_);
+  ObDASUpdIterator upd_iter(
+      upd_ctdef_, write_buffer_, op_alloc_, srs_provider_,
+      lob_read_options_);
   ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator> upd_adaptor;
   upd_adaptor.tx_desc_ = trans_desc_;
   upd_adaptor.snapshot_ = snapshot_;

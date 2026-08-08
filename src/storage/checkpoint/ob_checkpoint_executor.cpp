@@ -18,7 +18,7 @@
 
 #include "ob_checkpoint_executor.h"
 #include "storage/ls/ob_ls.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_structured_event_logger.h"
@@ -382,7 +382,7 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
   int64_t total_size = 0;
 
   ObLogService *log_service = nullptr;
-  if (OB_ISNULL(log_service = share::g_mp->log_service())) {
+  if (OB_ISNULL(log_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {

@@ -15,7 +15,7 @@
  */
 
 #include "ob_id_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_timestamp_service.h"
 #include "ob_trans_id_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -71,7 +71,7 @@ int ObIDService::check_and_fill_ls()
   if (OB_ISNULL(ls_)) {
     ObLS *ls = nullptr;
 
-    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
       TRANS_LOG(WARN, "get id service storage failed", K(ret));
     } else {
       ls_ = ls;
@@ -386,10 +386,10 @@ int ObIDService::get_id_service(const int64_t id_service_type, ObIDService *&id_
   int ret = OB_SUCCESS;
   switch (id_service_type) {
   case transaction::ObIDService::TimestampService:
-    id_service = (ObIDService *)share::g_mp->timestamp_service();
+    id_service = (ObIDService *)::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>();
     break;
   case transaction::ObIDService::TransIDService:
-    id_service = (ObIDService *)share::g_mp->trans_id_service();
+    id_service = (ObIDService *)::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>();
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
@@ -487,7 +487,7 @@ int ObPresistIDLogCb::on_success()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
+      if (OB_ISNULL(timestamp_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
@@ -501,7 +501,7 @@ int ObPresistIDLogCb::on_success()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
+      if (OB_ISNULL(trans_id_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {
@@ -530,7 +530,7 @@ int ObPresistIDLogCb::on_failure()
   switch (id_srv_type_) {
     case ObIDService::ServiceType::TimestampService: {
       transaction::ObTimestampService *timestamp_service = nullptr;
-      if (OB_ISNULL(timestamp_service = share::g_mp->timestamp_service())) {
+      if (OB_ISNULL(timestamp_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "timestamp service is null", K(ret));
       } else {
@@ -543,7 +543,7 @@ int ObPresistIDLogCb::on_failure()
     }
     case ObIDService::ServiceType::TransIDService: {
       transaction::ObTransIDService *trans_id_service = nullptr;
-      if (OB_ISNULL(trans_id_service = share::g_mp->trans_id_service())) {
+      if (OB_ISNULL(trans_id_service = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>())) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "trans id service is null", K(ret));
       } else {

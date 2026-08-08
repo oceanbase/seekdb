@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_tablet_fork_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet.h"
@@ -36,7 +36,7 @@
 #include "share/scn.h"
 #include "storage/blocksstable/index_block/ob_index_block_dual_meta_iterator.h"
 #include "storage/compaction/ob_sstable_builder.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/ls/ob_freezer_define.h"
@@ -462,9 +462,9 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
     } else {
       LOG_DEBUG("fork condition not satisfied yet, need retry", K(param));
     }
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls_))) {
     LOG_WARN("failed to get log stream", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_,
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls_,
       param.source_tablet_id_, src_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get source tablet failed", K(ret), K(param.source_tablet_id_));
   } else if (OB_FAIL(src_tablet_handle_.get_obj()->fetch_table_store(snapshot_table_store_))) {
@@ -479,7 +479,7 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
       table_store_iterator_,
       ObGetReadTablesMode::NORMAL))) {
     LOG_WARN("fail to fetch snapshot read tables", K(ret), K(param));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls_,
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls_,
       param.dest_tablet_id_, dst_tablet_handle_, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
     LOG_WARN("get destination tablet failed", K(ret), K(param.dest_tablet_id_));
   } else {
@@ -1484,9 +1484,9 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get ls", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, param.source_tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, param.source_tablet_id_, tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet", K(ret), K(param.source_tablet_id_));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1550,9 +1550,9 @@ int ObTabletForkUtil::check_fork_data_complete(
   if (OB_UNLIKELY(!dest_tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(dest_tablet_id));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::ddl_get_tablet(ls, dest_tablet_id,
+  } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, dest_tablet_id,
       tablet_handle, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
     LOG_WARN("failed to get tablet handle", K(ret), K(dest_tablet_id));
   } else if (OB_UNLIKELY(nullptr == tablet_handle.get_obj())) {
@@ -1685,7 +1685,7 @@ int ObTabletForkUtil::freeze_tablet(
     const ObTabletID &tablet_id)
 {
   int ret = OB_SUCCESS;
-  ObMemstoreFreezer *memstore_freezer = share::g_mp->memstore_freezer();
+  ObMemstoreFreezer *memstore_freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
   
   if (OB_ISNULL(memstore_freezer)) {
     ret = OB_ERR_UNEXPECTED;

@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/file/file_directory_utils.h"
 #include "ob_server_storage_meta_persister.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
@@ -105,7 +106,7 @@ int ObServerStorageMetaPersister::update_runtime_super_block(
 }
 
 int ObServerStorageMetaPersister::update_server_resources(
-    const ObServerRuntimeConfig &runtime_config)
+    const share::ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
@@ -126,19 +127,19 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
 
   if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(clog_dir))) {
     LOG_WARN("failed to get server clog dir", K(ret));
-  } else if (OB_FAIL(FileDirectoryUtils::is_exists(clog_dir, exist))) {
+  } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(clog_dir, exist))) {
     LOG_WARN("fail to check exist", K(ret));
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
     bool directory_empty = true;
-    if (OB_TMP_FAIL(FileDirectoryUtils::is_empty_directory(clog_dir, directory_empty))) {
+    if (OB_TMP_FAIL(common::FileDirectoryUtils::is_empty_directory(clog_dir, directory_empty))) {
       LOG_WARN("fail to check directory whether is empty", KR(tmp_ret), K(clog_dir));
     }
     if (!directory_empty) {
       LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg",
           "clog directory must be empty before rollback cleanup", K(clog_dir));
     }
-    if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(clog_dir))) {
+    if (OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(clog_dir))) {
       LOG_WARN("fail to delete clog dir", K(ret), K(clog_dir));
     }
   }
@@ -149,9 +150,9 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
     if (pret < 0 || pret >= MAX_PATH_SIZE) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("failed to construct server slog path", K(ret));
-    } else if (OB_FAIL(FileDirectoryUtils::is_exists(slog_dir, exist))) {
+    } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(slog_dir, exist))) {
       LOG_WARN("fail to check exist", K(ret));
-    } else if (exist && OB_FAIL(FileDirectoryUtils::delete_directory_rec(slog_dir))) {
+    } else if (exist && OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(slog_dir))) {
       LOG_WARN("fail to delete slog dir", K(ret), K(slog_dir));
     }
   }
@@ -230,14 +231,14 @@ int ObServerStorageMetaPersister::write_update_runtime_super_block_slog_(
 }
 
 int ObServerStorageMetaPersister::write_update_server_resources_slog_(
-    const ObServerRuntimeConfig &runtime_config)
+    const share::ObServerRuntimeConfig &runtime_config)
 {
   int ret = OB_SUCCESS;
   ObStorageLogParam log_param;
   int32_t cmd = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_SERVER_RESOURCES);
   ObUpdateServerResourcesLog log_entry(
-      *const_cast<ObServerRuntimeConfig*>(&runtime_config));
+      *const_cast<share::ObServerRuntimeConfig*>(&runtime_config));
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {

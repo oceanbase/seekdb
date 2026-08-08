@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_empty_shell_task.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/literals/ob_literals.h"
 #include "storage/tx_storage/ob_ls_service.h" // ObLSService
 #include "storage/tablet/ob_tablet_iterator.h"
@@ -52,7 +52,7 @@ void ObEmptyShellTask::runTimerTask()
     STORAGE_LOG(DEBUG, "ob block manager has not started");
   } else if (OB_UNLIKELY(skip_empty_shell_task)) {
     // do nothing
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     STORAGE_LOG(WARN, "get log stream failed", KR(ret));
   } else {
     ObTabletEmptyShellHandler *const tablet_empty_shell_handler =
@@ -128,7 +128,7 @@ int ObTabletEmptyShellHandler::init(ObLS *ls)
 int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry)
 {
   int ret = OB_SUCCESS;
-  ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;

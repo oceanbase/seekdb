@@ -20,7 +20,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/ob_allocator.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 #include "lib/time/ob_time_utility.h"
 #include "sql/engine/expr/ob_expr_embedded_vec.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"

@@ -20,7 +20,7 @@
 #include "rpc/frame/ob_req_translator.h"
 #include "observer/ob_srv_xlator.h"
 #include "observer/ob_srv_deliver.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase {
 namespace rpc {

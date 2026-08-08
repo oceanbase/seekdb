@@ -16,9 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_context.h"
-#include "sql/das/ob_das_utils.h"
+#include "share/ob_server_struct.h"
 #include "sql/ob_sql_context.h"
-#include "observer/ob_server.h"
+#include "sql/das/ob_das_utils.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "sql/optimizer/ob_phy_table_location_info.h"
+#include "sql/optimizer/ob_table_location.h"
+#include "sql/session/ob_basic_session_info.h"
 namespace oceanbase
 {
 using namespace common;

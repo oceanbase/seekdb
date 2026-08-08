@@ -19,9 +19,10 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_log_table_scan.h"
-#include "storage/ob_order_perserving_encoder.h"
+#include "data_plane/ob_order_perserving_encoder.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
 #include "sql/optimizer/ob_log_join.h"
+#include "data_plane/access/ob_parallel_range_task_planner.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -8907,11 +8908,11 @@ int ObOptimizerUtil::compute_nlj_spf_storage_compute_parallel_skew(ObOptimizerCo
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get table schame", K(ret));
     } else {
-      ObParallelBlockRangeTaskParams params;
+      data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
       params.parallelism_ = compute_parallel;
-      params.expected_task_load_ = table_schema->get_tablet_size() / 1024 <= 0 ?
-                                     sql::OB_EXPECTED_TASK_LOAD :
-                                     table_schema->get_tablet_size() / 1024;
+      if (table_schema->get_tablet_size() / 1024 > 0) {
+        params.expected_task_load_kb_ = table_schema->get_tablet_size() / 1024;
+      }
       // convert from B -> KB
       int64_t esti_table_size =
         (esti_table_meta_info->micro_block_count_ * esti_table_meta_info->micro_block_size_) / 1024;
@@ -8920,8 +8921,8 @@ int ObOptimizerUtil::compute_nlj_spf_storage_compute_parallel_skew(ObOptimizerCo
       esti_table_size *= query_range_filter_ratio;
       esti_table_size = MAX(0, esti_table_size);
       int64_t esti_task_cnt_by_data_size = 0;
-      if (OB_FAIL(ObGranuleUtil::compute_total_task_count(params, esti_table_size,
-                                                          esti_task_cnt_by_data_size))) {
+      if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(
+          params, esti_table_size, esti_task_cnt_by_data_size))) {
         LOG_WARN("compute total task count failed", K(ret));
       } else {
         // if table is so small, px still ensures at least one task per partition

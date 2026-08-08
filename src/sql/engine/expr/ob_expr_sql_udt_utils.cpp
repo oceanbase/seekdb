@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/ob_spi.h"
-#include "src/pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -90,7 +90,8 @@ int ObSqlUdtUtils::convert_result_for_client(ObObj &value,
       } else if (sub_meta.type_ == ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
         ObSqlCollectionInfo *coll_meta = reinterpret_cast<ObSqlCollectionInfo *>(sub_meta.value_);
         ObString res_str;
-        if (OB_FAIL(convert_collection_to_string(value, *coll_meta, allocator, res_str))) {
+        if (OB_FAIL(convert_collection_to_string(
+                *exec_context, value, *coll_meta, allocator, res_str))) {
           LOG_WARN("failed to convert udt to string", K(ret), K(subschema_id));
         } else {
           value.set_udt_value(res_str.ptr(), res_str.length());
@@ -288,8 +289,11 @@ int ObSqlUdtUtils::convert_sql_udt_to_string(ObObj &sql_udt_obj,
   return ret;
 }
 
-int ObSqlUdtUtils::convert_collection_to_string(ObObj &coll_obj, const ObSqlCollectionInfo &coll_meta,
-                                                common::ObIAllocator *allocator, ObString &res_str)
+int ObSqlUdtUtils::convert_collection_to_string(ObExecContext &exec_ctx,
+                                                ObObj &coll_obj,
+                                                const ObSqlCollectionInfo &coll_meta,
+                                                common::ObIAllocator *allocator,
+                                                ObString &res_str)
 {
   int ret = OB_SUCCESS;
   ObIArrayType *arr_obj = NULL;
@@ -297,7 +301,7 @@ int ObSqlUdtUtils::convert_collection_to_string(ObObj &coll_obj, const ObSqlColl
   ObStringBuffer buf(allocator);
   ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_meta.collection_meta_);
-  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&lob_allocator,
+  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(exec_ctx, &lob_allocator,
                                                         ObLongTextType,
                                                         CS_TYPE_BINARY,
                                                         true, coll_data))) {

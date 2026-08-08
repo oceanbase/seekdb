@@ -21,6 +21,21 @@ namespace oceanbase
 {
 namespace compaction
 {
+class ObTenantTabletScheduler;
+
+#define DEFINE_SCHEDULER_TIMER_TASK(TaskName, disable_timeout)                 \
+  class TaskName : public common::ObTimerTask {                               \
+  public:                                                                     \
+    TaskName() : scheduler_(nullptr)                                          \
+    {                                                                         \
+      if (disable_timeout) { disable_timeout_check(); }                        \
+    }                                                                         \
+    virtual ~TaskName() = default;                                            \
+    void bind(ObTenantTabletScheduler &scheduler) { scheduler_ = &scheduler; } \
+    virtual void runTimerTask() override;                                     \
+  private:                                                                    \
+    ObTenantTabletScheduler *scheduler_;                                      \
+  };
 
 struct ObTabletSchedulerTaskMgr : public ObCompactionTimerTask
 {
@@ -33,12 +48,13 @@ struct ObTabletSchedulerTaskMgr : public ObCompactionTimerTask
   void set_scheduler_interval(const int64_t schedule_interval) { schedule_interval_ = schedule_interval; }
   int restart_scheduler_timer_task(const int64_t merge_schedule_interval);
   int set_active_medium_loop(const bool active, const bool immediate);
-  DEFINE_TIMER_TASK(MergeLoopTask);
-  DEFINE_TIMER_TASK_WITHOUT_TIMEOUT_CHECK(SSTableGCTask);
-  DEFINE_TIMER_TASK(InfoPoolResizeTask);
-  DEFINE_TIMER_TASK(TabletUpdaterRefreshTask);
-  DEFINE_TIMER_TASK_WITHOUT_TIMEOUT_CHECK(MediumLoopTask);
-  DEFINE_TIMER_TASK_WITHOUT_TIMEOUT_CHECK(MediumCheckTask);
+  void bind_scheduler(ObTenantTabletScheduler &scheduler);
+  DEFINE_SCHEDULER_TIMER_TASK(MergeLoopTask, false);
+  DEFINE_SCHEDULER_TIMER_TASK(SSTableGCTask, true);
+  DEFINE_SCHEDULER_TIMER_TASK(InfoPoolResizeTask, false);
+  DEFINE_SCHEDULER_TIMER_TASK(TabletUpdaterRefreshTask, false);
+  DEFINE_SCHEDULER_TIMER_TASK(MediumLoopTask, true);
+  DEFINE_SCHEDULER_TIMER_TASK(MediumCheckTask, true);
   static const int64_t DEFAULT_COMPACTION_SCHEDULE_INTERVAL = 30 * 1000 * 1000L; // 30s
 private:
   static constexpr int64_t ACTIVE_MEDIUM_LOOP_INTERVAL = 1 * 1000 * 1000L; // 1s
@@ -60,6 +76,7 @@ private:
   MediumCheckTask medium_check_task_;
 };
 
+#undef DEFINE_SCHEDULER_TIMER_TASK
 
 } // namespace compaction
 } // namespace oceanbase

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_px_coord_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/ob_sql.h"
 #include "sql/dtl/ob_dtl_channel_group.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
@@ -239,7 +239,10 @@ int ObPxCoordOp::rescan()
       // nop
     } else if (MY_SPEC.batch_op_info_.is_inited() && OB_FAIL(init_batch_info())) {
       LOG_WARN("fail to init batch info", K(ret));
-    } else if (FALSE_IT(px_sequence_id_ = GCTX.sql_engine_->get_px_sequence_id())) {
+    } else if (OB_ISNULL(ctx_.get_sql_execution_id_provider())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("SQL execution-id provider is NULL", K(ret));
+    } else if (FALSE_IT(px_sequence_id_ = ctx_.get_sql_execution_id_provider()->get_px_sequence_id())) {
     } else if (OB_FAIL(register_interrupt())) {
       LOG_WARN("fail to register interrupt", K(ret));
     } else if (OB_FAIL(init_dfo_mgr(
@@ -762,10 +765,11 @@ int ObPxCoordOp::check_all_sqc(ObIArray<ObDfo *> &active_dfos,
 int ObPxCoordOp::register_interrupt()
 {
   int ret = OB_SUCCESS;
-  px_sequence_id_ = GCTX.sql_engine_->get_px_sequence_id();
-  ObInterruptUtil::generate_query_interrupt_id(px_sequence_id_,
-      interrupt_id_);
-  if (OB_FAIL(SET_INTERRUPTABLE(interrupt_id_))) {
+  CK (OB_NOT_NULL(ctx_.get_sql_execution_id_provider()));
+  OX (px_sequence_id_ = ctx_.get_sql_execution_id_provider()->get_px_sequence_id());
+  OX (ObInterruptUtil::generate_query_interrupt_id(px_sequence_id_, interrupt_id_));
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(SET_INTERRUPTABLE(interrupt_id_))) {
     LOG_WARN("fail to register interrupt", K(ret));
   } else {
     register_interrupted_ = true;
@@ -978,7 +982,7 @@ int ObPxCoordOp::erase_dtl_interm_result()
         key.channel_id_ = ci.chid_;
         for (int j = 0; j < last_px_batch_rescan_size_; ++j) {
           key.batch_id_ = j;
-          if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(key))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->erase_interm_result_info(key))) {
             LOG_TRACE("fail to release receive internal result", K(ret));
           }
         }

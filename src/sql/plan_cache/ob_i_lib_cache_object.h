@@ -29,11 +29,14 @@ class ObIAllocator;
 
 namespace sql
 {
+class ObPlanCache;
+
 // The abstract interface class of library cache object, each object in the ObLibCacheNameSpace
 // enum structure needs to inherit from this interface and implement its own implementation class
 class ObILibCacheObject
 {
 friend class ObLCObjectManager;
+friend class ObPlanCache;
 public:
   enum CacheObjStatus
   {
@@ -77,6 +80,7 @@ public:
   }
   inline void set_obj_status(CacheObjStatus status) { obj_status_ = status; }
   inline CacheObjStatus get_obj_status() const { return obj_status_; }
+  inline ObPlanCache *get_plan_cache() const { return plan_cache_; }
 
   ///
   /// The following interfaces need to be inherited and implemented by derived classes
@@ -104,6 +108,7 @@ protected:
   ObLibCacheNameSpace ns_;
   CacheObjStatus obj_status_;
   int64_t accounted_size_;
+  ObPlanCache *plan_cache_;
 };
 
 

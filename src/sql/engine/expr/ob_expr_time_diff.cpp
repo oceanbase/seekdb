@@ -128,7 +128,7 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
     int64_t int64_diff = 0;
     ObTime ot1(DT_TYPE_TIME);
     ObTime ot2(DT_TYPE_TIME);
-    if (OB_FAIL(ob_datum_to_ob_time_without_date(
+    if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
           *param_datum1, expr.args_[0]->datum_meta_.type_, expr.args_[0]->datum_meta_.scale_,
           tz_info, ot1, expr.args_[0]->obj_meta_.has_lob_header()))) {
       LOG_WARN("cast the first param failed", K(ret));
@@ -139,7 +139,7 @@ int ObExprTimeDiff::calc_timediff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       LOG_WARN("eval param value failed", K(ret));
     } else if (param_datum2->is_null()) {
       expr_datum.set_null();
-    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(
+    } else if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_,
                  *param_datum2, expr.args_[1]->datum_meta_.type_, expr.args_[1]->datum_meta_.scale_,
                  tz_info, ot2, expr.args_[1]->obj_meta_.has_lob_header()))) {
       LOG_WARN("cast the second param failed", K(ret));

@@ -96,8 +96,6 @@ int PwjTable::assign(const PwjTable &other)
   return ret;
 }
 
-OB_SERIALIZE_MEMBER(GroupPWJTabletIdInfo, group_id_, tablet_id_array_);
-
 void ObPwjComparer::reset()
 {
   pwj_tables_.reset();

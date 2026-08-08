@@ -20,6 +20,7 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 #include "storage/access/ob_table_param.h"
+#include "storage/access/ob_table_read_info.h"
 
 namespace oceanbase
 {

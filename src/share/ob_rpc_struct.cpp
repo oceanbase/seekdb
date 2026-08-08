@@ -17,17 +17,13 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_rpc_struct.h"
-#include "share/rc/ob_module_provider.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
 using namespace common;
-using namespace sql;
 using namespace share::schema;
 using namespace share;
-using namespace storage;
-using namespace transaction;
 using namespace transaction::tablelock;
 namespace obcall
 {
@@ -2400,6 +2396,7 @@ OB_SERIALIZE_MEMBER((ObCreateRoleArg, ObDDLArg),
 
                     user_infos_);
 
+OB_SERIALIZE_MEMBER(ObAdminSetConfigArg, items_, is_inner_);
 //----End of structs for managing privileges----
 
 
@@ -2408,9 +2405,6 @@ OB_SERIALIZE_MEMBER((ObCreateRoleArg, ObDDLArg),
 
 
 
-
-OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_);
-OB_SERIALIZE_MEMBER(ObAdminSetConfigArg, items_, is_inner_);
 
 bool ObUpdateIndexStatusArg::is_allow_when_disable_ddl() const
 {
@@ -2604,7 +2598,6 @@ OB_SERIALIZE_MEMBER((ObAlterTriggerArg, ObDDLArg), trigger_database_,
 
 
 
-
 OB_SERIALIZE_MEMBER(ObCancelTaskArg, task_id_);
 
 
@@ -2753,8 +2746,6 @@ int ObDDLRes::assign(const ObDDLRes &other)
 }
 
 OB_SERIALIZE_MEMBER(ObDDLRes, schema_id_, task_id_);
-
-
 OB_SERIALIZE_MEMBER(ObParallelDDLRes, schema_version_);
 void ObAlterTableRes::reset()
 {
@@ -3051,8 +3042,6 @@ OB_SERIALIZE_MEMBER(ObCreateTabletExtraInfo,
                     need_create_empty_major_,
                     micro_index_clustered_);
 
-// ObBatchCreateTabletArg implementation moved to storage/tablet/ob_batch_create_tablet_arg.cpp
-
 bool ObFetchTabletSeqArg::is_valid() const
 {
   return true
@@ -3118,22 +3107,11 @@ OB_SERIALIZE_MEMBER(ObSwitchSchemaResult, ret_);
 int ObRuntimeConfigArg::assign(const ObRuntimeConfigArg &other)
 {
   int ret = OB_SUCCESS;
-
   config_str_ = other.config_str_;
   return ret;
 }
 
 OB_SERIALIZE_MEMBER(ObRuntimeConfigArg, config_str_);
-
-
-
-
-
-
-
-
-
-
 
 OB_SERIALIZE_MEMBER(ObFlushOptStatArg, is_flush_col_usage_, is_flush_dml_stat_);
 

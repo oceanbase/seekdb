@@ -22,7 +22,7 @@
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"

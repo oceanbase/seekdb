@@ -17,16 +17,14 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_memstore_freezer_local_dispatch.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/ob_server.h"
-#include "rootserver/freeze/ob_major_freeze_helper.h"
+#include "data_plane/compaction/ob_i_major_freeze_coordinator.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 
 namespace oceanbase
 {
 using namespace share;
-using namespace rootserver;
 namespace storage
 {
 
@@ -65,8 +63,8 @@ static int do_tx_data_table_freeze_(const ObMemstoreFreezeArg &arg)
   LOG_INFO("start tx data table self freeze task", K(arg));
 
   ObTxDataFreezeGuard freeze_guard;
-  ObLSService *ls_srv = share::g_mp->ls_service();
-  ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
+  ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
   ObLS *ls = nullptr;
   ObTxTableGuard tx_table_guard;
 
@@ -96,13 +94,18 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
   SCN frozen_scn;
+  data_plane::ObIMajorFreezeCoordinator *major_freeze_coordinator =
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIMajorFreezeCoordinator>();
 
-  if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
+  if (OB_ISNULL(major_freeze_coordinator)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("major freeze coordinator is not configured", KR(ret));
+  } else if (OB_FAIL(major_freeze_coordinator->get_frozen_scn(frozen_scn))) {
     LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     int64_t frozen_scn_val = frozen_scn.get_val_for_tx();
     bool need_major = true;
-    ObMemstoreFreezer *freezer = share::g_mp->memstore_freezer();
+    ObMemstoreFreezer *freezer = ::oceanbase::share::server_service<::oceanbase::storage::ObMemstoreFreezer>();
     ObRetryMajorInfo retry_major_info = freezer->get_retry_major_info();
     retry_major_info.frozen_scn_ = arg.try_frozen_scn_;
     if (arg.try_frozen_scn_ > 0) {
@@ -119,11 +122,10 @@ static int do_major_freeze_(const ObMemstoreFreezeArg &arg)
     } else {
       retry_major_info.frozen_scn_ = frozen_scn_val;
 
-      ObMajorFreezeParam param;
-      param.freeze_reason_ = rootserver::MF_MAJOR_COMPACT_TRIGGER;
-      LOG_INFO("do major freeze", K(param));
-      if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
-        LOG_WARN("major freeze failed", K(param), KR(ret));
+      if (OB_FAIL(
+              major_freeze_coordinator
+                  ->trigger_memstore_pressure_major_freeze())) {
+        LOG_WARN("major freeze failed", KR(ret));
       } else {
         retry_major_info.reset();
       }
@@ -141,7 +143,7 @@ static int do_mds_table_freeze_(const ObMemstoreFreezeArg &arg)
   LOG_INFO("start mds table self freeze task", K(arg));
 
   ObLS *ls = nullptr;
-  ObLSService *ls_srv = share::g_mp->ls_service();
+  ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
 
   if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;

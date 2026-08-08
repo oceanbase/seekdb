@@ -22,7 +22,7 @@
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_tablet_autoincrement_param.h"
-#include "rootserver/truncate_info/ob_truncate_tablet_arg.h"
+#include "storage/truncate_info/ob_truncate_tablet_arg.h"
 
 namespace oceanbase
 {
@@ -54,14 +54,14 @@ public:
   bool is_valid() const;
   void reset();
   int set_autoinc_seq_arg(const obcall::ObBatchSetTabletAutoincSeqArg &arg);
-  int set_truncate_arg(const rootserver::ObTruncateTabletArg &arg);
+  int set_truncate_arg(const ObTruncateTabletArg &arg);
 
   TO_STRING_KV(K_(autoinc_seq_arg), K_(truncate_arg));
 
 public:
   
   obcall::ObBatchSetTabletAutoincSeqArg autoinc_seq_arg_;
-  rootserver::ObTruncateTabletArg truncate_arg_;
+  ObTruncateTabletArg truncate_arg_;
 
 private:
   common::ObArenaAllocator allocator_;

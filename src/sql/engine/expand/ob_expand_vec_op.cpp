@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expand_vec_op.h"
-#include "sql/engine/ob_bit_vector.h"
+#include "share/vector/ob_bit_vector.h"
 #include "sql/engine/basic/ob_batch_result_holder.h"
 
 namespace oceanbase

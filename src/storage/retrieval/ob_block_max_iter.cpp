@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "query/das/ob_block_max_spec_access.h"
 #include "ob_block_max_iter.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -41,36 +42,39 @@ ObBlockMaxScoreIterParam::ObBlockMaxScoreIterParam()
 {
 }
 
-int ObBlockMaxScoreIterParam::init(const ObDASIRScanCtDef &ir_ctdef, ObIAllocator &alloc)
+int ObBlockMaxScoreIterParam::init(
+    const sql::ObDASIRScanCtDef &ir_ctdef, ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   stat_cols_.set_allocator(&alloc);
   stat_projectors_.set_allocator(&alloc);
-  const ObTextBlockMaxSpec &block_max_spec = ir_ctdef.block_max_spec_;
-  if (OB_UNLIKELY(!ir_ctdef.is_block_scan_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ir_ctdef));
-  } else if (OB_FAIL(stat_cols_.init(block_max_spec.col_types_.count()))) {
+  query::ObTextBlockMaxSpecView spec;
+  if (OB_FAIL(query::get_text_block_max_spec(ir_ctdef, spec))) {
+    LOG_WARN("invalid text block max spec", K(ret));
+  } else if (OB_FAIL(stat_cols_.init(spec.column_count_))) {
     LOG_WARN("failed to init stat cols", K(ret));
-  } else if (OB_FAIL(stat_projectors_.init(block_max_spec.col_types_.count()))) {
+  } else if (OB_FAIL(stat_projectors_.init(spec.column_count_))) {
     LOG_WARN("failed to init stat projectors", K(ret));
   } else {
     // some column index hard coded here, generate it on code generation if inverted index schema may change
-    min_domain_id_col_idx_ = block_max_spec.min_id_idx_;
-    max_domain_id_col_idx_ = block_max_spec.max_id_idx_;
-    token_freq_col_idx_ = block_max_spec.token_freq_idx_;
-    doc_length_col_idx_ = block_max_spec.doc_length_idx_;
+    min_domain_id_col_idx_ = spec.min_domain_id_index_;
+    max_domain_id_col_idx_ = spec.max_domain_id_index_;
+    token_freq_col_idx_ = spec.token_frequency_index_;
+    doc_length_col_idx_ = spec.document_length_index_;
     dim_col_idx_in_rowkey_ = 0;
     domain_id_idx_in_rowkey_ = 1;
-    domain_id_obj_meta_ = ir_ctdef.inv_scan_domain_id_col_->obj_meta_;
-    dim_obj_meta_ = ir_ctdef.token_col_->obj_meta_;
+    domain_id_obj_meta_ = spec.domain_id_meta_;
+    dim_obj_meta_ = spec.dimension_meta_;
     scan_allocator_ = &alloc;
     ranking_type_ = ObMaxScoreRankingType::OB_MAX_SCORE_BM_25;
-    for (int64_t i = 0; OB_SUCC(ret) && i < block_max_spec.col_types_.count(); ++i) {
-      ObSkipIndexColMeta col_meta(block_max_spec.col_store_idxes_.at(i), block_max_spec.col_types_.at(i));
-      if (OB_FAIL(stat_cols_.push_back(col_meta))) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < spec.column_count_; ++i) {
+      query::ObBlockMaxColumnView column;
+      if (OB_FAIL(query::get_text_block_max_column(ir_ctdef, i, column))) {
+        LOG_WARN("failed to read text block max column", K(ret), K(i));
+      } else if (OB_FAIL(stat_cols_.push_back(ObSkipIndexColMeta(
+          column.store_index_, static_cast<ObSkipIndexColType>(column.statistic_type_))))) {
         LOG_WARN("failed to push back stat col", K(ret));
-      } else if (OB_FAIL(stat_projectors_.push_back(block_max_spec.scan_col_proj_.at(i)))) {
+      } else if (OB_FAIL(stat_projectors_.push_back(column.projector_))) {
         LOG_WARN("failed to push back stat projector", K(ret));
       }
     }
@@ -78,31 +82,37 @@ int ObBlockMaxScoreIterParam::init(const ObDASIRScanCtDef &ir_ctdef, ObIAllocato
   return ret;
 }
 
-int ObBlockMaxScoreIterParam::init(const ObDASVecAuxScanCtDef &vec_aux_ctdef, ObIAllocator &alloc)
+int ObBlockMaxScoreIterParam::init(
+    const sql::ObDASVecAuxScanCtDef &vec_aux_ctdef, ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
   stat_cols_.set_allocator(&alloc);
   stat_projectors_.set_allocator(&alloc);
-  const ObSPIVBlockMaxSpec &block_max_spec = vec_aux_ctdef.block_max_spec_;
-  if (OB_FAIL(stat_cols_.init(block_max_spec.col_types_.count()))) {
+  query::ObVectorBlockMaxSpecView spec;
+  if (OB_FAIL(query::get_vector_block_max_spec(vec_aux_ctdef, spec))) {
+    LOG_WARN("invalid vector block max spec", K(ret));
+  } else if (OB_FAIL(stat_cols_.init(spec.column_count_))) {
     LOG_WARN("failed to init stat cols", K(ret));
-  } else if (OB_FAIL(stat_projectors_.init(block_max_spec.col_types_.count()))) {
+  } else if (OB_FAIL(stat_projectors_.init(spec.column_count_))) {
     LOG_WARN("failed to init stat projectors", K(ret));
   } else {
-    min_domain_id_col_idx_ = block_max_spec.min_id_idx_;
-    max_domain_id_col_idx_ = block_max_spec.max_id_idx_;
-    score_col_idx_ = block_max_spec.value_idx_;
+    min_domain_id_col_idx_ = spec.min_domain_id_index_;
+    max_domain_id_col_idx_ = spec.max_domain_id_index_;
+    score_col_idx_ = spec.score_index_;
     dim_col_idx_in_rowkey_ = 0;
     domain_id_idx_in_rowkey_ = 1;
-    domain_id_obj_meta_ = vec_aux_ctdef.spiv_scan_docid_col_->obj_meta_;
-    dim_obj_meta_.set_uint32();
+    domain_id_obj_meta_ = spec.domain_id_meta_;
+    dim_obj_meta_ = spec.dimension_meta_;
     scan_allocator_ = &alloc;
     ranking_type_ = ObMaxScoreRankingType::OB_MAX_SCORE_INNER_PRODUCT;
-    for (int64_t i = 0; OB_SUCC(ret) && i < block_max_spec.col_types_.count(); ++i) {
-      ObSkipIndexColMeta col_meta(block_max_spec.col_store_idxes_.at(i), block_max_spec.col_types_.at(i));
-      if (OB_FAIL(stat_cols_.push_back(col_meta))) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < spec.column_count_; ++i) {
+      query::ObBlockMaxColumnView column;
+      if (OB_FAIL(query::get_vector_block_max_column(vec_aux_ctdef, i, column))) {
+        LOG_WARN("failed to read vector block max column", K(ret), K(i));
+      } else if (OB_FAIL(stat_cols_.push_back(ObSkipIndexColMeta(
+          column.store_index_, static_cast<ObSkipIndexColType>(column.statistic_type_))))) {
         LOG_WARN("failed to push back stat col", K(ret));
-      } else if (OB_FAIL(stat_projectors_.push_back(block_max_spec.scan_col_proj_.at(i)))) {
+      } else if (OB_FAIL(stat_projectors_.push_back(column.projector_))) {
         LOG_WARN("failed to push back stat projector", K(ret));
       }
     }
@@ -294,7 +304,7 @@ int ObBlockMaxScoreIterator::inner_init(
       block_max_scan_param.stat_projectors_,
       scan_param))) {
     LOG_WARN("fail to init block stat scan param", K(ret));
-  } else if (OB_FAIL(share::g_mp->access_service()->scan_block_stat(block_stat_scan_param_, stat_iter_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->scan_block_stat(block_stat_scan_param_, stat_iter_))) {
     LOG_WARN("fail to scan block stat", K(ret));
   } else {
     const int64_t dim_rowkey_idx = block_max_scan_param.dim_col_idx_in_rowkey_;
@@ -346,7 +356,7 @@ int ObBlockMaxScoreIterator::init_cmp_funcs(const ObBlockMaxScoreIterParam &bloc
   int ret = OB_SUCCESS;
   const ObObjMeta &id_obj_meta = block_max_scan_param.domain_id_obj_meta_;
   const ObObjMeta &dim_obj_meta = block_max_scan_param.dim_obj_meta_;
-  sql::ObExprBasicFuncs *dim_basic_funcs = ObDatumFuncs::get_basic_func(
+  common::ObDatumBasicFuncs *dim_basic_funcs = ObDatumFuncs::get_basic_func(
       dim_obj_meta.get_type(), dim_obj_meta.get_collation_type());
   if (OB_FAIL(domain_id_cmp_.init(id_obj_meta))) {
     LOG_WARN("fail to init domain id cmp", K(ret));
@@ -406,7 +416,8 @@ int ObBlockMaxScoreIterator::calc_domain_id_range(const ObDatumRow &agg_row, con
         } else if (OB_UNLIKELY(rowkey_dim_datum.is_ext() || scan_dim_datum.is_ext())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected ext datum for dimension", K(ret), K(rowkey_dim_datum), K(scan_dim_datum));
-        } else if (OB_FAIL(dim_cmp_(rowkey_dim_datum, scan_dim_datum, cmp_ret))) {
+        } else if (OB_FAIL(dim_cmp_(
+                       rowkey_dim_datum, scan_dim_datum, cmp_ret, nullptr))) {
           LOG_WARN("fail to compare dim", K(ret), K(scan_dim_obj), K(rowkey_dim_datum));
         } else if (OB_UNLIKELY(cmp_ret < 0)) {
           ret = OB_ERR_UNEXPECTED;

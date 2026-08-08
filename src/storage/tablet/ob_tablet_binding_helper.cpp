@@ -17,19 +17,19 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_binding_helper.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ex_rpc.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_binding_replay_executor.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "observer/ob_inner_sql_connection.h"
-#include "rootserver/ob_ddl_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;
 using namespace oceanbase::palf;
 using namespace oceanbase::memtable;
+using namespace oceanbase::obcall;
 
 namespace oceanbase
 {
@@ -100,9 +100,9 @@ int ObTabletBindingHelper::get_ls(ObLS *&tenant_ls)
   int ret = OB_SUCCESS;
   tenant_ls = nullptr;
   ObLSService *ls_srv = nullptr;
-  if (OB_ISNULL(ls_srv = share::g_mp->ls_service())) {
+  if (OB_ISNULL(ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("share::g_mp->ls_service() fail, server modules not initialized?", KR(ret));
+    LOG_ERROR("::oceanbase::share::server_service<::oceanbase::storage::ObLSService>() fail, server modules not initialized?", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(tenant_ls))) {
     LOG_ERROR("ls_srv->get_ls() fail", KR(ret));
   } else if (OB_ISNULL(tenant_ls)) {
@@ -267,7 +267,7 @@ int ObTabletBindingHelper::bind_lob_tablet_to_data_tablet(
 int ObTabletBindingHelper::build_single_table_write_defensive(
     const ObTableSchema &table_schema,
     const int64_t schema_version,
-    rootserver::ObDDLSQLTransaction &trans) 
+    common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!table_schema.is_valid() || schema_version <= 0)) {
@@ -824,7 +824,8 @@ int ObTabletBindingMdsHelper::register_mds_(
       LOG_WARN("failed to allocate", K(ret));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
       LOG_WARN("failed to serialize arg", K(ret));
-    } else if (OB_FAIL(static_cast<observer::ObInnerSQLConnection *>(isql_conn)->register_multi_data_source(ObTxDataSourceType::TABLET_BINDING, buf, pos))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                   isql_conn, ObTxDataSourceType::TABLET_BINDING, buf, pos))) {
       LOG_WARN("failed to register mds", K(ret));
     }
   }
@@ -867,7 +868,7 @@ int ObTabletBindingMdsHelper::modify_(
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("fail to get ls", KR(ret), K(arg));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); i++) {

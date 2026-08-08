@@ -16,25 +16,27 @@
 
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_sql.h"
-#include "observer/mysql/ob_sync_cmd_driver.h"
-#include "observer/mysql/obmp_stmt_execute.h"
+#include "sql/ob_query_retry_ctrl.h"
+#include "query/protocol/ob_client_protocol.h"
+#include "sql/plan_cache/ob_param_value_formatter.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ob_stmt_resolver.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_pl_integer_checker.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "pl/ob_pl_package.h"
-#include "pl/ob_pl_server_cursor.h"
+#include "sql/pl/ob_pl_package.h"
+#include "sql/pl/ob_pl_server_cursor.h"
 #include "sql/engine/expr/ob_expr_obj_access.h"
-#include "pl/ob_pl_exception_handling.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
+#include "sql/pl/ob_pl_exception_handling.h"
 
 namespace oceanbase
 {
 using namespace sqlclient;
 using namespace common;
 using namespace share;
-using namespace observer;
 using namespace pl;
 using namespace share::schema;
 namespace sql
@@ -89,7 +91,9 @@ namespace sql
     }                                                                          \
   } while (0)
 
-int ObSPIService::PLPrepareResult::init(sql::ObSQLSessionInfo &session_info)
+int ObSPIService::PLPrepareResult::init(
+    sql::ObSQLSessionInfo &session_info,
+    query::ObIPlanCacheAccessService &plan_cache_access_service)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
@@ -101,12 +105,16 @@ int ObSPIService::PLPrepareResult::init(sql::ObSQLSessionInfo &session_info)
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create memory entity failed", K(ret));
   } else {
-    result_set_ = new (buf_) ObResultSet(session_info, mem_context_->get_arena_allocator());
+    result_set_ = new (buf_) ObResultSet(
+        session_info, mem_context_->get_arena_allocator(),
+        plan_cache_access_service);
   }
   return ret;
 }
 
-int ObSPIResultSet::init(sql::ObSQLSessionInfo &session_info)
+int ObSPIResultSet::init(
+    sql::ObSQLSessionInfo &session_info,
+    query::ObIPlanCacheAccessService &plan_cache_access_service)
 {
   int ret = OB_SUCCESS;
   lib::ContextParam param;
@@ -118,7 +126,10 @@ int ObSPIResultSet::init(sql::ObSQLSessionInfo &session_info)
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
     LOG_WARN("create memory entity failed", K(ret));
   } else {
-    result_set_ = new (buf_) ObResultSet(session_info, mem_context_->get_arena_allocator());
+    plan_cache_access_service_ = &plan_cache_access_service;
+    result_set_ = new (buf_) ObResultSet(
+        session_info, mem_context_->get_arena_allocator(),
+        plan_cache_access_service);
     is_inited_ = true;
   }
   return ret;
@@ -736,6 +747,8 @@ int ObSPIService::spi_convert(ObSQLSessionInfo &session,
                               ObObj &src,
                               const ObExprResType &dst_type,
                               ObObj &dst,
+                              common::ObISrsProvider *srs_provider,
+                              common::ObILobReadService *lob_read_service,
                               bool ignore_fail,
                               const ObIArray<ObString> *type_info)
 {
@@ -749,6 +762,7 @@ int ObSPIService::spi_convert(ObSQLSessionInfo &session,
     bool is_strict = is_strict_mode(session.get_sql_mode());
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(&session);
     ObCastCtx cast_ctx(&allocator, &dtc_params, cast_mode, dst_type.get_collation_type());
+    session.configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
     if (dst_type.is_null() || dst_type.is_unknown() || dst_type.is_ext()) {
       OX (dst = src);
     } else if (ob_is_enum_or_set_type(src.get_type()) && ob_is_enum_or_set_type(dst_type.get_type())) {
@@ -765,13 +779,16 @@ int ObSPIService::spi_convert(ObSQLSessionInfo *session,
                               ObObjParam &src,
                               const ObExprResType &result_type,
                               ObObjParam &result,
+                              common::ObISrsProvider *srs_provider,
+                              common::ObILobReadService *lob_read_service,
                               const ObIArray<ObString> *type_info)
 {
   int ret = OB_SUCCESS;
   ObObj dst;
   CK (OB_NOT_NULL(session));
   CK (OB_NOT_NULL(allocator));
-  OZ (spi_convert(*session, *allocator, src, result_type, dst, false, type_info));
+  OZ (spi_convert(*session, *allocator, src, result_type, dst,
+                  srs_provider, lob_read_service, false, type_info));
   OX (src.set_param_meta());
   OX (result.set_accuracy(result_type.get_accuracy()));
   OX (result.set_meta_type(result_type.get_obj_meta()));
@@ -824,7 +841,11 @@ int ObSPIService::spi_convert_objparam(ObPLExecCtx *ctx,
       ObObjParam value;
       ObIArray<common::ObString> *type_info = NULL;
       OZ (expected_type->get_type_info(type_info));
-      OZ (spi_convert(ctx->exec_ctx_->get_my_session(), &tmp_alloc, *src, result_type, value, type_info));
+      OZ (spi_convert(ctx->exec_ctx_->get_my_session(), &tmp_alloc, *src,
+                      result_type, value,
+                      ctx->exec_ctx_->get_srs_provider(),
+                      ctx->exec_ctx_->get_lob_read_service(),
+                      type_info));
       OZ (deep_copy_obj(*ctx->allocator_, value, result_value));
       if (OB_SUCC(ret) && need_set) {
         void *ptr = ctx->params_->at(result_idx).get_deep_copy_obj_ptr();
@@ -1056,11 +1077,13 @@ int ObSPIService::spi_calc_package_expr_v1(const pl::ObPLResolveCtx &resolve_ctx
 {
   int ret = OB_SUCCESS;
   ObSqlExpression *sql_expr = NULL;
-  ObPLPackageManager &pl_manager = resolve_ctx.session_info_.get_pl_engine()->get_package_manager();
+  ObPLPackageManager *pl_manager = NULL;
+  CK (OB_NOT_NULL(resolve_ctx.params_.pl_engine_));
+  OX (pl_manager = &resolve_ctx.params_.pl_engine_->get_package_manager());
   ObCacheObjGuard *cache_obj_guard = NULL;
   ObPLPackage *package = NULL;
    ObPLPackageGuard &guard = resolve_ctx.package_guard_;
-  OZ (pl_manager.get_package_expr(resolve_ctx, package_id, expr_idx, sql_expr));
+  OZ (pl_manager->get_package_expr(resolve_ctx, package_id, expr_idx, sql_expr));
   CK (OB_NOT_NULL(sql_expr));
   OZ (guard.get(package_id, cache_obj_guard));
   CK (OB_NOT_NULL(cache_obj_guard));
@@ -1100,7 +1123,7 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
-  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
   if (OB_SUCC(ret)) {
@@ -1116,6 +1139,11 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
                                guard,
                                *sql_proxy,
                                false);
+    resolve_ctx.params_.plan_cache_ = exec_ctx->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
     OZ (package_guard.init());
     OZ (pl_manager.get_package_expr(resolve_ctx, package_id, expr_idx, sql_expr));
     CK (OB_NOT_NULL(sql_expr));
@@ -1201,7 +1229,7 @@ int ObSPIService::spi_set_package_variable(
   CK (OB_NOT_NULL(exec_ctx));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
-  CK (OB_NOT_NULL(pl_engine = session_info->get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   if (OB_SUCC(ret)) {
     ObObj result = *const_cast<ObObj *>(&value);
     ObPLPackageManager &pl_manager = pl_engine->get_package_manager();
@@ -1213,6 +1241,11 @@ int ObSPIService::spi_set_package_variable(
                                guard != NULL ? *(guard) : package_guard,
                                *sql_proxy,
                                false); // is_prepare_protocol
+    resolve_ctx.params_.plan_cache_ = exec_ctx->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
     OZ (GCTX.schema_service_->get_runtime_schema_guard(
         schema_guard));
     OZ (package_guard.init());
@@ -1455,8 +1488,8 @@ int ObSPIService::recreate_implicit_savapoint_if_need(sql::ObExecContext &ctx, i
     ObSQLSessionInfo *session_info = ctx.get_my_session();
     if (!session_info->is_in_transaction()) { // Transaction has ended, clear implicit savepoint marker
       OX (session_info->clear_pl_implicit_savepoint());
-    } else if (!session_info->get_tx_desc()
-               ->contain_savepoint(PL_IMPLICIT_SAVEPOINT)) {
+    } else if (!data_plane::tx_desc_contains_savepoint(
+                   session_info->get_tx_desc(), PL_IMPLICIT_SAVEPOINT)) {
       // PL internal rollback to savepoint statement rolled back to the outer checkpoint, overwriting PL's implicit checkpoint, at this point a new checkpoint needs to be rebuilt
       OZ (ObSqlTransControl::create_savepoint(ctx, PL_IMPLICIT_SAVEPOINT));
     }
@@ -1588,7 +1621,9 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
       ObSQLSessionInfo *session = ctx->exec_ctx_->get_my_session();
       stmt::StmtType stmt_type = static_cast<stmt::StmtType>(type);
 
-      OZ (spi_result.init(*session));
+      CK (OB_NOT_NULL(ctx->exec_ctx_->get_plan_cache_access_service()));
+      OZ (spi_result.init(
+          *session, *ctx->exec_ctx_->get_plan_cache_access_service()));
       OZ (spi_result.start_nested_stmt_if_need(ctx, sql, stmt_type, for_update));
 
       if (OB_SUCC(ret)) {
@@ -1856,6 +1891,7 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
                               ObMySQLProxy &sql_proxy,
                               share::schema::ObSchemaGetterGuard &schema_guard,
                               sql::ObRawExprFactory &expr_factory,
+                              ObIPLSqlRuntime *pl_sql_runtime,
                               const ObString &sql,
                               bool is_cursor,
                               pl::ObPLBlockNS *secondary_namespace,
@@ -1870,6 +1906,7 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
                             sql_proxy,
                             schema_guard,
                             expr_factory,
+                            pl_sql_runtime,
                             sql,
                             secondary_namespace,
                             prepare_result);
@@ -1882,6 +1919,7 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
                                     ObMySQLProxy &sql_proxy,
                                     share::schema::ObSchemaGetterGuard &schema_guard,
                                     sql::ObRawExprFactory &expr_factory,
+                                    ObIPLSqlRuntime *pl_sql_runtime,
                                     const ObString &sql,
                                     pl::ObPLBlockNS *secondary_namespace,
                                     ObSPIPrepareResult &prepare_result)
@@ -1900,14 +1938,13 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
     } else {
       PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false);
       SMART_VAR(PLPrepareResult, pl_prepare_result) {
-        CK (OB_NOT_NULL(GCTX.sql_engine_));
-        OZ (pl_prepare_result.init(session));
-        CK (OB_NOT_NULL(pl_prepare_result.result_set_));
+        CK (OB_NOT_NULL(pl_sql_runtime));
 #ifdef ERRSIM
         OX (ret = OB_E(EventTable::EN_SPI_SQL_EXEC) OB_SUCCESS);
 #endif
-        OZ (GCTX.sql_engine_->handle_pl_prepare(
+        OZ (pl_sql_runtime->prepare_pl_sql(
           prepare_result.route_sql_, pl_prepare_ctx, pl_prepare_result), K(sql));
+        CK (OB_NOT_NULL(pl_prepare_result.result_set_));
 
         LOG_TRACE("execute sql", K(sql), K(ret));
 
@@ -2038,6 +2075,7 @@ int ObSPIService::calc_dynamic_sqlstr(
   ObObjParam result;
   CK (OB_NOT_NULL(ctx));
   CK (OB_NOT_NULL(sql));
+  CK (OB_NOT_NULL(ctx->exec_ctx_));
   OZ (spi_calc_expr(ctx, sql, OB_INVALID_INDEX, &result));
   if (OB_FAIL(ret)) {
   } else if (result.is_null_or_empty_string()) {
@@ -2055,7 +2093,8 @@ int ObSPIService::calc_dynamic_sqlstr(
     ObCharsetType client_cs_type = CHARSET_INVALID;
 
     if (OB_SUCC(ret) && result.is_lob_storage()) {
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(&temp_allocator, result, tmp_sql))) {
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+              *ctx->exec_ctx_, &temp_allocator, result, tmp_sql))) {
         LOG_WARN("fail to read lob data", K(ret), K(result));
       }
     } else {
@@ -2113,20 +2152,19 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(ctx), ctx->valid());
   CK (OB_NOT_NULL(ctx->allocator_));
   CK (OB_NOT_NULL(session = ctx->exec_ctx_->get_my_session()));
-  CK (OB_NOT_NULL(GCTX.sql_engine_));
+  CK (OB_NOT_NULL(ctx->exec_ctx_->get_pl_sql_runtime()));
   stmt_type = stmt::T_NONE;
   bool is_prepare_with_param = OB_NOT_NULL(params);
   if (OB_SUCC(ret)) {
     PLPrepareCtx pl_prepare_ctx(*session, NULL, true, false, is_prepare_with_param);
 
     SMART_VAR(PLPrepareResult, pl_prepare_result) {
-      OZ (pl_prepare_result.init(*session));
-      CK (OB_NOT_NULL(pl_prepare_result.result_set_));
 #ifdef ERRSIM
       OX (ret = OB_E(EventTable::EN_SPI_SQL_EXEC) OB_SUCCESS);
 #endif
-      OZ (GCTX.sql_engine_->handle_pl_prepare(sql_str.string(), pl_prepare_ctx, pl_prepare_result,
-                                              nullptr));
+      OZ (ctx->exec_ctx_->get_pl_sql_runtime()->prepare_pl_sql(
+          sql_str.string(), pl_prepare_ctx, pl_prepare_result, nullptr));
+      CK (OB_NOT_NULL(pl_prepare_result.result_set_));
 
       OX (stmt_type = static_cast<stmt::StmtType>(pl_prepare_result.result_set_->get_stmt_type()));
       OZ (ob_write_string(allocator, pl_prepare_result.result_set_->get_stmt_ps_sql(), ps_sql, true));
@@ -2326,7 +2364,6 @@ int ObSPIService::spi_execute_immediate(ObPLExecCtx *ctx,
   CK (OB_LIKELY(0 <= sql_idx && sql_idx < ctx->func_->get_expressions().count()));
   OX (sql = ctx->func_->get_expressions().at(sql_idx));
   CK (OB_NOT_NULL(sql));
-  CK (OB_NOT_NULL(GCTX.sql_engine_));
   OX (saved_stmt_type = session->get_stmt_type());
   OZ (param_store.reserve(param_count));
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
@@ -2468,7 +2505,7 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
-  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
@@ -2482,6 +2519,11 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
                                ctx->guard_ != NULL ? *(ctx->guard_) : package_guard,
                                *sql_proxy,
                                false);
+    resolve_ctx.params_.plan_cache_ = exec_ctx->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
     OZ (pl_manager.get_package_var_val(
       resolve_ctx, *exec_ctx, package_id, OB_INVALID_VERSION, OB_INVALID_VERSION, index, value));
     CK (value.is_ext() || value.is_null());
@@ -2643,7 +2685,6 @@ int ObSPIService::spi_dynamic_open(ObPLExecCtx *ctx,
 
   return ret;
 }
-
 int ObSPIService::open_server_cursor(ObPLExecCtx *pl_ctx,
                                      ObPLServerCursorInfo &cursor,
                                      int64_t max_result_rows)
@@ -2895,7 +2936,9 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
   cursor.set_unstreaming();
   HEAP_VAR(ObSPIResultSet, spi_result) {
     ObSPICursor* spi_cursor = NULL;
-    OZ (spi_result.init(session_info));
+    CK (OB_NOT_NULL(ctx->exec_ctx_->get_plan_cache_access_service()));
+    OZ (spi_result.init(
+        session_info, *ctx->exec_ctx_->get_plan_cache_access_service()));
     OZ (spi_result.start_nested_stmt_if_need(ctx, sql, static_cast<stmt::StmtType>(type), for_update));
     OZ (save_unstreaming_cursor_sql(cursor, sql.empty() ? ps_sql : sql));
 
@@ -3529,8 +3572,8 @@ int ObSPIService::spi_check_timeout(sql::ObExecContext &exec_ctx)
     if (OB_FAIL(session_info->check_session_status())) {
       LOG_WARN("spi check session not healthy", K(ret));
     } else if (session_info->is_in_transaction()
-               && !session_info->get_tx_desc()->is_tx_end()
-               && session_info->get_tx_desc()->is_tx_timeout()) {
+               && !data_plane::tx_desc_is_ended(session_info->get_tx_desc())
+               && data_plane::tx_desc_is_timed_out(session_info->get_tx_desc())) {
       ret = OB_TRANS_TIMEOUT;
       LOG_WARN("spi check early exit, transaction timeout", K(ret));
     } else if (THIS_WORKER.is_timeout()) {
@@ -3656,7 +3699,8 @@ int ObSPIService::spi_process_resignal(pl::ObPLExecCtx *ctx,
     OZ (spi_calc_expr(ctx, expr, OB_INVALID_INDEX, &tmp)); \
     OX (expected_type.set_##type()); \
     OX (expected_type.set_collation_type(tmp.get_collation_type())); \
-    OZ (spi_convert(ctx->exec_ctx_->get_my_session(), ctx->get_top_expr_allocator(), tmp, expected_type, result)); \
+    OZ (spi_convert(ctx->exec_ctx_->get_my_session(), ctx->get_top_expr_allocator(), tmp, expected_type, result, \
+                    ctx->exec_ctx_->get_srs_provider(), ctx->exec_ctx_->get_lob_read_service())); \
   } while(0)
 
   if (OB_SUCC(ret)) {
@@ -3885,7 +3929,7 @@ int ObSPIService::spi_get_package_allocator(
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
-  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_my_session()->get_pl_engine()));
+  CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
@@ -3900,6 +3944,11 @@ int ObSPIService::spi_get_package_allocator(
                                ctx->guard_ != NULL ? *(ctx->guard_) : package_guard,
                                *sql_proxy,
                                false);
+    resolve_ctx.params_.plan_cache_ = exec_ctx->get_plan_cache();
+    resolve_ctx.params_.pl_sql_runtime_ = exec_ctx->get_pl_sql_runtime();
+    resolve_ctx.params_.pl_engine_ = exec_ctx->get_pl_engine();
+    resolve_ctx.params_.srs_provider_ = exec_ctx->get_srs_provider();
+    resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
     OZ (pl_manager.get_package_state(
       resolve_ctx, *exec_ctx, package_id, package_state), package_id);
     CK (OB_NOT_NULL(package_state));
@@ -3941,6 +3990,11 @@ int ObSPIService::spi_convert_anonymous_array(pl::ObPLExecCtx *ctx,
       ObObj *src_table_data = nullptr;
       ObPLResolveCtx resolve_ctx(
         *ctx->allocator_, *session, *schema_guard, *package_guard, *sql_proxy, false);
+      resolve_ctx.params_.plan_cache_ = ctx->exec_ctx_->get_plan_cache();
+      resolve_ctx.params_.pl_sql_runtime_ = ctx->exec_ctx_->get_pl_sql_runtime();
+      resolve_ctx.params_.pl_engine_ = ctx->exec_ctx_->get_pl_engine();
+      resolve_ctx.params_.srs_provider_ = ctx->exec_ctx_->get_srs_provider();
+      resolve_ctx.params_.lob_read_service_ = ctx->exec_ctx_->get_lob_read_service();
       OZ (pl_user_type->init_obj(*(schema_guard), tmp_alloc, dst, dst_size));
       OZ (pl_user_type->convert(resolve_ctx, src_ptr, dst_ptr));
       OZ (ObUserDefinedType::destruct_obj(*src_ptr, session, true));
@@ -3991,7 +4045,11 @@ int ObSPIService::spi_copy_datum(ObPLExecCtx *ctx,
       ret = OB_ERR_EXPRESSION_WRONG_TYPE;
       LOG_WARN("cursor assignment is not supported", K(ret));
     } else if (src->is_ext() && OB_NOT_NULL(dest_type) && dest_type->get_meta_type().is_ext()) {
-      OZ (ObPLComposite::copy_element(*src, *dest, *copy_allocator, ctx, ctx->exec_ctx_->get_my_session()));
+      OZ (ObPLComposite::copy_element(
+          *src, *dest, *copy_allocator, ctx,
+          ctx->exec_ctx_->get_my_session(), NULL,
+          ctx->exec_ctx_->get_srs_provider(),
+          ctx->exec_ctx_->get_lob_read_service(), true));
     } else if (OB_NOT_NULL(dest_type) && dest_type->get_meta_type().is_ext()) {
       ret = OB_ERR_EXPRESSION_WRONG_TYPE;
       LOG_WARN("src type and dest type is not match", K(ret));
@@ -4013,7 +4071,8 @@ int ObSPIService::spi_copy_datum(ObPLExecCtx *ctx,
           }
           OX (src_tmp = *src);
           OZ (spi_convert(
-            ctx->exec_ctx_->get_my_session(), &tmp_alloc, src_tmp, result_type, result, type_info),
+            ctx->exec_ctx_->get_my_session(), &tmp_alloc, src_tmp, result_type, result,
+            ctx->exec_ctx_->get_srs_provider(), ctx->exec_ctx_->get_lob_read_service(), type_info),
             K(src_tmp), K(result_type),KPC(src));
         }
       }
@@ -4063,7 +4122,9 @@ int ObSPIService::spi_interface_impl(pl::ObPLExecCtx *ctx, const char *interface
     LOG_WARN("Invalid context", K(ctx->exec_ctx_), K(ctx->params_), K(ctx->result_));
   } else {
     ObString name(interface_name);
-    PL_C_INTERFACE_t fp = GCTX.pl_engine_->get_interface_service().get_entry(name);
+    pl::ObPL *pl_engine = ctx->exec_ctx_->get_pl_engine();
+    PL_C_INTERFACE_t fp = OB_ISNULL(pl_engine)
+        ? nullptr : pl_engine->get_interface_service().get_entry(name);
     if (nullptr != fp) {
       ParamStore exec_params( (ObWrapperAllocator(*ctx->get_top_expr_allocator())) );
       for (int64_t i = 0; OB_SUCC(ret) && i < ctx->params_->count(); ++i) {
@@ -4359,11 +4420,11 @@ int ObSPIService::store_params_string(
       && OB_NOT_NULL(ctx->exec_ctx_->get_my_session())) {
     char *tmp_ptr = NULL;
     int64_t tmp_len = 0;
-    OZ (ObMPStmtExecute::store_params_value_to_str(spi_result.get_memory_ctx()->get_arena_allocator(),
-                                                   *ctx->exec_ctx_->get_my_session(),
-                                                   exec_params,
-                                                   tmp_ptr,
-                                                   tmp_len));
+    OZ (store_params_value_to_str(spi_result.get_memory_ctx()->get_arena_allocator(),
+                                  *ctx->exec_ctx_->get_my_session(),
+                                  exec_params,
+                                  tmp_ptr,
+                                  tmp_len));
     OX (spi_result.get_exec_params_str_ptr()->assign(tmp_ptr, tmp_len));
   }
   return ret;
@@ -4508,7 +4569,8 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
     LOG_TRACE("spi_execute using", K(sql), K(ps_sql), K(exec_params));
 #endif
     ObSQLSessionInfo *session = ctx->exec_ctx_->get_my_session();
-    if (OB_ISNULL(session) || OB_ISNULL(GCTX.sql_engine_)) {
+    ObIPLSqlRuntime *pl_sql_runtime = ctx->exec_ctx_->get_pl_sql_runtime();
+    if (OB_ISNULL(session) || OB_ISNULL(pl_sql_runtime)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Argument in pl context is NULL", K(session), K(ret));
     } else {
@@ -4523,25 +4585,25 @@ int ObSPIService::inner_open(ObPLExecCtx *ctx,
 #ifdef ERRSIM
             OX (ret = OB_E(EventTable::EN_SPI_SQL_EXEC) OB_SUCCESS);
 #endif
-            OZ (GCTX.sql_engine_->handle_pl_execute(sql,
-                                                    *session,
-                                                    exec_params,
-                                                    *spi_result.get_result_set(),
-                                                    spi_result.get_sql_ctx(),
-                                                    false /* is_prepare_protocol */,
-                                                    false /* is_dynamic_sql*/), K(sql), K(ps_sql), K(exec_params));
+            OZ (pl_sql_runtime->execute_pl_sql(sql,
+                                              *session,
+                                              exec_params,
+                                              *spi_result.get_result_set(),
+                                              spi_result.get_sql_ctx(),
+                                              false /* is_prepare_protocol */,
+                                              false /* is_dynamic_sql */), K(sql), K(ps_sql), K(exec_params));
           } else {
             spi_result.get_result_set()->set_stmt_type(static_cast<stmt::StmtType>(type));
 #ifdef ERRSIM
             OX (ret = OB_E(EventTable::EN_SPI_SQL_EXEC) OB_SUCCESS);
 #endif
-            OZ (GCTX.sql_engine_->handle_pl_execute(ps_sql,
-                                                    *session,
-                                                    exec_params,
-                                                    *spi_result.get_result_set(),
-                                                    spi_result.get_sql_ctx(),
-                                                    true /* is_prepare_protocol */,
-                                                    is_dynamic_sql /* is_dynamic_sql */), K(sql), K(ps_sql), K(exec_params));
+            OZ (pl_sql_runtime->execute_pl_sql(ps_sql,
+                                              *session,
+                                              exec_params,
+                                              *spi_result.get_result_set(),
+                                              spi_result.get_sql_ctx(),
+                                              true /* is_prepare_protocol */,
+                                              is_dynamic_sql /* is_dynamic_sql */), K(sql), K(ps_sql), K(exec_params));
             OZ (adjust_out_params(*spi_result.get_result_set(), out_params));
           }
         }
@@ -5018,9 +5080,20 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
             // Protocol fetch returns current_row directly.
           } else {
             ObCastCtx cast_ctx(&tmp_allocator, &dtc_params, cast_mode, cast_coll_type);
-            OZ (store_into_result(ctx, cast_ctx, current_row, into_exprs, column_types, type_count,
-                             into_count, exprs_not_null, pl_integer_ranges, return_types, return_type_count,
-                             actual_column_count, row_desc, is_type_record));
+            exec_ctx->get_my_session()->configure_obj_cast(
+                cast_ctx,
+                exec_ctx->get_srs_provider(),
+                exec_ctx->get_lob_read_service());
+            {
+              // Query evaluation warnings belong to the enclosing CALL, but a
+              // non-strict cast used only to assign an INTO variable does not.
+              // Isolate just the assignment instead of clearing the complete
+              // statement warning buffer after SELECT ... INTO.
+              ObWarningBufferIgnoreScope ignore_into_assignment_warnings;
+              OZ (store_into_result(ctx, cast_ctx, current_row, into_exprs, column_types, type_count,
+                               into_count, exprs_not_null, pl_integer_ranges, return_types, return_type_count,
+                               actual_column_count, row_desc, is_type_record));
+            }
             for (int64_t i = 0; OB_SUCC(ret) && i < into_count; ++i) {
               if (is_obj_access_expression(*into_exprs[i])) {
                 std::pair<uint64_t, uint64_t> package_var_info = std::pair<uint64_t, uint64_t>(OB_INVALID_ID, OB_INVALID_ID);
@@ -5052,9 +5125,9 @@ int ObSPIService::get_result(ObPLExecCtx *ctx,
     if (ob_result_set->is_with_rows()) { // SELECT or DML RETURNING
       // MYSQL Mode: send query result to client.
       ObSQLSessionInfo *session_info = NULL;
-      ObSyncCmdDriver  *query_sender = NULL;
+      ObIQueryResultSender *query_sender = NULL;
       CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
-      if (OB_SUCC(ret) && OB_NOT_NULL(query_sender = static_cast<ObSyncCmdDriver *>(session_info->get_pl_query_sender()))) {
+      if (OB_SUCC(ret) && OB_NOT_NULL(query_sender = session_info->get_pl_query_sender())) {
         OZ (query_sender->response_query_result(*ob_result_set,
                                                 session_info->is_ps_protocol(),
                                                 true,
@@ -5110,6 +5183,10 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
   CK(current_type.count() == type_count);
   CK(obj_array.count() == type_count);
 
+  ObSqlObjCastRuntime cast_runtime(
+      nullptr == ctx ? nullptr : ctx->exec_ctx_);
+  ObIObjCastRuntime *previous_runtime = cast_ctx.runtime_;
+  cast_ctx.runtime_ = &cast_runtime;
   ObObj tmp_obj;
   for (int i = 0; OB_SUCC(ret) && i < obj_array.count(); ++i) {
     ObObj &obj = obj_array.at(i);
@@ -5197,9 +5274,6 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
           }
         }
       }
-      if (OB_SUCC(ret) && ((result_type.is_ext() && obj.is_geometry()))) {
-        cast_ctx.exec_ctx_ = ctx->exec_ctx_;
-      }
       if (OB_FAIL(ret)) {
       } else if (result_type.is_null() || result_type.is_unknown()) {
         tmp_obj = obj;
@@ -5235,6 +5309,7 @@ int ObSPIService::convert_obj(ObPLExecCtx *ctx,
     }
   }
 
+  cast_ctx.runtime_ = previous_runtime;
   return ret;
 }
 
@@ -5524,7 +5599,12 @@ int ObSPIService::store_result(ObPLExecCtx *ctx,
 
       // outrow lob can not be assigned to user var, so convert outrow to inrow lob
       if (OB_SUCC(ret) && value.is_lob_storage()) {
-        if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(value, value, nullptr, cast_ctx.allocator_v2_, true/*allow_persist_inrow*/))) {
+        const common::ObLobReadOptions *lob_read_options = nullptr;
+        if (OB_FAIL(ctx->exec_ctx_->get_lob_read_options(lob_read_options))) {
+          LOG_WARN("failed to get LOB read options", K(ret));
+        } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(
+                       value, value, lob_read_options, cast_ctx.allocator_v2_,
+                       true/*allow_persist_inrow*/))) {
           LOG_WARN("convert outrow to inrow lob fail", K(ret), K(value));
         }
       }
@@ -6231,12 +6311,14 @@ int ObSPIService::setup_cursor_snapshot_verify_(ObPLCursorInfo *cursor, ObSPIRes
   if (!snapshot.is_valid()) {
     need_register_snapshot = false;
   } else if (cursor->is_for_update()) {
-    if (!tx || !tx->get_tx_id().is_valid() || !snapshot.tx_id().is_valid()) {
+    if (!tx || !data_plane::tx_desc_id(tx).is_valid() || !snapshot.tx_id().is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("for update cursor opened but not trans id invalid", K(ret), KPC(tx), K(snapshot));
+      LOG_ERROR("for update cursor opened but not trans id invalid", K(ret),
+                "tx", data_plane::ObTxDescLogView(tx), K(snapshot));
     }
     need_register_snapshot = true;
-  } else if (cursor->is_streaming() && tx && tx->is_in_tx()) {
+  } else if (cursor->is_streaming() && tx
+      && data_plane::tx_desc_is_in_tx(tx)) {
     need_register_snapshot = true;
   }
   if (OB_FAIL(ret)) {

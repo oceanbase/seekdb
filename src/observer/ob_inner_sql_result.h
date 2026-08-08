@@ -43,7 +43,10 @@ class ObInnerSQLResult : public common::sqlclient::ObMySQLResult
 {
   friend class ObInnerSQLConnection;
 public:
-  explicit ObInnerSQLResult(sql::ObSQLSessionInfo &session, bool is_inner_session);
+  explicit ObInnerSQLResult(
+      sql::ObSQLSessionInfo &session,
+      query::ObIPlanCacheAccessService &plan_cache_access_service,
+      bool is_inner_session);
   virtual ~ObInnerSQLResult();
   int init();
   virtual int open();
@@ -151,6 +154,7 @@ private:
   bool opened_;
   char buf_[sizeof(sql::ObResultSet)] __attribute__ ((aligned (16)));
   sql::ObSQLSessionInfo &session_;
+  query::ObIPlanCacheAccessService &plan_cache_access_service_;
   sql::ObResultSet *result_set_;
   const common::ObNewRow *row_;
   int64_t execute_start_ts_;

@@ -172,7 +172,7 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
     ObDateSqlMode date_sql_mode;
     date_sql_mode.init(sql_mode);
     date_sql_mode.allow_incomplete_dates_ = is_allow_incomplete_dates;
-    if (OB_FAIL(ob_datum_to_ob_time_with_date(datum, type, scale, tz_info,
+    if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, datum, type, scale, tz_info,
         ot2, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
         has_lob_header))) {
       LOG_WARN("cast to ob time failed", K(ret));
@@ -187,7 +187,7 @@ static int ob_expr_convert_to_time(const ObDatum &datum,
     }
   } else {
     ObTime ot2(DT_TYPE_TIME);
-    if (OB_FAIL(ob_datum_to_ob_time_without_date(datum, type, scale, tz_info,
+    if (OB_FAIL(ob_datum_to_ob_time_without_date(ctx.exec_ctx_, datum, type, scale, tz_info,
                                                  ot2, has_lob_header))) {
       LOG_WARN("cast to ob time failed", K(ret), K(type), K(datum));
     } else {

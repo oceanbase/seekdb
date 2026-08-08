@@ -794,14 +794,14 @@ inline int ObITabletMdsInterface::fill_virtual_info(ObIArray<mds::MdsNodeInfoFor
   int ret = OB_SUCCESS;
 
   ObArenaAllocator allocator(ObMemAttr("mds_reader", ObCtxIds::DEFAULT_CTX_ID));
-  share::ObTabletAutoincSeq seq_on_tablet;
+  ObTabletAutoincSeq seq_on_tablet;
   if (CLICK_FAIL(fill_virtual_info_by_obj_(get_tablet_meta_().last_persisted_committed_tablet_status_,
                                            mds::NodePosition::TABLET,
                                            mds_node_info_array))) {
     MDS_LOG_GET(WARN, "fail to fill tablet_status_ from cache");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletCreateDeleteMdsUserData>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill tablet_status_");
-  } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, share::ObTabletAutoincSeq>(mds_node_info_array)))) {
+  } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletAutoincSeq>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill seq from disk");
   } else if (CLICK_FAIL((fill_virtual_info_from_mds_sstable<mds::DummyKey, ObTabletBindingMdsUserData>(mds_node_info_array)))) {
     MDS_LOG_GET(WARN, "fail to fill aux_tablet_info_");

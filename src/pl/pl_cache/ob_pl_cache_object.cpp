@@ -46,7 +46,8 @@ void ObPLCacheObject::reset()
   expressions_.reset();
 }
 
-int ObPLCacheObject::set_runtime_and_system_schema_versions(schema::ObSchemaGetterGuard &schema_guard)
+int ObPLCacheObject::set_runtime_and_system_schema_versions(
+    share::schema::ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
   int64_t runtime_schema_version = OB_INVALID_VERSION;

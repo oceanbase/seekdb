@@ -19,7 +19,7 @@
 
 #include "lib/thread/ob_link_task.h"
 #include "lib/utility/ob_print_utils.h"          // TO_STRING_KV
-#include "lsn.h"                                 // LSN
+#include "share/log/palf/lsn.h"                                 // LSN
 #include "log_io_task_cb_utils.h"                // FlushLogCbCtx
 #include "log_writer_utils.h"                    // LogWriteBuf
 

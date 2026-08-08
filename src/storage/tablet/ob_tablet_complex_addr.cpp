@@ -43,7 +43,7 @@ int64_t ObTabletComplexAddr<mds::MdsDumpKV>::to_string(char *buf, const int64_t 
 }
 
 template <>
-int64_t ObTabletComplexAddr<share::ObTabletAutoincSeq>::to_string(char *buf, const int64_t buf_len) const
+int64_t ObTabletComplexAddr<ObTabletAutoincSeq>::to_string(char *buf, const int64_t buf_len) const
 {
   int64_t pos = 0;
 

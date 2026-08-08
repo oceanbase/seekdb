@@ -30,7 +30,7 @@ public:
   static const obmysql::ObMySQLCmd COM = obmysql::COM_STATISTICS;
 
 public:
-  explicit ObMPStatistic(const ObGlobalContext &gctx)
+  explicit ObMPStatistic(const share::ObGlobalContext &gctx)
       : ObMPBase(gctx)
   {}
 

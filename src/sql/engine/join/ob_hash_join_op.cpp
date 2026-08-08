@@ -4396,7 +4396,8 @@ int ObHashJoinOp::calc_hash_value(
       LOG_WARN("failed to eval datum", K(ret));
     } else {
       need_null_random |= (datum->is_null() && !MY_SPEC.is_ns_equal_cond_.at(idx));
-      if (OB_FAIL(hash_funcs.at(idx).hash_func_(*datum, hash_value, hash_value))) {
+      if (OB_FAIL(hash_funcs.at(idx).hash_func_(
+              *datum, hash_value, hash_value, datum_access_ctx_))) {
         LOG_WARN("failed to do hash", K(ret));
       }
     }
@@ -4438,7 +4439,8 @@ int ObHashJoinOp::calc_hash_value_batch(const ObIArray<ObExpr*> &join_keys,
                   expr->locate_batch_datums(eval_ctx_), expr->is_batch_result(),
                   *brs->skip_, brs->size_,
                   is_batch_seed ? hash_vals : &seed,
-                  is_batch_seed);
+                  is_batch_seed,
+                  datum_access_ctx_);
       }
     }
     if (OB_SUCC(ret)) {
@@ -4816,7 +4818,8 @@ int ObHashJoinOp::read_hashrow_batch()
           ObDatum &l = (*e)->args_[0]->locate_batch_datums(eval_ctx_)[batch_idx];
           ObDatum &r = (*e)->args_[1]->locate_batch_datums(eval_ctx_)[batch_idx];
           if (!l.is_null()) {
-            if (OB_FAIL((*e)->args_[0]->basic_funcs_->null_first_cmp_(l, r, cmp_ret))) {
+            if (OB_FAIL((*e)->args_[0]->basic_funcs_->null_first_cmp_(
+                    l, r, cmp_ret, datum_access_ctx_))) {
               LOG_WARN("failed to compare", K(ret));
             } else {
               matched = (cmp_ret == 0);

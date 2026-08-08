@@ -17,7 +17,7 @@
 #include "ob_ts_mgr.h"
 #include "ob_timestamp_access.h"
 #include "share/config/ob_server_config.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -31,7 +31,7 @@ int ObTsMgr::get_gts(SCN &scn)
 {
   int ret = OB_SUCCESS;
   int64_t gts = 0;
-  if (OB_FAIL(share::g_mp->timestamp_access()->get_number(gts))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampAccess>()->get_number(gts))) {
     if (OB_EAGAIN != ret) {
       TRANS_LOG(WARN, "get local timestamp failed", KR(ret));
     }

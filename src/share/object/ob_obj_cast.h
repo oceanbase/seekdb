@@ -30,6 +30,11 @@ namespace oceanbase
 {
 namespace common
 {
+class ObILobReadService;
+
+class ObISrsProvider;
+
+class ObIObjCastRuntime;
 
 #define DOUBLE_TRUE_VALUE_THRESHOLD (1e-50)
 
@@ -175,9 +180,12 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      exec_ctx_(NULL),
+      runtime_(nullptr),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET)
+      dest_max_length_(LENGTH_UNKNOWN_YET),
+      srs_provider_(nullptr),
+      lob_read_service_(nullptr),
+      json_max_depth_(100)
   {}
 
   ObObjCastParams(ObIAllocator *allocator_v2, const ObDataTypeCastParams *dtc_params,
@@ -195,9 +203,12 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      exec_ctx_(NULL),
+      runtime_(nullptr),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET)
+      dest_max_length_(LENGTH_UNKNOWN_YET),
+      srs_provider_(nullptr),
+      lob_read_service_(nullptr),
+      json_max_depth_(100)
   {
     if (NULL != dtc_params) {
     	dtc_params_ = *dtc_params;
@@ -221,9 +232,12 @@ struct ObObjCastParams
       dtc_params_(),
       format_number_with_limit_(true),
       is_ignore_(false),
-      exec_ctx_(NULL),
+      runtime_(nullptr),
       gen_query_range_(false),
-      dest_max_length_(LENGTH_UNKNOWN_YET)
+      dest_max_length_(LENGTH_UNKNOWN_YET),
+      srs_provider_(nullptr),
+      lob_read_service_(nullptr),
+      json_max_depth_(100)
   {
     if (NULL != dtc_params) {
     	dtc_params_ = *dtc_params;
@@ -273,9 +287,12 @@ struct ObObjCastParams
   ObDataTypeCastParams dtc_params_;
   bool format_number_with_limit_;
   bool is_ignore_;
-  sql::ObExecContext *exec_ctx_;
+  ObIObjCastRuntime *runtime_;
   bool gen_query_range_;
   int32_t dest_max_length_;
+  ObISrsProvider *srs_provider_;
+  ObILobReadService *lob_read_service_;
+  int32_t json_max_depth_;
 };
 
 class ObExpectType
@@ -330,9 +347,6 @@ typedef int (*ObCastEnumOrSetFunc)(const ObExpectType &expect_type, ObObjCastPar
 // whether the cast is supported
 bool cast_supported(const ObObjType orig_type, const ObCollationType orig_cs_type,
                     const ObObjType expect_type, const ObCollationType expect_cs_type);
-int ob_obj_to_ob_time_with_date(const ObObj& obj, const ObTimeZoneInfo* tz_info, ObTime& ob_time,
-                                const int64_t cur_ts_value, const ObDateSqlMode date_sql_mode = 0);
-int ob_obj_to_ob_time_without_date(const ObObj &obj, const ObTimeZoneInfo *tz_info, ObTime &ob_time);
 
 
 // CM_STRING_INTEGER_TRUNC only affect string to [unsigned] integer cast.
@@ -372,7 +386,10 @@ private:
 //==============================
 
 
-int obj_collation_check(const bool is_strict_mode, const ObCollationType cs_type, ObObj &obj);
+int obj_collation_check(ObCastCtx &cast_ctx,
+                        const bool is_strict_mode,
+                        const ObCollationType cs_type,
+                        ObObj &obj);
 int obj_accuracy_check(ObCastCtx &cast_ctx, const ObAccuracy &accuracy, const ObCollationType cs_type,
                        const ObObj &obj, ObObj &buf_obj, const ObObj *&res_obj);
 int get_bit_len(const ObString &str, int32_t &bit_len);
@@ -406,7 +423,6 @@ public:
                      const ObObj &in_obj, ObObj &out_obj);
   static int to_type(const ObObjType expect_type, ObCollationType expect_cs_type,
                      ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
-  // get_zero_value has been demoted to sql::get_obj_zero_value(ob_datum_cast.h; kept in sql because it uses the SET_RES macro)
   static int to_type(const ObExpectType &expect_type, ObCastCtx &cast_ctx, const ObObj &in_obj, ObObj &out_obj);
   static int is_cast_monotonic(ObObjType t1, ObObjType t2, bool &is_monotonic);
   static int is_order_consistent(const ObObjMeta &from,

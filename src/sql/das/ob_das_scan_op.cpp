@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "ob_das_scan_op.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/access/ob_tablet_scan.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
-#include "storage/tx_storage/ob_access_service.h"
 
 
 namespace oceanbase
@@ -260,8 +260,8 @@ int ObDASScanOp::init_scan_param()
   // set tx_id for read-latest,
   // TODO: add if(query_flag.is_read_latest) ..
   if (OB_NOT_NULL(trans_desc_)) {
-    scan_param_.tx_id_ = trans_desc_->get_tx_id();
-    scan_param_.tx_seq_base_ = trans_desc_->get_seq_base();
+    scan_param_.tx_id_ = data_plane::tx_desc_id(trans_desc_);
+    scan_param_.tx_seq_base_ = data_plane::tx_desc_seq_base(trans_desc_);
   } else {
     scan_param_.tx_id_.reset();
   }
@@ -1380,7 +1380,7 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
                       "index_table_id", index_ctdef_->ref_table_id_ ,
                       "data_table_tablet_id", tablet_id_ ,
                       KPC_(snapshot),
-                      KPC_(tx_desc));
+                      "tx_desc", data_plane::ObTxDescLogView(tx_desc_));
       (void)print_trans_info_and_key_range_();
     }
   }
@@ -1398,7 +1398,7 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
 OB_INLINE ObITabletScan &ObLocalIndexLookupOp::get_tsc_service()
 {
   return is_virtual_table(lookup_ctdef_->ref_table_id_) ?
-      *GCTX.vt_par_ser_ : *(share::g_mp->access_service());
+      *::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>() : *(::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>());
 }
 
 OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
@@ -1452,8 +1452,8 @@ OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
   // set tx_id for read-latest,
   // TODO: add if(query_flag.is_read_latest) ..
   if (OB_NOT_NULL(tx_desc_)) {
-    scan_param_.tx_id_ = tx_desc_->get_tx_id();
-    scan_param_.tx_seq_base_ = tx_desc_->get_seq_base();
+    scan_param_.tx_id_ = data_plane::tx_desc_id(tx_desc_);
+    scan_param_.tx_seq_base_ = data_plane::tx_desc_seq_base(tx_desc_);
   } else {
     scan_param_.tx_id_.reset();
   }

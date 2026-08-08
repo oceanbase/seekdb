@@ -15,10 +15,12 @@
  */
 #define USING_LOG_PREFIX RS
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/ob_rpc_struct.h"
+#include "share/ob_share_util.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/ob_ddl_service.h"
 #include "share/ob_debug_sync_point.h"
 #include "storage/ddl/ob_ddl_lock.h"
@@ -32,40 +34,12 @@ using namespace common;
 using namespace obcall;
 using namespace share;
 using namespace schema;
-using namespace observer;
 using namespace obcall;
 using namespace storage;
 namespace rootserver
 {
 ERRSIM_POINT_DEF(EN_TRUNCATE_TABLET_TRANS);
 
-int ObTruncateTabletArg::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, info_, index_tablet_id_, truncate_info_);
-  return ret;
-}
-
-int64_t ObTruncateTabletArg::get_serialize_size() const
-{
-  int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, info_, index_tablet_id_, truncate_info_);
-  return len;
-}
-
-int ObTruncateTabletArg::deserialize(
-    common::ObIAllocator &allocator,
-    const char *buf,
-    const int64_t data_len,
-    int64_t &pos)
-{
-  int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, info_, index_tablet_id_);
-  if (FAILEDx(truncate_info_.deserialize(allocator, buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize truncate arg", KR(ret));
-  }
-  return ret;
-}
 /*
 * ObTruncatePartKeyInfo
 */
@@ -302,9 +276,9 @@ int ObTruncatePartKeyInfo::create_tmp_session(
   session = nullptr;
   uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
   const schema::ObServerRuntimeSchema *runtime_info = nullptr;
-  if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_sessid(sid))) {
     LOG_WARN("Failed to create sess id", K(ret));
-  } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, session))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->create_session(sid, session))) {
     session = nullptr;
     LOG_WARN("Failed to create session", K(ret), K(sid));
   } else {
@@ -334,8 +308,8 @@ void ObTruncatePartKeyInfo::release_tmp_session(ObFreeSessionCtx &free_session_c
 {
   if (nullptr != session) {
     session->set_session_sleep();
-    GCTX.session_mgr_->revert_session(session);
-    GCTX.session_mgr_->free_session(free_session_ctx);
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(session);
+    ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(free_session_ctx);
     session = nullptr;
   }
 }
@@ -505,7 +479,7 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
                                    ObDDLOperator &ddl_operator,
                                    ObTableSchema &index_table_schema) {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *conn = nullptr;
+  common::sqlclient::ObISQLConnection *conn = nullptr;
   ObArray<ObTabletTablePair> tablet_infos;
   index_tablet_array_.reuse();
   if (IS_NOT_INIT) {
@@ -527,7 +501,7 @@ int ObTruncateInfoService::execute(ObMySQLTransaction &trans,
     LOG_WARN("invalid tablet info count", KR(ret), K_(index_tablet_array), K(tablet_infos));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(conn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", KR(ret));
   } else if (OB_FAIL(gen_new_schema_version_for_index_(trans, ddl_operator, index_table_schema))) {
@@ -804,7 +778,7 @@ int ObTruncatePartSchemaUtil::build_truncate_list_part_(
 }
 
 int ObTruncateInfoService::loop_part_to_register_mds_(
-  ObInnerSQLConnection &conn,
+  common::sqlclient::ObISQLConnection &conn,
   const ObTableSchema &index_table_schema)
 {
   int ret = OB_SUCCESS;
@@ -833,7 +807,7 @@ int ObTruncateInfoService::loop_part_to_register_mds_(
       loop_allocator_.reuse();
       const ObPartition *alter_part = alter_part_array[idx];
       const ObPartition *found_part_placeholder = nullptr;
-      ObTruncateTabletArg truncate_arg;
+      storage::ObTruncateTabletArg truncate_arg;
       ObTruncateInfo &truncate_info = truncate_arg.truncate_info_;
       if (OB_ISNULL(alter_part)) {
         ret = OB_ERR_UNEXPECTED;
@@ -861,8 +835,8 @@ int ObTruncateInfoService::loop_part_to_register_mds_(
 }
 
 int ObTruncateInfoService::loop_index_tablet_id_to_register_(
-  ObInnerSQLConnection &conn,
-  ObTruncateTabletArg &truncate_arg)
+  common::sqlclient::ObISQLConnection &conn,
+  storage::ObTruncateTabletArg &truncate_arg)
 {
   int ret = OB_SUCCESS;
   truncate_arg.truncate_info_.key_.tx_id_ = ddl_task_id_;
@@ -878,8 +852,8 @@ int ObTruncateInfoService::loop_index_tablet_id_to_register_(
 }
 
 int ObTruncateInfoService::register_mds_(
-  ObInnerSQLConnection &conn,
-  const ObTruncateTabletArg &arg)
+  common::sqlclient::ObISQLConnection &conn,
+  const storage::ObTruncateTabletArg &arg)
 {
   int ret = OB_SUCCESS;
   const int64_t buf_len = arg.get_serialize_size();
@@ -897,15 +871,16 @@ int ObTruncateInfoService::register_mds_(
 }
 
 int ObTruncateInfoService::register_mds_(
-    ObInnerSQLConnection &conn,
-    const ObTruncateTabletArg &arg,
+    common::sqlclient::ObISQLConnection &conn,
+    const storage::ObTruncateTabletArg &arg,
     const char *buf,
     const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObTimeUtility::current_time();
-  if (OB_FAIL(conn.register_multi_data_source(transaction::ObTxDataSourceType::SYNC_TRUNCATE_INFO,
-              buf, buf_len))) {
+  if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+          &conn, transaction::ObTxDataSourceType::SYNC_TRUNCATE_INFO,
+          buf, buf_len))) {
     LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf), K(buf_len));
   } else {
     LOG_INFO("[TRUNCATE_INFO] success to register mds", KR(ret), K(buf_len), K(arg),
@@ -915,7 +890,7 @@ int ObTruncateInfoService::register_mds_(
 }
 
 int ObTruncateInfoService::loop_subpart_to_register_mds_(
-    observer::ObInnerSQLConnection &conn,
+    common::sqlclient::ObISQLConnection &conn,
    const ObTableSchema &index_table_schema)
 {
   int ret = OB_SUCCESS;
@@ -943,7 +918,7 @@ int ObTruncateInfoService::loop_subpart_to_register_mds_(
       const ObSubPartition *alter_subpart_in_schema = nullptr;
       for (int64_t idx = 0; OB_SUCC(ret) && idx < subpart_num; ++idx) {
         loop_allocator_.reuse();
-        ObTruncateTabletArg truncate_arg;
+        storage::ObTruncateTabletArg truncate_arg;
         ObTruncateInfo &truncate_info = truncate_arg.truncate_info_;
         if (OB_FAIL(data_table_schema_.get_subpartition_by_name(
             sub_partition_array[idx]->get_part_name(), alter_part_in_schema, alter_subpart_in_schema))) {

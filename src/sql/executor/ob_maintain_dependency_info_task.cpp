@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 #include "sql/executor/ob_maintain_dependency_info_task.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {
@@ -27,7 +28,8 @@ namespace sql
 ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask ()
   : gctx_(GCTX),
     view_schema_(&alloc_),
-    reset_view_column_infos_(false)
+    reset_view_column_infos_(false),
+    root_command_service_(nullptr)
 {
   set_retry_times(0);
 }
@@ -121,6 +123,10 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
     LOG_WARN("buffer size is not enough", K(ret), K(buf_size), K(need_size));
   } else {
     task = new (buf) ObMaintainObjDepInfoTask{};
+    if (OB_NOT_NULL(root_command_service_)) {
+      static_cast<ObMaintainObjDepInfoTask *>(task)->
+          bind_root_command_service(*root_command_service_);
+    }
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_insert_dep_objs().assign(insert_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_update_dep_objs().assign(update_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_delete_dep_objs().assign(delete_dep_objs_));
@@ -155,7 +161,12 @@ int ObMaintainObjDepInfoTask::process()
               && dep_obj_info_arg.delete_dep_objs_.empty()
               && !dep_obj_info_arg.schema_.is_valid()) {
       // do nothing
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->maintain_obj_dependency_info(dep_obj_info_arg); }))) {
+    } else if (OB_ISNULL(root_command_service_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("root command service is not bound", K(ret));
+    } else if (OB_FAIL(query::serialize_root_service_call(
+        [&]{ return root_command_service_->
+            maintain_obj_dependency_info(dep_obj_info_arg); }))) {
       LOG_WARN("failed to maintain_obj_dependency_info", K(ret), K(dep_obj_info_arg));
     }
   }
@@ -301,6 +312,10 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
     }
   } else {
     SMART_VAR(sql::ObMaintainObjDepInfoTask, task) {
+      if (OB_NOT_NULL(task_queue.get_root_command_service())) {
+        task.bind_root_command_service(
+            *task_queue.get_root_command_service());
+      }
       share::schema::ObReferenceObjTable::ObGetDependencyObjOp op(&task.get_insert_dep_objs(),
                               &task.get_update_dep_objs(),
                               &task.get_delete_dep_objs());

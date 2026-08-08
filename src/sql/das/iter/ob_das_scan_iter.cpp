@@ -15,9 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "query/das/ob_das_iter_access.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
-#include "share/rc/ob_module_provider.h"
-#include "storage/tx_storage/ob_access_service.h"
+#include "share/rc/ob_server_runtime.h"
+#include "data_plane/access/ob_tablet_scan.h"
 #include "src/sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -35,8 +36,13 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
-    tsc_service_ = is_virtual_table(scan_ctdef->ref_table_id_) ? GCTX.vt_par_ser_
-                                                                : share::g_mp->access_service();
+    tsc_service_ = is_virtual_table(scan_ctdef->ref_table_id_)
+                       ? share::server_service<common::ObIVirtualTableScan>()
+                       : share::server_service<common::ObITabletScan>();
+    if (OB_ISNULL(tsc_service_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));
+    }
   }
 
   return ret;
@@ -218,4 +224,53 @@ int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
 }
 
 }  // namespace sql
+
+namespace query
+{
+
+int das_scan_next_row(sql::ObDASScanIter *iterator)
+{
+  return OB_ISNULL(iterator) ? common::OB_INVALID_ARGUMENT
+                             : iterator->get_next_row();
+}
+
+int das_scan_next_rows(
+    sql::ObDASScanIter *iterator, int64_t &count, const int64_t capacity)
+{
+  return OB_ISNULL(iterator) ? common::OB_INVALID_ARGUMENT
+                             : iterator->get_next_rows(count, capacity);
+}
+
+int das_scan_reuse(sql::ObDASScanIter *iterator)
+{
+  return OB_ISNULL(iterator) ? common::OB_INVALID_ARGUMENT : iterator->reuse();
+}
+
+int das_scan_rescan(sql::ObDASScanIter *iterator)
+{
+  return OB_ISNULL(iterator) ? common::OB_INVALID_ARGUMENT : iterator->rescan();
+}
+
+int das_scan_advance(sql::ObDASScanIter *iterator)
+{
+  return OB_ISNULL(iterator) ? common::OB_INVALID_ARGUMENT
+                             : iterator->advance_scan();
+}
+
+void das_scan_reset(sql::ObDASScanIter *iterator)
+{
+  if (OB_NOT_NULL(iterator)) {
+    iterator->reset();
+  }
+}
+
+void das_scan_set_param(
+    sql::ObDASScanIter *iterator, storage::ObTableScanParam &scan_param)
+{
+  if (OB_NOT_NULL(iterator)) {
+    iterator->set_scan_param(scan_param);
+  }
+}
+
+} // namespace query
 }  // namespace oceanbase

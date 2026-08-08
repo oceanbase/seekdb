@@ -15,10 +15,11 @@
  */
 
 #include "storage/ddl/ob_ddl_independent_dag.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_ddl_macro_block_write_task.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
+#include "storage/ddl/ob_vector_index_ddl_pipeline.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
 #include "storage/ddl/ob_tablet_ddl_kv_mgr.h"
@@ -124,7 +125,16 @@ int ObDDLIndependentDag::init_tablet_context_map()
     if (OB_ISNULL(tablet_context = OB_NEWx(ObDDLTabletContext, &arena_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory for tablet context failed", K(ret));
-    } else if (OB_FAIL(tablet_context->init(tablet_id, ddl_thread_count_, ddl_task_param_.snapshot_version_, direct_load_type_, ddl_table_schema_))) {
+    } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("LOB read service is unavailable", K(ret), K(tablet_id));
+    } else if (OB_FAIL(tablet_context->init(
+                   tablet_id,
+                   ddl_thread_count_,
+                   ddl_task_param_.snapshot_version_,
+                   direct_load_type_,
+                   ddl_table_schema_,
+                   *::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>()))) {
       LOG_WARN("init ddl tablet context failed", K(ret), K(tablet_id), K(ddl_thread_count_));
     } else if (use_tablet_mode() && OB_FAIL(alloc_task(tablet_context->scan_task_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

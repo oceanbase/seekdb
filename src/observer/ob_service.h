@@ -22,10 +22,14 @@
 #include "storage/ob_storage_rpc_arg.h"
 #include "observer/ob_server_schema_updater.h"
 #include "share/ob_rpc_struct.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_share_util.h"
+#include "share/ob_server_struct.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "observer/ob_uniq_task_queue.h"
 #include "observer/ob_tablet_runtime_meta_updater.h"
+#include "query/change_stream/ob_change_stream_service.h"
+#include "query/command/ob_local_command_service.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 
 namespace oceanbase
 {
@@ -69,10 +73,13 @@ public:
   int report();
 };
 
-class ObService
+class ObService : public rootserver::ObIRootserverLocalRuntime,
+                  public query::ObILocalCommandService
 {
 public:
-  explicit ObService(const ObGlobalContext &gctx);
+  ObService(
+      const share::ObGlobalContext &gctx,
+      query::ObIChangeStreamService &change_stream_service);
   virtual ~ObService();
 
   int init(common::ObMySQLProxy &sql_proxy,
@@ -127,17 +134,27 @@ public:
     obcall::ObDDLCheckTabletMergeStatusResult &result);
   int get_server_resource_info(share::ObServerResourceInfo &resource_info);
   static int get_build_version(share::ObBuildVersion &build_version);
+  int get_build_version(char *buf, int64_t buf_len) override;
+  int load_all_special_system_packages() override;
+  int wait_system_package_ready(const common::ObTimeoutCtx &ctx) override;
   int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
-  int set_ds_action(const obcall::ObDebugSyncActionArg &arg);
-  int set_tracepoint(const obcall::ObSetTracepointParam &param);
-  int cancel_sys_task(const share::ObTaskId &task_id);
-  int refresh_memory_stat();
+  int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override;
+  int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) override;
+  int update_opt_stat_monitoring_info(
+      const obcall::ObFlushOptStatArg &arg) override;
+  int set_tracepoint(const obcall::ObSetTracepointParam &param) override;
+  int cancel_sys_task(const share::ObTaskId &task_id) override;
+  int refresh_memory_stat() override;
+  int clear_expired_deadlock_events() override;
   ////////////////////////////////////////////////////////////////
   // misc functions
 
   int submit_async_refresh_schema_task(const int64_t schema_version);
-  int check_server_empty(bool &server_empty);
+  int check_server_empty(bool &server_empty) override;
+  int wait_until_change_stream_refreshed(
+      common::ObMySQLProxy &mysql_proxy,
+      int64_t timeout_us) override;
 
 private:
   int bootstrap();
@@ -156,7 +173,8 @@ private:
   ObServerSchemaUpdater schema_updater_;
 
   //lease
-  const ObGlobalContext &gctx_;
+  const share::ObGlobalContext &gctx_;
+  query::ObIChangeStreamService &change_stream_service_;
   ObSchemaReleaseTimeTask schema_release_task_;
   TelemetryTask telemetry_task_;
   bool need_bootstrap_;

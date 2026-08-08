@@ -16,10 +16,12 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_dynamic_sampling.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_basic_stats_estimator.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 using namespace oceanbase::common;
@@ -1031,18 +1033,22 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
     LOG_WARN("get unexpected empty", K(ret), K(ctx_->get_exec_ctx()), K(sql_proxy), K(session_info));
   }
   if (OB_SUCC(ret)) {
-    observer::ObInnerSQLConnection *conn = NULL;
+    sqlclient::ObISQLConnection *conn = NULL;
     sqlclient::ObISQLConnectionGuard conn_guard;
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       if (OB_UNLIKELY(raw_sql.empty())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret));
-      } else if (OB_FAIL(observer::ObInnerSQLConnection::create_connection_with_external_session(
+      } else if (OB_FAIL(
+                     query::ObInnerSQLConnectionAccess::
+                         create_connection_with_external_session(
                              session_info, conn_guard))) {
         LOG_WARN("failed to acquire inner connection", K(ret));
-      } else if (OB_ISNULL(conn = static_cast<observer::ObInnerSQLConnection *>(
-                               conn_guard.get_ptr()))) {
+      } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("inner SQL connection is null", K(ret));
+      } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret));
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(),
@@ -1155,11 +1161,12 @@ int ObDynamicSampling::restore_session(ObSQLSessionInfo *session,
     if (tx_desc != NULL) {//reset origin tx desc.
       // release curr
       if (OB_NOT_NULL(session->get_tx_desc())) {
-        auto txs = share::g_mp->trans_service();
+        data_plane::ObITransactionService *txs =
+            data_plane::query_transaction_service();
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("can not acquire server TransService", KR(ret));
-          session->get_tx_desc()->dump_and_print_trace();
+          data_plane::dump_tx_desc_trace(session->get_tx_desc());
         } else {
           txs->release_tx(*session->get_tx_desc());
         }

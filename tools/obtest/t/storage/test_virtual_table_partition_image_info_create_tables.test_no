@@ -1,0 +1,134 @@
+# owner: lixia.yq
+# owner group: storage
+# description: this case is use for test virtual table __all_virtual_partition_sstable_image_info
+#
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.z1.obs0.set extra_config=_enable_sparse_row=true;
+ob1.z2.obs0.set extra_config=_enable_sparse_row=true;
+ob1.z3.obs0.set extra_config=_enable_sparse_row=true;
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+connect (conn1,$ip,root@sys,,oceanbase,$port);
+connect (conn2,$ip,root@obtest,,test,$port);
+
+--disable_all_result_log
+let $version = 1;
+let $failed_flag = 0;
+let $table_no = 1;
+while ($version < 10)
+{
+  connection conn1;
+  # major freeze
+  alter system major freeze;
+  inc $version;
+  sleep 60;
+  ob1.check_version $version;
+  
+  let $zone_no = 1;
+  while ($zone_no <= 3)
+  {
+    let $svr_port = deploy_get_value(ob1.select select svr_port from __all_unit where zone='z$zone_no' limit 1, svr_port, 1);
+    
+    # check process
+    ob1.check_until_timeout select merge_process from __all_virtual_partition_sstable_image_info where svr_port = '$svr_port', 100, 30;
+    
+    # get sstable count
+    let $sstable_cnt_image = deploy_get_value(ob1.select select ss_store_count from __all_virtual_partition_sstable_image_info where major_version = '$version' and svr_port = '$svr_port', ss_store_count, 1);
+    let $sstable_cnt_merge = deploy_get_value(ob1.select select count(*) c from __all_virtual_partition_sstable_merge_info where version like "$version-0-0" and svr_port = '$svr_port', c, 1);
+    if ($sstable_cnt_image != $sstable_cnt_merge)
+    {
+      --echo zone "$zone_no" sstable_cnt not equal: "$sstable_cnt_image" "$sstable_cnt_merge"
+    	let $failed_flag = 1;
+    	break;
+    }
+
+    # get macro count
+    let $macro_block_count_image = deploy_get_value(ob1.select select macro_block_count from __all_virtual_partition_sstable_image_info where major_version = '$version' and svr_port = '$svr_port', macro_block_count, 1);
+    let $macro_block_count_merge = deploy_get_value(ob1.select select sum(macro_block_count) c from __all_virtual_partition_sstable_merge_info where version like "$version-0-0" and svr_port = '$svr_port', c, 1);
+    if ($macro_block_count_image != $macro_block_count_merge)
+    {
+      --echo zone "$zone_no" macro_block_cnt not equal: "$macro_block_count_image" "$macro_block_count_merge"
+      let $failed_flag = 1;
+      break;
+    }
+
+    # get old macro count
+    let $old_macro_block_count_image = deploy_get_value(ob1.select select use_old_macro_block_count from __all_virtual_partition_sstable_image_info where major_version = '$version' and svr_port = '$svr_port', use_old_macro_block_count, 1);
+    let $old_macro_block_count_merge = deploy_get_value(ob1.select select sum(use_old_macro_block_count) c from __all_virtual_partition_sstable_merge_info where version like "$version-0-0" and svr_port = '$svr_port', c, 1);
+    if ($old_macro_block_count_image != $old_macro_block_count_merge)
+    {
+      --echo zone "$zone_no" use_old_macro_block_cnt not equal: "$old_macro_block_count_image" "$old_macro_block_count_merge"
+      let $failed_flag = 1;
+      break;
+    }
+    
+    # check time
+    let $merge_start_time = deploy_get_value(ob1.select select UNIX_TIMESTAMP(merge_start_time) t from __all_virtual_partition_sstable_image_info where major_version = '$version' and svr_port = '$svr_port', t, 1);
+    let $merge_finish_time = deploy_get_value(ob1.select select UNIX_TIMESTAMP(merge_finish_time) t from __all_virtual_partition_sstable_image_info where major_version = '$version' and svr_port = '$svr_port', t, 1);
+    if ($merge_finish_time <= $merge_start_time)
+    {
+      --echo merge time is error "$merge_finish_time" "$merge_start_time"
+    }
+    
+    if ($version > 2)
+    {# check between two version
+      let $old_version = $version - 1;
+      let $macro_block_count_old = deploy_get_value(ob1.select select macro_block_count from __all_virtual_partition_sstable_image_info where major_version = '$old_version' and svr_port = '$svr_port', macro_block_count, 1);
+      #let $old_macro_block_count_old = deploy_get_value(ob1.select select use_old_macro_block_count from __all_virtual_partition_sstable_image_info where major_version = '$old_version' and svr_port = '$svr_port', use_old_macro_block_count, 1);
+      
+      if ($old_macro_block_count_image > $macro_block_count_old)
+      {
+        --echo zone "$zone_no" use old macro block is more than total count in last round: "$old_macro_block_count_image" "$macro_block_count_old"
+        let $failed_flag = 1;
+        break;
+      }
+      
+    }
+
+    inc $zone_no;
+  }
+  # meet error
+  if ($failed_flag != 0) 
+  {
+--enable_all_result_log
+    --echo failed
+--disable_all_result_log
+    break;
+  }
+  
+  # create tables
+  connection conn2;
+  let $j = 0;
+  while ($j < 100)
+  {
+    eval create table t_$table_no (c1 int primary key, c2 int, c3 float, c4 varchar(512), c5 varchar(1024));
+    inc $j;
+    inc $table_no;
+  }
+  
+  # check process
+  ob1.check_until_timeout select merge_process from __all_virtual_partition_sstable_image_info where svr_port = '$svr_port', 100, 30;
+  
+  # loop all tables
+  let $table_idx = 1;
+  while ($table_idx < $table_no)
+  {
+    let $i = 0;
+    while ($i < 10)
+    {
+      # insert rows
+      eval insert into t_$table_idx values($i + $version * 101, $i * 5, $i * 0.8, 'hello fhfnyiquytinquigquobiguiqnguqonguoq $i', 'fahuinfyiqbyqbgyqbigybqigybqibgyqigbyi');
+      inc $i;
+    }
+    inc $table_idx;
+  }
+
+}
+
+

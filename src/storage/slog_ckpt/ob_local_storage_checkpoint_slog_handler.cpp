@@ -18,13 +18,13 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_storage_checkpoint_slog_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/slog/ob_storage_log.h"
 #include "storage/slog/ob_storage_log_reader.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_writer.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_structured_event_logger.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
@@ -40,7 +40,6 @@ namespace oceanbase
 using namespace share;
 using namespace common;
 using namespace blocksstable;
-using namespace observer;
 namespace storage
 {
 
@@ -330,7 +329,7 @@ int ObLocalStorageCheckpointSlogHandler::do_replay_single_snapshot(const blockss
     ObTabletReplayCreateHandler handler;
     if (OB_FAIL(handler.init(replay_tablet_disk_addr_map_, ObTabletRepalyOperationType::REPLAY_INC_MACRO_REF))) {
       LOG_WARN("fail to init ObTabletReplayCreateHandler", K(ret));
-    } else if (OB_FAIL(handler.concurrent_replay(GCTX.startup_accel_handler_))) {
+    } else if (OB_FAIL(handler.concurrent_replay(::oceanbase::share::server_service<::oceanbase::storage::ObStartupAccelTaskHandler>()))) {
       LOG_WARN("fail to concurrent replay tablets", K(ret));
     }
   }
@@ -406,7 +405,7 @@ int ObLocalStorageCheckpointSlogHandler::replay_checkpoint_ls(
 
   if (OB_FAIL(ls_ckpt_member.deserialize(buf, buf_len, pos))) {
     LOG_WARN("fail to deserialize ls_ckpt_member", K(ret), KP(buf), K(buf_len));
-  } else if (OB_FAIL(share::g_mp->ls_service()->replay_create_ls(0/*ls_epoch*/, ls_ckpt_member.ls_meta_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_create_ls(0/*ls_epoch*/, ls_ckpt_member.ls_meta_))) {
     LOG_WARN("fail to replay put ls", K(ret), K(ls_ckpt_member));
   } else if (OB_FAIL(tablet_ckpt_reader.iter_read_meta_item(
       ls_ckpt_member.tablet_meta_entry_, replay_tablet_op, tmp_block_list))) {
@@ -453,7 +452,7 @@ int ObLocalStorageCheckpointSlogHandler::replay_local_storage_slog(const common:
     ObTabletReplayCreateHandler handler;
     if (OB_FAIL(handler.init(replay_tablet_disk_addr_map_, ObTabletRepalyOperationType::REPLAY_CREATE_TABLET))) {
       LOG_WARN("fail to init ObTabletReplayCreateHandler", K(ret));
-    } else if (OB_FAIL(handler.concurrent_replay(GCTX.startup_accel_handler_))) {
+    } else if (OB_FAIL(handler.concurrent_replay(::oceanbase::share::server_service<::oceanbase::storage::ObStartupAccelTaskHandler>()))) {
       LOG_WARN("fail to concurrent replay tablets", K(ret));
     }
   }
@@ -599,7 +598,7 @@ int ObLocalStorageCheckpointSlogHandler::write_checkpoint(bool is_force)
   int64_t alert_interval = ObWriteCheckpointTask::FAIL_WRITE_CHECKPOINT_ALERT_INTERVAL;
   int64_t min_interval = ObWriteCheckpointTask::RETRY_WRITE_CHECKPOINT_MIN_INTERVAL;
 
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
 
   HEAP_VARS_3((ObServerRuntimeSuperBlock, super_block), (ObServerRuntimeSuperBlock, last_super_block), (ObLocalStorageCheckpointWriter, local_storage_ckpt_writer)) {
     last_super_block = runtime->get_super_block();
@@ -702,7 +701,7 @@ int ObLocalStorageCheckpointSlogHandler::write_checkpoint(bool is_force)
 int ObLocalStorageCheckpointSlogHandler::add_snapshot(const ObServerSnapshotMeta &snapshot)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   lib::ObMutexGuard guard(super_block_mutex_);
   ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (IS_NOT_INIT) {
@@ -724,7 +723,7 @@ int ObLocalStorageCheckpointSlogHandler::add_snapshot(const ObServerSnapshotMeta
 int ObLocalStorageCheckpointSlogHandler::delete_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   lib::ObMutexGuard guard(super_block_mutex_);
   ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (IS_NOT_INIT) {
@@ -746,7 +745,7 @@ int ObLocalStorageCheckpointSlogHandler::delete_snapshot(const ObServerSnapshotI
 int ObLocalStorageCheckpointSlogHandler::swap_snapshot(const ObServerSnapshotMeta &snapshot)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   lib::ObMutexGuard guard(super_block_mutex_);
   ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (IS_NOT_INIT) {
@@ -945,7 +944,7 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_create_ls_slog(const ObRed
   int64_t pos = 0;
   if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
     LOG_WARN("fail to deserialize slog", K(ret), K(param), K(pos));
-  } else if (OB_FAIL(share::g_mp->ls_service()->replay_create_ls(0/*ls_epoch*/, slog_entry.get_ls_meta()))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_create_ls(0/*ls_epoch*/, slog_entry.get_ls_meta()))) {
     LOG_WARN("fail to replay ls meta slog", K(ret), K(param), K(pos));
   } else {
     LOG_INFO("successfully replay create ls slog", K(param), K(pos));
@@ -962,7 +961,7 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_update_ls_slog(const ObRed
   int64_t pos = 0;
   if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
     LOG_WARN("fail to deserialize slog", K(ret), K(param), K(pos));
-  } else if (OB_FAIL(share::g_mp->ls_service()->replay_update_ls(slog_entry.get_ls_meta()))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_update_ls(slog_entry.get_ls_meta()))) {
     LOG_WARN("fail to replay ls meta slog", K(ret), K(param), K(pos));
   } else {
     LOG_INFO("successfully replay update ls slog", K(param), K(pos));
@@ -981,7 +980,7 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_create_ls_commit_slog(
   int64_t pos = 0;
   if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
     LOG_WARN("fail to deserialize slog", K(ret), K(param), K(pos));
-  } else if (OB_FAIL(share::g_mp->ls_service()->replay_create_ls_commit())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_create_ls_commit())) {
     LOG_WARN("fail to replay create ls commit slog", K(ret), K(param), K(pos));
   } else {
     LOG_INFO("successfully replay create ls commit slog");
@@ -998,7 +997,7 @@ int ObLocalStorageCheckpointSlogHandler::inner_replay_delete_ls(const ObRedoModu
   int64_t pos = 0;
   if (OB_FAIL(slog_entry.deserialize(param.buf_, param.disk_addr_.size(), pos))) {
     LOG_WARN("fail to deserialize remove log stream slog", K(param), K(pos));
-  } else if (OB_FAIL(share::g_mp->ls_service()->replay_remove_ls())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->replay_remove_ls())) {
     LOG_WARN("fail to remove log stream", K(param), K(pos));
   } else {
     replay_tablet_disk_addr_map_.reuse();

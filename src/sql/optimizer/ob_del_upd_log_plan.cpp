@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_del_upd_log_plan.h"
 #include "ob_insert_log_plan.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/optimizer/ob_log_delete.h"
 #include "sql/optimizer/ob_log_insert.h"

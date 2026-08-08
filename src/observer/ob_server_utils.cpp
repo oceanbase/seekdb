@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_server_utils.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
+#include "share/ob_share_util.h"
 #include "storage/ob_file_system_router.h"
 #ifndef _WIN32
 #include <sys/utsname.h>
@@ -34,22 +35,11 @@ namespace observer
 int ObServerUtils::get_server_ip(ObIAllocator *allocator, ObString &ipstr)
 {
   int ret = OB_SUCCESS;
-  ObAddr addr = GCTX.self_addr();
-  char ip_buf[OB_IP_STR_BUFF] = {'\0'};
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid alloctor pointer is NULL", K(ret));
-  } else if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
-    ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "ip to string failed", K(ret));
-  } else {
-    ObString ipstr_tmp = ObString::make_string(ip_buf);
-    if (OB_FAIL(ob_write_string (*allocator, ipstr_tmp, ipstr))) {
-      SERVER_LOG(WARN, "ob write string failed", K(ret));
-    } else if (ipstr.empty()) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "host ip is empty", K(ret));
-    }
+  } else if (OB_FAIL(share::ObShareUtil::get_server_ip(GCTX.self_addr(), *allocator, ipstr))) {
+    SERVER_LOG(WARN, "get server IP failed", K(ret));
   }
   return ret;
 }

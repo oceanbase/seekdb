@@ -16,18 +16,27 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "data_plane/lob/ob_json_lob.h"
+#include "data_plane/lob/ob_lob_read.h"
+#include "data_plane/lob/ob_lob_value.h"
 #include "ob_lob_manager.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/ob_server.h"
+#include "common/json_type/ob_json_diff.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/ob_server_struct.h"
 #include "storage/lob/ob_lob_handler.h"
 #include "storage/lob/ob_lob_locator_struct.h"
+#include "storage/lob/ob_lob_persistent_reader.h"
 #include "storage/lob/ob_lob_tablet_dml.h"
 #include "share/ob_lob_access_utils.h"
+#include "share/lob/ob_lob_text_iter_context.h"
+#include "query/engine/expr/ob_expr_util.h"
 
 namespace oceanbase
 {
 namespace storage
 {
+using common::ObLobDiff;
+using common::ObLobDiffHeader;
 
 static int check_write_length(ObLobAccessParam& param, int64_t expected_len)
 {
@@ -505,7 +514,7 @@ int ObLobManager::compare(ObLobLocatorV2& lob_left,
                           int64_t& result) {
   INIT_SUCC(ret);
   ObArenaAllocator tmp_allocator("LobCmp", OB_MALLOC_MIDDLE_BLOCK_SIZE);
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get lob manager handle null.", K(ret));
@@ -602,7 +611,7 @@ int ObLobManager::compare(ObLobAccessParam& param_left,
             }
           } else if (need_convert_charset) {
             // convert right lob to left charset if necessary
-            if(OB_FAIL(ObExprUtil::convert_string_collation(
+            if(OB_FAIL(sql::ObExprUtil::convert_string_collation(
                                   read_buffer_right, collation_right,
                                   convert_buffer_right, cmp_collation,
                                   charset_convert_buff))) {
@@ -2197,8 +2206,7 @@ int ObLobManager::prepare_seq_no(ObLobAccessParam& param, ObLobDiskLocatorBuilde
 } // storage
 } // oceanbase
 
-// ===== lob-read domain port implementation(ObLobManager : common::ObILobReadService) =====
-// original ObTextStringIter out-of-row read bodies moved back here and are called by the share side through the port;
+// ===== lob-read domain port implementation (ObLobManager : common::ObILobReadService) =====
 // ObLobAccessParam construction plus query/getlength calls are all locked inside this storage implementation。
 namespace oceanbase
 {
@@ -2228,10 +2236,10 @@ static int init_lob_access_param(storage::ObLobManager &lob_mngr,
     COMMON_LOG(WARN, "Lob: is delta lob", K(ret), K(lob_iter_ctx->locator_));
   // worker timeout_ts is not guaranteed to be always valid
   // so take the greater value of both
-  } else if (OB_ISNULL(lob_iter_ctx->session_)) {
+  } else if (lob_iter_ctx->timeout_ts_ <= 0) {
     timeout_ts = OB_MAX(ObTimeUtility::current_time() + 60 * USECS_PER_SEC, THIS_WORKER.get_timeout_ts());
   } else {
-    timeout_ts = OB_MAX(lob_iter_ctx->session_->get_query_timeout_ts(), THIS_WORKER.get_timeout_ts());
+    timeout_ts = OB_MAX(lob_iter_ctx->timeout_ts_, THIS_WORKER.get_timeout_ts());
   }
 
   if (OB_FAIL(ret)) {
@@ -2246,7 +2254,7 @@ static int init_lob_access_param(storage::ObLobManager &lob_mngr,
     //   insert into t values (1,'v0');
     //   insert ignore into t values (1,'v11'), (1,'v222') on duplicate key update c1 = md5(c1);
     // second read shoud get "v11" not "v0"
-    param.access_ctx_ = lob_iter_ctx->lob_access_ctx_;
+    param.access_ctx_ = static_cast<ObLobAccessCtx *>(lob_iter_ctx->access_context_);
   }
 
   return ret;
@@ -2262,7 +2270,7 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
   int ret = OB_SUCCESS;
   if (!has_lob_header || !is_outrow || OB_ISNULL(ctx.alloc_)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header), K(is_outrow), KP(ctx.session_));
+    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header), K(is_outrow), K(ctx.timeout_ts_));
   } else { // outrow persist lob
     storage::ObLobAccessParam param;
     if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
@@ -2397,7 +2405,7 @@ int ObLobManager::get_outrow_prefix_data(common::ObLobTextIterCtx &ctx,
   int ret = OB_SUCCESS;
   if (!has_lob_header || !is_outrow || OB_ISNULL(ctx.alloc_)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header), K(is_outrow), KP(ctx.session_));
+    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header), K(is_outrow), K(ctx.timeout_ts_));
   } else { // outrow persist lob
     storage::ObLobAccessParam param;
     if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
@@ -2479,6 +2487,7 @@ int ObLobManager::get_first_block(common::ObLobTextIterCtx &ctx,
           ctx.buff_ = static_cast<char *>(ctx.alloc_->alloc(ctx.buff_byte_len_));
         }
         ObString output_data;
+        ObLobQueryIter *query_iter = nullptr;
         output_data.assign_buffer(ctx.buff_, ctx.buff_byte_len_);
 
         // 1. start query iter, and query one time
@@ -2487,9 +2496,13 @@ int ObLobManager::get_first_block(common::ObLobTextIterCtx &ctx,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(WARN,"Lob: failed to alloc output buffer",
               K(ret), KP(ctx.buff_), K(ctx.buff_byte_len_));
-        } else if (OB_FAIL(query(param, ctx.lob_query_iter_))) {
+        } else if (OB_FAIL(query(param, query_iter))) {
+          // query() may return a partially constructed iterator on failure;
+          // retain it in the protocol context so the normal cleanup path owns it.
+          ctx.read_cursor_ = query_iter;
           COMMON_LOG(WARN,"Lob: falied to query lob iter.", K(ret), K(param));
-        } else if (OB_FAIL(ctx.lob_query_iter_->get_next_row(output_data))) {
+        } else if (FALSE_IT(ctx.read_cursor_ = query_iter)) {
+        } else if (OB_FAIL(ctx.read_cursor_->get_next_row(output_data))) {
           COMMON_LOG(WARN,"Lob: falied to get first block.", K(ret), K(param));
         } else {
           ctx.content_byte_len_ = output_data.length();
@@ -2523,9 +2536,9 @@ int ObLobManager::get_next_block_inner(common::ObLobTextIterCtx &ctx,
   // reserve(memmove) is already done by share before the call;
   // this side fetches the next chunk through the query iter and updates ctx。
   int ret = OB_SUCCESS;
-  if (!is_outrow || !has_lob_header || OB_ISNULL(ctx.lob_query_iter_)) {
+  if (!is_outrow || !has_lob_header || OB_ISNULL(ctx.read_cursor_)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow), K(has_lob_header), KP(ctx.lob_query_iter_));
+    COMMON_LOG(WARN, "Lob: error condition", K(ret), K(is_outrow), K(has_lob_header), KP(ctx.read_cursor_));
   } else {
     ObString output_data;
     if (!ctx.is_backward_) {
@@ -2535,12 +2548,13 @@ int ObLobManager::get_next_block_inner(common::ObLobTextIterCtx &ctx,
       output_data.assign_buffer(ctx.buff_,
                                 ctx.buff_byte_len_ - ctx.reserved_byte_len_);
     }
-    if (OB_FAIL(ctx.lob_query_iter_->get_next_row(output_data))) {
+    if (OB_FAIL(ctx.read_cursor_->get_next_row(output_data))) {
       if (ret == OB_ITER_END) {
         state = common::TEXTSTRING_ITER_END; // iter finished
-        ctx.lob_query_iter_->reset();
-        OB_DELETE(ObLobQueryIter, "unused", ctx.lob_query_iter_);
-        ctx.lob_query_iter_ = NULL;
+        ObLobQueryIter *query_iter = static_cast<ObLobQueryIter *>(ctx.read_cursor_);
+        query_iter->reset();
+        OB_DELETE(ObLobQueryIter, "unused", query_iter);
+        ctx.read_cursor_ = nullptr;
         ret = OB_SUCCESS;
       } else {
         COMMON_LOG(WARN,"Lob: falied to get first block.", K(ret));
@@ -2596,13 +2610,518 @@ int ObLobManager::get_outrow_char_len(common::ObLobTextIterCtx &ctx,
 
 void ObLobManager::free_lob_query_iter(common::ObLobTextIterCtx &ctx)
 {
-  if (OB_NOT_NULL(ctx.lob_query_iter_)) {
-    ctx.lob_query_iter_->reset();
-    OB_DELETE(ObLobQueryIter, "unused", ctx.lob_query_iter_);
-    ctx.lob_query_iter_ = NULL;
+  if (OB_NOT_NULL(ctx.read_cursor_)) {
+    ObLobQueryIter *query_iter = static_cast<ObLobQueryIter *>(ctx.read_cursor_);
+    query_iter->reset();
+    OB_DELETE(ObLobQueryIter, "unused", query_iter);
+    ctx.read_cursor_ = nullptr;
   }
 }
 
 
 }  // namespace storage
+
+namespace data_plane
+{
+
+class ObJsonLobHandle
+{
+public:
+  explicit ObJsonLobHandle(storage::ObLobCursor *cursor)
+    : cursor_(cursor)
+  {}
+
+  storage::ObLobCursor *cursor_;
+};
+
+namespace
+{
+
+int create_json_lob_handle(common::ObIAllocator &allocator,
+                           storage::ObLobCursor *cursor,
+                           ObJsonLobHandle *&handle)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(cursor)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("JSON LOB cursor is null", K(ret));
+  } else if (OB_ISNULL(handle = OB_NEWx(ObJsonLobHandle, &allocator, cursor))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate JSON LOB handle", K(ret));
+  }
+  return ret;
+}
+
+storage::ObLobCursor *get_json_lob_cursor(
+    const common::ObJsonBinUpdateCtx &update_context)
+{
+  return static_cast<storage::ObLobCursor *>(update_context.cursor_);
+}
+
+class ObJsonLobDeltaCodec : public common::ObDeltaLob
+{
+public:
+  ObJsonLobDeltaCodec(common::ObIAllocator *allocator,
+                      int64_t query_timeout_ts,
+                      common::ObJsonBinUpdateCtx &update_context,
+                      ObJsonLobHandle *&handle)
+    : allocator_(allocator),
+      query_timeout_ts_(query_timeout_ts),
+      update_context_(update_context),
+      handle_(handle)
+  {}
+
+  explicit ObJsonLobDeltaCodec(common::ObJsonBinUpdateCtx &update_context,
+                               ObJsonLobHandle *&handle)
+    : allocator_(nullptr),
+      query_timeout_ts_(0),
+      update_context_(update_context),
+      handle_(handle)
+  {}
+
+  int64_t get_partial_data_serialize_size() const override
+  {
+    storage::ObLobPartialData *partial_data = get_partial_data();
+    return OB_ISNULL(partial_data) ? 0 : partial_data->get_serialize_size();
+  }
+
+  int64_t get_lob_diff_serialize_size() const override
+  {
+    int64_t len = sizeof(common::ObLobDiff)
+        * update_context_.binary_diffs_.count();
+    common::ObJsonDiffHeader json_diff_header;
+    json_diff_header.cnt_ = update_context_.json_diffs_.count();
+    len += json_diff_header.get_serialize_size();
+    for (int64_t i = 0; i < update_context_.json_diffs_.count(); ++i) {
+      len += update_context_.json_diffs_[i].get_serialize_size();
+    }
+    return len;
+  }
+
+  uint32_t get_lob_diff_cnt() const override
+  {
+    return static_cast<uint32_t>(update_context_.binary_diffs_.count());
+  }
+
+  int serialize_partial_data(char *buf,
+                             const int64_t buf_len,
+                             int64_t &pos) const override
+  {
+    int ret = OB_SUCCESS;
+    storage::ObLobPartialData *partial_data = get_partial_data();
+    if (OB_ISNULL(partial_data)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("JSON LOB partial data is null", K(ret));
+    } else if (OB_FAIL(partial_data->serialize(buf, buf_len, pos))) {
+      LOG_WARN("failed to serialize JSON LOB partial data",
+               K(ret), K(buf_len), K(pos));
+    }
+    return ret;
+  }
+
+  int serialize_lob_diffs(char *buf,
+                          const int64_t buf_len,
+                          common::ObLobDiffHeader *diff_header) const override
+  {
+    int ret = OB_SUCCESS;
+    char *diff_data_ptr = diff_header->get_inline_data_ptr();
+    common::ObLobDiff *lob_diffs = diff_header->get_diff_ptr();
+    int64_t data_len = buf_len - (diff_data_ptr - buf);
+    int64_t data_pos = 0;
+
+    for (int64_t i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
+      const common::ObJsonBinaryDiff &diff =
+          update_context_.binary_diffs_[i];
+      common::ObLobDiff *lob_diff =
+          new (lob_diffs + i) common::ObLobDiff();
+      lob_diff->type_ = common::ObLobDiff::DiffType::WRITE_DIFF;
+      lob_diff->dst_offset_ = diff.dst_offset_;
+      lob_diff->dst_len_ = diff.dst_len_;
+    }
+
+    common::ObJsonDiffHeader json_diff_header;
+    json_diff_header.cnt_ = update_context_.json_diffs_.count();
+    if (OB_FAIL(json_diff_header.serialize(
+            diff_data_ptr, data_len, data_pos))) {
+      LOG_WARN("failed to serialize JSON diff header",
+               K(ret), K(buf_len), K(data_pos));
+    }
+    for (int64_t i = 0;
+         OB_SUCC(ret) && i < update_context_.json_diffs_.count();
+         ++i) {
+      const common::ObJsonDiff &diff = update_context_.json_diffs_[i];
+      if (OB_FAIL(diff.serialize(diff_data_ptr, data_len, data_pos))) {
+        LOG_WARN("failed to serialize JSON diff",
+                 K(ret), K(i), K(buf_len), K(data_pos));
+      }
+    }
+    return ret;
+  }
+
+  int deserialize_partial_data(common::ObLobDiffHeader *diff_header) override
+  {
+    int ret = OB_SUCCESS;
+    storage::ObLobPartialData *partial_data = nullptr;
+    storage::ObLobCursor *cursor = nullptr;
+    storage::ObLobManager *lob_manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+    common::ObLobLocatorV2 locator;
+    int64_t pos = 0;
+    if (OB_ISNULL(allocator_) || OB_ISNULL(lob_manager)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("JSON LOB restore dependency is null",
+               K(ret), KP(allocator_), KP(lob_manager));
+    } else if (OB_ISNULL(partial_data =
+                   OB_NEWx(storage::ObLobPartialData, allocator_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate JSON LOB partial data", K(ret));
+    } else if (OB_FAIL(partial_data->init())) {
+      LOG_WARN("failed to initialize JSON LOB partial data", K(ret));
+    } else if (OB_FAIL(partial_data->deserialize(
+                   diff_header->data_, diff_header->persist_loc_size_, pos))) {
+      LOG_WARN("failed to deserialize JSON LOB partial data",
+               K(ret), K(diff_header->persist_loc_size_), K(pos));
+    } else if (OB_FALSE_IT(locator.assign_buffer(
+                   partial_data->locator_.ptr(),
+                   partial_data->locator_.length()))) {
+    } else if (OB_FAIL(lob_manager->query(allocator_,
+                                         locator,
+                                         query_timeout_ts_,
+                                         false,
+                                         partial_data,
+                                         cursor))) {
+      LOG_WARN("failed to open restored JSON LOB", K(ret), K(locator));
+    } else if (OB_FAIL(create_json_lob_handle(
+                   *allocator_, cursor, handle_))) {
+      cursor->~ObLobCursor();
+      cursor = nullptr;
+    }
+    return ret;
+  }
+
+  int deserialize_lob_diffs(char *buf,
+                            const int64_t buf_len,
+                            common::ObLobDiffHeader *diff_header) override
+  {
+    int ret = OB_SUCCESS;
+    common::ObLobDiff *lob_diffs = diff_header->get_diff_ptr();
+    char *data_ptr = diff_header->get_inline_data_ptr();
+    if (OB_ISNULL(lob_diffs) || OB_ISNULL(data_ptr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid serialized JSON LOB diff", K(ret), KP(lob_diffs),
+               KP(data_ptr));
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < diff_header->diff_cnt_; ++i) {
+        common::ObJsonBinaryDiff binary_diff;
+        binary_diff.dst_offset_ = lob_diffs[i].dst_offset_;
+        binary_diff.dst_len_ = lob_diffs[i].dst_len_;
+        if (OB_FAIL(update_context_.binary_diffs_.push_back(binary_diff))) {
+          LOG_WARN("failed to restore JSON binary diff", K(ret), K(i));
+        }
+      }
+
+      const int64_t data_len = buf_len - (data_ptr - buf);
+      int64_t data_pos = 0;
+      common::ObJsonDiffHeader json_diff_header;
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(json_diff_header.deserialize(
+                     data_ptr, data_len, data_pos))) {
+        LOG_WARN("failed to deserialize JSON diff header",
+                 K(ret), K(data_len), K(data_pos));
+      }
+      for (int64_t i = 0;
+           OB_SUCC(ret) && i < json_diff_header.cnt_;
+           ++i) {
+        common::ObJsonDiff json_diff;
+        if (OB_FAIL(json_diff.deserialize(data_ptr, data_len, data_pos))) {
+          LOG_WARN("failed to deserialize JSON diff", K(ret), K(i));
+        } else if (OB_FAIL(update_context_.json_diffs_.push_back(json_diff))) {
+          LOG_WARN("failed to restore JSON diff", K(ret), K(i));
+        }
+      }
+    }
+    return ret;
+  }
+
+private:
+  storage::ObLobPartialData *get_partial_data() const
+  {
+    storage::ObLobCursor *cursor = OB_NOT_NULL(handle_)
+        ? handle_->cursor_
+        : get_json_lob_cursor(update_context_);
+    return OB_ISNULL(cursor) ? nullptr : cursor->partial_data_;
+  }
+
+  common::ObIAllocator *allocator_;
+  int64_t query_timeout_ts_;
+  common::ObJsonBinUpdateCtx &update_context_;
+  ObJsonLobHandle *&handle_;
+};
+
+} // namespace
+
+int open_json_lob(common::ObIAllocator &allocator,
+                  common::ObLobLocatorV2 &locator,
+                  int64_t query_timeout_ts,
+                  ObJsonLobHandle *&handle)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLobCursor *cursor = nullptr;
+  storage::ObLobManager *lob_manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+  if (OB_NOT_NULL(handle)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("JSON LOB handle is already initialized", K(ret));
+  } else if (OB_ISNULL(lob_manager)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("LOB manager is null", K(ret));
+  } else if (OB_FAIL(lob_manager->query(
+                 &allocator, locator, query_timeout_ts,
+                 false, nullptr, cursor))) {
+    LOG_WARN("failed to open JSON LOB", K(ret), K(locator));
+  } else if (OB_FAIL(create_json_lob_handle(allocator, cursor, handle))) {
+    cursor->~ObLobCursor();
+    cursor = nullptr;
+  }
+  return ret;
+}
+
+int restore_json_lob_delta(common::ObIAllocator &allocator,
+                           const common::ObLobLocatorV2 &delta_locator,
+                           int64_t query_timeout_ts,
+                           common::ObJsonBinUpdateCtx &update_context,
+                           ObJsonLobHandle *&handle)
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(handle)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("JSON LOB handle is already initialized", K(ret));
+  } else {
+    ObJsonLobDeltaCodec codec(
+        &allocator, query_timeout_ts, update_context, handle);
+    if (OB_FAIL(codec.deserialize(delta_locator))) {
+      LOG_WARN("failed to restore JSON delta LOB", K(ret), K(delta_locator));
+    }
+  }
+  return ret;
+}
+
+void destroy_json_lob_handle(ObJsonLobHandle *&handle)
+{
+  if (OB_NOT_NULL(handle)) {
+    if (OB_NOT_NULL(handle->cursor_)) {
+      handle->cursor_->~ObLobCursor();
+      handle->cursor_ = nullptr;
+    }
+    handle->~ObJsonLobHandle();
+    handle = nullptr;
+  }
+}
+
+int read_json_lob_root_type(ObJsonLobHandle &handle, uint8_t &root_type)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(handle.cursor_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON LOB handle is not open", K(ret));
+  } else if (OB_FAIL(handle.cursor_->read_i8(
+                 0, reinterpret_cast<int8_t *>(&root_type)))) {
+    LOG_WARN("failed to read JSON LOB root type", K(ret));
+  }
+  return ret;
+}
+
+int try_get_single_chunk_json_lob(ObJsonLobHandle &handle,
+                                  bool &is_single_chunk,
+                                  common::ObString &data)
+{
+  int ret = OB_SUCCESS;
+  is_single_chunk = false;
+  if (OB_ISNULL(handle.cursor_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON LOB handle is not open", K(ret));
+  } else if (FALSE_IT(
+                 is_single_chunk =
+                     handle.cursor_->has_one_chunk_with_all_data())) {
+  } else if (is_single_chunk
+             && OB_FAIL(handle.cursor_->get_one_chunk_with_all_data(data))) {
+    LOG_WARN("failed to read single-chunk JSON LOB", K(ret));
+  }
+  return ret;
+}
+
+int bind_json_lob(ObJsonLobHandle &handle,
+                  common::ObJsonBinUpdateCtx &update_context)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(handle.cursor_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON LOB handle is not open", K(ret));
+  } else if (OB_NOT_NULL(update_context.cursor_)) {
+    ret = OB_INIT_TWICE;
+    LOG_WARN("JSON update context already owns a cursor", K(ret));
+  } else {
+    update_context.set_lob_cursor(handle.cursor_);
+    handle.cursor_ = nullptr;
+  }
+  return ret;
+}
+
+int validate_json_lob_delta(const common::ObJsonBinUpdateCtx &update_context)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLobCursor *cursor = get_json_lob_cursor(update_context);
+  storage::ObLobPartialData *partial_data =
+      OB_ISNULL(cursor) ? nullptr : cursor->partial_data_;
+  if (OB_ISNULL(partial_data)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("JSON LOB partial data is null", K(ret));
+  }
+  for (int64_t i = 0;
+       OB_SUCC(ret) && i < partial_data->index_.count();
+       ++i) {
+    storage::ObLobChunkIndex &chunk_index = partial_data->index_[i];
+    const uint64_t chunk_start_offset = chunk_index.offset_;
+    const uint64_t chunk_end_offset =
+        chunk_index.offset_ + chunk_index.byte_len_;
+    bool is_chunk_updated = false;
+    for (int64_t j = 0;
+         !chunk_index.is_add_ && j < update_context.binary_diffs_.count();
+         ++j) {
+      const common::ObJsonBinaryDiff &diff =
+          update_context.binary_diffs_[j];
+      const uint64_t diff_start_offset = diff.dst_offset_;
+      const uint64_t diff_end_offset = diff.dst_offset_ + diff.dst_len_;
+      if ((diff_start_offset >= chunk_start_offset
+           && diff_start_offset < chunk_end_offset)
+          || (diff_end_offset > chunk_start_offset
+              && diff_end_offset <= chunk_end_offset)
+          || (diff_start_offset <= chunk_start_offset
+              && chunk_end_offset <= diff_end_offset)) {
+        is_chunk_updated = true;
+      }
+    }
+    if (is_chunk_updated
+        && !chunk_index.is_add_
+        && !(chunk_index.is_modified_ && chunk_index.old_data_idx_ >= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("JSON LOB old chunk data was not recorded",
+               K(ret), K(i), K(chunk_index));
+    }
+  }
+  return ret;
+}
+
+int64_t get_json_lob_delta_serialize_size(
+    const common::ObJsonBinUpdateCtx &update_context)
+{
+  common::ObJsonBinUpdateCtx &mutable_context =
+      const_cast<common::ObJsonBinUpdateCtx &>(update_context);
+  ObJsonLobHandle *handle = nullptr;
+  ObJsonLobDeltaCodec codec(mutable_context, handle);
+  return codec.get_serialize_size();
+}
+
+int serialize_json_lob_delta(const common::ObJsonBinUpdateCtx &update_context,
+                             char *buf,
+                             int64_t buf_len,
+                             int64_t &pos)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(update_context.cursor_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("JSON update context has no LOB cursor", K(ret));
+  } else {
+    common::ObJsonBinUpdateCtx &mutable_context =
+        const_cast<common::ObJsonBinUpdateCtx &>(update_context);
+    ObJsonLobHandle *handle = nullptr;
+    ObJsonLobDeltaCodec codec(mutable_context, handle);
+    if (OB_FAIL(codec.serialize(buf, buf_len, pos))) {
+      LOG_WARN("failed to serialize JSON delta LOB",
+               K(ret), K(buf_len), K(pos));
+    }
+  }
+  return ret;
+}
+
+int lob_binary_equal(common::ObLobLocatorV2 &left,
+                     common::ObLobLocatorV2 &right,
+                     int64_t timeout_ts,
+                     transaction::ObTxDesc *tx_desc,
+                     bool &is_equal)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLobManager *manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+  if (OB_ISNULL(manager)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("LOB manager is null", K(ret));
+  } else {
+    storage::ObLobCompareParams params;
+    params.collation_left_ = common::CS_TYPE_BINARY;
+    params.collation_right_ = common::CS_TYPE_BINARY;
+    params.offset_left_ = 0;
+    params.offset_right_ = 0;
+    params.compare_len_ = UINT64_MAX;
+    params.timeout_ = timeout_ts;
+    params.tx_desc_ = tx_desc;
+    if (OB_FAIL(manager->equal(left, right, params, is_equal))) {
+      LOG_WARN("failed to compare LOB values", K(ret), K(left), K(right));
+    }
+  }
+  return ret;
+}
+
+int read_lob_to_buffer(common::ObIAllocator &allocator,
+                       common::ObLobLocatorV2 &lob,
+                       int64_t timeout_ts,
+                       transaction::ObTxDesc *tx_desc,
+                       common::ObString &buffer)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLobManager *manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+  storage::ObLobAccessParam param;
+  param.tx_desc_ = tx_desc;
+  if (OB_ISNULL(manager)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("LOB manager is null", K(ret));
+  } else if (OB_FAIL(manager->build_lob_param(
+                 param, allocator, common::CS_TYPE_BINARY,
+                 0, UINT64_MAX, timeout_ts, lob))) {
+    LOG_WARN("failed to build LOB read parameters", K(ret), K(lob));
+  } else if (OB_FAIL(manager->query(param, buffer))) {
+    LOG_WARN("failed to read LOB into buffer", K(ret), K(lob));
+  }
+  return ret;
+}
+
+void set_zero_lob_value(common::ObObjType type, common::ObObj &value)
+{
+  value.set_lob_value(
+      type,
+      reinterpret_cast<const char *>(&storage::ObLobManager::ZERO_LOB),
+      sizeof(common::ObLobCommon));
+  value.set_has_lob_header();
+}
+
+int fill_lob_header(common::ObIAllocator &allocator,
+                    common::ObString &data,
+                    common::ObString &out)
+{
+  return storage::ObLobManager::fill_lob_header(allocator, data, out);
+}
+
+int fill_lob_header(common::ObIAllocator &allocator,
+                    blocksstable::ObStorageDatum &datum)
+{
+  return storage::ObLobManager::fill_lob_header(allocator, datum);
+}
+
+int fill_lob_header(
+    common::ObIAllocator &allocator,
+    const common::ObIArray<share::schema::ObColDesc> &column_ids,
+    blocksstable::ObDatumRow &datum_row)
+{
+  return storage::ObLobManager::fill_lob_header(
+      allocator, column_ids, datum_row);
+}
+
+} // namespace data_plane
 }  // namespace oceanbase

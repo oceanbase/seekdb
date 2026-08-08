@@ -33,8 +33,6 @@
 #include "share/config/ob_system_config_key.h"
 #include "share/config/ob_runtime_config.h"
 #include "share/ob_errno.h"
-#include "share/ob_rpc_struct.h"
-#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

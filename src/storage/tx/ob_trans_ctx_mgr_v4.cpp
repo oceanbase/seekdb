@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_trans_ctx_mgr_v4.h"
-#include "share/rc/ob_module_provider.h"
+#include "ob_trans_service.h"
+#include "share/ob_server_struct.h"
 #include "ob_trans_functor.h"
 #include "storage/ls/ob_ls_tx_service.h"
 

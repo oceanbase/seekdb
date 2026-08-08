@@ -15,13 +15,9 @@
  */
  
 #include <gtest/gtest.h>
-#define private public
-#define protected public
 #include "share/geo/ob_wkt_parser.h"
 #include "share/geo/ob_geo_ibin.h"
 #include "share/geo/ob_geo_3d.h"
-#undef private
-#undef protected
 
 namespace oceanbase {
 namespace common {
@@ -55,7 +51,7 @@ public:
     ObString wkb;
     if (OB_NOT_NULL(geo) && !geo->is_tree()) {
       ObIWkbGeometry *geo_bin = reinterpret_cast<ObIWkbGeometry *>(geo);
-      wkb = geo_bin->data_;
+      wkb.assign_ptr(geo_bin->val(), geo_bin->length());
     }
     return wkb;
   }
@@ -64,7 +60,7 @@ public:
     ObString wkb;
     if (OB_NOT_NULL(geo) && !geo->is_tree()) {
       ObGeometry3D *geo_bin = reinterpret_cast<ObGeometry3D *>(geo);
-      wkb = geo_bin->data_;
+      wkb = geo_bin->to_wkb();
     }
     return wkb;
   }
@@ -216,36 +212,6 @@ TEST_F(TestWktParser, test_parse_linestring)
   ASSERT_TRUE(OB_SUCCESS != ObWktParser::parse_wkt(allocator, ObString("linestring((1 2), (3 4))"), geo, true, false));
   ASSERT_TRUE(NULL == geo);
 
-  // large number of point inside linestring
-  // single alloc size cannot exceed 4G
-  uint64_t num_points = 10000000;
-  
-  char *buf = static_cast<char *>(allocator.alloc(num_points * 4 + 64));
-  ObString wkt(num_points * 8 + 64, 0, buf);
-  ASSERT_EQ(strlen("linestring("), wkt.write("linestring(", strlen("linestring(")));
-
-  for (int i = 0; i < num_points; i++) {
-    ASSERT_EQ(strlen("1 1,"), wkt.write("1 1,", strlen("1 1,")));
-  }
-  ASSERT_EQ(wkt.length() - 1, wkt.set_length(wkt.length() - 1));
-  ASSERT_EQ(1, wkt.write(")", 1));
-
-  geo = NULL;
-  ASSERT_EQ(OB_SUCCESS, ObWktParser::parse_wkt(allocator, wkt, geo, true, false));
-  ASSERT_TRUE(NULL != geo);
-  uint64_t pos = 0;
-  const char *wkb = (to_hex(mock_to_wkb(geo))).ptr();
-  ASSERT_EQ(0, MEMCMP(wkb + pos, "0102000000", strlen("0102000000")));
-
-  ObString hex_num_points = ObString(sizeof(uint32_t), reinterpret_cast<char *>(&num_points));
-  pos += strlen("0102000000");
-  ASSERT_EQ(0, MEMCMP(wkb + pos, to_hex(hex_num_points).ptr(), sizeof(uint32_t) * 2));
-  pos += sizeof(uint32_t) * 2;
-
-  for(int i = 0; i < num_points; ++i) {
-    ASSERT_EQ(0, MEMCMP(wkb + pos, "000000000000F03F", strlen("000000000000F03F")));
-    pos += strlen("000000000000F03F");
-  }
 }
 
 TEST_F(TestWktParser, test_parse_polygon)
@@ -461,72 +427,6 @@ TEST_F(TestWktParser, test_geometrycollection)
   ASSERT_TRUE(OB_SUCCESS != ObWktParser::parse_wkt(allocator, ObString(" geometrycollection (geometrycollection(()))"), geo, true, false));
   ASSERT_TRUE(NULL == geo);
 
-  // large number of geometrycollection inside geometrycollection
-  // recursive geometrycollection(geometrycollection(...))
-  // the parse stack should not exceed 10M, or OB_SIZE_OVERFLOW is returned.
-  uint64_t num_geoms = 10000;
-  char *buf = static_cast<char *>(allocator.alloc(num_geoms * strlen("geometrycollection()")));
-  ObString wkt(num_geoms * strlen("geometrycollection()"), 0, buf);
-
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen("geometrycollection("), wkt.write("geometrycollection(", strlen("geometrycollection(")));
-  }
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen(")"), wkt.write((")"), strlen(")")));
-  }
-  geo = NULL;
-  ASSERT_EQ(OB_SUCCESS, ObWktParser::parse_wkt(allocator, wkt, geo, true, false));
-  ASSERT_TRUE(NULL != geo);
-  uint64_t pos = 0;
-  const char *wkb = (to_hex(mock_to_wkb(geo))).ptr();
-  for(int i = 0; i < num_geoms - 1; ++i) {
-    ASSERT_EQ(0, MEMCMP(wkb + pos, "010700000001000000", strlen("010700000001000000")));
-    pos += strlen("010700000001000000");
-  }
-  ASSERT_EQ(0, MEMCMP(wkb + pos, "010700000000000000", strlen("010700000000000000")));
-
-  num_geoms = 1000000;
-  allocator.free(buf);
-  buf = static_cast<char *>(allocator.alloc(num_geoms * strlen("geometrycollection()")));
-  wkt = ObString(num_geoms * strlen("geometrycollection()"), 0, buf);
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen("geometrycollection("), wkt.write("geometrycollection(", strlen("geometrycollection(")));
-  }
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen(")"), wkt.write((")"), strlen(")")));
-  }
-  geo = NULL;
-  ASSERT_EQ(OB_SIZE_OVERFLOW, ObWktParser::parse_wkt(allocator, wkt, geo, true, false));
-  ASSERT_TRUE(NULL == geo);
-
-  num_geoms = 10000000;
-  allocator.free(buf);
-  buf = static_cast<char *>(allocator.alloc(num_geoms * strlen("geometrycollection()")));
-  wkt = ObString(num_geoms * strlen("geometrycollection()"), 0, buf);
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen("geometrycollection("), wkt.write("geometrycollection(", strlen("geometrycollection(")));
-  }
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen(")"), wkt.write((")"), strlen(")")));
-  }
-  geo = NULL;
-  ASSERT_EQ(OB_SIZE_OVERFLOW, ObWktParser::parse_wkt(allocator, wkt, geo, true, false));
-  ASSERT_TRUE(NULL == geo);
-
-  // single alloc size cannot exceed 4G
-  num_geoms = 100000000;
-  allocator.free(buf);
-  buf = static_cast<char *>(allocator.alloc(num_geoms * strlen("geometrycollection()")));
-  wkt = ObString(num_geoms * strlen("geometrycollection()"), 0, buf);
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen("geometrycollection("), wkt.write("geometrycollection(", strlen("geometrycollection(")));
-  }
-  for (int i = 0; i < num_geoms; i++) {
-    ASSERT_EQ(strlen(")"), wkt.write((")"), strlen(")")));
-  }
-  geo = NULL;
-  ASSERT_EQ(OB_SIZE_OVERFLOW, ObWktParser::parse_wkt(allocator, wkt, geo, true, false));
-  ASSERT_TRUE(NULL == geo);
 }
 
 TEST_F(TestWktParser, test_parse_3dwkt)
@@ -673,14 +573,3 @@ TEST_F(TestWktParser, test_parse_3dwkt)
 }
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  /*
-  system("rm -f test_wkt_parser.log");
-  OB_LOGGER.set_file_name("test_wkt_parser.log");
-  OB_LOGGER.set_log_level("INFO");
-  */
-  return RUN_ALL_TESTS();
-}

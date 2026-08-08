@@ -1,0 +1,65 @@
+# owner:yongle.xh
+# owner group:storage
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set balancer_idle_time='10s';
+
+let $leader=deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table);
+let $follower_1=deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table,1);
+let $follower_2=deploy_get_value(ob1.get_follower sys:oceanbase:__all_core_table,2);
+
+let $ip = deploy_get_value($leader.ip);
+let $port = deploy_get_value($leader.mysql_port);
+
+connect(conn1, $ip, admin, admin, oceanbase, $port);
+connection conn1;
+
+# 新建一张表
+create table t1(c1 int, c2 int) primary_zone='z1';
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='t1', table_id, 1);
+
+sleep 5;
+
+alter system major freeze;
+sleep 1;
+alter system major freeze;
+sleep 1;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_type=4 and table_id=$table_id, 6, 60;
+
+alter system major freeze;
+sleep 1;
+alter system major freeze;
+sleep 1;
+
+# 打开配置项开关，只要落后日志，就会触发rebuild
+alter system set trigger_rebuild_on_purpose=true;
+alter system set trigger_reuse_table_in_table_mgr=true;
+# 阻塞leader和一个副本之间的网络
+$leader.block_net $follower_1;
+
+# 插入一行数据，leader和follower2形成majority，follower1未收到此日志
+insert into t1 values(1, 1);
+
+# 等待日志在leader和follower2形成多数派
+sleep 5;
+
+# 恢复网络，follower1会向leader获取日志，leader通知follower1需要执行rebuild；需要sleep 5
+$leader.clean_net $follower_1;
+
+# 等待follower1向leader拉取日志，触发rebuild，并汇报到__all_meta_table
+sleep 5;
+
+# 预期这张个replica需要执行rebuild
+ob1.check_until_timeout select count(*) from __all_virtual_partition_migration_status  where migrate_type = 'REBUILD_REPLICA_OP' and result = 0 and action='END', 1, 180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where rebuild=1, 0, 30;
+sleep 2;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_event_history where module='balancer' and event = 'finish_rebuild_replica' and value1 like '%$table_id%' and value4 = 0, 1, 10;
+
+
+ob1.check_until_timeout select value from oceanbase.__all_zone where name='last_merged_version' and zone='', 5, 600;
+ob1.check_log_until_success -c "table has already been in table mgr"
+select * from t1;

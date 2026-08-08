@@ -182,9 +182,3 @@ TEST_F(TestRawExprPrintVisitor, sys_fun_test)
   ObCStringHelper helper;
   _OB_LOG(INFO, "%s", helper.convert(ObRawExprPrintVisitor(expr)));
 }
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
-}

@@ -478,6 +478,7 @@ public:
     const ObIArray<ObSortFieldCollation> *sort_collations_;
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
     ObExecContext *exec_ctx_;
+    const common::ObDatumAccessContext *access_ctx_;
     bool enable_encode_sortkey_;
     int64_t cmp_count_;
     int64_t cmp_start_;
@@ -831,6 +832,7 @@ protected:
   const ObIArray<ObSortFieldCollation> *sort_collations_;
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   ObEvalCtx *eval_ctx_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   Compare comp_;
   ObChunkDatumStore datum_store_;
   ObChunkDatumStore::Iterator iter_;

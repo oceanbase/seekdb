@@ -232,7 +232,7 @@ int ObPLPackage::execute_init_routine(ObIAllocator &allocator, ObExecContext &ex
   if (OB_NOT_NULL(init_routine)) {
     pl::ObPL *pl_engine = NULL;
     CK (OB_NOT_NULL(exec_ctx.get_my_session()));
-    CK (OB_NOT_NULL(pl_engine = exec_ctx.get_my_session()->get_pl_engine()));
+    CK (OB_NOT_NULL(pl_engine = exec_ctx.get_pl_engine()));
 
     if (OB_SUCC(ret)) {
       ParamStore params;

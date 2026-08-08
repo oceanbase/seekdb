@@ -26,7 +26,7 @@ using namespace obmysql;
 
 namespace observer
 {
-ObMPPing::ObMPPing(const ObGlobalContext &gctx)
+ObMPPing::ObMPPing(const share::ObGlobalContext &gctx)
     : ObMPBase(gctx), sql_()
 {
 }

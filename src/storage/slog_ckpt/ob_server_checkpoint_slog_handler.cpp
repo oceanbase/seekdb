@@ -18,7 +18,7 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_checkpoint_slog_handler.h"
-#include "observer/omt/ob_server_runtime_controller.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "storage/blocksstable/ob_block_manager.h"
 #include "storage/slog/ob_storage_log.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_reader.h"
@@ -52,6 +52,7 @@ ObServerCheckpointSlogHandler::ObServerCheckpointSlogHandler()
   : is_inited_(false),
     is_writing_checkpoint_(false),
     server_slogger_(nullptr),
+    server_runtime_(nullptr),
     lock_(common::ObLatchIds::SLOG_CKPT_LOCK),
     server_meta_block_handle_(),
     write_ckpt_task_(this),
@@ -61,7 +62,8 @@ ObServerCheckpointSlogHandler::ObServerCheckpointSlogHandler()
 {
 }
 
-int ObServerCheckpointSlogHandler::init(ObStorageLogger *server_slogger)
+int ObServerCheckpointSlogHandler::init(
+    ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime)
 {
   int ret = OB_SUCCESS;
 
@@ -77,6 +79,7 @@ int ObServerCheckpointSlogHandler::init(ObStorageLogger *server_slogger)
     LOG_WARN("fail to schedule write checkpoint task", K(ret));
   } else {
     server_slogger_ = server_slogger;
+    server_runtime_ = &server_runtime;
     is_inited_ = true;
   }
   return ret;
@@ -565,7 +568,7 @@ int ObServerCheckpointSlogHandler::write_checkpoint(bool is_force)
       || is_force
       || (cur_cursor.file_id_ > last_slog_cursor_.file_id_)) {
     ObServerCheckpointWriter server_ckpt_writer;
-    if (OB_FAIL(server_ckpt_writer.init(server_slogger_))) {
+    if (OB_FAIL(server_ckpt_writer.init(server_slogger_, *server_runtime_))) {
       LOG_WARN("fail to init ObServerCheckpointWriter", K(ret));
     } else if (OB_FAIL(server_ckpt_writer.write_checkpoint(cur_cursor))) {
       LOG_WARN("failt to write server checkpoint", K(ret));

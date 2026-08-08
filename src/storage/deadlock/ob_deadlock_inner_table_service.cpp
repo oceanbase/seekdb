@@ -15,7 +15,6 @@
  */
 
 #include "ob_deadlock_inner_table_service.h"
-#include "rootserver/ob_local_management_service.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase

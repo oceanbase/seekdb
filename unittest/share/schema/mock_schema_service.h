@@ -26,6 +26,8 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_cache.h"
 #include "share/schema/ob_schema_mgr.h"
+#undef protected
+#undef private
 
 
 namespace oceanbase

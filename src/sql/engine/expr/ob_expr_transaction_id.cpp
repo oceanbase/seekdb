@@ -57,7 +57,7 @@ int ObExprTransactionId::eval_transaction_id(const ObExpr &expr, ObEvalCtx &ctx,
     LOG_WARN("session info is null", K(ret));
   } else {
     const transaction::ObTxDesc *txdesc = session_info->get_tx_desc();
-    const int64_t tx_id = txdesc ? txdesc->get_tx_id().get_id() : 0;
+    const int64_t tx_id = data_plane::tx_desc_id(txdesc).get_id();
     if (ObUInt64Type == expr.datum_meta_.type_) { // unsigned integer result
       expr_datum.set_uint(tx_id);
     } else { // numeric result

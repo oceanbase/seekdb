@@ -16,22 +16,44 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ddl_pipeline.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/vector/ob_i_vector_index_runtime.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_direct_load_struct.h"
 #include "storage/lob/ob_lob_util.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
-#include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "sql/engine/expr/ob_array_expr_utils.h"
-#include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
+#include "query/engine/expr/ob_expr_lob_utils.h"
+#include "query/engine/expr/ob_array_expr_utils.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
+
+namespace
+{
+int read_full_lob_string(
+    ObIAllocator &allocator,
+    ObObjType type,
+    ObCollationType collation_type,
+    bool has_lob_header,
+    ObString &value)
+{
+  int ret = OB_SUCCESS;
+  common::ObILobReadService *read_service =
+      ::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>();
+  if (OB_ISNULL(read_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed", K(ret));
+  } else {
+    const common::ObLobReadOptions options(*read_service);
+    ret = sql::ObTextStringHelper::read_real_string_data(
+        options, &allocator, type, collation_type, has_lob_header, value);
+  }
+  return ret;
+}
+}
 
 int ObIDDLPipeline::init(
     const ObTabletID &tablet_id,
@@ -93,8 +115,8 @@ ObVectorIndexTabletContext::ObVectorIndexTabletContext()
       meta_id_col_idx_(-1), meta_vector_col_idx_(-1), pq_center_id_col_idx_(-1), pq_center_vector_col_idx_(-1), extra_column_idx_types_(),
       lob_inrow_threshold_(0), rowkey_cnt_(0), column_cnt_(0), snapshot_version_(0), index_type_(share::VIAT_MAX), helper_(nullptr),
       allocator_("VecIndexCtx", OB_MALLOC_NORMAL_BLOCK_SIZE),
-      memory_context_(share::g_mp->plugin_vector_index_service()->get_memory_context()),
-      all_vsag_use_mem_(share::g_mp->plugin_vector_index_service()->get_all_vsag_use_mem())
+      memory_context_(::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>()->get_memory_context()),
+      all_vsag_use_mem_(::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>()->get_all_vsag_use_mem())
 {
 
 }
@@ -163,7 +185,7 @@ int ObVectorIndexTabletContext::init_hnsw_index(const ObDDLTableSchema &ddl_tabl
   vector_data_col_idx_ = -1;
   int64_t pk_increment_col_idx = -1;
 
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
     LOG_WARN("failed to get log stream", K(ret));
   } else if (OB_FAIL(ls->get_tablet(tablet_id_, five_tablet_handle))) {
     LOG_WARN("fail to get tablet handle", K(ret), K(tablet_id_));
@@ -932,16 +954,13 @@ int ObHNSWIndexAppendBufferOperator::append_row(
     // do nothing
   } else if (FALSE_IT(vec_vid = vectors.at(vector_vid_col_idx_)->get_int(row_pos))) {
   } else if (FALSE_IT(vec_str = vectors.at(vector_col_idx_)->get_string(row_pos))) {
-  } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&row_allocator_,
-                                                                ObLongTextType,
-                                                                CS_TYPE_BINARY,
-                                                                true,
-                                                                vec_str))) {
+  } else if (OB_FAIL(read_full_lob_string(
+                 row_allocator_, ObLongTextType, CS_TYPE_BINARY, true, vec_str))) {
     LOG_WARN("fail to get real data.", K(ret), K(vec_str));
   } else if (vec_str.length() == 0) {
     // do nothing
   } else {
-    ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+    ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     ObPluginVectorIndexAdapterGuard adaptor_guard;
     if (OB_ISNULL(vec_index_service)) {
       ret = OB_ERR_UNEXPECTED;
@@ -1077,7 +1096,7 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
 {
   int ret = OB_SUCCESS;
   // first we do vsag serialize
-  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+  ObIVectorIndexRuntime *vec_index_service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
   ObPluginVectorIndexAdapterGuard adaptor_guard;
   row_allocator_.reuse();
   if (OB_ISNULL(vec_index_service)) {
@@ -1099,7 +1118,7 @@ int ObHNSWIndexBuildOperator::serialize_vector_index(
     param.tmp_allocator_ = &row_allocator_;
     param.lob_inrow_threshold_ = lob_inrow_threshold;
     // build tx
-    oceanbase::transaction::ObTransService *txs = share::g_mp->trans_service();
+    oceanbase::transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     oceanbase::transaction::ObTxReadSnapshot snapshot;
     int64_t timeout = ObTimeUtility::fast_current_time() + storage::ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     if (OB_ISNULL(tx_desc)) {
@@ -1210,7 +1229,7 @@ int ObVectorIndexWriteMacroBaseOperator::write(const ObChunk &input_chunk, ObVec
       } else if (OB_ISNULL(ddl_dag = static_cast<ObDDLIndependentDag *>(get_dag()))) {
         ret = OB_ERR_SYS;
         LOG_WARN("get dag failed", K(ret));
-      } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
+      } else if (OB_FAIL(ObDDLStorageUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
         LOG_WARN("fill writer param failed", K(ret));
       } else if (OB_FAIL(slice_writer->init(write_param))) {
         LOG_WARN("init macro block slice store failed", K(ret));
@@ -1368,11 +1387,8 @@ int ObIVFCenterAppendBufferOperator::append_row(
     if (vector.is_null(row_pos)) {
       // do nothing // ignore
     } else if (FALSE_IT(vec_str = vector.get_string(row_pos))) {
-    } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&row_allocator_,
-                                                                  ObLongTextType,
-                                                                  CS_TYPE_BINARY,
-                                                                  true,
-                                                                  vec_str))) {
+    } else if (OB_FAIL(read_full_lob_string(
+                   row_allocator_, ObLongTextType, CS_TYPE_BINARY, true, vec_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(vec_str), K(vector.get_string(row_pos)), K(row_pos));
     } else if (OB_FAIL(get_spec_ivf_helper<ObIvfFlatBuildHelper>(helper_, helper))) {
       LOG_WARN("fail to get ivf flat helper", K(ret));
@@ -1473,11 +1489,8 @@ int ObIVFSq8MetaAppendBufferOperator::append_row(
     if (vector.is_null(row_pos)) {
       // do nothing // ignore
     } else if (FALSE_IT(vec_str = vector.get_string(row_pos))) {
-    } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&row_allocator_,
-                                                                  ObLongTextType,
-                                                                  CS_TYPE_BINARY,
-                                                                  true,
-                                                                  vec_str))) {
+    } else if (OB_FAIL(read_full_lob_string(
+                   row_allocator_, ObLongTextType, CS_TYPE_BINARY, true, vec_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(vec_str));
     } else if (OB_FAIL(get_spec_ivf_helper<ObIvfSq8BuildHelper>(helper_, helper))) {
       LOG_WARN("fail to get ivf flat helper", K(ret));
@@ -1571,11 +1584,8 @@ int ObIVFPqAppendBufferOperator::append_row(
     if (vector.is_null(row_pos)) {
       // do nothing // ignore
     } else if (FALSE_IT(residual_str = vector.get_string(row_pos))) {
-    } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&row_allocator_,
-                                                                  ObLongTextType,
-                                                                  CS_TYPE_BINARY,
-                                                                  true,
-                                                                  residual_str))) {
+    } else if (OB_FAIL(read_full_lob_string(
+                   row_allocator_, ObLongTextType, CS_TYPE_BINARY, true, residual_str))) {
       LOG_WARN("fail to get real data.", K(ret), K(residual_str));
     } else if (OB_FAIL(get_spec_ivf_helper(helper_, helper))) {
       LOG_WARN("fail to get ivf flat helper", K(ret));
@@ -1668,6 +1678,9 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (OB_FAIL(get_ddl_tablet_context(tablet_context))) {
     LOG_WARN("get ddl tablet context failed", K(ret), K(tablet_id));
+  } else if (OB_ISNULL(lob_read_service_ = tablet_context->lob_read_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed", K(ret));
   } else if (OB_ISNULL(vector_index_ctx = tablet_context->vector_index_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected, vector index ctx is null", K(ret));
@@ -1707,7 +1720,7 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate batch context", K(ret));
         } else {
-          current_batch_ = new (batch_buf) ObTaskBatchInfo();
+          current_batch_ = new (batch_buf) ObTaskBatchInfo(*lob_read_service_);
           if (OB_FAIL(current_batch_->init(batch_size_, vec_dim_))) {
             LOG_WARN("failed to init batch context", K(ret), K(batch_size_), K(vec_dim_));
             current_batch_->~ObTaskBatchInfo();
@@ -2017,7 +2030,7 @@ int ObHNSWEmbeddingOperator::flush_current_batch()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate new batch context", K(ret));
       } else {
-        current_batch_ = new (batch_buf) ObTaskBatchInfo();
+        current_batch_ = new (batch_buf) ObTaskBatchInfo(*lob_read_service_);
         if (OB_FAIL(current_batch_->init(batch_size_, vec_dim_))) {
           LOG_WARN("failed to init new batch context", K(ret), K(batch_size_), K(vec_dim_));
           current_batch_->~ObTaskBatchInfo();
@@ -2167,7 +2180,7 @@ int ObHNSWEmbeddingWriteMacroOperator::init(const ObTabletID &tablet_id, const i
     if (OB_ISNULL(ddl_dag = static_cast<ObDDLIndependentDag *>(get_dag()))) {
       ret = OB_ERR_SYS;
       LOG_WARN("get dag failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::fill_writer_param(tablet_id_, slice_idx_, ddl_dag, 0/*max_batch_size*/, write_param))) {
       LOG_WARN("fill writer param failed", K(ret));
     } else if (OB_ISNULL(slice_writer_ = OB_NEWx(ObTabletSliceWriter, &op_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

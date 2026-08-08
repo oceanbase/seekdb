@@ -144,7 +144,7 @@ int ObDASLocalLookupIter::init_scan_param(ObTableScanParam &param, const ObDASSc
       LOG_WARN("unexpected null snapshot", K(ret), KPC(this));
     }
     if (OB_NOT_NULL(trans_desc_)) {
-      param.tx_id_ = trans_desc_->get_tx_id();
+      param.tx_id_ = data_plane::tx_desc_id(trans_desc_);
     } else {
       param.tx_id_.reset();
     }
@@ -295,10 +295,11 @@ int ObDASLocalLookupIter::check_index_lookup()
             K(ret), K_(lookup_rowkey_cnt), K_(lookup_row_cnt),
             "main table id", lookup_ctdef_->ref_table_id_,
             "main tablet id", lookup_tablet_id_,
-            KPC_(trans_desc), KPC_(snapshot));
+            "trans_desc", data_plane::ObTxDescLogView(trans_desc_), KPC_(snapshot));
         } else {
           LOG_ERROR("Fatal Error!!! Catch a defensive error!",
-            K(ret), K_(lookup_rowkey_cnt), K_(lookup_row_cnt), KPC_(trans_desc), KPC_(snapshot));
+            K(ret), K_(lookup_rowkey_cnt), K_(lookup_row_cnt),
+            "trans_desc", data_plane::ObTxDescLogView(trans_desc_), KPC_(snapshot));
         }
         const ObIArray<std::pair<ObDocIdExt, int>> &doc_ids = static_cast<ObDASFuncDataIter *>(data_table_iter_)->get_doc_ids();
         for (int64_t i = 0; i < doc_ids.count(); i++) {
@@ -318,7 +319,8 @@ int ObDASLocalLookupIter::check_index_lookup()
             K(ret), K_(lookup_rowkey_cnt), K_(lookup_row_cnt),
             "main table id", lookup_ctdef_->ref_table_id_,
             "main tablet id", lookup_tablet_id_,
-            KPC_(trans_desc), KPC_(snapshot));
+            "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
+            KPC_(snapshot));
         const ObTableScanParam &scan_param = scan_iter->get_scan_param();
         if (trans_info_array_.count() == scan_param.key_ranges_.count()) {
           for (int64_t i = 0; i < trans_info_array_.count(); i++) {

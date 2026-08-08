@@ -24,9 +24,8 @@ namespace sql
 {
 
 ObDesExecContext::ObDesExecContext(ObIAllocator &allocator, ObSQLSessionMgr *session_mgr)
-    : ObExecContext(allocator)
+    : ObExecContext(allocator, session_mgr)
 {
-  UNUSED(session_mgr);
   free_session_ctx_.sessid_ = ObSQLSessionInfo::INVALID_SESSID;
   set_sql_ctx(&sql_ctx_);
 }
@@ -42,15 +41,16 @@ ObDesExecContext::~ObDesExecContext()
 
 void ObDesExecContext::cleanup_session()
 {
+  ObSQLSessionMgr *session_mgr = get_session_mgr();
   if (NULL != my_session_) {
     if (ObSQLSessionInfo::INVALID_SESSID == free_session_ctx_.sessid_) {
       my_session_->set_session_sleep();
       my_session_->~ObSQLSessionInfo();
       my_session_ = NULL;
-    } else if (NULL != GCTX.session_mgr_) {
+    } else if (NULL != session_mgr) {
       my_session_->set_session_sleep();
-      GCTX.session_mgr_->revert_session(my_session_);
-      GCTX.session_mgr_->free_session(free_session_ctx_);
+      session_mgr->revert_session(my_session_);
+      session_mgr->free_session(free_session_ctx_);
       my_session_ = NULL;
     }
   }
@@ -74,17 +74,18 @@ int ObDesExecContext::create_my_session()
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *local_session = NULL;
+  ObSQLSessionMgr *session_mgr = get_session_mgr();
   if (OB_UNLIKELY(my_session_ != NULL)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("my_session is not null.");
-  } else if (NULL == GCTX.session_mgr_) {
+  } else if (NULL == session_mgr) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session manager is NULL", K(ret));
   } else {
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
-    if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
+    if (OB_FAIL(session_mgr->create_sessid(sid))) {
       LOG_WARN("alloc session id failed", K(ret));
-    } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid, my_session_))) {
+    } else if (OB_FAIL(session_mgr->create_session(sid, my_session_))) {
       LOG_WARN("create session failed", K(ret), K(sid));
       my_session_ = NULL;
     } else {
@@ -100,12 +101,13 @@ int ObDesExecContext::create_my_session()
       } else {
         local_session = new (local_session) ObSQLSessionInfo();
         uint32_t tmp_sid = 0;
-        if (OB_FAIL(GCTX.session_mgr_->create_sessid(tmp_sid))) {
+        if (OB_FAIL(session_mgr->create_sessid(tmp_sid))) {
           LOG_WARN("failed to mock session id", K(ret));
         } else if (OB_FAIL(local_session->init(tmp_sid, NULL))) {
           LOG_WARN("my session init failed", K(ret));
           local_session->~ObSQLSessionInfo();
         } else {
+          local_session->set_session_manager(session_mgr);
           my_session_ = local_session;
         }
       }

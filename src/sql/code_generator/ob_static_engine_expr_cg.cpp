@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_CG
 
 #include "ob_static_engine_expr_cg.h"
+#include "lib/container/ob_fixed_array_iterator.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -1163,7 +1164,8 @@ int ObStaticEngineExprCG::alloc_const_frame(const ObIArray<ObRawExpr *> &exprs,
           datum->ptr_ = NULL;
         } else {
           if (is_lob_storage(tmp_obj.get_type())) {
-            if (OB_FAIL(ob_adjust_lob_datum(tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
+            if (OB_FAIL(ob_adjust_in_memory_lob_datum(
+                    tmp_obj, rt_expr->obj_meta_, allocator_, datum))) {
               LOG_WARN("fail to adjust lob datum", K(ret), K(tmp_obj), K(rt_expr->obj_meta_), K(datum));
             }
           }

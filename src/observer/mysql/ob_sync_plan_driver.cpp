@@ -17,9 +17,10 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/mysql/ob_sync_plan_driver.h"
-#include "observer/mysql/obmp_packet_sender.h"
+#include "query/protocol/ob_mysql_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "observer/mysql/obmp_query.h"
+#include "sql/ob_query_retry_ctrl.h"
 
 namespace oceanbase
 {
@@ -29,7 +30,7 @@ using namespace obmysql;
 namespace observer
 {
 
-ObSyncPlanDriver::ObSyncPlanDriver(const ObGlobalContext &gctx,
+ObSyncPlanDriver::ObSyncPlanDriver(const share::ObGlobalContext &gctx,
                                    const ObSqlCtx &ctx,
                                    sql::ObSQLSessionInfo &session,
                                    ObQueryRetryCtrl &retry_ctrl,

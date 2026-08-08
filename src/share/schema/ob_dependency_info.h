@@ -183,7 +183,6 @@ public:
   static int batch_invalidate_dependents(const common::ObIArray<CriticalDepInfo> &objs,
                                          common::ObMySQLTransaction &trans,
                                          uint64_t ref_obj_id);
-  // DDL-execution methods relocated to rootserver::ObDependencyDDLHelper
 
   static int insert_dependency_infos(common::ObMySQLTransaction &trans,
                               common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
@@ -400,7 +399,6 @@ public:
   }
   ~ObReferenceObjTable() { reset(); }
   void reset();
-  // process_reference_obj_table relocated to free fn in sql/executor/ob_maintain_dependency_info_task
   int add_ref_obj_version(
     const uint64_t dep_obj_id,
     const uint64_t dep_db_id,
@@ -434,15 +432,12 @@ public:
   { return set_ref_obj_op(dep_obj_id, dep_db_id, dep_obj_type, DELETE_OP, allocator); }
   inline RefObjVersionMap &get_ref_obj_table() { return ref_obj_version_table_; }
   inline const RefObjVersionMap &get_ref_obj_table() const { return ref_obj_version_table_; }
-  // batch_execute_insert_or_update_obj_dependency relocated to rootserver::ObDependencyDDLHelper
   static int batch_execute_delete_obj_dependency(const ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
     ObMySQLTransaction &trans);
-  // update_max_dependency_version relocated to rootserver::ObDependencyDDLHelper
 
 private:
   static int fill_rowkey_pairs(const ObDependencyObjKey &dep_obj_key,
                                share::ObDMLSqlSplicer &dml);
-  // batch_fill_kv_pairs relocated to rootserver::ObDependencyDDLHelper
   int get_or_add_def_obj_item(const uint64_t dep_obj_id,
                               const uint64_t dep_db_id,
                               const ObObjectType dep_obj_type,

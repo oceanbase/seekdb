@@ -17,6 +17,7 @@
 #ifndef OB_TEXT_DAAT_ITER_H_
 #define OB_TEXT_DAAT_ITER_H_
 
+#include "query/ob_sql_define.h"
 #include "ob_inv_idx_param_estimator.h"
 #include "ob_sparse_bmw_iter.h"
 #include "ob_sparse_daat_iter.h"
@@ -35,7 +36,7 @@ struct ObTextDaaTParam
 {
   ObTextDaaTParam()
     : dim_iters_(nullptr), base_param_(nullptr), allocator_(nullptr), relevance_collector_(nullptr),
-      bm25_param_est_ctx_(), mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      bm25_param_est_ctx_(), mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
       function_lookup_mode_(false) {}
   ~ObTextDaaTParam() {}
   TO_STRING_KV(K_(base_param), KP_(dim_iters), K_(bm25_param_est_ctx),  K_(mode_flag), K_(function_lookup_mode));
@@ -44,7 +45,7 @@ struct ObTextDaaTParam
   common::ObArenaAllocator *allocator_;
   ObSRDaaTRelevanceCollector *relevance_collector_;
   ObBM25ParamEstCtx bm25_param_est_ctx_;
-  ObMatchAgainstMode mode_flag_;
+  sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 };
 
@@ -53,7 +54,7 @@ class ObTextDaaTIter final : public ObSRDaaTIterImpl
 public:
   ObTextDaaTIter() : ObSRDaaTIterImpl(),
       bm25_param_estimator_(),
-      mode_flag_(ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
+      mode_flag_(sql::ObMatchAgainstMode::NATURAL_LANGUAGE_MODE),
       function_lookup_mode_(false) {}
   virtual ~ObTextDaaTIter() { reset(); }
 
@@ -64,7 +65,7 @@ protected:
   virtual int pre_process() override;
 protected:
   ObBM25ParamEstimator bm25_param_estimator_;
-  ObMatchAgainstMode mode_flag_;
+  sql::ObMatchAgainstMode mode_flag_;
   bool function_lookup_mode_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObTextDaaTIter);

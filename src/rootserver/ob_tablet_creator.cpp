@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_tablet_creator.h"
+#include "share/ob_share_util.h"
 #include "storage/tx/ob_trans_service.h"
-#include "observer/ob_inner_sql_connection.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/tx/ob_tx_log.h"
 #include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
 
@@ -332,12 +333,11 @@ int ObTabletCreator::execute()
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   const int64_t default_timeout_ts = GCONF.rpc_timeout;
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletCreator not init", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans_.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans_.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else if (OB_ISNULL(single_batch_arg_)) {
@@ -361,7 +361,9 @@ int ObTabletCreator::execute()
         if (ctx.is_timeouted()) {
           ret = OB_TIMEOUT;
           LOG_WARN("already timeout", KR(ret), K(ctx));
-        } else if (OB_FAIL(conn->register_multi_data_source(transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS, buf, buf_len))) {
+        } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+                       conn, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS,
+                       buf, buf_len))) {
           LOG_WARN("fail to register_tx_data", KR(ret), K(batch_arg->batch_arg_), K(buf), K(buf_len));
         }
         int64_t end_time = ObTimeUtility::current_time();

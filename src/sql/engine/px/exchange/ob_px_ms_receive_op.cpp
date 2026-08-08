@@ -844,7 +844,8 @@ int ObPxMSReceiveOp::get_all_rows_from_channels(
       if (0 >= merge_inputs_.count()) {
       } else if (OB_FAIL(row_heap_.init(merge_inputs_.count(),
           &MY_SPEC.sort_collations_,
-          &MY_SPEC.sort_cmp_funs_))) {
+          &MY_SPEC.sort_cmp_funs_,
+          datum_access_ctx_))) {
         LOG_WARN("fail to init row heap", K(ret));
       } else {
         for (int64_t i = 0; i < merge_inputs_.count() && OB_SUCC(ret); ++i) {
@@ -881,7 +882,8 @@ int ObPxMSReceiveOp::try_link_channel()
     } else if (!MY_SPEC.local_order_
         && OB_FAIL(row_heap_.init(get_channel_count(),
           &MY_SPEC.sort_collations_,
-          &MY_SPEC.sort_cmp_funs_))) {
+          &MY_SPEC.sort_cmp_funs_,
+          datum_access_ctx_))) {
       LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
     } else if (OB_FAIL(init_merge_sort_input(get_channel_count()))) {
       LOG_WARN("Merge sort input init failed", K(ret));
@@ -901,7 +903,8 @@ int ObPxMSReceiveOp::inner_rescan()
   } else if (!MY_SPEC.local_order_
              && OB_FAIL(row_heap_.init(get_channel_count(),
                                        &MY_SPEC.sort_collations_,
-                                       &MY_SPEC.sort_cmp_funs_))) {
+                                       &MY_SPEC.sort_cmp_funs_,
+                                       datum_access_ctx_))) {
     LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
   } else if (OB_FAIL(release_merge_inputs())) {
     LOG_WARN("fail to release merge sort input", K(ret));
@@ -1010,14 +1013,19 @@ bool ObPxMSReceiveOp::Compare::operator()(
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
     LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
+    const ObDatumAccessContext *access_ctx = nullptr;
     const ObDatum *lcells = l->cells();
     ObDatum *other_datum = nullptr;
     int cmp = 0;
+    if (OB_FAIL(eval_ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    }
     for (int64_t i = 0; 0 == cmp && i < sort_cmp_funs_->count() && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(r->at(idx)->eval(eval_ctx, other_datum))) {
         LOG_WARN("failed to eval expr", K(ret));
-      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], *other_datum, cmp))) {
+      } else if (OB_FAIL(
+                     sort_cmp_funs_->at(i).cmp_func_(lcells[idx], *other_datum, cmp, access_ctx))) {
         LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         less = !sort_collations_->at(i).is_ascending_;

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "data_plane/lob/ob_lob_value.h"
 #include "ob_vector_store.h"
 #include "storage/blocksstable/ob_micro_block_row_scanner.h"
 #include "storage/access/ob_pushdown_aggregate.h"
@@ -146,7 +147,7 @@ int ObVectorStore::init(const ObTableAccessParam &param, common::hash::ObHashSet
             // When do lob pushdown, should add lob header for default value
             ObString data = default_datum.get_string();
             ObString out;
-            if (OB_FAIL(ObLobManager::fill_lob_header(*context_.stmt_allocator_, data, out))) {
+            if (OB_FAIL(data_plane::fill_lob_header(*context_.stmt_allocator_, data, out))) {
               LOG_WARN("failed to fill lob header for column", K(ret), K(i), K(def_cell), K(data));
             } else {
               default_datum.set_string(out);

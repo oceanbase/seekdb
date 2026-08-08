@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_tx_data_table.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -128,7 +128,7 @@ int ObAllVirtualTxDataTable::get_next_tx_data_table_(ObITable *&tx_data_table)
     mgr_handle_.reset();
     table_store_wrapper_.reset();
 
-    auto *ls_service = share::g_mp->ls_service();
+    auto *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", KR(ret));

@@ -1,0 +1,11 @@
+load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+
+cc_library(
+    name = "objit_api_interface",
+    hdrs = ["include/objit/common/ob_item_type.h"],
+    tags = ["manual"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/query:__pkg__",
+    ],
+)

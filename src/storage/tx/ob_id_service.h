@@ -19,8 +19,7 @@
 
 #include "storage/slog/ob_storage_log_struct.h"
 #include "logservice/ob_append_callback.h"
-#include "logservice/ob_log_base_type.h"
-#include "logservice/ob_log_handler.h"
+#include "share/log/ob_log_base_type.h"
 #include "share/scn.h"
 
 namespace oceanbase

@@ -20,6 +20,8 @@
 #define private public
 
 #include "rootserver/ddl_task/ob_ddl_task.h"
+#undef protected
+#undef private
 
 #define LOG_FILE_PATH "./test_ddl_task_struct.log"
 
@@ -80,13 +82,4 @@ TEST(test_ddl_task_struct, ddl_slice_info)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  system("rm -rf " LOG_FILE_PATH "*");
-  oceanbase::common::ObLogger::get_logger().set_log_level("WDIAG");
-  oceanbase::common::ObLogger::get_logger().set_file_name(LOG_FILE_PATH, true);
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

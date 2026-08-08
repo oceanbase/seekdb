@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/px/ob_px_scheduler.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
 #include "sql/engine/join/ob_join_filter_op.h"
@@ -284,19 +285,19 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
     LOG_WARN("fail to merge feedback info", K(ret));
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(share::g_mp->trans_service()
+  } else if (OB_FAIL(data_plane::query_transaction_service()
                     ->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
     LOG_WARN("fail merge result", K(ret),
              "packet_trans_result", pkt.get_trans_result(),
-             "tx_desc", *session->get_tx_desc());
+             "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
   } else {
     if (pkt.get_trans_result().touches_storage()) {
       session->get_trans_result().mark_touched_storage();
     }
     LOG_TRACE("on_sqc_finish_msg trans_result",
               "packet_trans_result", pkt.get_trans_result(),
-              "tx_desc", *session->get_tx_desc(),
+              "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()),
               "tx_result", session->get_trans_result());
   }
   if (OB_FAIL(ret)) {
@@ -584,19 +585,19 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
     LOG_WARN("fail to merge feedback info", K(ret));
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(share::g_mp->trans_service()
+  } else if (OB_FAIL(data_plane::query_transaction_service()
                      ->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
     LOG_WARN("fail report tx result", K(ret),
              "packet_trans_result", pkt.get_trans_result(),
-             "tx_desc", *session->get_tx_desc());
+             "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
   } else {
     if (pkt.get_trans_result().touches_storage()) {
       session->get_trans_result().mark_touched_storage();
     }
     LOG_TRACE("on_sqc_finish_msg trans_result",
               "packet_trans_result", pkt.get_trans_result(),
-              "tx_desc", *session->get_tx_desc());
+              "tx_desc", data_plane::ObTxDescLogView(session->get_tx_desc()));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {

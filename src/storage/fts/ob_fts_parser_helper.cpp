@@ -27,7 +27,7 @@
 #include "storage/fts/ob_ik_ft_parser.h"
 #include "storage/fts/ob_ngram2_ft_parser.h"
 #include "storage/fts/ob_ngram_ft_parser.h"
-#include "storage/fts/ob_fts_parser_property.h"
+#include "data_plane/fts/ob_fts_parser_property.h"
 #include "storage/fts/ob_fts_stop_word.h"
 #include "storage/fts/ob_whitespace_ft_parser.h"
 

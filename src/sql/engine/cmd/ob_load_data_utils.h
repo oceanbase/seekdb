@@ -24,6 +24,7 @@
 #include "common/object/ob_object.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/ob_exec_context.h"
+#include "query/engine/cmd/ob_load_data_stat.h"
 
 #ifndef OCEANBASE_SQL_ENGINE_CMD_LOAD_DATA_UTILS_H_
 #define OCEANBASE_SQL_ENGINE_CMD_LOAD_DATA_UTILS_H_
@@ -159,69 +160,6 @@ struct ObLoadDataGID
   TO_STRING_KV(K(id));
 };
 
-
-struct ObLoadDataStat
-{
-  ObLoadDataStat() : allocator_(ObModIds::OB_SQL_LOAD_DATA), 
-                     ref_cnt_(0),
-                     job_id_(0),
-                     table_name_(),
-                     file_path_(),
-                     table_column_(0),
-                     file_column_(0),
-                     batch_size_(0),
-                     parallel_(1),
-                     load_mode_(0),
-                     start_time_(0),
-                     estimated_remaining_time_(0),
-                     total_bytes_(0),
-                     read_bytes_(0),
-                     parsed_bytes_(0),
-                     parsed_rows_(0),
-                     total_shuffle_task_(0),
-                     total_insert_task_(0),
-                     shuffle_rt_sum_(0),
-                     insert_rt_sum_(0),
-                     total_wait_secs_(0) {}
-  int64_t aquire() {
-    return ATOMIC_AAF(&ref_cnt_, 1);
-  }
-  int64_t release() {
-    return ATOMIC_AAF(&ref_cnt_, -1);
-  }
-  int64_t get_ref_cnt() { return ATOMIC_LOAD(&ref_cnt_); }
-
-  common::ObArenaAllocator allocator_;
-  volatile int64_t ref_cnt_;
-  
-  int64_t job_id_;
-  common::ObString table_name_;
-  common::ObString file_path_;
-  int64_t table_column_;
-  int64_t file_column_;
-  int64_t batch_size_;
-  int64_t parallel_;
-  int64_t load_mode_;
-  int64_t start_time_;
-  int64_t estimated_remaining_time_;
-  int64_t total_bytes_;
-  volatile int64_t read_bytes_;  //bytes read to memory
-  volatile int64_t parsed_bytes_;
-  volatile int64_t parsed_rows_;
-  int64_t total_shuffle_task_;
-  int64_t total_insert_task_;
-  int64_t shuffle_rt_sum_;
-  int64_t insert_rt_sum_;
-  int64_t total_wait_secs_;
-
-  TO_STRING_KV(K(job_id_),
-      K(table_name_), K(file_path_), K(table_column_), K(file_column_),
-      K(batch_size_), K(parallel_), K(load_mode_),
-      K(start_time_), K(estimated_remaining_time_),
-      K(total_bytes_), K(read_bytes_), K(parsed_bytes_),
-      K(parsed_rows_), K(total_shuffle_task_), K(total_insert_task_),
-      K(shuffle_rt_sum_), K(insert_rt_sum_), K(total_wait_secs_));
-};
 
 class ObGetAllJobStatusOp
 {

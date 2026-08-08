@@ -21,15 +21,8 @@
 #include "lib/task/ob_timer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/stat/ob_stat_define.h"
-#include "observer/virtual_table/ob_all_virtual_dml_stats.h"
 namespace oceanbase
 {
-
-namespace observer
-{
-class ObOptDmlStatMapGetter;
-}
-
 namespace common
 {
 typedef std::pair<uint64_t, uint64_t> StatKey;
@@ -38,7 +31,20 @@ typedef common::hash::ObHashMap<StatKey, int64_t> ColumnUsageMap;
 
 typedef common::hash::ObHashMap<StatKey, ObOptDmlStat> DmlStatMap;
 
+class ObIOptDmlStatConsumer
+{
+public:
+  virtual ~ObIOptDmlStatConsumer() = default;
+  virtual int consume(ObOptDmlStat &dml_stat) = 0;
+
+  int operator()(common::hash::HashMapPair<StatKey, ObOptDmlStat> &entry)
+  {
+    return consume(entry.second);
+  }
+};
+
 class ObMySQLProxy;
+class ObOptStatMonitorManager;
 struct ObColumnStatParam;
 
 struct ColumnUsageArg
@@ -139,7 +145,7 @@ public:
                                             ObSqlString &select_sql);
 
   int check_table_writeable(bool &is_writeable);
-  int generate_opt_stat_monitoring_info_rows(observer::ObOptDmlStatMapGetter &getter);
+  int generate_opt_stat_monitoring_info_rows(ObIOptDmlStatConsumer &consumer);
   int clean_useless_dml_stat_info();
   int get_col_usage_info(const bool with_check,
                          ObIArray<StatKey> &col_stat_keys,

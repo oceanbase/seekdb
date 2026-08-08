@@ -94,7 +94,7 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("no more memory to alloc for buf");
   } else if (FALSE_IT(date_sql_mode.init(sql_mode))) {
-  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(*date,
+  } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *date,
                                             expr.args_[0]->datum_meta_.type_,
                                             expr.args_[0]->datum_meta_.scale_,
                                             tz_info,

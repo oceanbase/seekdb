@@ -172,7 +172,7 @@ int ObExprDateAdjust::calc_date_adjust(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         }
       }
       bool need_check_date = ob_is_mysql_compact_dates_type(date_type);
-      if (OB_FAIL(ob_datum_to_ob_time_with_date(*date, date_type, expr.args_[0]->datum_meta_.scale_,
+      if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_, *date, date_type, expr.args_[0]->datum_meta_.scale_,
                                             tz_info,
                                             ob_time,
                                             get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),

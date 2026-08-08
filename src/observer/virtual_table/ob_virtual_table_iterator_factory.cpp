@@ -17,8 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_virtual_table_iterator_factory.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server.h"
+#include "observer/ob_server_runtime_access.h"
 #include "observer/virtual_table/ob_show_table_status.h"
 #include "observer/virtual_table/ob_show_tables.h"
 #include "observer/virtual_table/ob_virtual_warning.h"
@@ -86,7 +87,7 @@
 #include "observer/virtual_table/ob_all_virtual_id_service.h"
 #include "observer/virtual_table/ob_all_virtual_timestamp_service.h"
 #include "rootserver/ob_local_management_service.h"
-#include "rootserver/virtual_table/ob_virtual_core_inner_table.h"
+#include "observer/virtual_table/ob_virtual_core_inner_table.h"
 #include "observer/virtual_table/ob_virtual_charset.h"
 #include "observer/virtual_table/ob_virtual_collation.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_channel.h"
@@ -370,7 +371,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
       } else if (OB_ISNULL(params.op_)
                  || OB_ISNULL(params.op_->get_eval_ctx().exec_ctx_.get_my_session())
                  || OB_ISNULL(index_schema)
-                 || OB_ISNULL(GCTX.sql_engine_)
+                 || OB_ISNULL(get_observer_sql_engine())
                  || OB_ISNULL(GCTX.schema_service_)
                  || OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -379,7 +380,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    K(ret),
                    KP(params.op_),
                    KP(index_schema),
-                   KP(GCTX.sql_engine_),
+                   KP(get_observer_sql_engine()),
                    KP(GCTX.schema_service_),
                    KP(GCTX.sql_proxy_));
       } else if (is_extended_sys_view_table(pure_tid)
@@ -704,7 +705,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
           case OB_ALL_VIRTUAL_TRANS_CTX_MGR_STAT_TID: {
             ObGVTxCtxMgrStat *gv_tx_ctx_mgr_stat = NULL;
-            transaction::ObTransService *txs = share::g_mp->trans_service();
+            transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
             if (OB_UNLIKELY(NULL == txs)) {
               SERVER_LOG(WARN, "invalid argument", KP(txs));
               ret = OB_INVALID_ARGUMENT;
@@ -736,7 +737,6 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(WARN, "fail to allocate vtable iterator", K(ret));
             } else {
               px->set_allocator(&allocator);
-              // px->set_plan_cache_manager(GCTX.sql_engine_->get_plan_cache_manager());
               vt_iter = static_cast<ObVirtualTableIterator *>(px);
             }
           } break;
@@ -977,7 +977,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObShowProcesslist *processlist_show = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObShowProcesslist, processlist_show))) {
-              processlist_show->sesession_pool(GCTX.session_mgr_);
+              processlist_show->sesession_pool(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
               vt_iter = static_cast<ObVirtualTableIterator *>(processlist_show);
             }
             break;
@@ -986,7 +986,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObAllVirtualSessionInfo *session_info = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualSessionInfo, session_info))) {
-              session_info->sesession_pool(GCTX.session_mgr_);
+              session_info->sesession_pool(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
               vt_iter = static_cast<ObVirtualTableIterator *>(session_info);
             }
             break;
@@ -1458,7 +1458,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
               SERVER_LOG(ERROR, "ObVirtual open cursor table failed", K(ret));
             } else {
               open_cursors->set_allocator(&allocator);
-              open_cursors->sesession_pool(GCTX.session_mgr_);
+              open_cursors->sesession_pool(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
               OZ (open_cursors->set_addr(addr_));
               OX (vt_iter = static_cast<ObVirtualOpenCursorTable*>(open_cursors));
             }
@@ -1802,7 +1802,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObAllVirtualSchedulerRunningJob *running_job = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObAllVirtualSchedulerRunningJob, running_job))) {
-              running_job->sesession_pool(GCTX.session_mgr_);
+              running_job->sesession_pool(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
               vt_iter = static_cast<ObVirtualTableIterator *>(running_job);
             }
             break;

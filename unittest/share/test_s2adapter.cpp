@@ -24,6 +24,7 @@
 
 namespace oceanbase {
 namespace common {
+namespace test_s2adapter {
 
 class TestS2Adapter : public ::testing::Test {
 public:
@@ -42,7 +43,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestS2Adapter);
 };
@@ -512,11 +513,6 @@ TEST_F(TestS2Adapter, collection)
   printMbr(mbr);
 }
 
+} // namespace test_s2adapter
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

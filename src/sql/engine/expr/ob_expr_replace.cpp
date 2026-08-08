@@ -247,16 +247,16 @@ int ObExprReplace::eval_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
     from_data = from->get_string();
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *text,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_data))) {
       LOG_WARN("failed to get string data", K(ret), K(expr.args_[0]->datum_meta_));   
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *from,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *from,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), from_data))) {
       LOG_WARN("failed to get string data", K(ret), K(expr.args_[1]->datum_meta_));   
     } else if (NULL == to) {
       to_data.reset();
     } else if (OB_FALSE_IT(to_data = to->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *to,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *to,
                        expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), to_data))) {
       LOG_WARN("failed to get string data", K(ret), K(expr.args_[2]->datum_meta_));   
     }

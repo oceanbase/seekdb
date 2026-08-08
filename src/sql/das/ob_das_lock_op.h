@@ -17,7 +17,6 @@
 #ifndef DEV_SRC_SQL_DAS_OB_DAS_LOCK_OP_H_
 #define DEV_SRC_SQL_DAS_OB_DAS_LOCK_OP_H_
 #include "sql/das/ob_das_task.h"
-#include "storage/access/ob_dml_param.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_dml_ctx_define.h"
 namespace oceanbase

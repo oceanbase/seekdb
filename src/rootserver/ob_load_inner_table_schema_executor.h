@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_LOAD_INNER_TABLE_SCHEMA_EXECUTOR_H_
 #define OCEANBASE_ROOTSERVER_OB_LOAD_INNER_TABLE_SCHEMA_EXECUTOR_H_
 
+#include "lib/literals/ob_literals.h"
 #include "share/ob_rpc_struct.h"
 
 namespace oceanbase

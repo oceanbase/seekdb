@@ -16,10 +16,10 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "sql/engine/expr/ob_expr_bm25.h"
-#include "share/rc/ob_module_provider.h"
-#include "sql/engine/ob_exec_context.h"
-#include "sql/das/iter/ob_das_scan_iter.h"
+#include "query/engine/expr/ob_expr_bm25.h"
+#include "query/engine/expr/ob_expr_util.h"
+#include "query/das/ob_das_iter_access.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_block_stat_iter.h"
 #include "ob_inv_idx_param_estimator.h"
 
@@ -40,7 +40,7 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
   number::ObNumber zero_num;
   zero_num.set_zero();
   tmp_result.set_number(zero_num);
-  if (OB_FAIL(share::g_mp->access_service()->scan_block_stat(doc_length_est_param_, stat_iter))) {
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->scan_block_stat(doc_length_est_param_, stat_iter))) {
     LOG_WARN("failed to scan block stat", K(ret));
   }
   sql::ObNumStackAllocator<2> tmp_alloc;
@@ -234,7 +234,7 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
       if (OB_ISNULL(est_ctx_.total_doc_cnt_iter_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null total doc cnt expr", K(ret));
-      } else if (OB_FAIL(est_ctx_.total_doc_cnt_iter_->get_next_row())) {
+      } else if (OB_FAIL(query::das_scan_next_row(est_ctx_.total_doc_cnt_iter_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("failed to get next row from total doc cnt iter", K(ret));
         } else {

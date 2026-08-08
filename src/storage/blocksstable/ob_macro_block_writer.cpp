@@ -18,7 +18,7 @@
 
 #include "ob_macro_block_writer.h"
 #include "ob_imacro_block_flush_callback.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "src/storage/blocksstable/index_block/ob_sstable_sec_meta_iterator.h"
 #include "src/storage/ddl/ob_ddl_clog.h"
 #include "share/ob_io_device_helper.h"
@@ -460,7 +460,7 @@ int ObMacroBlockWriter::ObSmallSStableMacroBlockFlusher::write_disk(
 {
   int ret = OB_SUCCESS;
   UNUSED(is_close_flush);
-  ObSharedMacroBlockMgr *shared_block_mgr = share::g_mp->shared_macro_block_mgr();
+  ObSharedMacroBlockMgr *shared_block_mgr = ::oceanbase::share::server_service<::oceanbase::blocksstable::ObSharedMacroBlockMgr>();
   const int64_t data_buf_size =
       upper_align(macro_block.get_data_size(), DIO_ALIGN_SIZE);
   if (OB_UNLIKELY(OB_ISNULL(block_write_ctx_) || block_info_.is_valid())) {

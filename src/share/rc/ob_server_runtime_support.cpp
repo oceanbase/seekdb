@@ -15,7 +15,7 @@
  */
 
 #include "share/rc/ob_server_runtime_support.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 
 namespace oceanbase
@@ -25,7 +25,7 @@ namespace common
 
 ObRbMemMgr *__attribute__((used)) get_rb_mem_mgr()
 {
-  return ::oceanbase::share::g_mp->rb_mem_mgr();
+  return ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>();
 }
 
 } // namespace common

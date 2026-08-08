@@ -20,10 +20,10 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_print_utils.h" // Print*
 #include "share/scn.h"                        // SCN
-#include "lsn.h"                        // LSN
-#include "palf_base_info.h"             // LogInfo
-#include "palf_options.h"               // AccessMode
-#include "log_define.h"
+#include "share/log/palf/lsn.h"                        // LSN
+#include "share/log/palf/palf_base_info.h"             // LogInfo
+#include "share/log/palf/palf_options.h"               // AccessMode
+#include "share/log/palf/log_define.h"
 
 namespace oceanbase
 {

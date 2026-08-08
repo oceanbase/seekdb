@@ -19,7 +19,7 @@
 
 #include <cstdint>
 #include "share/schema/ob_schema_struct.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 namespace oceanbase {
 namespace sql {
 struct ObSqlCtx;

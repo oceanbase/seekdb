@@ -82,7 +82,8 @@ int ObMPStmtClose::process()
           LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
         }
       }
-      if (OB_FAIL(session->close_ps_stmt(stmt_id_))) {
+      if (OB_FAIL(session->close_ps_stmt(
+              get_observer_sql_engine()->get_ps_cache(), stmt_id_))) {
         // overwrite ret, low priority, will be overridden
         LOG_WARN("fail to close ps stmt", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }

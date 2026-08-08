@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX COMMON
 
-#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include "share/ob_debug_sync.h"
+#include "share/ob_i_debug_sync_broadcaster.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/container/ob_array.h"
 #include "share/config/ob_server_config.h"
@@ -26,8 +27,31 @@ namespace oceanbase
 {
 namespace common
 {
-using testing::_;
-using testing::Return;
+class RecordingDebugSyncBroadcaster final
+    : public ObIDebugSyncBroadcaster
+{
+public:
+  RecordingDebugSyncBroadcaster()
+      : call_count_(0), reset_(false), clear_(false), action_()
+  {}
+
+  int broadcast_debug_sync_action(
+      const bool reset,
+      const bool clear,
+      const ObDebugSyncAction &action) override
+  {
+    ++call_count_;
+    reset_ = reset;
+    clear_ = clear;
+    action_ = action;
+    return OB_SUCCESS;
+  }
+
+  int64_t call_count_;
+  bool reset_;
+  bool clear_;
+  ObDebugSyncAction action_;
+};
 
 TEST(common, ObDebugSyncAction)
 {
@@ -68,6 +92,38 @@ TEST(common, ObDebugSyncAction)
   ASSERT_EQ(a.signal_, b.signal_);
   ASSERT_EQ(a.wait_, b.wait_);
   ASSERT_EQ(a.no_clear_, b.no_clear_);
+}
+
+TEST(common, ObDebugSyncBroadcasterSeam)
+{
+  ObMalloc allocator;
+  ObDSSessionActions session_actions;
+  RecordingDebugSyncBroadcaster broadcaster;
+  ASSERT_EQ(OB_SUCCESS, session_actions.init(1024, allocator));
+
+  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync(
+      ObString::make_string("NOW CLEAR"),
+      false,
+      session_actions,
+      nullptr));
+  ASSERT_EQ(0, broadcaster.call_count_);
+
+  ASSERT_EQ(OB_SUCCESS, GDS.add_debug_sync(
+      ObString::make_string("NOW SIGNAL ready"),
+      true,
+      session_actions,
+      &broadcaster));
+  ASSERT_EQ(1, broadcaster.call_count_);
+  ASSERT_FALSE(broadcaster.reset_);
+  ASSERT_FALSE(broadcaster.clear_);
+  ASSERT_EQ(NOW, broadcaster.action_.sync_point_);
+  ASSERT_EQ(0, broadcaster.action_.signal_.str().compare("ready"));
+
+  ASSERT_EQ(OB_NOT_INIT, GDS.add_debug_sync(
+      ObString::make_string("NOW SIGNAL not-composed"),
+      true,
+      session_actions,
+      nullptr));
 }
 
 TEST(common, ObDSActionArray)
@@ -315,12 +371,4 @@ TEST(debug_sync, debug_sync_action_overflow)
 }
 
 }
-}
-
-int main(int argc, char **argv)
-{
-  oceanbase::common::ObLogger::get_logger().set_log_level("INFO");
-  OB_LOGGER.set_log_level("INFO");
-  ::testing::InitGoogleTest(&argc,argv);
-  return RUN_ALL_TESTS();
 }

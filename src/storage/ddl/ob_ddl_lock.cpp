@@ -26,7 +26,7 @@
 
 using namespace oceanbase::transaction::tablelock;
 using oceanbase::share::schema::ObTableSchema;
-using oceanbase::observer::ObInnerSQLConnection;
+using oceanbase::common::sqlclient::ObISQLConnection;
 
 namespace oceanbase
 {
@@ -52,7 +52,7 @@ int ObDDLLock::lock_for_add_drop_index_in_trans(
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock for rebuild hidden table index", K(ret));
@@ -94,7 +94,7 @@ int ObDDLLock::lock_for_add_drop_index(
   const uint64_t index_table_id = index_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   if (OB_UNLIKELY(data_table_schema.is_user_hidden_table() || data_table_id != index_schema.get_data_table_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock for rebuild hidden table index", K(ret), K(data_table_id), K(index_table_id), K(index_schema.get_data_table_id()));
@@ -177,7 +177,7 @@ int ObDDLLock::lock_for_rebuild_index(
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock for rebuild hidden table index", K(ret));
@@ -544,8 +544,8 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
             arg.op_type_ = ObTableLockOpType::OUT_TRANS_LOCK;
             arg.owner_id_ = lock_owner;
             arg.timeout_us_ = timeout_us;
-            ObInnerSQLConnection *iconn = nullptr;
-            if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+            ObISQLConnection *iconn = nullptr;
+            if (OB_ISNULL(iconn = trans.get_connection())) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("invalid conn", K(ret));
             } else if (OB_FAIL(append(arg.tablet_ids_, all_tablet_ids))) {
@@ -596,11 +596,11 @@ int ObDDLLock::check_has_dependent_task(const int64_t current_task_id,
       share::OB_ALL_DDL_TASK_STATUS_TNAME, current_task_id, share::ObDDLType::DDL_FORK_TABLE, table_id, table_id))) {
     LOG_WARN("assign sql string failed", K(ret));
   } else {
-    ObInnerSQLConnection *iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection());
+    ObISQLConnection *iconn = trans.get_connection();
     if (OB_ISNULL(iconn)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid connection", K(ret));
-    } else if (OB_FAIL(iconn->execute_read(sql_string.ptr(), res))) {
+    } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(iconn, sql_string, res))) {
       LOG_WARN("query ddl task record failed", K(ret), K(sql_string));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -762,10 +762,10 @@ int ObDDLLock::lock_table_in_trans(
   
   const uint64_t table_id = table_schema.get_table_id();
   const int64_t timeout_us = DEFAULT_TIMEOUT;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_id));
-  } else if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  } else if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, timeout_us, iconn))) {
@@ -782,8 +782,8 @@ int ObDDLLock::lock_table_lock_in_trans(const uint64_t table_id,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (tablet_ids.empty()) {
@@ -808,8 +808,8 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const ObTableLockOpType op_type = is_lock ? ObTableLockOpType::OUT_TRANS_LOCK : ObTableLockOpType::OUT_TRANS_UNLOCK;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else {
@@ -853,8 +853,8 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const ObTableLockOpType op_type = is_lock ? ObTableLockOpType::OUT_TRANS_LOCK : ObTableLockOpType::OUT_TRANS_UNLOCK;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_UNLIKELY(tablet_ids.empty()
@@ -906,9 +906,9 @@ int ObDDLLock::replace_tablet_lock(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   const ObTableLockOpType op_type = ObTableLockOpType::OUT_TRANS_UNLOCK;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   ObUnLockAloneTabletRequest unlock_arg;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || tablet_ids.count() < 1)) {
@@ -962,7 +962,7 @@ int ObOnlineDDLLock::lock_table_in_trans(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   ObLockObjRequest arg;
   arg.obj_type_ = ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLE;
   arg.obj_id_ = table_id;
@@ -970,7 +970,7 @@ int ObOnlineDDLLock::lock_table_in_trans(
   arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
   arg.lock_mode_ = lock_mode;
   arg.owner_id_.set_default();
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
@@ -986,8 +986,8 @@ int ObOnlineDDLLock::lock_tablets_in_trans(const ObIArray<ObTabletID> &tablet_id
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else {
@@ -1019,7 +1019,7 @@ int ObOnlineDDLLock::lock_table(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   ObLockObjRequest arg;
   arg.obj_type_ = ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLE;
   arg.obj_id_ = table_id;
@@ -1027,7 +1027,7 @@ int ObOnlineDDLLock::lock_table(
   arg.op_type_ = ObTableLockOpType::OUT_TRANS_LOCK;
   arg.lock_mode_ = lock_mode;
   arg.owner_id_ = lock_owner;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
@@ -1045,8 +1045,8 @@ int ObOnlineDDLLock::lock_tablets(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else {
@@ -1079,7 +1079,7 @@ int ObOnlineDDLLock::unlock_table(
     bool &some_lock_not_exist)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
+  ObISQLConnection *iconn = nullptr;
   ObUnLockObjRequest arg;
   arg.obj_type_ = ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLE;
   arg.obj_id_ = table_id;
@@ -1087,7 +1087,7 @@ int ObOnlineDDLLock::unlock_table(
   arg.op_type_ = ObTableLockOpType::OUT_TRANS_UNLOCK;
   arg.lock_mode_ = lock_mode;
   arg.owner_id_ = lock_owner;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::unlock_obj(arg, iconn))) {
@@ -1111,8 +1111,8 @@ int ObOnlineDDLLock::unlock_tablets(const ObIArray<ObTabletID> &tablet_ids,
     bool &some_lock_not_exist)
 {
   int ret = OB_SUCCESS;
-  ObInnerSQLConnection *iconn = nullptr;
-  if (OB_ISNULL(iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection()))) {
+  ObISQLConnection *iconn = nullptr;
+  if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else {

@@ -1,0 +1,182 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SHARE_VECTOR_TYPES_TRAIT_H_
+#define OCEANBASE_SHARE_VECTOR_TYPES_TRAIT_H_
+
+#include "common/object/ob_obj_type.h"
+#include "common/wide_integer/ob_wide_integer.h"
+
+namespace oceanbase
+{
+namespace common
+{
+enum VectorFormat: uint8_t
+{
+  VEC_INVALID = 0,
+  VEC_FIXED,
+  VEC_DISCRETE,
+  VEC_CONTINUOUS,
+  VEC_UNIFORM,
+  VEC_UNIFORM_CONST,
+  VEC_MAX_FORMAT
+};
+
+inline bool is_uniform_format(VectorFormat format) {
+  return VEC_UNIFORM_CONST == format || VEC_UNIFORM == format;
+}
+
+inline bool is_discrete_format(VectorFormat format) {
+  return VEC_DISCRETE == format;
+}
+
+inline bool is_valid_format(VectorFormat format) {
+  return format > VEC_INVALID && format < VEC_MAX_FORMAT;
+}
+
+
+namespace number {
+  class ObNumber;
+}
+template<typename ValueType>
+class ObFixedLengthFormat;
+class ObContinuousFormat;
+class ObDiscreteFormat;
+template<bool IS_CONST>
+class ObUniformFormat;
+class ObString;
+class ObOTimestampData;
+class ObOTimestampTinyData;
+class ObVectorBase;
+class ObObj;
+
+template <VecValueTypeClass vec_tc>
+struct RTTypeTraits {};
+
+#define DEFINE_VECTOR_TC_TRAITS(vec_tc, is_fixed, c_type) \
+template <> \
+struct RTTypeTraits<vec_tc> { \
+  static const bool fixed = is_fixed; \
+  using CType = c_type; \
+};
+
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_NULL, true, char[0]);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_INTEGER, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_UINTEGER, true, uint64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_FLOAT, true, float);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DOUBLE, true, double);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_FIXED_DOUBLE, true, double);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_NUMBER, false, number::ObNumber);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DATETIME, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DATE, true, int32_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_TIME, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_YEAR, true, uint8_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_EXTEND, false, ObObj);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_UNKNOWN, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_STRING, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_BIT, true, uint64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_ENUM_SET, true, uint64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_ENUM_SET_INNER, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_TIMESTAMP_TZ, true, ObOTimestampData);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_TIMESTAMP_TINY, true, ObOTimestampTinyData);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_RAW, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_INTERVAL_YM, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_INTERVAL_DS, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_ROWID, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_LOB, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_JSON, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_GEO, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_UDT, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DEC_INT32, true, int32_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DEC_INT64, true, int64_t);
+
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DEC_INT128, true, int128_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DEC_INT256, true, int256_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_DEC_INT512, true, int512_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_COLLECTION, false, ObString);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_MYSQL_DATETIME, true, int64_t);
+DEFINE_VECTOR_TC_TRAITS(VEC_TC_MYSQL_DATE, true, int32_t);
+
+#undef DEFINE_VECTOR_TC_TRAITS
+
+template <VecValueTypeClass value_tc>
+using RTCType = typename RTTypeTraits<value_tc>::CType;
+
+constexpr bool is_fixed_length_vec(const VecValueTypeClass tc)
+{
+  return tc == VEC_TC_INTEGER
+      || tc == VEC_TC_UINTEGER
+      || tc == VEC_TC_FLOAT
+      || tc == VEC_TC_DOUBLE
+      || tc == VEC_TC_FIXED_DOUBLE
+      || tc == VEC_TC_DATETIME
+      || tc == VEC_TC_DATE
+      || tc == VEC_TC_TIME
+      || tc == VEC_TC_YEAR
+      || tc == VEC_TC_UNKNOWN
+      || tc == VEC_TC_BIT
+      || tc == VEC_TC_ENUM_SET
+      || tc == VEC_TC_TIMESTAMP_TZ
+      || tc == VEC_TC_TIMESTAMP_TINY
+      || tc == VEC_TC_INTERVAL_YM
+      || tc == VEC_TC_INTERVAL_DS
+      || tc == VEC_TC_DEC_INT32
+      || tc == VEC_TC_DEC_INT64
+      || tc == VEC_TC_DEC_INT128
+      || tc == VEC_TC_DEC_INT256
+      || tc == VEC_TC_DEC_INT512
+      || tc == VEC_TC_MYSQL_DATETIME
+      || tc == VEC_TC_MYSQL_DATE;
+}
+
+//********************* def RTVectorTraits ******************
+template <VectorFormat format, VecValueTypeClass vec_tc>
+struct RTVectorTraits {
+  using VectorType = ObVectorBase;
+};
+
+template <VecValueTypeClass vec_tc>
+struct RTVectorTraits<VEC_UNIFORM, vec_tc> {
+  using VectorType = ObUniformFormat<false>;
+};
+
+template <VecValueTypeClass vec_tc>
+struct RTVectorTraits<VEC_UNIFORM_CONST, vec_tc> {
+  using VectorType = ObUniformFormat<true>;
+};
+
+template <VecValueTypeClass vec_tc>
+struct RTVectorTraits<VEC_FIXED, vec_tc> {
+  using VectorType = ObFixedLengthFormat<RTCType<vec_tc>>;
+};
+
+template <VecValueTypeClass vec_tc>
+struct RTVectorTraits<VEC_CONTINUOUS, vec_tc> {
+  using VectorType = ObContinuousFormat;
+};
+
+template <VecValueTypeClass vec_tc>
+struct RTVectorTraits<VEC_DISCRETE, vec_tc> {
+  using VectorType = ObDiscreteFormat;
+};
+
+// runtime vector type
+template <VectorFormat format, VecValueTypeClass value_tc>
+using RTVectorType = typename RTVectorTraits<format, value_tc>::VectorType;
+//********************* def RTVectorTraits end ******************
+}
+}
+#endif // OCEANBASE_SHARE_VECTOR_TYPES_TRAIT_H_

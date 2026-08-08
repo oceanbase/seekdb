@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_lob_locator.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 
@@ -433,7 +433,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
         if (is_access_index_) {
           ObLS *tenant_ls = nullptr;
           ObTabletHandle tablet_handle;
-          if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
             LOG_WARN("failed to get log stream", K(ret));
           } else if (OB_FAIL(tenant_ls->get_tablet(target_tablet_id, tablet_handle))) {
             LOG_WARN("fail to get tablet handle", K(ret), K(target_tablet_id));
@@ -481,7 +481,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
           } 
         } else if ((!is_src_inrow) && is_dst_inrow) { //src outrow, load to inrow result
           OB_ASSERT(payload.length() >= sizeof(ObLobCommon));
-          storage::ObLobManager* lob_mngr = share::g_mp->lob_manager();
+          storage::ObLobManager* lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
           ObString disk_loc_str;
           if (OB_FAIL(locator.get_disk_locator(disk_loc_str))) {
             STORAGE_LOG(WARN, "Lob: get disk locator failed", K(ret), K(column_id));

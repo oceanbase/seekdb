@@ -1,7 +1,6 @@
-#!/bin/bash
-#
+#!/usr/bin/env bash
 
-TOPDIR=`readlink -f \`dirname $0\``
-CTEST_COMMAND=${TOPDIR}/../../deps/3rd/usr/local/oceanbase/devtools/bin/ctest
+set -euo pipefail
 
-${CTEST_COMMAND} "$@"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec "${ROOT}/bazel.py" test //unittest/... "$@"

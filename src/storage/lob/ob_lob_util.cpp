@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/tx/ob_trans_service.h"
 
 namespace oceanbase
@@ -58,7 +58,7 @@ int ObInsertLobColumnHelper::start_trans(const bool is_for_read,
   tx_param.isolation_ = transaction::ObTxIsolationLevel::RC;
   tx_param.timeout_us_ = std::max(static_cast<int64_t>(0), timeout_ts - ObTimeUtility::current_time());
 
-  ObTransService *txs = share::g_mp->trans_service();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   if (OB_FAIL(txs->acquire_tx(tx_desc))) {
     LOG_WARN("fail to acquire tx", K(ret));
   } else if (OB_FAIL(txs->start_tx(*tx_desc, tx_param))) {
@@ -74,7 +74,7 @@ int ObInsertLobColumnHelper::end_trans(transaction::ObTxDesc *tx_desc,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   transaction::ObTxExecResult trans_result;
-  ObTransService *txs = share::g_mp->trans_service();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
 
   if (OB_ISNULL(tx_desc)) {
     ret = OB_INVALID_ARGUMENT;
@@ -112,8 +112,8 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
   int tmp_ret = OB_SUCCESS;
 
   ObTxDesc *tx_desc = nullptr;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
-  ObTransService *txs = share::g_mp->trans_service();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
@@ -204,7 +204,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
 
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get lob manager handle.", K(ret));
@@ -244,7 +244,7 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         }
       }
     } else {
-      ObTransService *txs = share::g_mp->trans_service();
+      ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
       ObLobAccessParam lob_param;
       lob_param.tx_desc_ = tx_desc;
       // lob_param.snapshot_ = snapshot;
@@ -287,8 +287,8 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
   int tmp_ret = OB_SUCCESS;
 
   ObTxDesc *tx_desc = nullptr;
-  ObLobManager *lob_mngr = share::g_mp->lob_manager();
-  ObTransService *txs = share::g_mp->trans_service();
+  ObLobManager *lob_mngr = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
+  ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   ObTxReadSnapshot snapshot;
   if (OB_ISNULL(lob_mngr)) {
     ret = OB_ERR_UNEXPECTED;

@@ -270,7 +270,7 @@ int ObExprFromUnixTime::eval_fromtime_normal(const ObExpr &expr,
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, BUF_LEN))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("no more memory to alloc for buf", K(ret));
-      } else if (OB_FAIL(ob_datum_to_ob_time_with_date(
+      } else if (OB_FAIL(ob_datum_to_ob_time_with_date(ctx.exec_ctx_,
                            expr_datum, ObTimestampType, NUMBER_SCALE_UNKNOWN_YET,
                            tz_info,
                            ob_time,

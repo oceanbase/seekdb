@@ -1,0 +1,75 @@
+#rs
+#msy
+#验证设置restore相关的设置
+#验证再次设置最大保护时，需要保证备库上确实是最大性能状态，保证备库汇报上来的level一定是准确的
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+
+let $case_index = 2;
+source include/create_tenant_1.inc;
+
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#设置restore为强同步
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#设置restore为强同步
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ob2.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PROTECTION, 100;
+#停掉备库的心跳，设置最大性能
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_STANDBY_HEARTBEAT wait_for continue_signal';
+sleep 4;
+connection conn1;
+#设置很小的时间，就不会通知备库了
+set ob_query_timeout = 2000000;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PERFORMANCE;
+set ob_query_timeout = 30000000;
+--error 4179
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PERFORMANCE, 100;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 100;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO PRIMARY, 100;
+ob2.mysql alter system commit to switchover to primary;
+
+ob2.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 100;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO PRIMARY, 100;
+ob1.mysql alter system commit to switchover to primary;
+let $case_index = 3;
+source include/create_tenant_1.inc;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 100;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO PRIMARY, 100;
+ob2.mysql alter system commit to switchover to primary;
+
+ob2.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 100;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO PRIMARY, 100;
+ob1.mysql alter system commit to switchover to primary;
+

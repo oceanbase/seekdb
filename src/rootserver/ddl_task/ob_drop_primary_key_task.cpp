@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_drop_primary_key_task.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -113,7 +114,7 @@ int ObDropPrimaryKeyTask::process()
     }
     if (OB_FAIL(ret)) {
       add_event_info("drop primary key task process fail");
-      LOG_INFO("drop primary key task process fail", "ddl_event_info", ObDDLEventInfo());
+      LOG_INFO("drop primary key task process fail", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
     }
   }
   return ret;

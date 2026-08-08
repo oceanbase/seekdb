@@ -18,14 +18,13 @@
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "logservice/ob_log_service.h" // for ObLogService
-#include "observer/omt/ob_server_runtime_controller.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
-#include "share/rc/ob_module_provider.h"
 #include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "ob_ddl_service_launcher.h"
 #include "share/ob_structured_event_logger.h" // for SERVER_EVENT_ADD
 #include "share/ob_server_struct.h"     // for GCTX
 #include "share/rc/ob_server_runtime.h"    // for SERVER_ID
 #include "rootserver/ob_local_management_service.h" // for ObLocalManagementService
+#include "query/command/ob_local_command_service.h"
 
 namespace oceanbase
 {
@@ -123,12 +122,12 @@ int ObDDLServiceLauncher::init_sequence_id_(const int64_t proposal_id)
   if (OB_UNLIKELY(OB_INVALID_ID == proposal_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("proposal id not valid", KR(ret), K(proposal_id));
-  } else if (OB_ISNULL(GCTX.local_management_service_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
   } else {
     ObRefreshSchemaInfo schema_info;
-    ObSchemaService *schema_service = GCTX.local_management_service_->get_schema_service().get_schema_service();
+    ObSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(schema_service));
@@ -156,7 +155,7 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_()
   } else if (OB_FAIL(init_sequence_id_(proposal_id))) {
     LOG_WARN("fail to init sequence id", KR(ret), K(proposal_id));
   // Reset the local DDL epoch so the next DDL transaction persists a fresh epoch.
-  } else if (OB_FAIL(GCTX.local_management_service_->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
     LOG_WARN("fail to remove ddl epoch", KR(ret));
   } else {
     ATOMIC_SET(&is_ddl_service_started_, true);

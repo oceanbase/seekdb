@@ -1,0 +1,29 @@
+# owner: jingyan.kfy
+# owner group: trans
+# description: 
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=4);
+ob1.reboot;
+
+#在zone1上建立连接
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+use test;
+
+create table test(a char(20) primary key,b char(20),c char(30),d char(40), index abc(b));
+insert into test values('abc ','ad ','abb ','cdd ');
+insert into test values('bc ','d ','bb ','dd ');
+insert into test values('c  ','d','b ','d ');
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+set sql_mode=PAD_CHAR_TO_FULL_LENGTH;
+update test set c='abcd   ';
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;

@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX TRANS
 #include "ob_row_conflict_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/access/ob_rows_info.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
@@ -268,7 +268,7 @@ int ObRowConflictHandler::post_row_read_conflict(ObMvccAccessCtx &acc_ctx,
     ret = OB_ERR_EXCLUSIVE_LOCK_CONFLICT;
     TRANS_LOG(WARN, "exclusive lock conflict", K(ret), K(row_key),
               K(conflict_tx_id), K(acc_ctx), K(lock_wait_expire_ts));
-  } else if (OB_ISNULL(lock_wait_mgr = share::server_module<ObLockWaitMgr*>())) {
+  } else if (OB_ISNULL(lock_wait_mgr = share::server_service<ObLockWaitMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "can not get server lock_wait_mgr");
   } else {

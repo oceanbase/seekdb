@@ -24,8 +24,6 @@ namespace common
 {
 namespace decint_scale
 {
-WarnFn g_warn_from_exec_ctx = nullptr;
-
 static inline bool decimal_int_truncated_check(const ObDecimalInt *decint, const int32_t int_bytes,
                                        const unsigned scale)
 {
@@ -162,7 +160,7 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
                                          const ObScale in_scale, const ObScale out_scale,
                                          const ObPrecision out_prec, const ObCastMode cast_mode,
                                          ObDecimalIntBuilder &val,
-                     const void *warn_payload, WarnFn warn_fn)
+                                         const ObIObjCastRuntime *runtime)
 {
   int ret = OB_SUCCESS;
   ObDecimalIntBuilder max_v, min_v;
@@ -197,8 +195,9 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     if (OB_SUCC(ret)) {
       if (in_scale > out_scale &&
             decimal_int_truncated_check(decint, int_bytes, in_scale - out_scale)) {
-        if (nullptr != warn_fn) {
-          warn_fn(warn_payload, OB_ERR_DATA_TRUNCATED, ObString(""), ObString(""), cast_mode);
+        if (nullptr != runtime) {
+          runtime->report_warning(
+              OB_ERR_DATA_TRUNCATED, ObString(""), ObString(""), cast_mode);
         }
       }
     }

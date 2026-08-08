@@ -1,0 +1,45 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql_root alter system set enable_auto_leader_switch = True;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+create database db primary_zone = 'z1';
+create table db.t1(c1 int primary key auto_increment, c2 int);
+ob1.z1.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+alter database db primary_zone = 'z2';
+ob1.z2.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+alter database db primary_zone = 'z3';
+ob1.z3.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+2000001	0
+2000002	1
+alter database db primary_zone = 'z1';
+ob1.z1.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+2000001	0
+2000002	1
+3000001	0
+3000002	1

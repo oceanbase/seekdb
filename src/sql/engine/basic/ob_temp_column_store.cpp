@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_temp_column_store.h"
+#include "query/engine/basic/ob_spill_batch_spool.h"
 #include "sql/engine/vector/ob_continuous_format.h"
 #include "sql/engine/vector/ob_fixed_length_format.h"
 #include "sql/engine/vector/ob_uniform_format.h"
 #include "sql/engine/vector/type_traits.h"
-#include "storage/ddl/ob_direct_load_struct.h"
 
 namespace oceanbase
 {
@@ -311,7 +311,7 @@ int ObTempColumnStore::init(const IVectorPtrs &vectors,
   return ret;
 }
 
-int ObTempColumnStore::init(const common::ObIArray<storage::ObColumnSchemaItem> &col_array,
+int ObTempColumnStore::init(const common::ObIArray<query::ObSpillColumnDesc> &col_array,
                             const int64_t max_batch_size,
                             const lib::ObMemAttr &mem_attr,
                             const int64_t mem_limit,
@@ -324,12 +324,12 @@ int ObTempColumnStore::init(const common::ObIArray<storage::ObColumnSchemaItem> 
   if (OB_FAIL(init_vectors(col_array, arena, vectors))) {
     LOG_WARN("init vectors failed", K(ret));
   } else if (OB_FAIL(init(vectors, max_batch_size, mem_attr, mem_limit, enable_dump, compressor_type))) {
-    LOG_WARN("init with vectors failed", K(ret), K(col_array));
+    LOG_WARN("init with vectors failed", K(ret), "column_count", col_array.count());
   }
   return ret;
 }
 
-int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_array,
+int ObTempColumnStore::init_vectors(const ObIArray<query::ObSpillColumnDesc> &col_array,
                                     ObIAllocator &allocator,
                                     IVectorPtrs &vectors)
 {
@@ -342,10 +342,9 @@ int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_arra
     LOG_WARN("fail to prepare allocate vectors", K(ret), K(col_array.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_array.count(); ++i) {
-      const ObColumnSchemaItem &column_schema = col_array.at(i);
-      VecValueTypeClass value_tc = get_vec_value_tc(column_schema.col_type_.get_type(),
-                                                    column_schema.col_type_.get_scale(),
-                                                    column_schema.col_accuracy_.get_precision());
+      const query::ObSpillColumnDesc &column = col_array.at(i);
+      VecValueTypeClass value_tc = get_vec_value_tc(
+          column.type_, column.scale_, column.precision_);
       const bool is_fixed = is_fixed_length_vec(value_tc);
       ObIVector *vector = nullptr;
       if (is_fixed) { // fixed format
@@ -382,7 +381,7 @@ int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_arra
         #undef FIXED_VECTOR_INIT_SWITCH
           default:
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid fixed vector value type class", K(ret), K(i), K(column_schema), K(value_tc));
+            LOG_WARN("invalid fixed vector value type class", K(ret), K(i), K(value_tc));
             break;
         }
       } else { // continuous format
@@ -409,7 +408,7 @@ int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_arra
         #undef CONTINUOUS_VECTOR_INIT_SWITCH
           default:
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid continuous vector value type class", K(ret), K(i), K(column_schema), K(value_tc));
+            LOG_WARN("invalid continuous vector value type class", K(ret), K(i), K(value_tc));
             break;
         }
       }

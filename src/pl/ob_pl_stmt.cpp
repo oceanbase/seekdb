@@ -1418,7 +1418,7 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
           }
         }
         if (OB_SUCC(ret) && OB_INVALID_INDEX == var_idx) {
-          ObPLPackageManager &package_manager = session_info.get_pl_engine()->get_package_manager();
+          ObPLPackageManager &package_manager = resolve_ctx_.params_.pl_engine_->get_package_manager();
           const ObPLVar *var = NULL;
           const ObUserDefinedType *user_type = NULL;
           if (OB_FAIL(package_manager.get_package_var(resolve_ctx_, parent_id, name, var, var_idx))) {
@@ -1578,7 +1578,7 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
         }
       }
       if (OB_SUCC(ret)) {
-        ObPLPackageManager &package_manager = resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
+        ObPLPackageManager &package_manager = resolve_ctx_.params_.pl_engine_->get_package_manager();
         uint64_t package_id = package_info->get_package_id();
         const ObUserDefinedType *package_user_type = NULL;
         ObPLDataType *copy_pl_type = NULL;
@@ -2638,16 +2638,16 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
     // package cursor
     CK (OB_NOT_NULL(ctx.session_info_));
     CK (OB_NOT_NULL(ctx.secondary_namespace_));
-    CK (OB_NOT_NULL(ctx.session_info_->get_pl_engine()));
     CK (OB_NOT_NULL(ctx.secondary_namespace_->get_external_ns()));
     if (OB_SUCC(ret)) {
       pl::ObPLPackageGuard package_guard{};
       const pl::ObPLResolveCtx &resolve_ctx = ctx.secondary_namespace_->get_external_ns()
                                                 ->get_resolve_ctx();
+      CK (OB_NOT_NULL(resolve_ctx.params_.pl_engine_));
       
       const ObPackageInfo *package_info = NULL;
-      ObPLPackageManager &package_manager =
-        ctx.session_info_->get_pl_engine()->get_package_manager();
+      ObPLPackageManager *package_manager = NULL;
+      OX (package_manager = &resolve_ctx.params_.pl_engine_->get_package_manager());
       ObString db_name =
         database_name.empty() ? ctx.session_info_->get_database_name() : database_name;
       uint64_t database_id = OB_INVALID_ID;
@@ -2669,7 +2669,7 @@ int ObPLBlockNS::get_cursor_by_name(const ObExprResolveContext &ctx,
                               db_name.length(), db_name.ptr(),
                               package_name.length(), package_name.ptr());
       }
-      OZ (package_manager.get_package_cursor(
+      OZ (package_manager->get_package_cursor(
             resolve_ctx, package_info->get_package_id(), cursor_name, cursor, idx));
     }
   }
@@ -2788,7 +2788,8 @@ int ObPLBlockNS::get_package_var(const ObPLResolveCtx &resolve_ctx,
     CK (OB_NOT_NULL(package_spec_ns->get_symbol_table()));
     CK (OB_NOT_NULL(var = package_spec_ns->get_symbol_table()->get_symbol(var_idx)));
   } else { // Step4: try external package.
-    OZ (resolve_ctx.session_info_.get_pl_engine()->get_package_manager().get_package_var(
+    CK (OB_NOT_NULL(resolve_ctx.params_.pl_engine_));
+    OZ (resolve_ctx.params_.pl_engine_->get_package_manager().get_package_var(
             resolve_ctx, package_id, var_idx, var));
   }
   return ret;
@@ -3040,7 +3041,7 @@ do {  \
       ObPLExternalNS *extern_ns = const_cast<ObPLExternalNS *>(root_ns->get_external_ns());
       if (OB_NOT_NULL(extern_ns)) {
         const ObPLResolveCtx &ctx = extern_ns->get_resolve_ctx();
-        // ret = ctx.session_info_.get_pl_engine()->get_package_manager().get_package_var(
+        // ret = ctx.params_.pl_engine_->get_package_manager().get_package_var(
         //   ctx, pkg_id, var_idx, var);
         ret = ns.get_package_var(ctx, pkg_id, var_idx, var);
         if (OB_SUCC(ret) && OB_NOT_NULL(var)) {

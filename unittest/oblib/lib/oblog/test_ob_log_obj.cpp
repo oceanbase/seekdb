@@ -1,0 +1,82 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include  <gtest/gtest.h>
+#include "common/ob_range.h"
+using namespace std;
+namespace oceanbase
+{
+namespace common
+{
+  enum ObLogTestLevel
+  {
+    first = 0,
+    second = 1,
+    third = 2,
+  };
+class ObLogTest
+{
+  public:
+    ObLogTest():num_(10),name_("hello"),lever_(first) {}
+    virtual ~ObLogTest() {};
+    int64_t num_;
+    char name_[100];
+    ObLogTestLevel lever_;
+
+};
+TEST(ObLogPrintObj,basic_test )
+{
+  int ret = OB_SUCCESS;
+  ObLogTest log_test;
+  char buf[100];
+  int64_t len = 100;
+  int64_t pos = 0;
+  ret = logdata_print_obj(buf, len, pos, &log_test);
+  ASSERT_EQ(OB_SUCCESS, ret);
+  // Pointer format (%p) length varies across platforms:
+  // - Linux typically prints "0x" + 12 hex digits = 14 chars
+  // - macOS may print shorter addresses without leading zeros
+  // Just verify that something was printed (pos > 0) and it looks like a pointer
+  ASSERT_GT(pos, 0);
+  ASSERT_TRUE(buf[0] == '0' && buf[1] == 'x');  // Should start with "0x"
+  int64_t ptr_len = pos;  // Save the pointer length for later adjustments
+  pos =0 ;
+  ret =logdata_print_obj(buf, len,pos,log_test.name_);
+  ASSERT_EQ(7,pos);
+  ASSERT_STREQ(buf, "\"hello\"");
+  ObLogTest *tmp_test=NULL;
+  ret =logdata_print_obj(buf, len,pos,tmp_test);
+  ASSERT_EQ(11,pos);
+  ASSERT_STREQ(buf, "\"hello\"NULL");
+  ObVersion version;
+  ret = logdata_print_obj(buf, len,  pos,version);
+  ASSERT_EQ(18,pos);
+  ASSERT_STREQ(buf, "\"hello\"NULL\"0-0-0\"");
+  ObVersion *version1 = new ObVersion();
+  ret = logdata_print_obj(buf, len,  pos,version1);
+  ASSERT_EQ(25,pos);
+  ASSERT_STREQ(buf, "\"hello\"NULL\"0-0-0\"\"0-0-0\"");
+  ObVersion *version2 = NULL;
+  ret = logdata_print_obj(buf, len,  pos,version2);
+  ASSERT_EQ(29,pos);
+  ASSERT_STREQ(buf, "\"hello\"NULL\"0-0-0\"\"0-0-0\"NULL");
+  // TODO: use KVV, KVV(version2)
+  // ret = logdata_print_obj(buf, len,  pos, *version2);
+  // ASSERT_EQ(33,pos);
+  // ASSERT_STREQ(buf, "\"hello\"NULL\"0-0-0\"\"0-0-0\"NULLNULL");
+}
+}
+}

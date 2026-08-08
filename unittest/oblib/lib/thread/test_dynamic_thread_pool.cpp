@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "lib/thread/ob_dynamic_thread_pool.h"
+#include <gtest/gtest.h>
+#include <malloc.h>
+
+using namespace oceanbase::common;
+class TestObDynamicThreadPool: public ::testing::Test
+{
+public:
+  TestObDynamicThreadPool() {}
+  virtual ~TestObDynamicThreadPool(){}
+  virtual void SetUp()
+  {
+  }
+  virtual void TearDown()
+  {
+  }
+
+  static void SetUpTestCase()
+  {
+  }
+
+  static void TearDownTestCase()
+  {
+  }
+private:
+  // disallow copy
+  DISALLOW_COPY_AND_ASSIGN(TestObDynamicThreadPool);
+protected:
+  // function members
+protected:
+};
+
+class SimpleTask: public ObDynamicThreadTask
+{
+public:
+  int process(const bool &is_stop)
+  {
+    UNUSED(is_stop);
+    ATOMIC_INC(&count_);
+    return OB_SUCCESS;
+  }
+  static int64_t count_;
+};
+
+int64_t SimpleTask::count_ = 0;
+
+
+TEST_F(TestObDynamicThreadPool, normal)
+{
+  ObDynamicThreadPool pool;
+  const int64_t task_count = 10000;
+  SimpleTask task;
+  SimpleTask::count_ = 0;
+  ASSERT_EQ(OB_SUCCESS, pool.init());
+  ASSERT_EQ(OB_SUCCESS, pool.set_task_thread_num(10));
+
+  for (int64_t i = 0; i < task_count; ++i) {
+    ASSERT_EQ(OB_SUCCESS, pool.add_task(&task));
+  }
+  sleep(1);
+  pool.stop();
+  pool.destroy();
+  ASSERT_EQ(task_count, SimpleTask::count_);
+}
+
+TEST_F(TestObDynamicThreadPool, test_change_thread_num)
+{
+  ObDynamicThreadPool pool;
+  const int64_t task_count = 10000;
+  SimpleTask task;
+  ObRandom rand;
+  SimpleTask::count_ = 0;
+  ASSERT_EQ(OB_SUCCESS, pool.init());
+  ASSERT_EQ(OB_SUCCESS, pool.set_task_thread_num(512));
+
+  for (int64_t i = 0; i < task_count; ++i) {
+    if (pool.get_task_count() < ObDynamicThreadPool::MAX_TASK_NUM) {
+      ASSERT_EQ(OB_SUCCESS, pool.add_task(&task));
+    }
+    pool.set_task_thread_num(rand.rand(0, ObDynamicThreadPool::MAX_THREAD_NUM));
+  }
+  pool.set_task_thread_num(1);
+  sleep(1);
+  pool.stop();
+  pool.destroy();
+  ASSERT_EQ(task_count, SimpleTask::count_);
+
+}

@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_lock_wait_stat.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "observer/ob_server_utils.h"
@@ -46,7 +46,7 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
   if (!start_to_read_) {
     start_to_read_ = true;
   }
-  if (OB_ISNULL(node_iter_ = share::g_mp->lock_wait_mgr()
+  if (OB_ISNULL(node_iter_ = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>()
                                         ->next(node_iter_, &cur_node_))) {
     ret = OB_ITER_END;
   } else {
@@ -187,7 +187,7 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
 {
   int ret = OB_SUCCESS;
   ObLockWaitMgr *lwm = NULL;
-  if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
+  if (OB_ISNULL(lwm = ::oceanbase::share::server_service<::oceanbase::memtable::ObLockWaitMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "server LockWaitMgr is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){

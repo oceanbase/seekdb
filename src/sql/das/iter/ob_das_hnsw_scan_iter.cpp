@@ -16,15 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/iter/ob_das_hnsw_scan_iter.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
+#include "data_plane/blocksstable/ob_datum_row.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/das/ob_das_scan_op.h"
-#include "storage/tx_storage/ob_access_service.h"
-#include "src/storage/access/ob_table_scan_iterator.h"
+#include "data_plane/access/ob_table_scan_access.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_ir_define.h"
@@ -238,14 +238,14 @@ int ObDASHNSWScanIter::inner_init(ObDASIterParam &param)
       } else {
         ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx_);
         ObVecIdxAdaTryPath cur_path = ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN;
-        // A copied scan has no physical plan and keeps the path encoded in ctdef.
-        if (OB_NOT_NULL(plan_ctx->get_phy_plan())) {
-          cur_path = static_cast<ObVecIdxAdaTryPath>(plan_ctx->get_phy_plan()->stat_.vec_index_exec_ctx_.cur_path_);
-          if (cur_path != vec_idx_try_path_ &&
-              cur_path > ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN &&
-              cur_path < ObVecIdxAdaTryPath::VEC_PATH_MAX) {
-            vec_idx_try_path_ = cur_path;
-          }
+        if (OB_ISNULL(plan_ctx->get_phy_plan())) {
+          // remote scan, phy plan is null, do nothing, just use try path in ctdef
+          LOG_WARN("plan ctx is null", K(ret), KP(plan_ctx));
+        } else if (OB_FALSE_IT(cur_path = static_cast<ObVecIdxAdaTryPath>(plan_ctx->get_phy_plan()->stat_.vec_index_exec_ctx_.cur_path_))) {
+        } else if (cur_path != vec_idx_try_path_ &&
+                  cur_path > ObVecIdxAdaTryPath::VEC_PATH_UNCHOSEN &&
+                  cur_path < ObVecIdxAdaTryPath::VEC_PATH_MAX) {
+          vec_idx_try_path_ = cur_path;
         }
       }
     }
@@ -544,7 +544,7 @@ int ObDASHNSWScanIter::calc_dis_by_vid(const ObObj& vid_obj, double &dis_value)
         LOG_WARN("failed to parse params.", K(ret));
       } else if (OB_FAIL(share::ObVectorIndexUtil::get_vec_dis_type_from_dis_algorithm(index_param.dist_algorithm_, vec_dis_type))) {
         LOG_WARN("failed to get vec dis type", K(ret));
-      } else if (OB_FAIL(ObExprVectorDistance::DisFunc<float>::distance_funcs[vec_dis_type](embedded_data, query_data, embedded_size, dis_value))) {
+      } else if (OB_FAIL(ObExprVectorDistance::DisFunc<float>::distance_funcs[static_cast<int64_t>(vec_dis_type)](embedded_data, query_data, embedded_size, dis_value))) {
         LOG_WARN("failed to calculate distance", K(ret), K(vec_dis_type));
       }
     }
@@ -819,20 +819,20 @@ int ObDASHNSWScanIter::reset_filter_path()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(*exec_ctx_);
   ObPlanStat* plan_stat = nullptr;
-  // A copied scan has no physical plan and keeps the path encoded in ctdef.
-  if (OB_NOT_NULL(plan_ctx->get_phy_plan())) {
-    plan_stat = const_cast<ObPlanStat*>(&(plan_ctx->get_phy_plan()->stat_));
-    if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
-      if (is_ipivf()) {
-        vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_POST_FILTER;
-      } else {
-        vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
-      }
-    } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER) {
-      double iter_selectivity = double(adaptive_ctx_.iter_res_row_cnt_) / double(adaptive_ctx_.iter_filter_row_cnt_);
-      adaptive_ctx_.selectivity_ = iter_selectivity;
-      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
+  if (OB_ISNULL(plan_ctx->get_phy_plan())) {
+    // remote scan, phy plan is null, do nothing, just use try path in ctdef
+    LOG_WARN("plan ctx is null", K(ret), KP(plan_ctx));
+  } else if (OB_FALSE_IT(plan_stat = const_cast<ObPlanStat*>(&(plan_ctx->get_phy_plan()->stat_)))) {
+  } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER) {
+    if (is_ipivf()) {
+      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_POST_FILTER;
+    } else {
+      vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER;
     }
+  } else if (vec_idx_try_path_ == ObVecIdxAdaTryPath::VEC_INDEX_ITERATIVE_FILTER) {
+    double iter_selectivity = double(adaptive_ctx_.iter_res_row_cnt_) / double(adaptive_ctx_.iter_filter_row_cnt_);
+    adaptive_ctx_.selectivity_ = iter_selectivity;
+    vec_idx_try_path_ = ObVecIdxAdaTryPath::VEC_INDEX_PRE_FILTER;
   }
 
   if (OB_FAIL(ret) || OB_ISNULL(plan_stat)) {
@@ -948,7 +948,8 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
 {
   int ret = OB_SUCCESS;
 
-  ObPluginVectorIndexService *vec_index_service = share::g_mp->plugin_vector_index_service();
+  query::ObIVectorIndexService *vec_index_service =
+      ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
   ObPluginVectorIndexAdapterGuard adaptor_guard;
   ObVectorQueryAdaptorResultContext ada_ctx(extra_column_count_, &vec_op_alloc_, &allocator);
   share::ObVectorIndexAcquireCtx index_ctx;
@@ -959,7 +960,10 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
   index_ctx.data_tablet_id_ = com_aux_vec_tablet_id_;
   bool ls_leader = true;
 
-  if (OB_FAIL(vec_index_service->acquire_adapter_guard(index_ctx, adaptor_guard, &vec_index_param_, dim_))) {
+  if (OB_ISNULL(vec_index_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("vector index service is null", K(ret));
+  } else if (OB_FAIL(vec_index_service->acquire_adapter_guard(index_ctx, adaptor_guard, &vec_index_param_, dim_))) {
     LOG_WARN("failed to get ObPluginVectorIndexAdapter", K(ret), K(index_ctx));
   } else {
     share::ObPluginVectorIndexAdaptor* adaptor = adaptor_guard.get_adatper();
@@ -970,7 +974,7 @@ int ObDASHNSWScanIter::process_adaptor_state_hnsw(ObIAllocator &allocator, bool 
       LOG_WARN("failed to set query condition.", K(ret));
     } else if (vec_aux_ctdef_->relevance_col_cnt_ > 0  && OB_FAIL(init_rel_map(adaptor))) {
       LOG_WARN("failed to init rel map", K(ret));
-    } else if (OB_FAIL(ObPluginVectorIndexUtils::get_leader_flag(ls_leader))) {
+    } else if (OB_FAIL(vec_index_service->get_leader_flag(ls_leader))) {
       LOG_WARN("fail to get ls leader flag", K(ret));
     } else if (OB_FALSE_IT(ada_ctx.set_ls_leader(ls_leader))) {
     } else if (OB_FALSE_IT(ada_ctx.set_sparse_vector(is_ipivf()))) {
@@ -1208,12 +1212,12 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter_brute_force_not_bq(
 
   // release distances
   if (OB_NOT_NULL(distances_inc)) {
-    adaptor->get_incr_data()->mem_ctx_->Deallocate((void *)distances_inc);
+    adaptor->deallocate_query_distances(distances_inc, false);
     distances_inc = nullptr;
   }
 
   if (OB_NOT_NULL(distances_snap)) {
-    adaptor->get_snap_data_()->mem_ctx_->Deallocate((void *)distances_snap);
+    adaptor->deallocate_query_distances(distances_snap, true);
     distances_snap = nullptr;
   }
   return ret;
@@ -1274,11 +1278,11 @@ void ObDASHNSWScanIter::release_brute_force_distance_memory(ObPluginVectorIndexA
                                                            const DistanceResult& dist_result)
 {
   if (OB_NOT_NULL(dist_result.distances_inc)) {
-    adaptor->get_incr_data()->mem_ctx_->Deallocate((void *)dist_result.distances_inc);
+    adaptor->deallocate_query_distances(dist_result.distances_inc, false);
   }
 
   if (OB_NOT_NULL(dist_result.distances_snap)) {
-    adaptor->get_snap_data_()->mem_ctx_->Deallocate((void *)dist_result.distances_snap);
+    adaptor->deallocate_query_distances(dist_result.distances_snap, true);
   }
 }
 
@@ -1532,7 +1536,16 @@ int ObDASHNSWScanIter::process_adaptor_state_pre_filter(
     } else if (OB_FAIL(adaptor->query_result(ada_ctx, &query_cond_, adaptor_vid_iter_))) {
       LOG_WARN("failed to query result.", K(ret));
     } else if (PVQ_REFRESH == ada_ctx->get_status()) {
-      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(adaptor))) {
+      query::ObIVectorIndexService *service =
+          ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
+      if (OB_ISNULL(service)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("vector index service is null", K(ret));
+      } else if (OB_ISNULL(query_cond_.lob_read_options_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("LOB read options are not initialized", K(ret));
+      } else if (OB_FAIL(service->query_need_refresh_memdata(
+          adaptor, *query_cond_.lob_read_options_))) {
         if (ret != OB_SCHEMA_EAGAIN) {
           LOG_WARN("fail to refresh memdata in query", K(ret));
         }
@@ -1855,7 +1868,9 @@ int ObDASHNSWScanIter::get_from_embedded_table(ObIAllocator &allocator, ObString
             found_vector_column = true;
             ObDatum &datum = expr->locate_expr_datum(*embedded_table_rtdef->eval_ctx_);
             vector = datum.get_string();
-            if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+            if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                  *exec_ctx_,
+                                                                  &allocator,
                                                                   ObLongTextType,
                                                                   CS_TYPE_BINARY,
                                                                   embedded_table_ctdef->result_output_.at(0)->obj_meta_.has_lob_header(),
@@ -3123,7 +3138,16 @@ int ObDASHNSWScanIter::call_pva_interface(const ObVidAdaLookupStatus& cur_state,
       break;
     }
     case ObVidAdaLookupStatus::STATES_REFRESH: {        // refresh
-      if (OB_FAIL(ObPluginVectorIndexUtils::query_need_refresh_memdata(&adaptor))) {
+      query::ObIVectorIndexService *service =
+          ::oceanbase::share::server_service<::oceanbase::query::ObIVectorIndexService>();
+      if (OB_ISNULL(service)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("vector index service is null", K(ret));
+      } else if (OB_ISNULL(query_cond_.lob_read_options_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("LOB read options are not initialized", K(ret));
+      } else if (OB_FAIL(service->query_need_refresh_memdata(
+          &adaptor, *query_cond_.lob_read_options_))) {
         if (ret != OB_SCHEMA_EAGAIN) {
           LOG_WARN("fail to refresh memdata in query", K(ret));
         }
@@ -3265,13 +3289,23 @@ int64_t ObDASHNSWScanIter::get_reorder_count(const int64_t ef_search, const int6
 int ObDASHNSWScanIter::set_vector_query_condition(ObVectorQueryConditions &query_cond)
 {
   int ret = OB_SUCCESS;
-  if ((OB_ISNULL(search_vec_) && hybrid_search_vec_.empty()) || OB_ISNULL(sort_rtdef_) || OB_ISNULL(sort_rtdef_->eval_ctx_)) {
+  const common::ObLobReadOptions *lob_read_options = nullptr;
+  if ((OB_ISNULL(search_vec_) && hybrid_search_vec_.empty())
+      || OB_ISNULL(exec_ctx_)
+      || OB_ISNULL(sort_rtdef_)
+      || OB_ISNULL(sort_rtdef_->eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null.", K(ret));
+  } else if (OB_FAIL(exec_ctx_->get_lob_read_options(lob_read_options))) {
+    LOG_WARN("failed to get LOB read options", K(ret));
+  } else if (OB_ISNULL(lob_read_options)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read options are not initialized", K(ret));
   } else {
     query_cond.query_order_ = true;
     query_cond.query_scn_ = snapshot_scan_param_.snapshot_.core_.version_;
     query_cond.scan_param_ = &snapshot_scan_param_;
+    query_cond.lob_read_options_ = lob_read_options;
     query_cond.rel_count_ = vec_aux_ctdef_->relevance_col_cnt_;
     query_cond.rel_map_ptr_ = &rel_map_;
     query_cond.is_post_with_filter_ = is_iter_filter();
@@ -3616,7 +3650,7 @@ int ObDASHNSWScanIter::get_vector_from_com_aux_vec_table(ObIAllocator &allocator
   int ret = OB_SUCCESS;
 
   const ObDASScanCtDef *com_aux_vec_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(vec_aux_ctdef_->get_com_aux_tbl_idx(), ObTSCIRScanType::OB_VEC_COM_AUX_SCAN);
-  storage::ObTableScanIterator *table_scan_iter = dynamic_cast<storage::ObTableScanIterator *>(com_aux_vec_iter_->get_output_result_iter());
+  common::ObNewRowIterator *table_scan_iter = com_aux_vec_iter_->get_output_result_iter();
   blocksstable::ObDatumRow *datum_row = nullptr;
 
   com_aux_vec_iter_->clear_evaluated_flag();
@@ -3642,7 +3676,7 @@ int ObDASHNSWScanIter::get_vector_from_com_aux_vec_table(ObIAllocator &allocator
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(table_scan_iter->get_next_row(datum_row))) {
+  } else if (OB_FAIL(data_plane::table_scan_next_datum_row(table_scan_iter, datum_row))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to scan com aux vec iter", K(ret));
     }
@@ -3651,7 +3685,9 @@ int ObDASHNSWScanIter::get_vector_from_com_aux_vec_table(ObIAllocator &allocator
     LOG_WARN("get row column cnt invalid.", K(ret), K(datum_row->get_column_count()));
   } else if (OB_FALSE_IT(vector = datum_row->storage_datums_[vec_col_idx].get_string())) {
     LOG_WARN("failed to get vid.", K(ret));
-  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator,
+  } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                                                                *exec_ctx_,
+                                                                &allocator,
                                                                 ObLongTextType,
                                                                 CS_TYPE_BINARY,
                                                                 com_aux_vec_ctdef->result_output_.at(0)->obj_meta_.has_lob_header(),

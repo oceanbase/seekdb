@@ -25,7 +25,8 @@ namespace blocksstable
 {
 static int nonext_nonext_compare(const ObStorageDatum &left, const ObStorageDatum &right, const common::ObCmpFunc &cmp_func, int &cmp_ret)
 {
-  int ret = cmp_func.cmp_func_(left, right, cmp_ret);
+  // Storage rowkey comparison never dereferences an out-row LOB payload.
+  int ret = cmp_func.cmp_func_(left, right, cmp_ret, nullptr);
   STORAGE_LOG(DEBUG, "chaser debug compare datum", K(ret), K(left), K(right), K(cmp_ret));
   return ret;
 }
@@ -219,7 +220,7 @@ int ObStorageDatumUtils::inner_init(
       precision = col_desc.col_type_.get_stored_precision();
       OB_ASSERT(precision != PRECISION_UNKNOWN_YET);
     }
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(col_desc.col_type_.get_type(),
                                                                       col_desc.col_type_.get_collation_type(),
                                                                       col_desc.col_type_.get_scale(),
                                                                       has_lob_header,
@@ -245,7 +246,7 @@ int ObStorageDatumUtils::inner_init(
     }
   }
   if (OB_SUCC(ret)) {
-    sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObExtendType, CS_TYPE_BINARY);
+    common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(ObExtendType, CS_TYPE_BINARY);
     if (OB_UNLIKELY(nullptr == basic_funcs || nullptr == basic_funcs->murmur_hash_v2_)) {
       ret = OB_ERR_SYS;
       STORAGE_LOG(ERROR, "Unexpected null basic funcs for extend type", K(ret));

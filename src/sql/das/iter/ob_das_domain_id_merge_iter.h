@@ -20,9 +20,10 @@
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "common/ob_tablet_id.h"
-#include "storage/access/ob_dml_param.h"
+#include "data_plane/access/ob_table_scan_param.h"
 #include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -49,7 +50,7 @@ public:
                      K(rowkey_domain_table_iters_),
                      K(rowkey_domain_ctdefs_),
                      K(rowkey_domain_rtdefs_),
-                     KPC(trans_desc_),
+                     "trans_desc", data_plane::ObTxDescLogView(trans_desc_),
                      KPC(snapshot_));
 public:
   common::ObArray<common::ObTabletID> rowkey_domain_tablet_ids_;

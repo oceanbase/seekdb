@@ -1,0 +1,286 @@
+ob1=OBI(cluster=1,proxy_num=1);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table tg_table_1 (c1 int primary key auto_increment, c2 int);
+insert into tg_table_1 values (1,1), (2,2), (3,3);
+select * from tg_table_1;
+c1	c2
+1	1
+2	2
+3	3
+create table t1 (c1 int primary key auto_increment, c2 int);
+insert into t1 values (1,1), (2,2), (3,3);
+select * from t1;
+c1	c2
+1	1
+2	2
+3	3
+create table subpt2 (c1 int, c2 int, c3 int, primary key(c1, c2)) partition by key(c1) subpartition by range columns (c2) subpartition template (subpartition p0 values less than (10), subpartition p1 values less than (100) ) partitions 16;
+CASE 1: login standby
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tt1_id, $partition_cnt, 120;
+ob2.check_until_timeout select min_log_service_ts > $now from oceanbase.__all_virtual_partition_info where table_id=$t1_id, 1, 120;
+select /*+ read_consistency(weak) */ * from t1;
+c1	c2
+1	1
+2	2
+3	3
+select /*+ read_consistency(weak) */ * from t2;
+c1	c2
+1	1
+2	2
+3	3
+show create table t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `c1` int(11) NOT NULL AUTO_INCREMENT,
+  `c2` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) AUTO_INCREMENT = AUTO_INCREMENT_NUM DEFAULT CHARSET = charset COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE TABLET_SIZE = SIZE PCTFREE = NUM
+show create table tg_table_1;
+Table	Create Table
+t2	CREATE TABLE `t2` (
+  `c1` int(11) NOT NULL AUTO_INCREMENT,
+  `c2` int(11) DEFAULT NULL,
+  PRIMARY KEY (`c1`)
+) AUTO_INCREMENT = AUTO_INCREMENT_NUM DEFAULT CHARSET = charset COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = NUM BLOCK_SIZE = SIZE TABLET_SIZE = SIZE PCTFREE = NUM
+CASE 2: 7 virtual tables used by proxy should be working (__all_virtual_proxy_route has been deprecated)
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_zone_stat;
+count(*)
+1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_server_stat;
+count(*)
+1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+count(*)
+sys_variable
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+count(*)
+1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition where table_id=1101710651081555;
+count(*)
+16
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition_info where table_id=1101710651081555;
+count(*)
+2
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sub_partition where table_id=1101710651081555;
+count(*)
+2
+select count(*) from oceanbase.__all_virtual_zone_stat;
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_proxy_server_stat;
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+count(*)
+sys_variable
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+count(*)
+1
+select count(*) from oceanbase.__all_virtual_proxy_partition where table_id=1101710651081555;
+count(*)
+16
+select count(*) from oceanbase.__all_virtual_proxy_partition_info where table_id=1101710651081555;
+count(*)
+2
+select count(*) from oceanbase.__all_virtual_proxy_sub_partition where table_id=1101710651081555;
+count(*)
+2
+CASE 3: OB java connector
+ob2.set_ds_global_config maxRetryCount=15,getConnectionTimeout=900ms;
+select * from t1;
+ERROR HY000: standby cluster support weak read only
+select /*+ read_consistency(weak) */ * from t1;
+c1	c2
+1	1
+2	2
+3	3
+select /*+ read_consistency(weak) */ * from t2;
+c1	c2
+1	1
+2	2
+3	3
+select @@autocommit;
+@@autocommit
+1
+show variables like 'autocommit';
+Variable_name	Value
+autocommit	ON
+select @@version_comment;
+@@version_comment
+areadonlyvariable
+select @@global.autocommit;
+@@global.autocommit
+1
+show collation like 'binary';
+Collation	Charset	Id	Default	Compiled	Sortlen
+binary	binary	63	Yes	Yes	1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_zone_stat;
+count(*)
+1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_server_stat;
+count(*)
+1
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+count(*)
+sys_variable
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+count(*)
+1
+count(*)
+16
+count(*)
+2
+count(*)
+2
+CASE 5.1: sys tenant statements
+create table standby_sys_t1 (pk int);
+replace into standby_sys_t1 values (1),(2),(3);
+select * from standby_sys_t1;
+pk
+1
+2
+3
+show tables like 'standby%';
+Tables_in_oceanbase (standby%)
+standby_sys_t1
+show databases like 'test';
+Database (test)
+test
+show collation like 'binary';
+Collation	Charset	Id	Default	Compiled	Sortlen
+binary	binary	63	Yes	Yes	1
+show variables like 'autocommit';
+Variable_name	Value
+autocommit	ON
+CASE 5.2: show statements
+set ob_read_consistency='strong';
+show tables;
+Tables_in_test
+subpt2
+t1
+t2
+show databases;
+Database
+oceanbase
+information_schema
+mysql
+test
+show databases like 'test';
+Database (test)
+test
+show collation like 'binary';
+Collation	Charset	Id	Default	Compiled	Sortlen
+binary	binary	63	Yes	Yes	1
+show variables like 'autocommit';
+Variable_name	Value
+autocommit	ON
+set ob_read_consistency='weak';
+show tables;
+Tables_in_test
+subpt2
+t1
+t2
+show databases;
+Database
+oceanbase
+information_schema
+mysql
+test
+show databases like 'test';
+Database (test)
+test
+show collation like 'binary';
+Collation	Charset	Id	Default	Compiled	Sortlen
+binary	binary	63	Yes	Yes	1
+show variables like 'autocommit';
+Variable_name	Value
+autocommit	ON
+set ob_read_consistency='strong';
+CASE 5.3: user table statements on standby non-sys tenant
+set ob_read_consistency='strong';
+insert into t1 values (100, 100),(200, 200),(300, 300);
+ERROR HY000: standby cluster support weak read only
+insert into t2 values (100, 100),(200, 200),(300, 300);
+ERROR HY000: standby cluster support weak read only
+update t1 set c2=c2+1;
+ERROR HY000: standby cluster support weak read only
+update t2 set c2=c2+1;
+ERROR HY000: standby cluster support weak read only
+delete from t1;
+ERROR HY000: standby cluster support weak read only
+delete from t2;
+ERROR HY000: standby cluster support weak read only
+select * from t1 where c1 = 1 for update;
+ERROR HY000: standby cluster support weak read only
+select * from t2 where c1 = 1 for update;
+ERROR HY000: standby cluster support weak read only
+select * from t1;
+ERROR HY000: standby cluster support weak read only
+select * from t2;
+ERROR HY000: standby cluster support weak read only
+select /*+ read_consistency(weak) */ * from t1;
+c1	c2
+1	1
+2	2
+3	3
+select /*+ read_consistency(weak) */ * from t2;
+c1	c2
+1	1
+2	2
+3	3
+CASE 5.4:  INNER-TABLE statements from INNER
+select table_name from __all_virtual_table where table_id = 1099511677777;
+table_name
+standby_sys_t1
+select table_name from __all_virtual_table where table_id = 1101710651081554;
+table_name
+t1
+CASE 5.5:  INNER-TABLE statements from user
+select table_name from __all_table_v2 where table_id = 1099511677777;
+table_name
+standby_sys_t1
+select /*+ read_consistency(weak) */ table_name from __all_table_v2 where table_id = 1099511677777;
+table_name
+standby_sys_t1
+select count(*) from oceanbase.__all_table_v2 where table_name = 't1';
+ERROR HY000: standby cluster support weak read only
+select /*+ read_consistency(weak) */ count(*) from oceanbase.__all_table_v2 where table_name = 't1';
+count(*)
+1
+CASE 6:  MySQL Tenant Table
+create table t1_mysql2 (c1 int primary key, c2 int);
+insert into t1_mysql2 values (1,1), (2,2), (3,3);
+select * from t1_mysql2;
+c1	c2
+1	1
+2	2
+3	3
+ob2.z1.obs0.check_until_timeout select min_log_service_ts > $now from oceanbase.__all_virtual_partition_info where table_id=$t1_mysql2_id, 1, 240;
+insert into t1_mysql2 values (100, 100),(200, 200),(300, 300);
+ERROR HY000: standby cluster support weak read only
+update t1_mysql2 set c2=c2+1;
+ERROR HY000: standby cluster support weak read only
+delete from t1_mysql2;
+ERROR HY000: standby cluster support weak read only
+select * from t1_mysql2 where c1 = 1 for update;
+ERROR HY000: standby cluster support weak read only
+select * from t1_mysql2;
+ERROR HY000: standby cluster support weak read only
+select /*+ read_consistency(weak) */ * from t1_mysql2;
+c1	c2
+1	1
+2	2
+3	3

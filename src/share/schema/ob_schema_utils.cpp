@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_utils.h"
-#include "share/config/ob_runtime_config.h"  // RUNTIME_CONF/ObRuntimeConfigGuard(both are in share/config)
 #include "share/schema/ob_table_schema.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -24,7 +23,6 @@
 namespace oceanbase
 {
 using namespace common;
-using namespace sql;
 namespace share
 {
 namespace schema
@@ -256,13 +254,15 @@ bool ObSchemaUtils::is_support_parallel_drop(const ObTableType table_type)
          || TMP_TABLE == table_type;
 }
 
-int ObSchemaUtils::get_runtime_int_variable(ObSysVarClassType var_id,
+int ObSchemaUtils::get_runtime_int_variable(
+                                           ObMultiVersionSchemaService &schema_service,
+                                           ObSysVarClassType var_id,
                                            int64_t &v)
 {
   int ret = OB_SUCCESS;
   schema::ObSchemaGetterGuard schema_guard;
   ObObj value;
-  if (OB_FAIL(get_runtime_variable(schema_guard, var_id, value))) {
+  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
     LOG_WARN("fail to get runtime variable", K(value), K(var_id), K(ret));
   } else if (OB_FAIL(value.get_int(v))) {
     LOG_WARN("get int from value failed", K(ret), K(value));
@@ -270,7 +270,9 @@ int ObSchemaUtils::get_runtime_int_variable(ObSysVarClassType var_id,
   return ret;
 }
 
-int ObSchemaUtils::get_runtime_varchar_variable(ObSysVarClassType var_id,
+int ObSchemaUtils::get_runtime_varchar_variable(
+                                               ObMultiVersionSchemaService &schema_service,
+                                               ObSysVarClassType var_id,
                                                ObIAllocator &allocator,
                                                ObString &v)
 {
@@ -278,7 +280,7 @@ int ObSchemaUtils::get_runtime_varchar_variable(ObSysVarClassType var_id,
   schema::ObSchemaGetterGuard schema_guard;
   ObObj value;
   ObString tmp;
-  if (OB_FAIL(get_runtime_variable(schema_guard, var_id, value))) {
+  if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
     LOG_WARN("fail to get runtime variable", K(value), K(var_id), K(ret));
   } else if (OB_FAIL(value.get_varchar(tmp))) {
     LOG_WARN("get varchar from value failed", K(ret), K(value));
@@ -289,14 +291,13 @@ int ObSchemaUtils::get_runtime_varchar_variable(ObSysVarClassType var_id,
   return ret;
 }
 
-int ObSchemaUtils::get_runtime_variable(schema::ObSchemaGetterGuard &schema_guard,
+int ObSchemaUtils::get_runtime_variable(ObMultiVersionSchemaService &schema_service,
+                                       schema::ObSchemaGetterGuard &schema_guard,
                                        ObSysVarClassType var_id,
                                        ObObj &value)
 {
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
-  share::schema::ObMultiVersionSchemaService &schema_service =
-      share::schema::ObMultiVersionSchemaService::get_instance();
   if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_system_variable(
@@ -565,9 +566,8 @@ int64_t ObSchemaUtils::get_inner_table_sys_schema_version(ObIArray<ObTableSchema
   return sys_schema_version;
 }
 
-// ObSchemaUtils::wait_local_schema_visible moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
-
 int ObSchemaUtils::batch_get_latest_table_schemas(
+    ObMultiVersionSchemaService *schema_service,
     common::ObISQLClient &sql_client,
     common::ObIAllocator &allocator,
     const common::ObIArray<ObObjectID> &table_ids,
@@ -576,6 +576,7 @@ int ObSchemaUtils::batch_get_latest_table_schemas(
   int ret = OB_SUCCESS;
   const int64_t schema_version = INT64_MAX - 1; // get latest schema
   if (OB_FAIL(batch_get_table_schemas_by_version(
+      schema_service,
       sql_client,
       allocator,
       schema_version,
@@ -588,6 +589,7 @@ int ObSchemaUtils::batch_get_latest_table_schemas(
 }
 
 int ObSchemaUtils::batch_get_table_schemas_by_version(
+    ObMultiVersionSchemaService *multi_version_schema_service,
     common::ObISQLClient &sql_client,
     common::ObIAllocator &allocator,
     const int64_t schema_version,
@@ -603,8 +605,8 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
   if (OB_UNLIKELY(table_ids.empty() || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_ids), K(schema_version));
-  } else if (OB_ISNULL(GCTX.schema_service_)
-      || OB_ISNULL(schema_service = GCTX.schema_service_->get_schema_service())) {
+  } else if (OB_ISNULL(multi_version_schema_service)
+      || OB_ISNULL(schema_service = multi_version_schema_service->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multiversion_schema_service or schema_service is null", KR(ret));
   } else if (OB_FAIL(schema_service->get_table_latest_schema_versions(
@@ -613,6 +615,7 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
       table_schema_versions))) {
     LOG_WARN("get table latest schema versions failed", KR(ret), K(table_ids));
   } else if (OB_FAIL(batch_get_table_schemas_from_cache_(
+      multi_version_schema_service,
       allocator,
       schema_version,
       table_schema_versions,
@@ -620,6 +623,7 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
       table_schemas))) {
     LOG_WARN("batch get table schemas from cache failed", KR(ret), K(table_schema_versions));
   } else if (OB_FAIL(batch_get_table_schemas_from_inner_table_(
+      multi_version_schema_service,
       sql_client,
       allocator,
       schema_version,
@@ -682,6 +686,7 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
 }
 
 int ObSchemaUtils::get_latest_table_schema(
+    ObMultiVersionSchemaService *schema_service,
     common::ObISQLClient &sql_client,
     common::ObIAllocator &allocator,
     const ObObjectID &table_id,
@@ -697,6 +702,7 @@ int ObSchemaUtils::get_latest_table_schema(
   } else if (OB_FAIL(table_ids.push_back(table_id))) {
     LOG_WARN("push back failed", KR(ret), K(table_id), K(table_ids));
   } else if (OB_FAIL(batch_get_latest_table_schemas(
+      schema_service,
       sql_client,
       allocator,
       table_ids,
@@ -715,6 +721,7 @@ int ObSchemaUtils::get_latest_table_schema(
 }
 
 int ObSchemaUtils::batch_get_table_schemas_from_cache_(
+    ObMultiVersionSchemaService *multi_version_schema_service,
     common::ObIAllocator &allocator,
     const int64_t specified_schema_version,
     const ObIArray<ObTableLatestSchemaVersion> &table_schema_versions,
@@ -728,10 +735,10 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
   if (OB_UNLIKELY(specified_schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(specified_schema_version));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(multi_version_schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multiversion_schema_service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(multi_version_schema_service->get_runtime_schema_guard(
       schema_guard))) {
     LOG_WARN("get schema guard failed", KR(ret));
   } else {
@@ -767,6 +774,7 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
 }
 
 int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
+    ObMultiVersionSchemaService *multi_version_schema_service,
     common::ObISQLClient &sql_client,
     common::ObIAllocator &allocator,
     const int64_t schema_version,
@@ -781,8 +789,8 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   if (OB_UNLIKELY(schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(schema_version));
-  } else if (OB_ISNULL(GCTX.schema_service_)
-      || OB_ISNULL(schema_service = GCTX.schema_service_->get_schema_service())) {
+  } else if (OB_ISNULL(multi_version_schema_service)
+      || OB_ISNULL(schema_service = multi_version_schema_service->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multiversion_schema_service or schema_service is null", KR(ret));
   } else if (need_refresh_table_schema_keys.empty()) {
@@ -800,106 +808,57 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
   return ret;
 }
 
-const char* DDLType[]
-{
-  "TRUNCATE_TABLE",
-  "SET_COMMENT",
-  "CREATE_INDEX",
-  "CREATE_VIEW",
-  "DROP_TABLE"
-};
-
-int ObParallelDDLControlMode::string_to_ddl_type(const ObString &ddl_string, ObParallelDDLType &ddl_type)
+int ObSchemaUtils::check_whether_column_exist(common::ObISQLClient &sql_client,
+    const ObObjectID &table_id,
+    const ObString &column_name,
+    bool &exist)
 {
   int ret = OB_SUCCESS;
-  ddl_type = MAX_TYPE;
-  STATIC_ASSERT((ARRAYSIZEOF(DDLType)) == MAX_TYPE, "size count not match");
-  bool find = false;
-  for (uint64_t i = 0; !find && i < ARRAYSIZEOF(DDLType); i++) {
-    if (ddl_string.case_compare(DDLType[i]) == 0) {
-      find = true;
-      ddl_type = static_cast<ObParallelDDLType>(i);
-    }
-  }
-  if (OB_UNLIKELY(!find)) {
+  exist = false;
+  if (OB_UNLIKELY(OB_INVALID_ID == table_id
+      || column_name.empty()
+      || !is_sys_table(table_id)
+      || is_core_table(table_id))) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "unknown ddl_type", KR(ret), K(ddl_string));
-  }
-  return ret;
-}
-
-int ObParallelDDLControlMode::set_value(const ObConfigModeItem &mode_item)
-{
-  int ret = OB_SUCCESS;
-  const uint8_t* values = mode_item.get_value();
-  if (OB_ISNULL(values)) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "mode item's value_ is null ptr", KR(ret));
+    LOG_WARN("invalid args", KR(ret), K(table_id), K(column_name));
   } else {
-    STATIC_ASSERT(((sizeof(value_)/sizeof(uint8_t) <= ObConfigModeItem::MAX_MODE_BYTES)),
-                  "value_ size overflow");
-    STATIC_ASSERT( (MAX_TYPE * 2) <= (sizeof(value_) * 8), "type size overflow");
-    value_ = 0;
-    for (uint64_t i = 0; i < 8; ++i) {
-      value_ = (value_ | static_cast<uint64_t>(values[i]) << (8 * i));
+    SMART_VAR(ObISQLClient::ReadResult, result) {
+      ObSqlString sql;
+      common::sqlclient::ObMySQLResult *res = NULL;
+      // in __all_column, sys tenant is primary key and it's value is 0
+      if (OB_FAIL(sql.append_fmt(
+          "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu and column_name = '%.*s'",
+          OB_ALL_COLUMN_TNAME, table_id, column_name.length(), column_name.ptr()))) {
+        LOG_WARN("fail to assign sql", KR(ret));
+      } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
+        LOG_WARN("execute sql failed", KR(ret), K(sql));
+      } else if (OB_ISNULL(res = result.get_result())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get mysql result failed", KR(ret), K(sql));
+      } else if (OB_FAIL(res->next())) {
+        LOG_WARN("next failed", KR(ret), K(sql));
+      } else if (OB_FAIL(res->get_bool("exist", exist))) {
+        LOG_WARN("get max task id failed", KR(ret), K(sql));
+      }
     }
   }
   return ret;
 }
 
-int ObParallelDDLControlMode::set_parallel_ddl_mode(const ObParallelDDLType type, const uint8_t mode)
+int ObSchemaUtils::is_drop_column_only(const AlterTableSchema &alter_table_schema, bool &is_drop_col_only)
 {
   int ret = OB_SUCCESS;
-  if ((TRUNCATE_TABLE <= type) && (type < MAX_TYPE)) {
-    uint64_t shift = static_cast<uint64_t>(type);
-    if (!check_mode_valid_(mode)) {
-      ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "mode invalid", KR(ret), K(mode));
-    } else {
-      uint64_t mask = MASK << (shift * MASK_SIZE);
-      value_ = (value_ & ~mask) | (static_cast<uint64_t>(mode) << (shift * MASK_SIZE));
-    }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "type invalid", KR(ret), K(type));
-  }
-  return ret;
-}
-
-int ObParallelDDLControlMode::is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel)
-{
-  int ret = OB_SUCCESS;
-  is_parallel = true;
-  if ((TRUNCATE_TABLE <= type) && (type < MAX_TYPE)) {
-    uint64_t shift = static_cast<uint64_t>(type);
-    uint8_t value = static_cast<uint8_t>((value_ >> (shift * MASK_SIZE)) & MASK);
-    if (value == ObParallelDDLControlParser::MODE_OFF) {
-      is_parallel = false;
-    } else if (value == ObParallelDDLControlParser::MODE_ON) {
-      is_parallel = true;
-    } else if (value == ObParallelDDLControlParser::MODE_DEFAULT) {
-      is_parallel = true;
-    } else {
+  is_drop_col_only = true;
+  ObTableSchema::const_column_iterator it_begin = alter_table_schema.column_begin();
+  ObTableSchema::const_column_iterator it_end = alter_table_schema.column_end();
+  for (; OB_SUCC(ret) && is_drop_col_only && it_begin != it_end; it_begin++) {
+    const AlterColumnSchema *alter_col = static_cast<AlterColumnSchema*>(*it_begin);
+    if (OB_ISNULL(alter_col)) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(WARN, "invalid value unexpected", KR(ret), K(value));
+      LOG_WARN("alter col should not be null", K(ret), K(alter_table_schema));
+    } else if (OB_DDL_DROP_COLUMN != alter_col->alter_type_) {
+      is_drop_col_only = false;
     }
-  } else {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "type invalid", KR(ret), K(type));
-  }
-  return ret;
-}
-
-// is_parallel_ddl_enable: restored back to share(omt::ObRuntimeConfigGuard/RUNTIME_CONF actually lives in share/config, originally misclassified as observer)
-int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel)
-{
-  int ret = OB_SUCCESS;
-  is_parallel = true;
-  ObParallelDDLControlMode cfg;
-  if (OB_FAIL(GCONF._parallel_ddl_control.init_mode(cfg))) {
-    LOG_WARN("init mode failed", KR(ret));
-  } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
-    LOG_WARN("fail to check is parallel ddl", KR(ret), K(ddl_type));
   }
   return ret;
 }

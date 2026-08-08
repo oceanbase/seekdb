@@ -36,7 +36,7 @@ ObExprPrivSTPointOnSurface::~ObExprPrivSTPointOnSurface()
 
 int ObExprPrivSTPointOnSurface::calc_result_type1(
     ObExprResType &type, ObExprResType &type1, common::ObExprTypeCtx &type_ctx) const
-{ 
+{
   int ret = OB_SUCCESS;
   ObObjType obj_type1 = type1.get_type();
 
@@ -71,11 +71,12 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
     is_null_res = true;
   } else {
     ObString wkb1 = datum1->get_string();
-    omt::ObSrsCacheGuard srs_guard;
+    common::ObSrsCacheGuard srs_guard;
     const ObSrsItem *srs1 = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb1))) {
+            ctx.exec_ctx_, allocator, *datum1, arg1->datum_meta_,
+            arg1->obj_meta_.has_lob_header(), wkb1))) {
       LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs1, true, N_PRIV_ST_POINTONSURFACE))) {
       LOG_WARN("fail to get srs item", K(ret), K(wkb1));
@@ -87,7 +88,7 @@ int ObExprPrivSTPointOnSurface::process_input_geometry(
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_PRIV_ST_ASMVTGEOM,
                   ObGeoTypeUtil::get_geo_name_by_type(geo1->type()));
       LOG_WARN("Geometry in geographical srs can not be input", K(ret), K(srs1));
-    } 
+    }
   }
 
   return ret;

@@ -15,7 +15,7 @@
  */
 
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
-#include "storage/tablelock/ob_lock_executor.h"
+#include "query/session/ob_session_access.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase

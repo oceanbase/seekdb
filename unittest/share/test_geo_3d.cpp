@@ -425,12 +425,3 @@ TEST_F(TestGeo3D, test_coordinate_range)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  system("rm -f test_geo_3d.log");
-  OB_LOGGER.set_file_name("test_geo_3d.log");
-  OB_LOGGER.set_log_level("INFO");
-  return RUN_ALL_TESTS();
-}

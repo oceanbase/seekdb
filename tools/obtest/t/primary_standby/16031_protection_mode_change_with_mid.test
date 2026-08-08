@@ -1,0 +1,167 @@
+#rs
+#msy
+#验证设置模式切换以及各类的中间状态
+#验证在中间状态可以进行模式切换
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#设置restore为强同步
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#设置restore为强同步
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob1.mysql alter system set _ob_ddl_timeout = '10s';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+set ob_query_timeout = 10000000;
+#case 1: mpf->mpt
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FINISH_SET_PROTECTION_MODE wait_for continue_signal';
+--error 4012
+alter system set standby cluster to maximize protection;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+#会有后台线程处理
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+
+#case 2: mpt->mpf, 备库宕机
+ob2.force_stop;
+alter system set standby cluster to maximize performance;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+#会有后台线程处理
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PERFORMANCE, 100;
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 100;
+
+#case 3: mpf->ma,mpf->ma,ma
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FINISH_SET_PROTECTION_MODE wait_for continue_signal';
+alter system set standby cluster to maximize availability;
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+sleep 60;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 100;
+
+#case 4: 备库宕机，ma,ma->ma, mpf
+ob2.force_stop;
+ob_connect(conntt1, ob1.z1.obs0, root@tenant_1, ,oceanbase, , USE_OB_CONNECTOR);
+connection conntt1;
+use test;
+--error 4012
+create table t2(c1 int);
+sleep 30;
+connection conn1;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PERFORMANCE, 100;
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 100;
+#case 5: ma,ma ->mpt,mpt
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 50;
+alter system set standby cluster to maximize protection;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+
+#case 6: mpt, mpt -> ma,ma
+alter system set standby cluster to maximize availability;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+
+#case 7：ma,ma->mpf,mpf,备库宕机
+ob2.force_stop;
+alter system set standby cluster to maximize performance;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PERFORMANCE, 100;
+
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 100;
+#case 8: 拉起备库，升级到一半后,切换mode
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FINISH_SET_PROTECTION_MODE wait_for continue_signal';
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+connection conn1;
+--error 4012
+alter system set standby cluster to maximize protection;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+alter system set standby cluster to maximize availability;
+ob2.force_stop;
+connection conntt1;
+use test;
+--error 4012
+create table t3(c1 int);
+sleep 30;
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 100;
+ob2.start;
+#case 9:，ma,mpf/ma ->mpt,mpt
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+connection conn1;
+alter system set standby cluster to maximize protection;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+
+#case 10: mpt, mpt->ma,ma->ma,mpr->mpf,mpf
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 100;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+ob2.force_stop;
+connection conntt1;
+use test;
+send create table t2(c1 int);
+ob1.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PERFORMANCE, 40;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FINISH_SET_PROTECTION_MODE wait_for continue_signal';
+connection conn1;
+alter system set standby cluster to maximize performance;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PERFORMANCE, 100;
+
+ob2.start;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+#进入ma，然后在mpf阶段模式切换
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob1.mysql alter system commit to switchover to physical standby;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob2.mysql alter system commit to switchover to primary;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob2.mysql_p select cluster_id, protection_level from oceanbase.__all_cluster;
+
+
+

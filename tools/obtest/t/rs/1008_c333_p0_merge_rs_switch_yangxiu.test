@@ -1,0 +1,81 @@
+##############################
+# owner: rongxuan.lc
+# owner group: proxy
+#功能点：
+# 合并过程中rs相关操作
+#
+#用例场景：
+#1、发起合并，马上切换rs
+#2、rs切换后进行合并
+#3、连续发起多次合并，两次合并过程中rs切换
+#
+###############################
+
+ob1=OBI(cluster=2:2:2,proxy_num=1);
+ob1.reboot;
+
+ob1.source include/merge.inc;
+ob1.mysql set global max_allowed_packet=2097152;
+
+# 并发合并zone的数量，设置成统一合并
+ob1.mysql alter system set enable_auto_leader_switch = false;
+
+ob1.create_client;
+
+#ob1.mysql_cur_tenant source sql/big_table_1.sql;
+
+#source sql/t.sql;
+#ob1.prepare;
+#ob1.start_check;
+
+##########
+#case1: 发起合并，马上切换
+##########
+ob1.mysql alter system major freeze;
+
+ob1.z3.obs0.switch_partition sys:oceanbase:__all_core_table;
+
+# wait rs election
+sleep 20;
+
+source sql/check_ddl.sql;
+
+ob1.check_version 2;
+
+##########
+#case2: 切换后合并
+###########
+
+sleep 5;
+ob1.z1.obs0.switch_partition sys:oceanbase:__all_core_table;
+sleep 20;
+--disable_query_log
+--disable_result_log
+source sql/big_table_3.sql;
+--enable_query_log
+--enable_result_log
+ob1.mysql alter system major freeze;
+
+ob1.check_version 3;
+
+--disable_result_log
+select * from test.big_table_3 where pk=0000;
+--enable_result_log
+
+##########
+#case3: 连续发起多次合并,rs切换
+##############
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+
+ob1.z2.obs0.switch_partition sys:oceanbase:__all_core_table;
+sleep 20;
+ob1.mysql alter system major freeze;
+
+sleep 20;
+ob1.check_version 6;
+
+select count(*) from test.big_table_3;
+
+
+

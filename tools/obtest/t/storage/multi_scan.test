@@ -1,0 +1,135 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# Test the case: multi scan query
+
+ob1=OBI(cluster=1:1, proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn0,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn1,$ip,root@sys,,oceanbase,$port);
+connection conn0;
+
+use test;
+create table test.t1(c1 int primary key, c2 int, c3 varchar(20));
+
+let $cnt=1;
+while($cnt < 1000)
+{
+  eval insert into test.t1 values($cnt, $cnt, 'oceanbase');
+  inc $cnt;
+}
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+# add some delete, update into memtable and then minor merge
+
+let $cnt=1;
+while($cnt < 1000)
+{
+  eval update test.t1 set c3 = 'test$cnt' where c1 = $cnt;
+  inc $cnt;
+  inc $cnt;
+  inc $cnt;
+  eval delete from test.t1 where c1 = $cnt;
+  inc $cnt;
+  inc $cnt;
+}
+
+ob1.mysql alter system minor freeze;
+sleep 120;
+
+# add some insert, delete and update in memtable
+let $cnt=1;
+while($cnt < 1000)
+{
+  inc $cnt;
+  eval update test.t1 set c3 = 'test$cnt' where c1 = $cnt;
+  inc $cnt;
+  inc $cnt;
+  inc $cnt;
+  eval delete from test.t1 where c1 = $cnt;
+  inc $cnt;
+}
+
+let $cnt=1001;
+while($cnt < 2000)
+{
+  inc $cnt;
+  inc $cnt;
+  inc $cnt;
+  eval insert into test.t1 values($cnt, $cnt, 'oceanbase');
+  inc $cnt;
+  eval insert into test.t1 values($cnt, $cnt, 'oceanbase');
+  inc $cnt;
+}
+
+# case 1: 单个get range
+select * from test.t1 where c1 = 1;
+select * from test.t1 where c1 = 1 order by c1 desc;
+select * from test.t1 where c1 = 2;
+select * from test.t1 where c1 = 2 order by c1 desc;
+select * from test.t1 where c1 = 3;
+select * from test.t1 where c1 = 3 order by c1 desc;
+select * from test.t1 where c1 = 4;
+select * from test.t1 where c1 = 4 order by c1 desc;
+select * from test.t1 where c1 = 5;
+select * from test.t1 where c1 = 5 order by c1 desc;
+select * from test.t1 where c1 = 1001;
+select * from test.t1 where c1 = 1001 order by c1 desc;
+select * from test.t1 where c1 = 2000;
+select * from test.t1 where c1 = 2000 order by c1 desc;
+select * from test.t1 where c1 = 0;
+select * from test.t1 where c1 = 0 order by c1 desc;
+
+# case 2: 单个scan range
+select * from test.t1 where c1 > -1 and c1 <= 0;
+select * from test.t1 where c1 > -1 and c1 <= 0 order by c1 desc;
+select * from test.t1 where c1 >= 0 and c1 <= 5;
+select * from test.t1 where c1 >= 0 and c1 <= 5 order by c1 desc;
+select * from test.t1 where c1 >= 999 and c1 <= 1005;
+select * from test.t1 where c1 >= 999 and c1 <= 1005 order by c1 desc;
+select * from test.t1 where c1 >= 1995 and c1 < 2005;
+select * from test.t1 where c1 >= 1995 and c1 < 2005 order by c1 desc;
+
+# case 3: 多个get range
+select * from test.t1 where c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238;
+select * from test.t1 where c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 order by c1 desc;
+
+# case 4: 多个scan range
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+
+# case 5: 多个get和scan交叉
+select * from test.t1 where (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or (c1 > 0 and c1 <= 5) or (c1 = 1000) or (c1 >= 999 and c1 <= 1005) or (c1 = 1978) or (c1 >= 1975 and c1 <= 2008);
+select * from test.t1 where (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or (c1 = 1000) or (c1 >= 999 and c1 <= 1005) or (c1 = 1978) or (c1 >= 1975 and c1 <= 2008) order by c1 desc;
+
+# case 6: 前面多个get，后面多个scan
+select * from test.t1 where c1 = 1 or c1 = 2 or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+select * from test.t1 where c1 = 1 or c1 = 2 or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = -1 or c1 = 1000 or c1 = 1995 or c1 = 1238 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+
+# case 7:前面多个scan，后面多个get
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) or (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9);
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) or (c1 = -1) or (c1 > -1 and c1 <= 0) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5 or c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) order by c1 desc;
+
+# case 8: 前面一个get，后面多个scan
+select * from test.t1 where c1 = 6 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+select * from test.t1 where c1 = 6 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+select * from test.t1 where c1 = -1 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005);
+select * from test.t1 where c1 = -1 or (c1 > -1 and c1 <= 0) or (c1 > 0 and c1 <= 5) or (c1 >= 999 and c1 <= 1005) or (c1 >= 1978 and c1 < 2005) or (c1 > 2005) order by c1 desc;
+
+# case 9: 前面一个scan，后面多个get
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 = -1) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5) or c1 = 2005 or c1 = 1979 or c1 = 1004;
+select * from test.t1 where (c1 > -1 and c1 <= 0) or (c1 = -1) or (c1 = 3) or (c1 = 1 or c1 = 2 or c1 = 3 or c1 = 4 or c1 = 5) or c1 = 2005 or c1 = 1979 or c1 = 1004 order by c1 desc;
+select * from test.t1 where (c1 > 0 and c1 <= 5) or (c1 = -1) or (c1 = 3) or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = 2005 or c1 = 1979 or c1 = 1004;
+select * from test.t1 where (c1 > 0 and c1 <= 5) or (c1 = -1) or (c1 = 3) or (c1 = 6 or c1 = 7 or c1 = 8 or c1 = 9) or c1 = 2005 or c1 = 1979 or c1 = 1004 order by c1 desc;

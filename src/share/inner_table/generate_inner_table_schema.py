@@ -11,6 +11,7 @@ import argparse
 import copy
 from collections import OrderedDict
 from ob_inner_table_init_data import *
+import difflib
 import io
 import re
 import os
@@ -147,6 +148,16 @@ def parse_args(argv):
   parser.add_argument('--def-file',
                       default=os.path.join(script_dir, 'ob_inner_table_schema_def.py'),
                       help='Path to the schema definition Python file')
+  parser.add_argument('--share-output-dir',
+                      default=share_output_dir,
+                      help='Directory for generated share/inner_table files')
+  parser.add_argument('--observer-output-dir',
+                      default=observer_output_dir,
+                      help='Directory for generated observer/virtual_table files')
+  parser.add_argument('--expected-output',
+                      action='append',
+                      default=[],
+                      help='Expected generated path, prefixed with share/ or observer/')
   parser.add_argument('--quiet',
                       action='store_true',
                       help='Suppress non-error output')
@@ -156,12 +167,40 @@ def parse_args(argv):
   return parser.parse_args(argv)
 
 def configure_paths(args):
+  global share_output_dir
+  global observer_output_dir
   global quiet_mode
   global verbose_mode
+  share_output_dir = os.path.abspath(args.share_output_dir)
+  observer_output_dir = os.path.abspath(args.observer_output_dir)
   quiet_mode = args.quiet
   verbose_mode = args.verbose
   os.makedirs(share_output_dir, exist_ok=True)
   os.makedirs(observer_output_dir, exist_ok=True)
+
+def validate_expected_outputs(expected_outputs):
+  if not expected_outputs:
+    return
+  actual_outputs = []
+  for output_dir, prefix in (
+      (share_output_dir, 'share'),
+      (observer_output_dir, 'observer')):
+    for filename in os.listdir(output_dir):
+      path = os.path.join(output_dir, filename)
+      if os.path.isfile(path):
+        actual_outputs.append('{0}/{1}'.format(prefix, filename))
+  expected_outputs = sorted(expected_outputs)
+  actual_outputs = sorted(actual_outputs)
+  if expected_outputs != actual_outputs:
+    diff = difflib.unified_diff(
+        expected_outputs,
+        actual_outputs,
+        fromfile='expected outputs',
+        tofile='actual outputs',
+        lineterm='')
+    raise RuntimeError(
+        'inner-table generator output set changed; update the Bazel declaration:\n'
+        + '\n'.join(diff))
   
 def print_method_start(table_name):
   global cpp_f
@@ -3357,8 +3396,10 @@ if __name__ == "__main__":
   ob_virtual_index_table_id = max_ob_virtual_table_id - 1
   ora_virtual_index_table_id = max_ora_virtual_table_id - 1
 
+  with open(args.def_file, "rb") as def_file:
+    schema_definition = compile(def_file.read(), args.def_file, 'exec')
   clean_files("ob_inner_table_schema.*")
-  exec(compile(open("ob_inner_table_schema_def.py", "rb").read(), "ob_inner_table_schema_def.py", 'exec'))
+  exec(schema_definition)
   def_all_lob_aux_table()
   end_generate_cpp()
 
@@ -3382,4 +3423,5 @@ if __name__ == "__main__":
 
   # Generate SQLite virtual table C++ files
   generate_sqlite_virtual_table_cpp_files()
+  validate_expected_outputs(args.expected_output)
   log_info("Successfully generate C++ files for SQLite virtual tables.")

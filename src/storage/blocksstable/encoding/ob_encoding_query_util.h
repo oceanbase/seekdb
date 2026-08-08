@@ -22,40 +22,13 @@
 #endif
 
 #include "ob_encoding_util.h"
-#include "sql/engine/basic/ob_pushdown_filter.h"
+#include "query/engine/basic/ob_pushdown_filter.h"
 
 
 namespace oceanbase
 {
 namespace blocksstable
 {
-
-// Check if current CPU
-static inline bool is_avx512_valid()
-{
-#if defined ( __x86_64__ )
-  int a, b, c, d;
-  __asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0) : );
-  if ((b & (1 << 31)) == 0) return false;           // AVX512VL invalid
-  if ((b & 0x40020000) != 0x40020000) return false; // AVX512BW/AVX512DQ invalid
-  return true;
-#else
-  return false;
-#endif
-}
-
-static inline bool is_avx2_valid()
-{
-#if defined ( __x86_64__ )
-  int a, b, c, d;
-  __asm("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0) : );
-  if ((b & (1 <<  5)) == 0) return false; // AVX2 invalid
-  return true;
-#else
-  return false;
-#endif
-}
-
 
 /**
   * 0: OP := _MM_CMPINT_EQ

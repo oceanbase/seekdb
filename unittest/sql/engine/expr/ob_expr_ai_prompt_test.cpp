@@ -84,11 +84,3 @@ TEST_F(ObAIPromptTest, test_replace_all_str_args_in_template)
   // std::cout << "prompt_str: " << prompt_str.ptr() << std::endl;
   // std::cout << "result_str: " << result_str.ptr() << std::endl;
 }
-
-
-int main(int argc, char **argv)
-{
-    ::testing::InitGoogleTest(&argc,argv);
-    return RUN_ALL_TESTS();
-}
- 

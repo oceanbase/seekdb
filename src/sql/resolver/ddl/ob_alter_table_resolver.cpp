@@ -22,8 +22,8 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/session/ob_local_session_var.h"
-#include "rootserver/ob_partition_exchange.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/command/ob_root_command_service.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -1031,18 +1031,23 @@ int ObAlterTableResolver::resolve_index_column_list(const ParseNode &node,
       } else {
         //column_name
         sort_item.reset();
-        //if the type of node is not identifiter, the index is considered as a fuctional index
-        if (sort_column_node->children_[0]->type_ != T_IDENT) {
-          sort_item.is_func_index_ = true;
-          cnt_func_index = true;
-        }
-        sort_item.column_name_.assign_ptr(sort_column_node->children_[0]->str_value_,
-            static_cast<int32_t>(sort_column_node->children_[0]->str_len_));
-        bool is_multi_value_index = false;
-        if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
-                                                                  is_multi_value_index,
-                                                                  reinterpret_cast<int*>(&index_keyname_)))) {
-          LOG_WARN("failed to resolve index type", K(ret));
+        if (OB_ISNULL(sort_column_node->children_[0])) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "invalid parse tree", K(ret));
+        } else {
+          //if the type of node is not identifiter, the index is considered as a fuctional index
+          if (sort_column_node->children_[0]->type_ != T_IDENT) {
+            sort_item.is_func_index_ = true;
+            cnt_func_index = true;
+          }
+          sort_item.column_name_.assign_ptr(sort_column_node->children_[0]->str_value_,
+              static_cast<int32_t>(sort_column_node->children_[0]->str_len_));
+          bool is_multi_value_index = false;
+          if (OB_FAIL(share::ObMulValueIndexBuilderUtil::adjust_index_type(sort_item.column_name_,
+                                                                    is_multi_value_index,
+                                                                    reinterpret_cast<int*>(&index_keyname_)))) {
+            LOG_WARN("failed to resolve index type", K(ret));
+          }
         }
         if (OB_FAIL(ret)) {
           //do nothing
@@ -1348,7 +1353,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "spatial global index");
               } else if (share::schema::is_fts_index(create_index_arg->index_type_)
-                  && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_, *create_index_arg, allocator_))) {
+                  && OB_FAIL(share::ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema_, *create_index_arg, allocator_))) {
                 LOG_WARN("failed to generate fts parser name", K(ret));
               } else {
                 create_index_arg->index_schema_.set_table_type(USER_INDEX);
@@ -1401,7 +1406,7 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 }
                 if (OB_SUCC(ret)) {
                   create_index_arg->index_key_ = static_cast<int64_t>(index_keyname_);
-                  if (OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(table_schema_, create_index_arg))) {
+                  if (OB_FAIL(share::ObFtsIndexBuilderUtil::check_supportability_for_building_index(table_schema_, create_index_arg))) {
                     LOG_WARN("fail to check supportability for building index",
                         K(ret), KPC(table_schema_), KPC(create_index_arg));
                   } else if (OB_FAIL(resolve_results.push_back(resolve_result))) {
@@ -2234,7 +2239,11 @@ int ObAlterTableResolver::resolve_exchange_partition(const ParseNode &node,
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(rootserver::ObPartitionExchange::check_partition_exchange_schema_for_user(
+  } else if (OB_ISNULL(params_.root_command_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root command service is not bound", KR(ret));
+  } else if (OB_FAIL(params_.root_command_service_->
+      check_partition_exchange_schema_for_user(
       orig_table_schema, *exchange_table_schema, orig_part_name, exchange_part_level))) {
     LOG_WARN("failed to check partition exchange schema for user", KR(ret), K(orig_table_schema),
         KPC(exchange_table_schema), K(orig_part_name), K(exchange_part_level));
@@ -2795,7 +2804,7 @@ int ObAlterTableResolver::resolve_alter_primary(const ParseNode &action_node_lis
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
-    } else if (OB_FAIL(ObVectorIndexUtil::check_has_extra_info(*table_schema_, *schema_guard, has_hnsw_with_extra_info))) {
+    } else if (OB_FAIL(share::ObVectorIndexUtil::check_has_extra_info(*table_schema_, *schema_guard, has_hnsw_with_extra_info))) {
       LOG_WARN("fail to check has hnsw index with extra info", K(ret), KPC(table_schema_));
     } else if (has_hnsw_with_extra_info) {
       ret = OB_NOT_SUPPORTED;

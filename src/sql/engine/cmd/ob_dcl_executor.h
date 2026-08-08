@@ -47,8 +47,8 @@ public:
   virtual ~ObRevokeExecutor() {}
   int execute(ObExecContext &ctx, ObRevokeStmt &stmt);
 private:
-  int revoke_user(ObRevokeStmt &stmt);
-  int revoke_db(ObRevokeStmt &stmt);
+  int revoke_user(ObRevokeStmt &stmt, ObExecContext &ctx);
+  int revoke_db(ObRevokeStmt &stmt, ObExecContext &ctx);
   int revoke_table(ObRevokeStmt &stmt,
                    ObExecContext &ctx);
   int revoke_routine(ObRevokeStmt &stmt,

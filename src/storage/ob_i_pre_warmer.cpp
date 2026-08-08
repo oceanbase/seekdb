@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SHARE
 #include "ob_i_pre_warmer.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_stat_mgr.h"
 namespace oceanbase
 {
@@ -39,7 +39,7 @@ int ObPreWarmerParam::init(const common::ObTabletID &tablet_id, const bool use_f
     }
     if (PRE_WARM_TYPE_NONE == tmp_type) {
       storage::ObTabletStatAnalyzer tablet_analyzer;
-      if (OB_TMP_FAIL(share::g_mp->tablet_stat_mgr()
+      if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObTabletStatMgr>()
                   ->get_tablet_analyzer(tablet_id, tablet_analyzer))) {
         if (OB_HASH_NOT_EXIST != tmp_ret) {
           LOG_WARN_RET(tmp_ret, "Failed to get tablet stat analyzer", K(tablet_id));

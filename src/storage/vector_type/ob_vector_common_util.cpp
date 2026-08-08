@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX SHARE
 #include "share/geo/ob_s2adapter.h" // for htonll
 #include "ob_vector_common_util.h"
-#include "observer/ob_inner_sql_connection.h"
 
 namespace oceanbase {
 namespace share {
@@ -292,20 +291,6 @@ uint64_t ObVectorKmeansClusterHelper::get_center_prefix(const ObString &center_i
   }
   return prefix;
 }
-
-void ObVectorKmeansClusterHelper::release_inner_session(sql::ObFreeSessionCtx &free_session_ctx, sql::ObSQLSessionInfo *&session)
-{
-  if (nullptr != session) {
-    LOG_INFO("[VECTOR INDEX]: Release inner session", KP(session));
-    session->get_ddl_info().set_is_dummy_ddl_for_inner_visibility(false);
-    session->set_session_sleep();
-    GCTX.session_mgr_->revert_session(session);
-    GCTX.session_mgr_->free_session(free_session_ctx);
-    session = nullptr;
-  }
-}
-
-
 
 // ------------------ ObCentersBuffer implement ------------------
 template <>

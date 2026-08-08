@@ -19,7 +19,6 @@
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
 {
@@ -5856,7 +5855,7 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
     ObTableSchema &new_table_schema,
     ObTableSchema &new_index_schema,
     common::ObIAllocator &allocator,
-    oceanbase::rootserver::ObDDLOperator &ddl_operator,
+    query::ObIColumnSchemaWriter &column_writer,
     common::ObMySQLTransaction &trans,
     ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
     ObSEArray<ObString, 1> &domain_store_columns)
@@ -5899,7 +5898,7 @@ int ObVecIndexBuilderUtil::generate_vec_index_aux_columns(
           }
           tmp_table_schema.set_in_offline_ddl_white_list(true);
           FOREACH_X(it, gen_columns, OB_SUCC(ret)) {
-            if (OB_FAIL(ddl_operator.insert_single_column(trans, tmp_table_schema, *(*it)))) {
+            if (OB_FAIL(column_writer.insert_single_column(trans, tmp_table_schema, *(*it)))) {
               LOG_WARN("failed to insert vec column", K(ret), KP(*it));
             }
           }

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_pl_resolver.h"
+#include "share/rc/ob_server_runtime.h"
 #include "pl/ob_pl_router.h"
 #include "pl/ob_pl_exception_handling.h"
 #include "sql/parser/parse_malloc.h"
@@ -3053,6 +3054,7 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
                                             resolve_ctx_.sql_proxy_,
                                             resolve_ctx_.schema_guard_,
                                             expr_factory_,
+                                            resolve_ctx_.params_.pl_sql_runtime_,
                                             new_sql.empty() ?
                                               parse_tree->str_value_ : new_sql.ptr(),
                                             is_cursor,
@@ -3304,8 +3306,8 @@ int ObPLResolver::resolve_interface(const ObStmtNodeTree *parse_tree,
 
   if (OB_SUCC(ret)) {
     PL_C_INTERFACE_t entry = nullptr;
-    CK (OB_NOT_NULL(GCTX.pl_engine_));
-    OX (entry = GCTX.pl_engine_->get_interface_service().get_entry(interface_name));
+    CK (OB_NOT_NULL(resolve_ctx_.params_.pl_engine_));
+    OX (entry = resolve_ctx_.params_.pl_engine_->get_interface_service().get_entry(interface_name));
     if (OB_SUCC(ret) && OB_ISNULL(entry)) {
       ret = OB_ERR_FUNCTION_UNKNOWN;
       LOG_USER_ERROR(OB_ERR_FUNCTION_UNKNOWN, "PROCEDURE",
@@ -4188,7 +4190,7 @@ int ObPLResolver::resolve_cparams(ObIArray<ObRawExpr*> &exprs,
       CK (PL_CURSOR_FOR_LOOP == stmt->get_type() || PL_OPEN == stmt->get_type());
       CK (OB_NOT_NULL(formal_param));
       OZ (convert_cursor_actual_params(
-        params.at(i), formal_param->get_pl_data_type(), func, idx));
+        params.at(i), pl::get_pl_data_type(*formal_param), func, idx));
       if (OB_SUCC(ret) && idx != OB_INVALID_INDEX) {
         expr_idx.at(i) = idx;
       }
@@ -4255,7 +4257,7 @@ int ObPLResolver::resolve_cparams(ObIArray<ObRawExpr*> &exprs,
       bool need_wrap = false;
       // expr T_OBJ_ACCESS_REF will add cast to string when CodeGenerate call stmt
       OZ (ObRawExprUtils::need_wrap_to_string(params.at(i)->get_result_type(),
-                                              params_list.at(i)->get_pl_data_type().get_obj_type(),
+                                              pl::get_pl_data_type(*params_list.at(i)).get_obj_type(),
                                               true,
                                               need_wrap));
       if (OB_SUCC(ret) && need_wrap) {
@@ -4461,6 +4463,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                           resolve_ctx_.sql_proxy_,
                                           resolve_ctx_.schema_guard_,
                                           expr_factory_,
+                                          resolve_ctx_.params_.pl_sql_runtime_,
                                           sql_node->str_value_,
                                           true, /*is_cursor*/
                                           &sql_ns,
@@ -5000,7 +5003,7 @@ int ObPLResolver::resolve_cursor_actual_params(
   ObSEArray<ObIRoutineParam*, 16> iparams;
   const ObPLCursor *cursor = static_cast<ObPLOpenStmt*>(stmt)->get_cursor();
   CK (OB_NOT_NULL(cursor));
-  CK (OB_NOT_NULL(resolve_ctx_.session_info_.get_pl_engine()));
+  CK (OB_NOT_NULL(resolve_ctx_.params_.pl_engine_));
   CK (OB_NOT_NULL(stmt->get_namespace()));
   if (OB_SUCC(ret) && NULL != parse_tree) {
     OZ (resolve_cparams_expr(parse_tree, func, exprs));
@@ -6053,6 +6056,7 @@ int ObPLResolver::transform_subquery_expr(const ParseNode *node,
                               resolve_ctx_.sql_proxy_,
                               resolve_ctx_.schema_guard_,
                               expr_factory_,
+                              resolve_ctx_.params_.pl_sql_runtime_,
                               sql_str,
                               false,
                               &current_block_->get_namespace(),
@@ -6342,6 +6346,11 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                             *(params.schema_checker_->get_schema_guard()),
                             *package_guard,
                             *(params.sql_proxy_),
+                            params.plan_cache_,
+                            params.pl_sql_runtime_,
+                            params.pl_engine_,
+                            params.srs_provider_,
+                            params.lob_read_service_,
                             *(params.expr_factory_),
                             NULL,/*parent ns*/
                             params.is_prepare_protocol_,
@@ -6363,6 +6372,9 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
       OZ (ObPLBuilder::init_anonymous_ast(func_ast,
                                             *(params.allocator_),
                                             *(params.session_info_),
+                                            *(params.plan_cache_),
+                                            params.srs_provider_,
+                                            params.lob_read_service_,
                                             *(params.sql_proxy_),
                                             *(params.schema_checker_->get_schema_guard()),
                                             *package_guard,
@@ -6387,6 +6399,11 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                             ns.get_external_ns()->get_resolve_ctx().schema_guard_,
                             ns.get_external_ns()->get_resolve_ctx().package_guard_,
                             ns.get_external_ns()->get_resolve_ctx().sql_proxy_,
+                            ns.get_external_ns()->get_resolve_ctx().params_.plan_cache_,
+                            ns.get_external_ns()->get_resolve_ctx().params_.pl_sql_runtime_,
+                            ns.get_external_ns()->get_resolve_ctx().params_.pl_engine_,
+                            ns.get_external_ns()->get_resolve_ctx().params_.srs_provider_,
+                            ns.get_external_ns()->get_resolve_ctx().params_.lob_read_service_,
                             *(params.expr_factory_),
                             ns.get_external_ns()->get_parent_ns(),
                             params.is_prepare_protocol_,
@@ -6431,6 +6448,11 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                           ns.get_external_ns()->get_resolve_ctx().schema_guard_,
                           ns.get_external_ns()->get_resolve_ctx().package_guard_,
                           ns.get_external_ns()->get_resolve_ctx().sql_proxy_,
+                          ns.get_external_ns()->get_resolve_ctx().params_.plan_cache_,
+                          ns.get_external_ns()->get_resolve_ctx().params_.pl_sql_runtime_,
+                          ns.get_external_ns()->get_resolve_ctx().params_.pl_engine_,
+                          ns.get_external_ns()->get_resolve_ctx().params_.srs_provider_,
+                          ns.get_external_ns()->get_resolve_ctx().params_.lob_read_service_,
                           expr_factory,
                           ns.get_external_ns()->get_parent_ns(),
                           is_prepare_protocol,
@@ -6746,6 +6768,11 @@ int ObPLResolver::resolve_obj_access_node(ParseNode *node,
                                                         : ns->get_external_ns()
                                                             ->get_resolve_ctx().sql_proxy_) 
                                           : *sql_proxy,
+                               NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.plan_cache_,
+                               NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.pl_sql_runtime_,
+                               NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.pl_engine_,
+                               NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.srs_provider_,
+                               NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.lob_read_service_,
                                expr_factory,
                                NULL == ns ? NULL : ns->get_external_ns()->get_parent_ns(),
                                false/*not prepare*/,
@@ -7179,7 +7206,7 @@ int ObPLResolver::resolve_record_construct(const ObQualifiedName &q_name,
         OZ (object_expr->add_param_expr(member->get_default_expr()));
       } else {
         ObPLPackageManager &package_manager =
-          resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
+          resolve_ctx_.params_.pl_engine_->get_package_manager();
         ObRawExpr *expr = NULL;
         OZ (package_manager.get_package_expr(resolve_ctx_,
                                              expr_factory_,
@@ -8206,7 +8233,7 @@ int ObPLResolver::check_package_variable_read_only(uint64_t package_id, uint64_t
   if (OB_SUCC(ret) && !is_local) {
     const ObPLVar *var = NULL;
     ObPLPackageManager &package_manager =
-        resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
+        resolve_ctx_.params_.pl_engine_->get_package_manager();
     OZ (package_manager.get_package_var(resolve_ctx_, package_id, var_idx, var));
     CK (OB_NOT_NULL(var));
     if (OB_SUCC(ret) && var->is_readonly()) {
@@ -8923,7 +8950,7 @@ int ObPLResolver::resolve_function(ObObjAccessIdent &access_ident,
                                                 return_type,
                                                 NULL));
   } else {
-    OX (return_type = routine_info->get_ret_info()->get_pl_data_type());
+    OX (return_type = pl::get_pl_data_type(*routine_info->get_ret_info()));
   }
   if (OB_SUCC(ret)
       && access_ident.udf_info_.ref_expr_->get_udf_id() == OB_INVALID_ID) {
@@ -9562,7 +9589,7 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
       
       const ObPackageInfo *package_info = NULL;
       ObPLPackageManager &package_manager =
-        resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
+        resolve_ctx_.params_.pl_engine_->get_package_manager();
       db_name = db_name.empty() ? resolve_ctx_.session_info_.get_database_name() : db_name;
       const ObPLCondition *condition = NULL;
       OZ (resolve_ctx_.schema_guard_.get_database_id(db_name, database_id));
@@ -10193,7 +10220,7 @@ int ObPLResolver::resolve_package_cursor(
   int64_t idx = OB_INVALID_INDEX;
   const ObPLCursor *cursor = NULL;
   const ObPackageInfo *package_info = NULL;
-  ObPLPackageManager &package_manager = resolve_ctx_.session_info_.get_pl_engine()->get_package_manager();
+  ObPLPackageManager &package_manager = resolve_ctx_.params_.pl_engine_->get_package_manager();
   OZ (package_manager.get_package_cursor(resolve_ctx_, package_id, cursor_name, cursor, idx));
   if (OB_SUCC(ret) && OB_ISNULL(cursor)) {
     ret = OB_ERR_SP_CURSOR_MISMATCH;
@@ -11042,7 +11069,11 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
     LOG_WARN("routine_block is invalid", K(ret));
   } else {
     ObPLResolver resolver(resolve_ctx_.allocator_, resolve_ctx_.session_info_, resolve_ctx_.schema_guard_,
-                          resolve_ctx_.package_guard_, resolve_ctx_.sql_proxy_, expr_factory_,
+                          resolve_ctx_.package_guard_, resolve_ctx_.sql_proxy_,
+                          resolve_ctx_.params_.plan_cache_, resolve_ctx_.params_.pl_sql_runtime_,
+                          resolve_ctx_.params_.pl_engine_,
+                          resolve_ctx_.params_.srs_provider_,
+                          resolve_ctx_.params_.lob_read_service_, expr_factory_,
                           &current_block_->get_namespace(), resolve_ctx_.is_prepare_protocol_,
                           false/*is_check_mode_ = false*/, false/*bool is_sql_scope_ = false*/,
                           resolve_ctx_.params_.param_list_);
@@ -11326,9 +11357,11 @@ int ObPLResolveCtx::get_user_type(uint64_t type_id, const ObUserDefinedType *&us
               && extract_package_id(type_id) != OB_INVALID_ID) {
       ret = OB_SUCCESS;
       const ObUserDefinedType *package_user_type = NULL;
-      ObPLPackageManager &package_manager = session_info_.get_pl_engine()->get_package_manager();
+      ObPLPackageManager *package_manager = NULL;
+      CK (OB_NOT_NULL(params_.pl_engine_));
+      OX (package_manager = &params_.pl_engine_->get_package_manager());
       ObPLDataType *copy_pl_type = NULL;
-      OZ (package_manager.get_package_type(*this, extract_package_id(type_id), type_id, package_user_type), K(type_id));
+      OZ (package_manager->get_package_type(*this, extract_package_id(type_id), type_id, package_user_type), K(type_id));
       CK (OB_NOT_NULL(user_type = static_cast<const ObUserDefinedType *>(package_user_type)));
     }
     if (OB_SUCC(ret) && alloc == &allocator_) {

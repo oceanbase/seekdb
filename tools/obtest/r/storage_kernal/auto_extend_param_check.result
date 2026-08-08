@@ -1,0 +1,39 @@
+# owner: yangjiali.yjl
+# owner group: storage
+# ----------------------------------------------------------------------
+# Test of DISK AUTO EXTEND PARAM
+# ----------------------------------------------------------------------
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+#
+# Test datafile_next param
+#
+alter system set datafile_next=1;
+alter system set datafile_next=1M;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '1M' at line 1
+alter system set datafile_next=1G;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '1G' at line 1
+alter system set datafile_next='1';
+alter system set datafile_next='1M';
+alter system set datafile_next='5G';
+alter system set datafile_next='1G';
+#
+# Test datafile_maxsize param
+#
+alter system set datafile_maxsize=1;
+alter system set datafile_maxsize=1M;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '1M' at line 1
+alter system set datafile_maxsize=1G;
+ERROR 42000: You have an error in your SQL syntax; check the manual that corresponds to your OceanBase version for the right syntax to use near '1G' at line 1
+#
+# Test datafile_maxsize set in virtual table
+#
+alter system set datafile_maxsize='5';
+alter system set datafile_maxsize='5M';
+alter system set datafile_maxsize='10G';
+alter system set datafile_maxsize='5G';
+alter system set datafile_maxsize=0;
+# ----------------------------------------------------------------------
+# Test of disk auto extend end.
+# ----------------------------------------------------------------------

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-// storage DDL helper class: contains  storage-clean static methods(A-set member-split cleanup)
 #ifndef OCEANBASE_STORAGE_DDL_OB_DDL_STORAGE_UTIL_H_
 #define OCEANBASE_STORAGE_DDL_OB_DDL_STORAGE_UTIL_H_
 #include "share/ob_ddl_common.h"  // reuses its types(ObMacroDataSeq/ObDatumRow/ObBatchDatumRows/ObStorageSchema/ObWriteMacroParam/ObTableSchema etc.) for forward declarations
@@ -23,11 +22,86 @@ namespace oceanbase
 namespace blocksstable { class ObDatumRowkey; }
 namespace storage
 {
+class ObDDLBatchRows;
+class ObDDLMacroBlockWriter;
+class ObLobMacroBlockWriter;
+
 class ObDDLStorageUtil
 {
 public:
-  static constexpr int64_t MACRO_SEQ_STEP = 1LL << 25;
-
+  static int ddl_get_tablet(
+      ObLS *ls,
+      const ObTabletID &tablet_id,
+      ObTabletHandle &tablet_handle,
+      const ObMDSGetTabletMode mode = ObMDSGetTabletMode::READ_WITHOUT_CHECK);
+  static int get_tablet_physical_row_cnt(
+      const ObTabletID &tablet_id,
+      const bool calc_sstable,
+      const bool calc_memtable,
+      int64_t &physical_row_count);
+  static int is_major_exist(const ObTabletID &tablet_id, bool &is_exist);
+  static int set_tablet_autoinc_seq(const ObTabletID &tablet_id, const int64_t seq_value);
+  static int report_ddl_checksum_from_major_sstable(
+      const ObTabletID &tablet_id,
+      const uint64_t table_id,
+      const int64_t execution_id,
+      const int64_t ddl_task_id,
+      const int64_t data_format_version);
+  static int report_ddl_sstable_checksum(
+      const ObTabletID &tablet_id,
+      const uint64_t target_table_id,
+      const int64_t execution_id,
+      const int64_t ddl_task_id,
+      const int64_t data_format_version,
+      ObTabletHandle &tablet_handle,
+      blocksstable::ObSSTable *first_major_sstable);
+  static int init_macro_block_writer(
+      const ObWriteMacroParam &param,
+      ObIAllocator &allocator,
+      ObDDLMacroBlockWriter *&macro_block_writer);
+  static int prepare_lob_writer(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      const ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer);
+  static int handle_lob_columns(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &allocator,
+      blocksstable::ObDatumRow &datum_row);
+  static int handle_lob_columns(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &allocator,
+      blocksstable::ObBatchDatumRows &batch_rows);
+  static int convert_to_storage_row(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      const ObWriteMacroParam &param,
+      ObLobMacroBlockWriter *&lob_writer,
+      ObArenaAllocator &row_arena,
+      blocksstable::ObDatumRow &current_row);
+  static int fill_writer_param(
+      const ObTabletID &tablet_id,
+      const int64_t slice_idx,
+      ObDDLIndependentDag *dag,
+      const int64_t max_batch_size,
+      ObWriteMacroParam &param);
+  static int get_task_ranges(
+      const int64_t task_id,
+      const ObTabletID &tablet_id,
+      const int64_t tablet_size,
+      const int64_t hint_parallelism,
+      ObArenaAllocator &allocator,
+      ObArray<blocksstable::ObDatumRange> &ranges);
+  static int init_batch_rows(
+      const ObDDLTableSchema &ddl_table_schema,
+      const int64_t batch_size,
+      ObDDLBatchRows &batch_rows);
   static int check_null_and_length(
       const bool is_index_table,
       const bool has_lob_rowkey,
@@ -59,7 +133,6 @@ public:
       const share::schema::ObTableSchema *table_schema,
       ObIAllocator &allocator,
       ObStorageSchema *&storage_schema);
-  // --- ObDDLErrorMessageTableOperator::extract_index_key demoted and merged in(storage-bound: ObDatumRowkey/ObStorageDatum) ---
   static int extract_index_key(
       const share::schema::ObTableSchema &index_schema,
       const blocksstable::ObDatumRowkey &index_key,

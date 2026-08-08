@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE_BLKMGR
 
 #include "storage/blocksstable/ob_shared_macro_block_manager.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "storage/tablet/ob_mds_schema_helper.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -438,7 +438,7 @@ int ObSharedMacroBlockMgr::defragment()
   ObArenaAllocator iter_allocator("SSTDefragIter", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObFixedArray<MacroBlockId, ObIAllocator> macro_ids(task_allocator);
   ObHasNestedTableFilterOp op;
-  ObTabletIterator tablet_iter(*(share::g_mp->storage_meta_mem_mgr()), iter_allocator, &op);
+  ObTabletIterator tablet_iter(*(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()), iter_allocator, &op);
   ObSSTableIndexBuilder *sstable_index_builder = nullptr;
   ObIndexBlockRebuilder *index_block_rebuilder = nullptr;
   int64_t rewrite_cnt = 0;
@@ -613,7 +613,7 @@ int ObSharedMacroBlockMgr::update_tablet(
   }
 
   if (OB_SUCC(ret) && !new_sstables.empty()) {
-    ObLSService *ls_svr = share::g_mp->ls_service();
+    ObLSService *ls_svr = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     ObLS *tenant_ls = nullptr;
 
     if (OB_FAIL(ls_svr->get_ls(tenant_ls))) {

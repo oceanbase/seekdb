@@ -23,7 +23,7 @@
 #include "share/ob_delegate.h"
 #include "palf/palf_env.h"
 #include "palf/palf_handle.h"
-#include "palf/palf_base_info.h"
+#include "share/log/palf/palf_base_info.h"
 #include "palf/palf_iterator.h"
 
 namespace oceanbase
@@ -40,10 +40,6 @@ namespace transaction
 {
 class ObTsMgr;
 }
-namespace storage
-{
-class ObLS;
-}
 namespace palf
 {
 class LSN;
@@ -53,6 +49,7 @@ namespace logservice
 class ObLogApplyService;
 class ObApplyStatus;
 class ObLogReplayService;
+class ObILogStorage;
 class AppendCb;
 class ObILogHandler
 {
@@ -473,18 +470,19 @@ int init_log_iterator(
   return ret;
 }
 
-int __get_log_handler(ObLogHandler *&log_handler,
-                      storage::ObLS *&ls);
+int __get_log_handler(
+    ObILogStorage &log_storage,
+    ObLogHandler *&log_handler);
 
 template<class LogEntryType, class StartPoint>
-int init_log_iterator_(const StartPoint &start_point,
+int init_log_iterator_(ObILogStorage &log_storage,
+  const StartPoint &start_point,
   const int64_t suggested_read_buf_size,
   palf::PalfIterator<LogEntryType> &iterator)
 {
   int ret = OB_SUCCESS;
   ObLogHandler *log_handler = NULL;
-  storage::ObLS *ls = nullptr;
-  if (OB_FAIL(__get_log_handler(log_handler, ls))) {
+  if (OB_FAIL(__get_log_handler(log_storage, log_handler))) {
     CLOG_LOG(WARN, "__get_log_handler failed");
   } else if (OB_FAIL(init_log_iterator(log_handler, start_point, suggested_read_buf_size, iterator))) {
     CLOG_LOG(WARN, "seek iterator from log_handler failed", K(start_point));
@@ -493,11 +491,13 @@ int init_log_iterator_(const StartPoint &start_point,
 }
 
 template<typename StartPoint, typename IteratorType>
-int seek_log_iterator(const StartPoint &start_point,
+int seek_log_iterator(ObILogStorage &log_storage,
+                      const StartPoint &start_point,
                       palf::PalfIterator<IteratorType> &iterator)
 {
   constexpr int64_t suggested_read_buf_size = palf::PALF_BLOCK_SIZE;
-  return init_log_iterator_(start_point, suggested_read_buf_size, iterator);
+  return init_log_iterator_(
+      log_storage, start_point, suggested_read_buf_size, iterator);
 }
 
 // =============================== Iterator end===========================

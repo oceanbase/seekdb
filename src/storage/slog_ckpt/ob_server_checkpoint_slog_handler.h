@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "lib/atomic/ob_atomic.h"
-#include "observer/omt/ob_server_runtime_meta.h"
+#include "storage/meta_store/ob_server_runtime_meta.h"
 #include "storage/slog_ckpt/ob_local_storage_checkpoint_reader.h"
 #include "storage/ob_super_block_struct.h"
 #include "storage/slog/ob_storage_log_replayer.h"
@@ -31,9 +31,9 @@ namespace storage
 {
 
 struct ObMetaDiskAddr;
-
 class ObRedoModuleReplayParam;
 class ObStorageLogger;
+class ObIServerRuntime;
 
 class ObServerCheckpointSlogHandler : public ObIRedoModule
 {
@@ -59,7 +59,7 @@ public:
   ObServerCheckpointSlogHandler(const ObServerCheckpointSlogHandler &) = delete;
   ObServerCheckpointSlogHandler &operator=(const ObServerCheckpointSlogHandler &) = delete;
 
-  int init(ObStorageLogger *server_slogger);
+  int init(ObStorageLogger *server_slogger, ObIServerRuntime &server_runtime);
   int start();
   int start_replay();
   // Fetch the single replayed runtime metadata record.
@@ -105,6 +105,7 @@ private:
   bool is_inited_;
   bool is_writing_checkpoint_;
   ObStorageLogger *server_slogger_;
+  ObIServerRuntime *server_runtime_;
   common::TCRWLock lock_;  // protect block_handle
   ObMetaBlockListHandle server_meta_block_handle_;
   ObWriteCheckpointTask write_ckpt_task_;

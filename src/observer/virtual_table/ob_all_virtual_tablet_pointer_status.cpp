@@ -15,7 +15,7 @@
  */
 
 #include "ob_all_virtual_tablet_pointer_status.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::storage;
@@ -75,7 +75,7 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
 {
   int ret = OB_SUCCESS;
   if (nullptr == tablet_iter_) {
-    ObStorageMetaMemMgr *t3m = share::g_mp->storage_meta_mem_mgr();
+    ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     tablet_iter_ = new (iter_buf_) ObTabletPtrWithInMemObjIterator(*t3m);
     if (OB_ISNULL(tablet_iter_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -158,7 +158,7 @@ int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
           break;
         case OLD_CHAIN:
           MEMSET(old_chain_, 0, STR_LEN);
-          if (OB_FAIL(share::g_mp->storage_meta_mem_mgr()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
+          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
             SERVER_LOG(WARN, "fail to print old chain", K(ret), K(key), KPC(tablet_pointer));
           } else {
             cur_row_.cells_[i].set_varchar(old_chain_);

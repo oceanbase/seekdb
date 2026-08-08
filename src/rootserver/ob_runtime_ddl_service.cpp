@@ -1,4 +1,3 @@
-#include "observer/ob_service.h"
 #include "share/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -24,7 +23,6 @@
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_schema_status_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"

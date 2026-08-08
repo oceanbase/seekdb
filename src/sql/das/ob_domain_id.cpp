@@ -18,7 +18,8 @@
 
 #include "ob_domain_id.h"
 #include "share/schema/ob_table_schema.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
+#include "sql/ob_sql_context.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 
 namespace oceanbase

@@ -398,7 +398,7 @@ int ObGlobalMergeManagerBase::adjust_global_merge_info()
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(ObTabletMetaTableCompactionOperator::get_min_compaction_scn(
-      min_compaction_scn))) {
+      GCTX.meta_db_pool_, min_compaction_scn))) {
     LOG_WARN("fail to get min compaction scn", KR(ret));
   } else if (OB_UNLIKELY(min_compaction_scn < SCN::base_scn())) {
     ret = OB_ERR_UNEXPECTED;

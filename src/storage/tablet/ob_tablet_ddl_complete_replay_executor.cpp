@@ -15,7 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_ddl_complete_replay_executor.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
@@ -34,7 +34,7 @@ namespace oceanbase
 namespace storage
 {
 ObTabletDDLCompleteReplayExecutor::ObTabletDDLCompleteReplayExecutor()
-  : logservice::ObTabletReplayExecutor(),
+  : ObTabletReplayExecutor(),
     user_ctx_(nullptr), user_data_(nullptr)
 {
 }
@@ -121,7 +121,7 @@ int ObTabletDDLCompleteReplayExecutor::update_tablet_table_store(ObTablet &table
   } else if (nullptr != first_major_sstable) {
     /* do nothing */
     LOG_INFO("first major sstable exist, do nothing", K(ret), K(user_data));
-  } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     LOG_WARN("failed to get ls", K(ret), K(user_data));
   } else {
     ObUpdateTableStoreParam param(user_data.snapshot_version_,

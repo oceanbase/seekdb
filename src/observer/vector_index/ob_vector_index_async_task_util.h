@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_VECTOR_INDEX_ASYNC_TASK_UTIL_H_
 
 #include "lib/string/ob_string.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/container/ob_array.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
@@ -43,7 +43,7 @@ class ObPluginVectorIndexMgr;
 #define CHECK_TASK_CANCELLED_IN_PROCESS(ret, loop_cnt, ctx_)  \
   if (OB_FAIL(ret)) { \
   } else if (++loop_cnt > 20) { \
-    ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service(); \
+    ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>(); \
     bool is_cancel = false; \
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::check_task_is_cancel(ctx_, is_cancel))) { \
       LOG_WARN("fail to check task is cancel", KPC(ctx_));  \

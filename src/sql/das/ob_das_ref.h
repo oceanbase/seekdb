@@ -17,11 +17,10 @@
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_REF_H_
 #include "sql/das/ob_das_task.h"
-#include "share/rc/ob_module_provider.h"
 #include "sql/das/ob_das_define.h"
 #include "sql/das/ob_das_factory.h"
 #include "sql/das/ob_das_def_reg.h"
-#include "storage/tx/ob_trans_service.h"
+#include "data_plane/transaction/ob_tx_desc_lifecycle.h"
 
 namespace oceanbase
 {
@@ -72,11 +71,7 @@ public:
   {
     parallel_type_ = DAS_SERIALIZATION;
     submitted_task_count_ = 0;
-    if (OB_NOT_NULL(tx_desc_bak_)) {
-      transaction::ObTransService *txs = share::g_mp->trans_service();
-      txs->release_tx(*tx_desc_bak_);
-      tx_desc_bak_ = NULL;
-    }
+    data_plane::release_tx_desc(tx_desc_bak_);
     has_refreshed_tx_desc_scn_ = false;
   }
   void set_tx_desc_bak(transaction::ObTxDesc *v) { tx_desc_bak_ = v; }
@@ -87,7 +82,7 @@ public:
   TO_STRING_KV(K_(parallel_type),
                K_(submitted_task_count),
                K_(das_dop),
-               K_(tx_desc_bak),
+               "tx_desc_bak", data_plane::ObTxDescLogView(tx_desc_bak_),
                K_(has_refreshed_tx_desc_scn));
 public:
   ObDasParallelType parallel_type_;

@@ -90,7 +90,8 @@ OB_DEF_SERIALIZE_SIZE(ObPushDownTopNFilterMsg)
   return len;
 }
 ObPushDownTopNFilterMsg::ObPushDownTopNFilterMsg()
-    : ObP2PDatahubMsgBase(), total_sk_cnt_(0), compares_(allocator_), heap_top_datums_(allocator_),
+    : ObP2PDatahubMsgBase(), total_sk_cnt_(0), datum_access_ctx_(nullptr),
+      compares_(allocator_), heap_top_datums_(allocator_),
       cells_size_(allocator_), data_version_(0), is_fetch_with_ties_(false)
 {}
 
@@ -106,12 +107,15 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
   int64_t effective_sk_cnt = pd_topn_filter_info->effective_sk_cnt_;
   ObPxSqcHandler *sqc_handler = exec_ctx->get_sqc_handler();
   int64_t task_id = 0;
-  if (nullptr == sqc_handler) {
+  if (OB_FAIL(exec_ctx->get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  } else if (nullptr == sqc_handler) {
     // none px plan
   } else {
     task_id = exec_ctx->get_px_task_id();
   }
-  if (OB_FAIL(ObP2PDatahubMsgBase::init(
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObP2PDatahubMsgBase::init(
           pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id, timeout_ts))) {
     LOG_WARN("fail to init basic p2p msg", K(ret));
   } else if (FALSE_IT(total_sk_cnt_ = pd_topn_filter_info->total_sk_cnt_)) {
@@ -156,6 +160,7 @@ int ObPushDownTopNFilterMsg::assign(const ObP2PDatahubMsgBase &src_msg)
       static_cast<const ObPushDownTopNFilterMsg &>(src_msg);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(src_msg))) {
     LOG_WARN("failed to assign base data", K(ret));
+  } else if (FALSE_IT(datum_access_ctx_ = src_topn_msg.datum_access_ctx_)) {
   } else if (FALSE_IT(total_sk_cnt_ = src_topn_msg.total_sk_cnt_)) {
   } else if (OB_FAIL(compares_.assign(src_topn_msg.compares_))) {
     LOG_WARN("fail to assign compares_", K(ret));
@@ -223,7 +228,9 @@ int ObPushDownTopNFilterMsg::filter_out_data(const ObExpr &expr, ObEvalCtx &ctx,
   int cmp_res = 0;
   bool is_filtered = false;
   filter_ctx.total_count_++;
-  if (OB_UNLIKELY(is_empty_)) {
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  } else if (OB_UNLIKELY(is_empty_)) {
     res.set_int(0);
     filter_ctx.filter_count_++;
     filter_ctx.check_count_++;
@@ -268,7 +275,9 @@ int ObPushDownTopNFilterMsg::filter_out_data_batch(
 {
   int ret = OB_SUCCESS;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
-  if (OB_UNLIKELY(is_empty_)) {
+  if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx_))) {
+    LOG_WARN("failed to get datum access context", K(ret));
+  } else if (OB_UNLIKELY(is_empty_)) {
     ObDatum *results = expr.locate_batch_datums(ctx);
     for (int64_t i = 0; i < batch_size; i++) {
       results[i].set_int(0);
@@ -392,7 +401,8 @@ int ObPushDownTopNFilterMsg::merge_heap_top_datums(ObIArray<ObDatum> &incomming_
       const ObDatum &incomming_datum = incomming_datums.at(i);
       ObDatum &origin_datum = heap_top_datums_.at(i);
       cmp_res = 0;
-      if (OB_FAIL(compare.compare_for_build(incomming_datum, origin_datum, cmp_res))) {
+      if (OB_FAIL(compare.compare_for_build(
+              incomming_datum, origin_datum, cmp_res, datum_access_ctx_))) {
         LOG_WARN("fail to compare_for_build", K(ret));
       } else if (cmp_res < 0) {
         break;

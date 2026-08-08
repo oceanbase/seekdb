@@ -24,7 +24,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_schema_struct.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "sql/plan_cache/ob_pre_calc_expr_handler.h"
 #include "sql/plan_cache/ob_i_lib_cache_object.h"
 #include "sql/plan_cache/ob_plan_cache_struct.h"

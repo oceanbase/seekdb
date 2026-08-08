@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_PRIV_ST_EQUALS_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 
 namespace oceanbase
@@ -37,7 +37,7 @@ public:
       ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const override;
 
 private:
-  static int get_input_geometry(omt::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
+  static int get_input_geometry(common::ObSrsCacheGuard &srs_guard, MultimodeAlloctor &allocator, ObEvalCtx &ctx, ObExpr *gis_arg,
       ObDatum *gis_datum, const ObSrsItem *&srs, ObGeometry *&geo, bool &is_geo_empty);
   DISALLOW_COPY_AND_ASSIGN(ObExprPrivSTEquals);
 };

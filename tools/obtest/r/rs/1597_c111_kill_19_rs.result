@@ -1,0 +1,20 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql alter system set election_blacklist_interval = '0s';
+ob1.mysql alter system set dead_socket_detection_timeout = '5s';
+'case 1 : z1 kill -19'
+ob1.z1.obs0.kill -19;
+'case 1 : leader should switch to z2'
+ob1.z2.obs0.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = "z2" and role = 1, 1, 120;
+'case 1 : leader switch to z2 cost 127 s'
+'case 1 : z1 kill -18'
+ob1.z1.obs0.kill -18;
+'case 1 : leader should switch to z1'
+ob1.z2.obs0.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = "z1" and role = 1, 1, 120;
+'case 1 : leader switch to z1 cost 12 s'

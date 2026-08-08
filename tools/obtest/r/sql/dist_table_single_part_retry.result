@@ -1,0 +1,55 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql drop tenant if exists xy_tenant_1;
+ob1.mysql create resource unit if not exists xy_box_1 max_cpu 5, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 3, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = $obs_num;
+ob1.mysql create tenant if not exists xy_tenant_1 primary_zone='$zone_name', resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
+alter system flush plan cache;
+select effective_tenant();
+effective_tenant()
+xy_tenant_1
+**************************************** Single Table Dist Plan ****************************************
+
+=============================== single table select ===============================
+
+// scan table, result as follows
+select /*+ no_use_px parallel(2) */ * from case1_t_1 where pk1 < 21;
+
+// scan table again, result as follows
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+// print explain result
+explain select /*+ no_use_px parallel(2) */ * from case1_t_1;
+Query Plan
+=================================================
+|ID|OPERATOR           |NAME     |EST. ROWS|COST|
+-------------------------------------------------
+|0 |EXCHANGE IN DISTR  |         |30       |45  |
+|1 | EXCHANGE OUT DISTR|         |30       |42  |
+|2 |  TABLE SCAN       |case1_t_1|30       |42  |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([case1_t_1.pk1], [case1_t_1.a1]), filter(nil)
+  1 - output([case1_t_1.pk1], [case1_t_1.a1]), filter(nil)
+  2 - output([case1_t_1.pk1], [case1_t_1.a1]), filter(nil), 
+      access([case1_t_1.pk1], [case1_t_1.a1]), partitions(p[0-29])
+
+
+// alter system switch replica part1 to backup server
+
+// expect same single table dist plan
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+
+// alter system switch replica part1 to backup server
+
+// expect the QUERY EXECUTE SUCC, DO NOT RETURN 4038
+select /*+ no_use_px parallel(2) */ * from case1_t_1;
+****************************** cleanup ******************************
+drop database if exists xy_db;
+alter system set enable_auto_leader_switch = true;
+drop tenant xy_tenant_1;
+drop resource pool xy_pool_1;
+drop resource unit xy_box_1;

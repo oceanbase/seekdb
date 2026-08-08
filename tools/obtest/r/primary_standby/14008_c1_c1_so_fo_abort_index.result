@@ -1,0 +1,54 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for continue_signal';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+create table t_t_t_t(c1 int primary key, c2 int) partition by hash(c1) partitions 12;
+set ob_query_timeout = 1000000000;
+create index t_index on t(c2) global partition by hash(c2) partitions 3;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+set ob_query_timeout = 60000000;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select count(*) from __all_virtual_table where data_table_id=$table_id, 0, 3;
+alter system commit to switchover to primary;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ERROR HY000: Add index failed
+ob1.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%cluster%' and event = 'drop index', 1, 3;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_LOCAL_INDEX_STATUS wait_for continue_signal2';
+create index t_t_index2 on t_t(c2) local;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+alter system commit to switchover to physical standby;
+alter system commit to switchover to primary;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal2';
+ERROR HY000: Add index failed
+ob1.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%cluster%' and event = 'drop index', 2, 3;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for continue_signal3';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_LOCAL_INDEX_STATUS wait_for continue_signal3';
+create index t_t_t_index_global on t_t_t(c2) global partition by hash(c2) partitions 3;
+create index t_t_t_t_index_local on t_t_t_t(c2);
+ob1.check_until_timeout select count(*) from __all_virtual_table where data_table_id=$table_id, 1, 20;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+show index from t_t_t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t_t_t	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t_t_t	1	t_t_t_index_global	1	c2	A	NULL	NULL	NULL	YES	BTREE	unavailable		YES
+show index from t_t_t_t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t_t_t_t	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t_t_t_t	1	t_t_t_t_index_local	1	c2	A	NULL	NULL	NULL	YES	BTREE	unavailable		YES
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 30;
+ob1.force_stop;
+set ob_query_timeout = 1000000000;
+alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%cluster%' and event = 'drop index', 2, 3;

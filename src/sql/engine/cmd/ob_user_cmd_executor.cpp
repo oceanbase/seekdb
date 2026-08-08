@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
-#include "rootserver/ob_local_management_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "query/command/ob_root_command_service.h"
 
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -225,7 +225,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(create_user(arg))) {
+      if (OB_FAIL(create_user(arg, ctx.root_command_service()))) {
         LOG_WARN("Create user rpc failed", K(ret));
       }
     }
@@ -233,13 +233,15 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
   return ret;
 }
 
-int ObCreateUserExecutor::create_user(const obcall::ObCreateUserArg& arg) const
+int ObCreateUserExecutor::create_user(
+    const obcall::ObCreateUserArg& arg,
+    query::ObIRootCommandService &root_commands) const
 {
   int ret = OB_SUCCESS;
   ObSArray<int64_t> failed_index;
   ObSqlString fail_msg;
   obcall::ObCreateUserArg user_arg = arg;
-  if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_user(user_arg, failed_index); }))) {
+  if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.create_user(user_arg, failed_index); }))) {
     LOG_WARN("Create user error", K(ret));
   } else if (0 != failed_index.count()) {
     ObSArray<ObString> failed_users;
@@ -365,7 +367,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(drop_user(arg, stmt.get_if_exists()))) {
+      if (OB_FAIL(drop_user(arg, stmt.get_if_exists(), ctx.root_command_service()))) {
         LOG_WARN("Drop user completely failed", K(ret));
       } else {
         //do nothing
@@ -376,7 +378,8 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 }
 
 int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
-                                  bool if_exist_stmt)
+                                  bool if_exist_stmt,
+                                  query::ObIRootCommandService &root_commands)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -388,7 +391,7 @@ int ObDropUserExecutor::drop_user(const obcall::ObDropUserArg &arg,
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_user(arg, failed_index); }))) {
+    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.drop_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
     }
     if (0 != failed_index.count()) {
@@ -461,7 +464,7 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(lock_user(arg))) {
+      if (OB_FAIL(lock_user(arg, ctx.root_command_service()))) {
         LOG_WARN("Rename user completely failed", K(arg), K(ret));
       } else {
         //do nothing
@@ -471,7 +474,9 @@ int ObLockUserExecutor::execute(ObExecContext &ctx, ObLockUserStmt &stmt)
   return ret;
 }
 
-int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
+int ObLockUserExecutor::lock_user(
+    const obcall::ObLockUserArg &arg,
+    query::ObIRootCommandService &root_commands)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -483,7 +488,7 @@ int ObLockUserExecutor::lock_user(const obcall::ObLockUserArg &arg)
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->lock_user(arg, failed_index); }))) {
+    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.lock_user(arg, failed_index); }))) {
       LOG_WARN("Lock user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.users_, arg.hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));
@@ -588,13 +593,10 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
   } else if (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag()) {
     OZ (set_role_exec(ctx, stmt));
   } else if (ObAlterUserRoleStmt::SET_DEFAULT_ROLE == stmt.get_set_role_flag()) {
-    if (OB_ISNULL(GCTX.local_management_service_)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("local management service is null", K(ret));
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
-                 return GCTX.local_management_service_->get_ddl_service()
-                     .alter_user_default_role(stmt.get_ddl_arg());
-               }))) {
+    if (OB_FAIL(query::serialize_root_service_call([&] {
+          return ctx.root_command_service().alter_user_default_role(
+              stmt.get_ddl_arg());
+        }))) {
       LOG_WARN("alter user default role failed", K(ret));
     }
   } else {
@@ -668,7 +670,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(rename_user(arg))) {
+      if (OB_FAIL(rename_user(arg, ctx.root_command_service()))) {
         LOG_WARN("Rename user completely failed", K(arg), K(ret));
       }
     }
@@ -676,7 +678,9 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
   return ret;
 }
 
-int ObRenameUserExecutor::rename_user(const obcall::ObRenameUserArg &arg)
+int ObRenameUserExecutor::rename_user(
+    const obcall::ObRenameUserArg &arg,
+    query::ObIRootCommandService &root_commands)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!arg.is_valid())) {
@@ -688,7 +692,7 @@ int ObRenameUserExecutor::rename_user(const obcall::ObRenameUserArg &arg)
   } else {
     ObSArray<int64_t> failed_index;
     ObSqlString fail_msg;
-    if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->rename_user(arg, failed_index); }))) {
+    if (OB_FAIL(query::serialize_root_service_call([&]{ return root_commands.rename_user(arg, failed_index); }))) {
       LOG_WARN("Rename user failed", K(ret));
       if (OB_FAIL(ObDropUserExecutor::build_fail_msg(arg.old_users_, arg.old_hosts_, fail_msg))) {
         LOG_WARN("Build fail msg error", K(arg), K(ret));

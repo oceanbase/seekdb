@@ -1477,7 +1477,7 @@ int ObDMLStmtPrinter::print_vector_index_query_param()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt_ is NULL or buf_ is NULL or pos_ is NULL", K(ret));
   } else {
-    const ObVectorIndexQueryParam& param = stmt_->get_vector_index_query_param();
+    const share::ObVectorIndexQueryParam& param = stmt_->get_vector_index_query_param();
     if (param.is_valid()) {
       DATA_PRINTF(" parameters(");
       if (OB_SUCC(ret) && param.is_set_ef_search_) {

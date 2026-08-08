@@ -15,7 +15,7 @@
  */
 
 #include "ob_partition_parallel_merge_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/ob_partition_range_spliter.h"
 #include "ob_tablet_merge_ctx.h"
 #include "ob_tablet_scheduler.h"
@@ -91,7 +91,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
   if (OB_FAIL(ret)) {
   } else if (tablet_size <= 0
           || (!enable_parallel_minor_merge && !is_major_merge_type(merge_type))
-          || (is_mini_merge(merge_type) && ObCompactionMemPool::NORMAL_MODE != share::g_mp->compaction_mem_pool()->get_memory_mode())) {
+          || (is_mini_merge(merge_type) && ObCompactionMemPool::NORMAL_MODE != ::oceanbase::share::server_service<::oceanbase::storage::ObCompactionMemPool>()->get_memory_mode())) {
     if (OB_FAIL(init_serial_merge())) {
       STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret), K(tablet_size), K(merge_ctx));
     }
@@ -423,14 +423,15 @@ void ObParallelMergeCtx::calc_adaptive_parallel_degree(
   int tmp_ret = OB_SUCCESS;
   int64_t dag_worker_limit = 0;
 
-  if (OB_TMP_FAIL(share::g_mp->dag_scheduler()->get_limit(prio, dag_worker_limit))) {
+  if (OB_TMP_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_limit(prio, dag_worker_limit))) {
     dag_worker_limit = DEFAULT_MERGE_THREAD_CNT;
     STORAGE_LOG_RET(WARN, tmp_ret, "failed to get worker thread cnt, use dfault value", K(prio), K(dag_worker_limit));
   }
   parallel_degree = MIN(MAX(dag_worker_limit, PARALLEL_MERGE_TARGET_TASK_CNT), origin_degree);
   if (parallel_degree <= 2) {
     // do nothing
-  } else if (share::g_mp->tablet_scheduler()->enable_adaptive_compaction()) {
+  } else if (share::server_service<compaction::ObTabletScheduler>()
+                 ->enable_adaptive_compaction()) {
     const int64_t compaction_memory_limit = lib::get_compaction_memory_limit();
     const int64_t mem_allow_max_thread_cnt =
         compaction_memory_limit / MAX(mem_per_thread, 1);

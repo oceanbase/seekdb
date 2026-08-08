@@ -1,0 +1,83 @@
+# owner: lixia.yq
+# owner group: storage
+# Test the case: check history mini minor merge
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,root@obtest,,test,$port);
+
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set minor_compact_trigger = 10;
+
+
+sleep 5;
+
+connection conn1;
+--disable_warnings
+drop table if exists test_history_mini_minor_table;
+--enable_warnings
+
+connection conn1;
+create table test_history_mini_minor_table(i int, c1 char(30), c256 char(255), dt datetime(6), d  datetime(6));
+
+let $tid=deploy_get_value(ob1.select select /*+QUERY_TIMEOUT(10000000)*/ table_id from oceanbase.__all_virtual_table where table_name= 'test_history_mini_minor_table', table_id, 1);
+
+# generate 3 mini sstables
+let $cnt=0;
+while($cnt < 3)
+{
+  inc $cnt;
+  connection conn1;
+  let $i=0;
+  while($i < 10) 
+  {
+      eval insert into test_history_mini_minor_table(i,c1,c256,dt,d) values($i,'1','$i','2012-10-10 12:00:00','2012-10-10');
+      inc $i;
+  }
+  
+  ob1.mysql alter system minor freeze;
+  ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_id = $tid and table_type = 0 and is_active = 0, 0, 300;
+  --echo minor freeze $i $cnt
+}
+
+# generate 2 major freeze point
+ob1.mysql alter system suspend merge;
+ob1.mysql alter system major freeze;
+sleep 5;
+
+connection conn1;
+let $i=0;
+while($i < 10) 
+{
+    eval insert into test_history_mini_minor_table(i,c1,c256,dt,d) values($i,'1','$i','2012-10-10 12:00:00','2012-10-10');
+    inc $i;
+}
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_id = $tid and table_type = 0 and is_active = 0, 0, 300;
+
+ob1.mysql alter system major freeze;
+
+connection conn1;
+let $i=0;
+while($i < 10) 
+{
+    eval insert into test_history_mini_minor_table(i,c1,c256,dt,d) values($i,'1','$i','2012-10-10 12:00:00','2012-10-10');
+    inc $i;
+}
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_id = $tid and table_type = 0 and is_active = 0, 0, 300;
+
+let $max_frozen_version=deploy_get_value(ob1.select select /*+QUERY_TIMEOUT(10000000)*/ frozen_snapshot from oceanbase.__all_virtual_freeze_info order by frozen_snapshot desc, frozen_snapshot, 1);
+let $left_frozen_ts=deploy_get_value(ob1.select select /*+QUERY_TIMEOUT(10000000)*/ frozen_timestamp from oceanbase.__all_virtual_freeze_info where frozen_version = $max_frozen_version - 1, frozen_timestamp, 1);
+let $table_cnt1=deploy_get_value(ob1.select select count(*) as c from oceanbase.__all_virtual_table_mgr where table_id = $tid and table_type = 7 and upper_trans_version < $left_frozen_ts, c, 1);
+--echo before history merge table_cnt="$table_cnt1"
+
+ob1.mysql alter system set minor_compact_trigger = 2;
+
+ob1.check_until_timeout select count(*) as c from oceanbase.__all_virtual_table_mgr where table_id = $tid and table_type = 7 and upper_trans_version < $left_frozen_ts, 1, 300;
+--echo after history merge table_cnt="$table_cnt2"
+
+connection conn1;
+drop table test_history_mini_minor_table;

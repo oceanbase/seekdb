@@ -28,6 +28,7 @@ using namespace oceanbase::common;
 namespace oceanbase {
 
 namespace common {
+namespace test_geo_func_difference {
 
 class TestGeoFuncDifference : public ::testing::Test {
 public:
@@ -46,7 +47,7 @@ public:
   static void TearDownTestCase()
   {}
 
-private:
+public:
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(TestGeoFuncDifference);
 
@@ -2123,11 +2124,6 @@ TEST_F(TestGeoFuncDifference, polygon_multipolygon_geog)
     ASSERT_EQ(true, is_geo_equal(*res, output));
 }
 
+} // namespace test_geo_func_difference
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char** argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

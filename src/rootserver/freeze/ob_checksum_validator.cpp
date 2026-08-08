@@ -468,6 +468,7 @@ int ObChecksumValidator::batch_update_report_scn()
   int ret = OB_SUCCESS;
   if (finish_tablet_ids_.empty()) {
   } else if (OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_report_scn(
+          GCTX.meta_db_pool_,
           get_compaction_scn_val(),
           finish_tablet_ids_,
           ObTabletRuntimeInfo::ScnStatus::SCN_STATUS_ERROR /*except_status*/))) {

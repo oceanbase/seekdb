@@ -30,6 +30,10 @@ struct ObLockUserArg;
 struct ObRenameUserArg;
 struct ObDropUserArg;
 }
+namespace query
+{
+class ObIRootCommandService;
+}
 namespace sql
 {
 class ObExecContext;
@@ -57,7 +61,8 @@ public:
                               const common::ObString &host_name,
                               const common::ObString &opreation_name);
 private:
-  int create_user(const obcall::ObCreateUserArg &arg) const;
+  int create_user(const obcall::ObCreateUserArg &arg,
+                  query::ObIRootCommandService &root_commands) const;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCreateUserExecutor);
 };
@@ -81,7 +86,8 @@ public:
                                     const ObString &host, 
                                     common::ObSqlString &msg);
   static int drop_user(const obcall::ObDropUserArg &arg,
-                       bool if_exists);
+                       bool if_exists,
+                       query::ObIRootCommandService &root_commands);
   int execute(ObExecContext &ctx, ObDropUserStmt &stmt);
 
 private:
@@ -97,7 +103,8 @@ public:
   int execute(ObExecContext &ctx, ObLockUserStmt &stmt);
 
 private:
-  int lock_user(const obcall::ObLockUserArg &arg);
+  int lock_user(const obcall::ObLockUserArg &arg,
+                query::ObIRootCommandService &root_commands);
   DISALLOW_COPY_AND_ASSIGN(ObLockUserExecutor);
 };
 
@@ -123,7 +130,8 @@ public:
   int execute(ObExecContext &ctx, ObRenameUserStmt &stmt);
 
 private:
-  int rename_user(const obcall::ObRenameUserArg &arg);
+  int rename_user(const obcall::ObRenameUserArg &arg,
+                  query::ObIRootCommandService &root_commands);
   DISALLOW_COPY_AND_ASSIGN(ObRenameUserExecutor);
 };
 

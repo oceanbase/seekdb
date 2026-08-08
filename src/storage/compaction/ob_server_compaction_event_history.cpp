@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/compaction/ob_server_compaction_event_history.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -139,7 +139,7 @@ int ObServerCompactionEventIterator::open()
   if (OB_SUCC(ret)) {
     {
       SERVER_MODULE_SCOPE {
-        if (OB_FAIL(share::g_mp->server_compaction_event_history()->get_list(event_array_))) {
+        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObServerCompactionEventHistory>()->get_list(event_array_))) {
           LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {

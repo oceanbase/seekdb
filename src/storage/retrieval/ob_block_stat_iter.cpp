@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/tx_storage/ob_ls_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_block_stat_iter.h"
 
 namespace oceanbase
@@ -409,7 +409,7 @@ int ObBlockStatIterator::refresh_tablet_iter()
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
       LOG_WARN("timeout", K(ret), K(tablet_id), K(remain_timeout));
-    } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(tenant_ls))) {
+    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
       LOG_WARN("failed to get ls", K(ret));
     } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,

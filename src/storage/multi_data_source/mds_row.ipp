@@ -822,7 +822,7 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
   int ret = OB_SUCCESS;
   constexpr int64_t buffer_size = 1_KB;
   char stack_buffer[buffer_size] = { 0 };
-  observer::MdsEvent event;
+  MdsEvent event;
   if (nullptr == MdsRowBase<K, V>::p_mds_unit_ ||
       nullptr == MdsRowBase<K, V>::p_mds_unit_->p_mds_table_) {
     ret = OB_ERR_UNEXPECTED;
@@ -830,8 +830,8 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
   } else if (OB_FAIL(node.fill_event_(event, event_str, stack_buffer, buffer_size))) {
     MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
-    observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
-    observer::ObMdsEventBuffer::append(key, event, MdsRowBase<K, V>::p_mds_unit_->p_mds_table_, file, line, function_name);
+    MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);
+    ObMdsEventBuffer::append(key, event, MdsRowBase<K, V>::p_mds_unit_->p_mds_table_, file, line, function_name);
   }
 }
 

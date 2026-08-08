@@ -17,7 +17,7 @@
 #include "storage/fts/ob_ngram2_ft_parser.h"
 
 #include "lib/charset/ob_ctype.h"
-#include "storage/fts/ob_fts_struct.h"
+#include "data_plane/fts/ob_fts_struct.h"
 #include "storage/fts/utils/ob_ft_ngram_impl.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS

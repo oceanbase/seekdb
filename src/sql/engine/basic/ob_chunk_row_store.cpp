@@ -285,7 +285,7 @@ void ObChunkRowStore::reset()
   row_cnt_ = 0;
 
   if (is_file_open()) {
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->remove(io_.fd_))) {
+    if (OB_FAIL(data_plane::tmp_file_remove(io_.fd_))) {
       LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_TRACE("close file success", K(ret), K_(io_.fd));
@@ -1491,7 +1491,7 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
-      } else if (OB_FAIL(share::g_mp->tmp_file_manager()->open(io_.fd_, io_.dir_id_))) {
+      } else if (OB_FAIL(data_plane::tmp_file_open(io_.fd_, io_.dir_id_))) {
         LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
@@ -1504,7 +1504,7 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
   }
   if (OB_SUCC(ret) && size > 0) {
     set_io(size, static_cast<char *>(buf));
-    if (OB_FAIL(share::g_mp->tmp_file_manager()->write(io_))) {
+    if (OB_FAIL(data_plane::tmp_file_write(io_))) {
       LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
@@ -1541,11 +1541,11 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
     this->set_io(size, static_cast<char *>(buf));
     io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_READ);
     io_.io_timeout_ms_ = timeout_ms;
-    tmp_file::ObTmpFileIOHandle handle;
+    data_plane::ObTmpFileIOHandle handle;
     if (0 == read_size
-        && OB_FAIL(share::g_mp->tmp_file_manager()->get_tmp_file_size(io_.fd_, tmp_file_size))) {
+        && OB_FAIL(data_plane::tmp_file_get_size(io_.fd_, tmp_file_size))) {
       LOG_WARN("failed to get tmp file size", K(ret));
-    } else if (OB_FAIL(share::g_mp->tmp_file_manager()->pread(io_, offset, handle))) {
+    } else if (OB_FAIL(data_plane::tmp_file_pread(io_, offset, handle))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("read form file failed", K(ret), K(io_), K(offset), K(timeout_ms));
       }
@@ -1575,7 +1575,7 @@ int ObChunkStoreUtil::alloc_dir_id(int64_t &dir_id)
 {
   int ret = OB_SUCCESS;
   dir_id = 0;
-  if (OB_FAIL(share::g_mp->tmp_file_manager()->alloc_dir(dir_id))) {
+  if (OB_FAIL(data_plane::tmp_file_alloc_dir(dir_id))) {
     LOG_WARN("allocate file directory failed", K(ret));
   }
   return ret;

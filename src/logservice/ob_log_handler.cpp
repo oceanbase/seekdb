@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "ob_log_handler.h"
-#include "storage/ls/ob_ls.h"
-#include "storage/tx_storage/ob_ls_service.h"
-#include "share/rc/ob_module_provider.h"
+#include "logservice/ob_i_log_storage.h"
 #include "logservice/ob_log_service.h"
 
 namespace oceanbase
@@ -583,16 +581,11 @@ int ObLogHandler::advance_base_lsn_impl_(const LSN &lsn)
   return ret;
 }
 
-int __get_log_handler(ObLogHandler *&log_handler,
-                      storage::ObLS *&ls)
+int __get_log_handler(
+    ObILogStorage &log_storage,
+    ObLogHandler *&log_handler)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls))) {
-    CLOG_LOG(WARN, "get_ls failed");
-  } else {
-    log_handler = ls->get_log_handler();
-  }
-  return ret;
+  return log_storage.get_log_handler(log_handler);
 }
 
 } // end namespace logservice

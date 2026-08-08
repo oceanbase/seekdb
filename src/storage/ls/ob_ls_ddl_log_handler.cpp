@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_ls_ddl_log_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/ddl/ob_ddl_replay_executor.h"
@@ -212,7 +212,8 @@ int ObLSDDLLogHandler::offline()
   }
 
   add_ddl_event(ret, "ddl log hanlder offline");
-  FLOG_INFO("ddl log hanlder offline", K(ret), "ls_meta", ls_->get_ls_meta(), "ddl_event_info", ObDDLEventInfo());
+  FLOG_INFO("ddl log hanlder offline", K(ret), "ls_meta", ls_->get_ls_meta(),
+      "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return OB_SUCCESS;
 }
 
@@ -254,7 +255,8 @@ int ObLSDDLLogHandler::online()
     is_online_ = true;
   }
   add_ddl_event(ret, "ddl log hanlder online");
-  FLOG_INFO("ddl log hanlder online", K(ret), "ls_meta", ls_->get_ls_meta(), "ddl_event_info", ObDDLEventInfo());
+  FLOG_INFO("ddl log hanlder online", K(ret), "ls_meta", ls_->get_ls_meta(),
+      "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -449,7 +451,7 @@ SCN ObLSDDLLogHandler::get_rec_scn()
   }
 
   // gc tablet direct load periodically
-  ObDirectLoadMgr *direct_load_mgr = share::g_mp->direct_load_mgr();
+  ObDirectLoadMgr *direct_load_mgr = ::oceanbase::share::server_service<::oceanbase::storage::ObDirectLoadMgr>();
   if (OB_NOT_NULL(direct_load_mgr)) {
     (void)direct_load_mgr->gc_tablet_direct_load();
   }

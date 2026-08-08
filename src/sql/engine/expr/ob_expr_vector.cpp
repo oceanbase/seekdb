@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "storage/vector_type/ob_vector_norm.h"
+#include "data_plane/vector/ob_vector_norm.h"
 
 namespace oceanbase
 {
@@ -166,7 +166,7 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     } else if (dis_type != ObVecDisType::DOT) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("sparse vector not support", K(ret), K(dis_type));
-    } else if (OB_FAIL(SparseVectorDisFunc::spiv_distance_funcs[dis_type](spv_l, spv_r, distance))) {
+    } else if (OB_FAIL(SparseVectorDisFunc::spiv_distance_funcs[static_cast<int64_t>(dis_type)](spv_l, spv_r, distance))) {
       LOG_WARN("sparse vector failed to calc distance", K(ret), K(dis_type));
     } else {
       res_datum.set_double(distance);
@@ -182,10 +182,10 @@ int ObExprVectorDistance::calc_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       const float *data_l = reinterpret_cast<const float*>(arr_l->get_data());
       const float *data_r = reinterpret_cast<const float*>(arr_r->get_data());
       const uint32_t size = arr_l->size();
-      if (DisFunc<float>::distance_funcs[dis_type] == nullptr) {
+      if (DisFunc<float>::distance_funcs[static_cast<int64_t>(dis_type)] == nullptr) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("not support", K(ret), K(dis_type));
-      } else if (OB_FAIL(DisFunc<float>::distance_funcs[dis_type](data_l, data_r, size, distance))) {
+      } else if (OB_FAIL(DisFunc<float>::distance_funcs[static_cast<int64_t>(dis_type)](data_l, data_r, size, distance))) {
         if (OB_ERR_NULL_VALUE == ret) {
           res_datum.set_null();
           ret = OB_SUCCESS; // ignore

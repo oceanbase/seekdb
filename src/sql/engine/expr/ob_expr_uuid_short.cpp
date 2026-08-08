@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/engine/expr/ob_expr_uuid_short.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 

@@ -22,7 +22,7 @@
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
@@ -726,7 +726,7 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
                                                   ret_pl_type,
                                                   NULL));
     } else {
-      OX (ret_pl_type = ret_param->get_pl_data_type());
+      OX (ret_pl_type = pl::get_pl_data_type(*ret_param));
     }
     SET_RES_TYPE_BY_PL_TYPE(result_type, ret_pl_type);
     OX (udf_raw_expr->set_pls_type(ret_pl_type.get_pl_integer_type()));
@@ -763,7 +763,7 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
                                                   param_pl_type,
                                                   NULL));
     } else {
-      OX (param_pl_type = iparam->get_pl_data_type());
+      OX (param_pl_type = pl::get_pl_data_type(*iparam));
     }
     SET_RES_TYPE_BY_PL_TYPE(param_type, param_pl_type);
     OZ (params_type.push_back(param_type));
@@ -943,7 +943,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
     if (OB_SUCC(ret)) {
       bool need_wrap = false;
       OZ (ObRawExprUtils::need_wrap_to_string(udf_raw_expr->get_param_expr(i)->get_result_type(),
-                                              iparam->get_pl_data_type().get_obj_type(),
+                                              pl::get_pl_data_type(*iparam).get_obj_type(),
                                               true,
                                               need_wrap,
                                               false));
@@ -1066,7 +1066,7 @@ do {                                                                            
                                                           *(params.sql_proxy_),
                                                           param_type));
               } else {
-                param_type = iparam->get_pl_data_type();
+                param_type = pl::get_pl_data_type(*iparam);
               }
               OZ (pl::ObPLResolver::set_question_mark_type( iexpr, 
                                                             params.secondary_namespace_, 
@@ -7111,11 +7111,7 @@ int ObRawExprUtils::new_parse_node(ParseNode *& node, ObRawExprFactory &expr_fac
     node->type_ = type;
     node->num_child_ = num;
     node->param_num_ = 0;
-    node->is_neg_ = 0;
-    node->is_hidden_const_ = 0;
-    node->is_date_unit_ = 0;
-    node->is_tree_not_param_ = 0;
-    node->reserved_multiset_ = 0;
+    node->flag_ = 0;
     node->value_ = INT64_MAX;
     node->str_len_ = 0;
     node->str_value_ = NULL;

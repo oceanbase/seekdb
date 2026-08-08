@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_partition_exchange.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
+#include "share/schema/ob_table_sql_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"

@@ -1,0 +1,147 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description:
+
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:sz);
+ob1.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3';
+ob1.mysql ALTER TENANT tenant_1 set variables ob_tcp_invited_nodes='%';
+sleep 10;
+
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+
+let $obs_addr = deploy_get_value(ob1.select select concat(svr_ip, ":", svr_port) addr from __all_unit where resource_pool_id = $resource_pool_id, addr, 1);
+let $obs = deploy_get_value(ob1.get_obs_by_addr $obs_addr);
+let $obs_ip  = deploy_get_value($obs.ip);
+let $obs_port  = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+connect (conn_sys,$obs_ip,root,,oceanbase,$obs_mysql_port);
+
+connection conn1;
+use test;
+create table t1(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+insert into t1(c1, c2) values(1,1);
+insert into t1(c1, c2) values(2,2);
+
+connection conn_sys;
+
+# case 0: 禁止同时修改系统变量和tenant option
+--error 4179
+alter tenant tenant_1 set locality = "F@z1,F@z2" VARIABLES read_only = on;
+--error 4179
+alter tenant tenant_1 READ WRITE VARIABLES read_only=on;
+
+# readonly属性以系统变量为准
+
+# case 1: 系统租户下修改普通租户系统变量
+
+# readonly初始为0
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+# 预期为1
+alter tenant tenant_1 VARIABLES read_only=on;
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+# 预期为0
+alter tenant tenant_1 VARIABLES read_only=off;
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+
+# case 2: 普通租户下修改全局系统变量
+connection conn1;
+# 预期为1
+set global read_only=on;
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+# 预期为0
+set global read_only=off;
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+
+# case 3: 修改tenant option
+--error 1235
+alter tenant tenant_1 READ ONLY;
+
+--error 1235
+alter tenant tenant_1 READ WRITE;
+
+# case 4: create tenant
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为1
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read only set ob_tcp_invited_nodes='%';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 1, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为0
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read only set ob_tcp_invited_nodes='%', read_only='off';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为1
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read only set ob_tcp_invited_nodes='%', read_only='on';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 1, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为0
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read write set ob_tcp_invited_nodes='%';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为1
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read write set ob_tcp_invited_nodes='%', read_only='on';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 1, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为0
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3', read write set ob_tcp_invited_nodes='%', read_only='off';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为1
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%', read_only='on';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 1, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 1, 3;
+ob1.mysql DROP TENANT tenant_1;
+
+# 预期为0
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%', read_only='off';
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+ob1.check_until_timeout select value from oceanbase.__all_virtual_sys_variable where tenant_id = $tenant1_id and name = "read_only", 0, 3;
+ob1.check_until_timeout select read_only from oceanbase.__all_tenant where tenant_name = "tenant_1", 0, 3;
+ob1.mysql DROP TENANT tenant_1;
+

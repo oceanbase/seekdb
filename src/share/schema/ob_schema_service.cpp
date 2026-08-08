@@ -593,37 +593,6 @@ int ObSchemaService::alloc_table_schema(const ObTableSchema &table,
   return ret;
 }
 
-
-// ===== ObSchemaService factory injection(implementationlives in the observer layer) =====
-ObSchemaServiceCreator ObSchemaServiceFactory::creator_ = NULL;
-ObSchemaServiceDestroyer ObSchemaServiceFactory::destroyer_ = NULL;
-
-void ObSchemaServiceFactory::register_creator(ObSchemaServiceCreator creator,
-                                              ObSchemaServiceDestroyer destroyer)
-{
-  creator_ = creator;
-  destroyer_ = destroyer;
-}
-
-ObSchemaService *ObSchemaServiceFactory::create()
-{
-  ObSchemaService *ret = NULL;
-  if (NULL != creator_) {
-    ret = creator_();
-  } else {
-    SHARE_SCHEMA_LOG_RET(ERROR, common::OB_NOT_INIT,
-        "ObSchemaService creator not registered (observer must register it before schema init)");
-  }
-  return ret;
-}
-
-void ObSchemaServiceFactory::destroy(ObSchemaService *schema_service)
-{
-  if (NULL != schema_service && NULL != destroyer_) {
-    destroyer_(schema_service);
-  }
-}
-
 } //end of namespace schema
 } //end of namespace share
 } //end of namespace oceanbase

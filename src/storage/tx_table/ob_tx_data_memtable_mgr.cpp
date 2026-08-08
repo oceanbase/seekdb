@@ -15,7 +15,6 @@
  */
 
 #include "ob_tx_data_memtable_mgr.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase

@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_gv_sql.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "src/sql/plan_cache/ob_pcv_set.h"
 
@@ -54,7 +54,7 @@ int ObGVSql::get_next_plan_row(bool &is_end)
   ObReqTimeGuard req_timeinfo_guard;
   is_end = false;
   if (OB_INVALID_ID == static_cast<uint64_t>(plan_id_array_idx_)) {
-    plan_cache_ = share::g_mp->plan_cache();
+    plan_cache_ = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
     NG_TRACE(trav_ps_map_start);
     ObGetAllCacheIdOp plan_id_op(&plan_id_array_);
     if (OB_FAIL(plan_cache_->foreach_alloc_cache_obj(plan_id_op))) {

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_ddl_resolver.h"
-#include "storage/blocksstable/index_block/ob_index_block_util.h"
+#include "data_plane/blocksstable/ob_index_block_util.h"
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -27,8 +27,10 @@
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/resolver/ddl/ob_fts_parser_resolver.h"
 #include "sql/session/ob_local_session_var.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "share/schema/ob_table_schema.h"  // relocated-definition owner
+#include "query/ddl/ob_dynamic_partition_policy.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_table_schema.h"
+#include "sql/engine/expr/ob_obj_cast_runtime.h"
 
 namespace oceanbase
 {
@@ -2655,7 +2657,11 @@ int ObDDLResolver::resolve_srid_node(share::schema::ObColumnSchemaV2 &column,
       LOG_USER_ERROR(OB_ERR_SRID_WRONG_USAGE);
     } else {
       int64_t srid = srid_node.children_[0]->value_;
-      if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(srid))) {
+      if (OB_ISNULL(params_.srs_provider_)) {
+        ret = OB_NOT_INIT;
+        SQL_RESV_LOG(WARN, "SRS provider is not configured", K(ret));
+      } else if (OB_FAIL(ObSqlGeoUtils::check_srid_by_srs(
+                     *params_.srs_provider_, srid))) {
         SQL_RESV_LOG(WARN, "invalid srid", K(ret), K(srid));
       } else {
         column.set_srid(srid);
@@ -2911,7 +2917,8 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
     ObCastCtx cast_ctx(&allocator, &dtc_params, CUR_TIME,
                        cast_mode,
                        column_schema.get_collation_type(), NULL, &res_accuracy);
-    cast_ctx.exec_ctx_ = session_info->get_cur_exec_ctx();
+    ObSqlObjCastRuntime cast_runtime(session_info->get_cur_exec_ctx());
+    cast_ctx.runtime_ = &cast_runtime;
     if (ob_is_enumset_tc(column_schema.get_data_type())) {
       if (OB_FAIL(cast_enum_or_set_default_value(column_schema, cast_ctx, default_value))) {
         LOG_WARN("fail to cast enum or set default value", K(default_value), K(column_schema), K(ret));
@@ -3903,6 +3910,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        ObIArray<ObString> &gen_col_expr_arr,
                                        const ObSQLMode sql_mode,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        share::schema::ObColumnSchemaV2 *hidden_col)
 {
   int ret = OB_SUCCESS;
@@ -3923,7 +3932,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
     } else if (OB_FAIL(check_default_value(default_value, tz_info_wrap, allocator,
                                           table_schema, dummy_array,column, gen_col_expr_arr, sql_mode,
-                                          &empty_session, schema_checker))) {
+                                          &empty_session, schema_checker,
+                                          srs_provider, lob_read_service))) {
       LOG_WARN("check default value failed", K(ret));
     }
     exec_ctx.set_physical_plan_ctx(NULL);
@@ -3941,6 +3951,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const ObSQLMode sql_mode,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        bool coltype_not_defined)
 {
   int ret = OB_SUCCESS;
@@ -3985,6 +3997,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     params.session_info_ = session_info;
     params.param_list_ = &empty_param_list;
     params.schema_checker_ = schema_checker;
+    params.srs_provider_ = srs_provider;
+    params.lob_read_service_ = lob_read_service;
     common::ObObj tmp_default_value;
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
@@ -3996,6 +4010,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
+    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
     ObAccuracy res_acc = accuracy;
     cast_ctx.res_accuracy_ = &res_acc;
     bool transform_happened = false;
@@ -4031,7 +4046,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
-    } else if (OB_FAIL(obj_collation_check(is_strict, collation_type,  *const_cast<ObObj*>(tmp_res_obj)))) {
+    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                           *const_cast<ObObj*>(tmp_res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), K(tmp_dest_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(tmp_res_obj));
@@ -4073,6 +4089,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
                                        const ObSQLMode sql_mode,
                                        ObSQLSessionInfo *session_info,
                                        ObSchemaChecker *schema_checker,
+                                       common::ObISrsProvider *srs_provider,
+                                       common::ObILobReadService *lob_read_service,
                                        bool coltype_not_defined)
 {
   int ret = OB_SUCCESS;
@@ -4082,7 +4100,8 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   }
   OZ (check_default_value(default_value, tz_info_wrap, allocator, table_schema,
                           resolved_col_ptrs, column, gen_col_expr_arr, sql_mode,
-                          session_info, schema_checker, coltype_not_defined));
+                          session_info, schema_checker, srs_provider,
+                          lob_read_service, coltype_not_defined));
   return ret;
 }
 
@@ -4139,16 +4158,24 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       const ObServerRuntimeSchema *runtime_schema = NULL;
       ObSchemaGetterGuard guard;
       ObSessionDDLInfo ddl_info;
+      common::ObILobReadService *lob_read_service = nullptr;
       ddl_info.set_ddl_check_default_value(true);
       ParamStore empty_param_list( (ObWrapperAllocator(allocator)) );
       params.expr_factory_ = &expr_factory;
       params.allocator_ = &allocator;
       params.session_info_ = &empty_session;
       params.param_list_ = &empty_param_list;
-      exec_ctx.set_my_session(&empty_session);
       exec_ctx.set_physical_plan_ctx(&phy_plan_ctx);
       if (OB_FAIL(empty_session.test_init(0, 0, &allocator))) {
         LOG_WARN("init empty session failed", K(ret));
+      } else if (false) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("module provider is not installed", K(ret));
+      } else if (OB_ISNULL(lob_read_service = ::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("LOB read service is not installed", K(ret));
+      } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
+      } else if (FALSE_IT(exec_ctx.set_lob_read_service(lob_read_service))) {
       } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
@@ -4196,7 +4223,8 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
           // remove lob header for lob
           if (dest_obj.has_lob_header()) {
             ObString str;
-            if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, dest_obj, str))) {
+            if (OB_FAIL(ObTextStringHelper::read_real_string_data(
+                    exec_ctx, &allocator, dest_obj, str))) {
               LOG_WARN("failed to read real data for lob obj", K(ret), K(dest_obj));
             } else {
               dest_obj.set_string(dest_obj.get_type(), str);
@@ -4227,11 +4255,14 @@ int ObDDLResolver::check_udt_default_value(ObObj &default_value,
                                            const ObSQLMode sql_mode,
                                            ObSQLSessionInfo *session_info,
                                            ObSchemaChecker *schema_checker,
+                                           common::ObISrsProvider *srs_provider,
+                                           common::ObILobReadService *lob_read_service,
                                            ObDDLArg &ddl_arg)
 {
   ObObj extend_result;
   return get_udt_column_default_values(default_value, tz_info_wrap, allocator,
                                        column, sql_mode, session_info, schema_checker,
+                                       srs_provider, lob_read_service,
                                        extend_result, ddl_arg);
 }
 
@@ -4362,6 +4393,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
                                                  const ObSQLMode sql_mode,
                                                  ObSQLSessionInfo *session_info,
                                                  ObSchemaChecker *schema_checker,
+                                                 common::ObISrsProvider *srs_provider,
+                                                 common::ObILobReadService *lob_read_service,
                                                  ObObj &extend_result,
                                                  obcall::ObDDLArg &ddl_arg)
 {
@@ -4394,6 +4427,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     params.session_info_ = session_info;
     params.param_list_ = &empty_param_list;
     params.schema_checker_ = schema_checker;
+    params.srs_provider_ = srs_provider;
+    params.lob_read_service_ = lob_read_service;
     common::ObObj tmp_default_value;
     common::ObObj tmp_dest_obj;
     const ObObj *tmp_res_obj = NULL;
@@ -4405,6 +4440,7 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     ObCollationType collation_type = column.get_collation_type();
     const ObDataTypeCastParams dtc_params = session_info->get_dtc_params();
     ObCastCtx cast_ctx(&allocator, &dtc_params, CM_NONE, collation_type);
+    session_info->configure_obj_cast(cast_ctx, srs_provider, lob_read_service);
 
     if (OB_FAIL(input_default_value.get_string(expr_str))) {
       LOG_WARN("get expr string from default value failed", K(ret), K(input_default_value));
@@ -4430,7 +4466,8 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
-    } else if (OB_FAIL(obj_collation_check(is_strict, collation_type,  *const_cast<ObObj*>(tmp_res_obj)))) {
+    } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
+                                           *const_cast<ObObj*>(tmp_res_obj)))) {
       LOG_WARN("failed to check collation", K(ret), K(collation_type), K(tmp_dest_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
       LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(tmp_res_obj));
@@ -8545,12 +8582,12 @@ int ObDDLResolver::resolve_column_skip_index(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected invalid type list node", K(ret),
           K(type_list_node->num_child_), K(type_list_node->type_));
-    } else if (is_skip_index_black_list_type(column_schema.get_data_type())) {
+    } else if (blocksstable::is_skip_index_black_list_type(column_schema.get_data_type())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
       LOG_WARN("not supported skip index on column with invalid column type", K(ret), K(column_schema));
     } else if (column_schema.get_skip_index_attr().has_sum() &&
-               !can_agg_sum(column_schema.get_data_type())) {
+               !blocksstable::can_agg_sum(column_schema.get_data_type())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
       LOG_WARN("not supported skip index on column with invalid column type", K(ret), K(column_schema));
@@ -8784,399 +8821,4 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
 }
 
 }  // namespace sql
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_table_schema.cpp =====
-// real user of this module's symbol(previously share->upper-layer inverted include); declaration remains in share header, resolved at link time(transitional state)
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObTableSchema::check_alter_column_accuracy(const ObColumnSchemaV2 &src_column,
-                                              ObColumnSchemaV2 &dst_column,
-                                              const int32_t src_col_byte_len,
-                                              const int32_t dst_col_byte_len,
-                                              bool &is_offline) const
-{
-  int ret = OB_SUCCESS;
-  const ColumnType src_col_type = src_column.get_data_type();
-  const ColumnType dst_col_type = dst_column.get_data_type();
-  const ObAccuracy &src_accuracy = src_column.get_accuracy();
-  const ObAccuracy &dst_accuracy = dst_column.get_accuracy();
-  const ObObjMeta &src_meta = src_column.get_meta_type();
-  const ObObjMeta &dst_meta = dst_column.get_meta_type();
-  if (src_column.get_data_type() == dst_column.get_data_type()) {
-    bool is_type_reduction = false;
-    // In ObAccuracy, precision and length_semantics are union data structure, so when you change
-    // varchar2(m byte) to varchar2(m char), the precision you get from ObAccuracy is an invalid value
-    // because the length_semantics of byte is 2, the length_semantics of char is 1. this will lead to misjudgment
-    // so, if it is a string type, length must be used to compare.
-    if (ob_is_number_or_decimal_int_tc(src_col_type)) {
-      if (ObAccuracy::is_default_number(src_accuracy) && !ObAccuracy::is_default_number(dst_accuracy)) {
-        is_type_reduction = true;
-      } else if (!ObAccuracy::is_default_number(src_accuracy) && ObAccuracy::is_default_number(dst_accuracy)) {
-        const int64_t m1 = src_accuracy.get_fixed_number_precision();
-        const int64_t d1 = src_accuracy.get_fixed_number_scale();
-        is_type_reduction = (m1 - d1 > OB_MAX_NUMBER_PRECISION);
-      } else if (!ObAccuracy::is_default_number(src_accuracy) && !ObAccuracy::is_default_number(dst_accuracy)) {
-        const int64_t m1 = src_accuracy.get_fixed_number_precision();
-        const int64_t d1 = src_accuracy.get_fixed_number_scale();
-        const int64_t m2 = dst_accuracy.get_fixed_number_precision();
-        const int64_t d2 = dst_accuracy.get_fixed_number_scale();
-        is_type_reduction = !(d1 <= d2 && m1 - d1 <= m2 - d2);
-      } else {
-        // both are default number
-      }
-    } else if ((!src_column.is_string_type() && !src_meta.is_integer_type() &&
-              (src_accuracy.get_precision() > dst_accuracy.get_precision() ||
-              src_accuracy.get_scale() > dst_accuracy.get_scale()))
-            || ((src_column.is_string_type()) &&
-              src_col_byte_len > dst_col_byte_len)) {
-      is_type_reduction = true;
-    }
-    // in mysql mode
-    if (src_meta.is_date()
-     || src_meta.is_year()) {
-       // online, do nothing
-    } else if (ObEnumSetTC == src_column.get_data_type_class()) {
-      bool is_incremental = true;
-      if (src_column.get_extended_type_info().count() >
-          dst_column.get_extended_type_info().count()) {
-        is_offline = true;
-      } else if (src_column.get_collation_type() != dst_column.get_collation_type()) {
-        is_offline = true;
-      } else if (OB_FAIL(ObDDLResolver::check_type_info_incremental_change(
-                 src_column, dst_column, is_incremental))) {
-        LOG_WARN("failed to check type info incremental change", K(ret));
-      } else if (!is_incremental) {
-        is_offline = true;
-      }
-    } else if (is_type_reduction) {
-      is_offline = true;
-    } else {
-      // increase column length
-      if (ob_is_number_tc(src_col_type) || src_meta.is_bit() || src_meta.is_char()
-       || src_meta.is_varchar() || src_meta.is_varbinary() || src_meta.is_text()
-       || src_meta.is_blob() || src_meta.is_timestamp() || src_meta.is_datetime()
-       || src_meta.is_integer_type() || src_meta.is_json()) {
-         // online, do nothing
-      } else if (ob_is_decimal_int_tc(src_col_type)
-                   && dst_accuracy.get_scale() == src_accuracy.get_scale()
-                   && (get_decimalint_type(dst_accuracy.get_precision())
-                        == get_decimalint_type(src_accuracy.get_precision()))) {
-        // online, do nothing
-      } else {
-        is_offline = true;
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTableSchema::check_is_exactly_same_type(const ObColumnSchemaV2 &src_column,
-                                              const ObColumnSchemaV2 &dst_column,
-                                              bool &is_same)
-{
-  int ret = OB_SUCCESS;
-  is_same = false;
-  if (src_column.get_data_type() == dst_column.get_data_type()) {
-    if (src_column.get_meta_type().is_enum_or_set()) {
-      if (src_column.get_charset_type() == dst_column.get_charset_type() &&
-          src_column.get_collation_type() == dst_column.get_collation_type()) {
-        bool is_incremental = true;
-        if (OB_FAIL(ObDDLResolver::check_type_info_incremental_change(
-                    src_column, dst_column, is_incremental))) {
-          LOG_WARN("failed to check type info incremental change", K(ret));
-        } else if ((src_column.get_extended_type_info().count() ==
-                  dst_column.get_extended_type_info().count()) &&
-                  is_incremental) {
-          is_same = true;
-        }
-      }
-    } else if (src_column.is_collection()) {
-      if (OB_FAIL(src_column.is_same_collection_column(dst_column, is_same))) {
-        LOG_WARN("failed to check whether is same collection cols", K(ret));
-      }
-    } else {
-      if (src_column.is_string_type()
-          || src_column.is_json()) {
-        if (src_column.get_charset_type() == dst_column.get_charset_type() &&
-            src_column.get_collation_type() == dst_column.get_collation_type() &&
-            src_column.get_data_length() == dst_column.get_data_length() &&
-            src_column.get_length_semantics() == dst_column.get_length_semantics()) {
-          is_same = true;
-        }
-      } else {
-        if ((ob_is_int_tc(src_column.get_data_type()) ||
-            src_column.get_data_precision() == dst_column.get_data_precision()) &&
-            src_column.get_data_scale() == dst_column.get_data_scale()) {
-          is_same = true;
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObTableSchema::get_partition_keys_by_part_func_expr(const common::ObString &part_func_expr_str, common::ObIArray<uint64_t> &partition_key_ids) const
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator allocator;
-  ObArray<ObString> partkey_strs;
-  const int64_t table_id = get_table_id();
-  if (OB_FAIL(ObDDLResolver::get_partition_keys_by_part_func_expr(part_func_expr_str, allocator, partkey_strs))) {
-    LOG_WARN("failed to get part keys", K(ret), K(part_func_expr_str), K(false));
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && i < partkey_strs.count(); i++) {
-      const ObString &partkey = partkey_strs.at(i);
-      const ObColumnSchemaV2 *column = get_column_schema(partkey);
-      if (OB_ISNULL(column)) {
-        ret = OB_ERR_BAD_FIELD_ERROR;
-        LOG_WARN("fail to get column schema", KR(ret), K(partkey));
-      } else if (OB_FAIL(partition_key_ids.push_back(column->get_column_id()))) {
-        LOG_WARN("fail to push back", KR(ret), KPC(column));
-      }
-    }
-  }
-  return ret;
-}
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_table_schema.cpp(is_range_col_part_type, round 2) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObTableSchema::is_range_col_part_type(bool &is_range_column_type) const
-{
-  int ret = OB_SUCCESS;
-  is_range_column_type = false;
-  ObObjMeta type;
-  if (!is_index_table()) {
-    ObRowkeyColumn row_key_col;
-    const common::ObRowkeyInfo &row_key_info = get_rowkey_info();
-    if (row_key_info.get_size() > 1) {
-      is_range_column_type = true;
-    } else if (OB_FAIL(row_key_info.get_column(0/*since there is only one row key, we only need to check the first one*/, row_key_col))) {
-      LOG_WARN("get row key column failed", K(ret), K(row_key_info));
-    } else if (ObResolverUtils::is_partition_range_column_type(row_key_col.get_meta_type().get_type())) {
-      is_range_column_type = true;
-    }
-  } else {
-    ObIndexColumn index_key_col;
-    const common::ObIndexInfo &index_key_info = get_index_info();
-    if (index_key_info.get_size() > 1) {
-      is_range_column_type = true;
-    } else if (OB_FAIL(index_key_info.get_column(0/*since there is only one index key, we only need to check the first one*/, index_key_col))) {
-      LOG_WARN("get index key column failed", K(ret), K(index_key_info));
-    } else if (ObResolverUtils::is_partition_range_column_type(index_key_col.get_meta_type().get_type())) {
-      is_range_column_type = true;
-    }
-  }
-  return ret;
-}
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_table_schema.cpp(check_alter_column_in_index, round 3) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObTableSchema::check_alter_column_in_index(const ObColumnSchemaV2 &src_column,
-                                               const ObColumnSchemaV2 &dst_column,
-                                               ObSchemaGetterGuard &schema_guard,
-                                               bool &is_in_index) const
-{
-  int ret = OB_SUCCESS;
-  ObArray<ObColDesc> column_ids;
-  const uint64_t column_id = src_column.get_column_id();
-
-  ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
-  // Vector index dependency validation: （start）
-  // The logical rule is that if a vector index exists on a column, no modifications to the column are allowed.
-  // To accommodate potential user operations where the data type remains consistent before and after the change,
-  // an additional conditional check has been implemented.
-  bool is_column_has_vector_index = false;
-  ObIndexType index_type = INDEX_TYPE_IS_NOT;
-  if (OB_FAIL(ObVectorIndexUtil::check_column_has_vector_index(
-        *this, schema_guard, column_id, is_column_has_vector_index, index_type))) {
-    LOG_WARN("check_column_has_vector_index failed", K(ret));
-  } else if (is_column_has_vector_index) {
-    // For vector-indexed columns, enforce strict data type consistency checks.
-    bool is_same_type = false;
-    if (src_column.is_collection() && dst_column.is_collection()) {
-      // Collection types (including vector types) require specialized comparison logic.
-      if (OB_FAIL(src_column.is_same_collection_column(dst_column, is_same_type))) {
-        LOG_WARN("failed to check collection column type", K(ret));
-      }
-    } else {
-      // For non-collection types, compare basic types and meta types.
-      is_same_type = (src_column.get_data_type() == dst_column.get_data_type() &&
-                     src_column.get_meta_type().get_type() == dst_column.get_meta_type().get_type());
-    }
-    if (OB_SUCC(ret) && !is_same_type) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "For columns with vector indexes, altering the column type is");
-      LOG_WARN("column type modification is not supported because it is depended by vector index",
-               K(column_id), K(ret), K(src_column.get_data_type()), K(dst_column.get_data_type()));
-    }
-  }
-  // Vector index dependency validation (end)
-
-  if(OB_FAIL(ret)){
-  } else if (OB_FAIL(get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", K(ret));
-  }
-
-  for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
-    const ObTableSchema *index_table_schema = NULL;
-    if (OB_FAIL(schema_guard.get_table_schema(
-        simple_index_infos.at(i).table_id_, index_table_schema))) {
-      LOG_WARN("fail to get table schema",
-               K(simple_index_infos.at(i).table_id_), K(ret));
-    } else if (OB_ISNULL(index_table_schema)) {
-      ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("index table schema must not be NULL", K(ret));
-    } else {
-      column_ids.reuse();
-      if (OB_FAIL(index_table_schema->get_column_ids(column_ids))) {
-        LOG_WARN("fail to get column ids", K(ret));
-      }
-      for (int64_t j = 0; OB_SUCC(ret) && j < column_ids.count(); ++j) {
-        if (column_id == column_ids.at(j).col_id_) {
-          is_in_index = true;
-        }
-      }
-      if (OB_SUCC(ret) && is_in_index) {
-        if (!index_table_schema->is_vec_index() && dst_column.is_key_forbid_lob()) {
-          ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, dst_column.get_column_name_str().length(),
-          dst_column.get_column_name_str().ptr());
-          LOG_WARN("BLOB, TEXT column can't be primary key", K(dst_column), K(ret));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/ob_ddl_common.cpp(new_discrete_vector, discrete-vector template real user; external linkage, share callers resolve it through declarations) =====
-#include "sql/engine/vector/ob_discrete_format.h"
-#include "sql/engine/vector/type_traits.h"
-namespace oceanbase
-{
-namespace share
-{
-
-int new_discrete_vector(
-    VecValueTypeClass value_tc,
-    const int64_t max_batch_size,
-    ObIAllocator &allocator,
-    ObDiscreteBase *&result_vec)
-{
-  int ret = OB_SUCCESS;
-  result_vec = nullptr;
-  ObIVector *vector = nullptr;
-  switch (value_tc) {
-#define DISCRETE_VECTOR_INIT_SWITCH(value_tc)                           \
-  case value_tc: {                                                      \
-    using VecType = RTVectorType<VEC_DISCRETE, value_tc>;               \
-    static_assert(sizeof(VecType) <= ObIVector::MAX_VECTOR_STRUCT_SIZE, \
-                  "vector size exceeds MAX_VECTOR_STRUCT_SIZE");        \
-    vector = OB_NEWx(VecType, &allocator, nullptr, nullptr, nullptr);   \
-    break;                                                              \
-  }
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_NUMBER);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_EXTEND);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_STRING);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_ENUM_SET_INNER);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_RAW);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_ROWID);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_LOB);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_JSON);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_GEO);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_UDT);
-    DISCRETE_VECTOR_INIT_SWITCH(VEC_TC_COLLECTION);
-#undef DISCRETE_VECTOR_INIT_SWITCH
-    default:
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected discrete vector value type class", K(ret), K(value_tc));
-      break;
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(vector)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc vecttor", K(ret));
-  } else {
-    ObDiscreteBase *discrete_vec = static_cast<ObDiscreteBase *>(vector);
-    const int64_t nulls_size = ObBitVector::memory_size(max_batch_size);
-    const int64_t lens_size = sizeof(int32_t) * max_batch_size;
-    const int64_t ptrs_size = sizeof(char *) * max_batch_size;
-    ObBitVector *nulls = nullptr;
-    int32_t *lens = nullptr;
-    char **ptrs = nullptr;
-    if (OB_ISNULL(nulls = to_bit_vector(allocator.alloc(nulls_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", K(ret), K(nulls_size));
-    } else if (OB_ISNULL(lens = static_cast<int32_t *>(allocator.alloc(lens_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", K(ret), K(lens_size));
-    } else if (OB_ISNULL(ptrs = static_cast<char **>(allocator.alloc(ptrs_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc mem", K(ret), K(ptrs_size));
-    } else {
-      nulls->reset(max_batch_size);
-      discrete_vec->set_nulls(nulls);
-      discrete_vec->set_lens(lens);
-      discrete_vec->set_ptrs(ptrs);
-      result_vec = discrete_vec;
-    }
-  }
-  return ret;
-}
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/ob_ddl_common.cpp(vectorized helper familyround 2) =====
-namespace oceanbase
-{
-namespace share
-{
-
-// handle_lob_column moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-// check_null_and_length moved to ob_ddl_common_storage_impl.cpp end of file (ObDDLStorageUtil)
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/ob_ddl_common.cpp(is_rowkey_based_co_sstable) =====
-namespace oceanbase
-{
-namespace share
-{
-
-
-}  // namespace share
 }  // namespace oceanbase

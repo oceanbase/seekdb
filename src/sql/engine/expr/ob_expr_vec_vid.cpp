@@ -18,7 +18,8 @@
 
 #include "sql/engine/expr/ob_expr_vec_vid.h"
 #include "sql/engine/ob_exec_context.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -87,9 +88,13 @@ int ObExprVecVid::cg_expr(
     if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx, partition_id, tablet_id))) {
       LOG_WARN("calc part and tablet id by expr failed", K(ret));
     } else {
-      share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
+      share::ObITabletAutoincrementService *auto_inc =
+          ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
       uint64_t seq_id = 0;
-      if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
+      if (OB_ISNULL(auto_inc)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tablet autoincrement service is unavailable", K(ret));
+      } else if (OB_FAIL(auto_inc->next_value(tablet_id, seq_id))) {
         LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
       } else {
         expr_datum.set_int(seq_id);
@@ -103,4 +108,3 @@ int ObExprVecVid::cg_expr(
 
 }  // namespace sql
 }  // namespace oceanbase
-

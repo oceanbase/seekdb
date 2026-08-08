@@ -19,9 +19,9 @@
 #include "ob_call_procedure_resolver.h"
 #include "ob_call_procedure_stmt.h"
 #include "src/sql/resolver/dml/ob_dml_resolver.h"
-#include "pl/ob_pl_package.h"
-#include "pl/pl_cache/ob_pl_cache_mgr.h"
-#include "pl/ob_pl_dependency_util.h"
+#include "sql/pl/ob_pl_package.h"
+#include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
+#include "sql/pl/ob_pl_dependency_util.h"
 namespace oceanbase
 {
 using namespace common;
@@ -251,12 +251,14 @@ int ObCallProcedureResolver::generate_pl_cache_ctx(pl::ObPLCacheCtx &pc_ctx)
 int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
 {
   int ret = OB_SUCCESS;
-  ObPlanCache *plan_cache = NULL;
-  pl::ObPLCacheCtx pc_ctx;
+  ObPlanCache *plan_cache = params_.plan_cache_;
+  if (OB_ISNULL(plan_cache)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("plan cache is not bound to resolver", K(ret));
+    return ret;
+  }
+  pl::ObPLCacheCtx pc_ctx(*plan_cache);
   if (OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
-  } else if (OB_ISNULL(plan_cache = session_info_->get_plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
@@ -286,13 +288,15 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
 int ObCallProcedureResolver::find_call_proc_info(ObCallProcedureStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  ObPlanCache *plan_cache = NULL;
+  ObPlanCache *plan_cache = params_.plan_cache_;
   ObCallProcedureInfo *call_proc_info = NULL;
-  pl::ObPLCacheCtx pc_ctx;
+  if (OB_ISNULL(plan_cache)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("plan cache is not bound to resolver", K(ret));
+    return ret;
+  }
+  pl::ObPLCacheCtx pc_ctx(*plan_cache);
   if (OB_ISNULL(session_info_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
-  } else if (OB_ISNULL(plan_cache = session_info_->get_plan_cache())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
@@ -321,7 +325,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
   ObString sp_name;
   ObCallProcedureInfo *call_proc_info = NULL;
   const ObRoutineInfo *proc_info = NULL;
-  if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
+  ObPlanCache *plan_cache = params_.plan_cache_;
+  if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_) || OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(schema_checker_), K(session_info_), K(ret));
   } else if (OB_UNLIKELY(T_SP_CALL_STMT != parse_tree.type_ || OB_ISNULL(name_node))) {
@@ -344,7 +349,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
       OX (params_.package_guard_ = package_guard);
     }
     int64_t compile_start = ObTimeUtility::current_time();
-    OZ (ObCacheObjectFactory::alloc(stmt->get_cacheobj_guard(),
+    OZ (ObCacheObjectFactory::alloc(*plan_cache, stmt->get_cacheobj_guard(),
                                   ObLibCacheNameSpace::NS_CALLSTMT));
     OX (call_proc_info = static_cast<ObCallProcedureInfo*>(stmt->get_cacheobj_guard().get_cache_obj()));
     CK (OB_NOT_NULL(call_proc_info));

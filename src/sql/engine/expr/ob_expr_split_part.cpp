@@ -138,7 +138,7 @@ int ObExprSplitPart::calc_split_part_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ObIAllocator &tmp_alloc = alloc_guard.get_allocator();
       ObString str;
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
-      if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, str_datum, str))) {
+      if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc, 0, str_datum, str))) {
         LOG_WARN("get full text string failed ", K(ret));
       } else {
         bool null_res = false;

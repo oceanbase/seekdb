@@ -522,7 +522,9 @@ int ObDDLChecksumOperator::get_table_column_checksum(const int64_t execution_id,
   return ret;
 }
 
-int ObDDLChecksumOperator::get_table_column_checksum_without_execution_id(const uint64_t table_id,
+int ObDDLChecksumOperator::get_table_column_checksum_without_execution_id(
+    ObMultiVersionSchemaService &schema_service,
+    const uint64_t table_id,
     const uint64_t index_table_id,
     const int64_t ddl_task_id,
     const bool is_unique_index_checking,
@@ -537,9 +539,9 @@ int ObDDLChecksumOperator::get_table_column_checksum_without_execution_id(const 
       || OB_INVALID_ID == ddl_task_id || !column_checksum_map.created() || !sql_proxy.is_inited())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(index_table_id), K(ddl_task_id), K(column_checksum_map.created()), K(sql_proxy.is_inited()));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(table_id, tablet_ids))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, table_id, tablet_ids))) {
     LOG_WARN("failed to get table tablet ids", K(ret), K(table_id), K(tablet_ids));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(index_table_id, index_tablet_ids))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, index_table_id, index_tablet_ids))) {
     LOG_WARN("failed to get index table tablet ids", K(ret), K(index_table_id), K(index_tablet_ids));
   } else {
     int64_t tablet_latest_execution_id = 0;
@@ -612,7 +614,9 @@ int ObDDLChecksumOperator::check_column_checksum(
   return ret;
 }
 
-int ObDDLChecksumOperator::check_column_checksum_without_execution_id(const uint64_t data_table_id,
+int ObDDLChecksumOperator::check_column_checksum_without_execution_id(
+      ObMultiVersionSchemaService &schema_service,
+      const uint64_t data_table_id,
       const uint64_t index_table_id,
       const int64_t ddl_task_id,
       const bool is_unique_index_checking,
@@ -632,10 +636,10 @@ int ObDDLChecksumOperator::check_column_checksum_without_execution_id(const uint
     LOG_WARN("fail to create column checksum map", K(ret));
   } else if (OB_FAIL(index_table_column_checksums.create(OB_MAX_COLUMN_NUMBER / 2, ObModIds::OB_SSTABLE_CREATE_INDEX))) {
     LOG_WARN("fail to create column checksum map", K(ret));
-  } else if (OB_FAIL(get_table_column_checksum_without_execution_id(data_table_id, index_table_id,
+  } else if (OB_FAIL(get_table_column_checksum_without_execution_id(schema_service, data_table_id, index_table_id,
     ddl_task_id, is_unique_index_checking, data_table_column_checksums, sql_proxy))) {
     LOG_WARN("fail to get table column checksum", K(ret), K(data_table_id), K(index_table_id), K(ddl_task_id));
-  } else if (OB_FAIL(get_table_column_checksum_without_execution_id(index_table_id, index_table_id,
+  } else if (OB_FAIL(get_table_column_checksum_without_execution_id(schema_service, index_table_id, index_table_id,
     ddl_task_id, is_unique_index_checking, index_table_column_checksums, sql_proxy))) {
     LOG_WARN("fail to get table column checksum", K(ret), K(index_table_id), K(ddl_task_id));
   } else {

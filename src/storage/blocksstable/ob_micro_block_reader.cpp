@@ -19,6 +19,8 @@
 #include "storage/access/ob_aggregated_store.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/access/ob_table_access_param.h"
+#include "storage/access/ob_table_access_context.h"
+#include "storage/truncate_info/ob_truncate_filter_evaluator.h"
 
 namespace oceanbase
 {
@@ -813,7 +815,7 @@ int ObMicroBlockReader::filter_pushdown_filter(
           if (1 != filter.get_col_count()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("Unexpected col_ids count: not 1", K(ret), K(filter));
-          } else if (OB_FAIL(filter_white_filter(white_filter, datum_buf[0], filtered))) {
+          } else if (OB_FAIL(white_filter.filter_datum(datum_buf[0], filtered))) {
             LOG_WARN("Failed to filter row with white filter", K(ret), K(row_idx));
           }
         }
@@ -831,76 +833,80 @@ int ObMicroBlockReader::filter_pushdown_filter(
   return ret;
 }
 
-int ObMicroBlockReader::filter_pushdown_truncate_filter(
-    const sql::ObPushdownFilterExecutor *parent,
-    sql::ObPushdownFilterExecutor &filter,
-    const sql::PushdownFilterInfo &pd_filter_info,
+int ObMicroBlockReader::filter_truncate_evaluator(
+    storage::ObTruncateFilterEvaluator &evaluator,
+    const int64_t start,
+    const int64_t count,
+    const common::ObBitmap *candidate_rows,
     common::ObBitmap &result_bitmap)
 {
   int ret = OB_SUCCESS;
   allocator_.reuse();
-  if (OB_UNLIKELY(pd_filter_info.start_ < 0 ||
-                  pd_filter_info.start_ + pd_filter_info.count_ > row_count_)) {
+  if (OB_UNLIKELY(start < 0 || count <= 0 || start + count > row_count_ ||
+                  !evaluator.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(row_count_), K(pd_filter_info.start_), K(pd_filter_info.count_));
-  } else if (OB_UNLIKELY(!filter.is_truncate_filter_node())) {
+    LOG_WARN("invalid truncate evaluator input", K(ret), K(row_count_), K(start), K(count));
+  } else if (OB_UNLIKELY(nullptr == read_info_ || nullptr == header_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected truncate filter type", K(ret), K(filter));
+    LOG_WARN("flat reader is not initialized", K(ret), KP_(read_info), KP_(header));
   } else {
-    sql::ObITruncateFilterExecutor *truncate_executor = nullptr;
-    if (filter.is_filter_black_node()) {
-      truncate_executor = static_cast<sql::ObTruncateBlackFilterExecutor*>(&filter);
-    } else {
-      truncate_executor = static_cast<sql::ObTruncateWhiteFilterExecutor*>(&filter);
-    }
-    ObStorageDatum *datum_buf = truncate_executor->get_tmp_datum_buffer();
-    const common::ObIArray<int32_t> &col_idxs = truncate_executor->get_col_idxs();
+    const int64_t column_count = evaluator.referenced_column_count();
+    ObStorageDatum *datum_buf = nullptr;
     const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
-    const int64_t col_count = col_idxs.count();
-    int64_t row_idx = 0;
-    if (OB_UNLIKELY(col_count <= 0 || nullptr == datum_buf)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected col count", K(ret), K(col_count), KP(datum_buf));
+    if (OB_UNLIKELY(column_count <= 0) ||
+        OB_ISNULL(datum_buf = static_cast<ObStorageDatum *>(
+            allocator_.get_inner_allocator().alloc(sizeof(ObStorageDatum) * column_count)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("failed to allocate projected truncate row", K(ret), K(column_count));
+    } else {
+      for (int64_t i = 0; i < column_count; ++i) {
+        new (datum_buf + i) ObStorageDatum();
+      }
     }
-    for (int64_t offset = 0; OB_SUCC(ret) && offset < pd_filter_info.count_; ++offset) {
-      row_idx = offset + pd_filter_info.start_;
-      if (nullptr != parent && parent->can_skip_filter(offset)) {
+    for (int64_t offset = 0; OB_SUCC(ret) && offset < count; ++offset) {
+      const int64_t row_idx = offset + start;
+      if (nullptr != candidate_rows && !candidate_rows->test(offset)) {
         continue;
       } else {
         ObStorageDatum tmp_datum; // used for deep copy decimalint
-        for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
           ObStorageDatum &datum = datum_buf[i];
-          const int64_t col_idx = col_idxs.at(i);
-          const ObObjType obj_type = cols_desc.at(col_idx).col_type_.get_type();
-          const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+          const int64_t column_index = evaluator.referenced_column(i);
           datum.reuse();
-          if (OB_FAIL(flat_row_reader_.read_column(
-              data_begin_ + index_data_[row_idx],
-              index_data_[row_idx + 1] - index_data_[row_idx],
-              col_idx,
-              tmp_datum))) {
-            LOG_WARN("fail to read column", K(ret), K(i), K(col_idx), K(row_idx), KPC_(header));
-          } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(col_idx))) {
+          tmp_datum.reuse();
+          if (OB_UNLIKELY(column_index < 0 || column_index >= cols_desc.count())) {
+            ret = OB_INDEX_OUT_OF_RANGE;
+            LOG_WARN("truncate column is out of range", K(ret), K(column_index), K(cols_desc.count()));
+          } else if (OB_FAIL(flat_row_reader_.read_column(
+                         data_begin_ + index_data_[row_idx],
+                         index_data_[row_idx + 1] - index_data_[row_idx],
+                         column_index,
+                         tmp_datum))) {
+            LOG_WARN("failed to read truncate column", K(ret), K(i), K(column_index), K(row_idx), KPC_(header));
+          } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
             datum.set_int(-tmp_datum.get_int());
-          } else if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
-            LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(tmp_datum), K(obj_type), K(map_type));
+          } else {
+            const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
+            const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
+            if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
+              LOG_WARN("failed to convert truncate datum", K(ret), K(i), K(tmp_datum), K(obj_type), K(map_type));
+            }
           }
         }
       }
       if (OB_SUCC(ret)) {
         bool filtered = false;
-        if (OB_FAIL(truncate_executor->filter(datum_buf, col_count, filtered))) {
-          LOG_WARN("Failed to filter row with black filter", K(ret), K(row_idx));
+        if (OB_FAIL(evaluator.filter_projected(datum_buf, column_count, filtered))) {
+          LOG_WARN("failed to evaluate projected truncate row", K(ret), K(row_idx));
         } else if (!filtered) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("Failed to set result bitmap", K(ret), K(offset));
+            LOG_WARN("failed to set truncate result", K(ret), K(offset));
           }
         }
       }
     }
-    LOG_TRACE("[TRUNCATE INFO] micro block black pushdown filter row", K(ret), K(pd_filter_info),
-              K(result_bitmap.popcnt()), K(result_bitmap), KPC_(header),
-              KPC(truncate_executor), K(filter));
+    LOG_TRACE("[TRUNCATE INFO] flat micro block truncate filter", K(ret), K(start), K(count),
+              K(result_bitmap.popcnt()), K(result_bitmap), KPC_(header));
   }
   return ret;
 }

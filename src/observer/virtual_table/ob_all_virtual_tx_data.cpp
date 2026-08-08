@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 #include "ob_all_virtual_tx_data.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -52,7 +52,9 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
   return ret;
 }
 
-int ObAllVirtualTxData::fill_in_row_(const VirtualTxDataRow &row_data, common::ObNewRow *&row)
+int ObAllVirtualTxData::fill_in_row_(
+    const data_plane::ObVirtualTxDataRow &row_data,
+    common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   const int64_t col_count = output_column_ids_.count();
@@ -152,13 +154,14 @@ int ObAllVirtualTxData::handle_key_range_(ObNewRange &key_range)
   return ret;
 }
 
-int ObAllVirtualTxData::generate_virtual_tx_data_row_(VirtualTxDataRow &tx_data_row)
+int ObAllVirtualTxData::generate_virtual_tx_data_row_(
+    data_plane::ObVirtualTxDataRow &tx_data_row)
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE
   {
     ObLS *ls = nullptr;
-    ObLSService *ls_service = share::g_mp->ls_service();
+    ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
     if (OB_ISNULL(ls_service)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", KR(ret));

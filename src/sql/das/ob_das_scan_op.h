@@ -16,13 +16,16 @@
 
 #ifndef OBDEV_SRC_SQL_DAS_OB_DAS_SCAN_OP_H_
 #define OBDEV_SRC_SQL_DAS_OB_DAS_SCAN_OP_H_
+#include "data_plane/access/ob_table_param.h"
+#include "data_plane/access/ob_table_scan_param.h"
+#include "data_plane/transaction/ob_tx_desc_access.h"
+#include "query/engine/basic/ob_row_to_expr_projector.h"
 #include "sql/das/ob_das_task.h"
-#include "storage/access/ob_dml_param.h"
 #include "sql/engine/table/ob_index_lookup_op_impl.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/rewrite/ob_query_range_define.h"
 #include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "query/vector/ob_vector_index_util.h"
 
 namespace oceanbase
 {
@@ -141,7 +144,8 @@ public:
 
 struct ObDASScanRtDef : ObDASBaseRtDef
 {
-  OB_UNIS_VERSION(1);
+  friend class DASOpResultIter;
+  OB_UNIS_VERSION(2);
 public:
   ObDASScanRtDef()
     : ObDASBaseRtDef(DAS_OP_TABLE_SCAN),
@@ -215,7 +219,7 @@ public:
   uint64_t scan_op_id_;
   int64_t scan_rows_size_;
   int64_t in_row_cache_threshold_;
-  ScanResumePoint *scan_resume_point_;
+  storage::ScanResumePoint *scan_resume_point_;
   // row_scan_cnt_ indicates the total rows scanned during a table scan, for multi-partition tables, it sums rows
   // from all local partitions and retains its value even after rescan.
   uint64_t row_scan_cnt_;
@@ -231,8 +235,8 @@ private:
 
 class ObDASScanOp : public ObIDASTaskOp
 {
-  friend class ObDASMergeIter;
   friend class DASOpResultIter;
+  friend class ObDASMergeIter;
   OB_UNIS_VERSION(2);
 public:
   ObDASScanOp(common::ObIAllocator &op_alloc);
@@ -387,7 +391,7 @@ public:
   virtual int revert_iter();
   VIRTUAL_TO_STRING_KV(KPC_(lookup_ctdef),
                        KPC_(lookup_rtdef),
-                       KPC_(tx_desc),
+                       "tx_desc", data_plane::ObTxDescLogView(tx_desc_),
                        KPC_(snapshot),
                        K_(tablet_id),
                        K_(state),

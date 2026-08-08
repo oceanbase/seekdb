@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "rootserver/ob_domain_index_builder_util.h"
+#include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ob_local_management_service.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
@@ -26,7 +27,7 @@ namespace oceanbase
 using namespace common;
 using namespace obcall;
 using namespace share::schema;
-namespace share
+namespace rootserver
 {
 
 #define LOCATE_INDEX_IDX(INDEX_TYPE, IDX_VALUE)                                                  \
@@ -69,7 +70,8 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
     } else if (OB_ISNULL(local_management_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("local_management_service is nullptr", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(data_table_id,
+    } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
+                   *GCTX.schema_service_, data_table_id,
                                                       ddl_rpc_timeout))) {
       LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else {
@@ -86,7 +88,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
         LOG_WARN("generate aux index schema failed", K(ret), K(arg));
       } else if (res.schema_generated_) {
         task_submitted = true;
@@ -98,7 +100,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
         } else { // need to wait data complement finish
           res_task_id = res.ddl_task_id_;
           TCWLockGuard guard(lock);
-          share::ObDomainDependTaskStatus status;
+          ObDomainDependTaskStatus status;
           // check if child task is already added
           if (OB_FAIL(map.get_refactored(aux_table_id, status))) {
             if (OB_HASH_NOT_EXIST == ret) {
@@ -355,5 +357,5 @@ int ObDomainIndexBuilderUtil::locate_aux_index_schema_by_name(
   return ret;
 }
 
-}//end namespace share
+}//end namespace rootserver
 }//end namespace oceanbase

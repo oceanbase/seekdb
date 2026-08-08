@@ -18,8 +18,8 @@
 #include "ob_sql_context.h"
 
 #include "sql/optimizer/ob_log_plan.h"
+#include "sql/optimizer/ob_table_partition_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "src/storage/tx/ob_trans_define_v4.h"
 
 using namespace ::oceanbase::common;
 namespace oceanbase
@@ -132,6 +132,8 @@ ObSqlCtx::ObSqlCtx()
     is_cursor_(false),
     statement_id_(common::OB_INVALID_ID),
     stmt_type_(stmt::T_NONE),
+    partition_infos_(NULL),
+    partition_infos_allocator_(NULL),
     is_restore_(false),
     all_plan_const_param_constraints_(nullptr),
     all_possible_const_param_constraints_(nullptr),
@@ -208,7 +210,15 @@ void ObSqlCtx::reset()
 //release dynamic allocated memory
 void ObSqlCtx::clear()
 {
-  partition_infos_.reset();
+  if (OB_NOT_NULL(partition_infos_)) {
+    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
+        PartitionInfoStorage;
+    PartitionInfoStorage *storage = static_cast<PartitionInfoStorage *>(partition_infos_);
+    storage->~PartitionInfoStorage();
+    partition_infos_allocator_->free(storage);
+    partition_infos_ = NULL;
+    partition_infos_allocator_ = NULL;
+  }
   related_user_var_names_.reset();
   base_constraints_.reset();
   strict_constraints_.reset();
@@ -355,20 +365,59 @@ int ObSqlCtx::set_partition_infos(const ObTablePartitionInfoArray &info, ObIAllo
 {
   int ret = OB_SUCCESS;
   int64_t count = info.count();
-  partition_infos_.reset();
+  if (OB_NOT_NULL(partition_infos_)) {
+    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
+        PartitionInfoStorage;
+    PartitionInfoStorage *storage = static_cast<PartitionInfoStorage *>(partition_infos_);
+    storage->~PartitionInfoStorage();
+    partition_infos_allocator_->free(storage);
+    partition_infos_ = NULL;
+    partition_infos_allocator_ = NULL;
+  }
   if (count > 0) {
-    partition_infos_.set_allocator(&allocator);
-    if (OB_FAIL(partition_infos_.init(count))) {
+    typedef common::ObFixedArray<ObTablePartitionInfo *, common::ObIAllocator>
+        PartitionInfoStorage;
+    void *buf = allocator.alloc(sizeof(PartitionInfoStorage));
+    PartitionInfoStorage *storage = NULL;
+    if (OB_ISNULL(buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate partition info storage failed", K(ret), K(count));
+    } else if (FALSE_IT(storage = new (buf) PartitionInfoStorage(&allocator))) {
+    } else if (OB_FAIL(storage->init(count))) {
       LOG_WARN("init partition info failed", K(ret), K(count));
     } else {
+      partition_infos_ = storage;
+      partition_infos_allocator_ = &allocator;
       for (int64_t i = 0; i < count && OB_SUCC(ret); ++i) {
-        if (OB_FAIL(partition_infos_.push_back(info.at(i)))) {
+        if (OB_FAIL(storage->push_back(info.at(i)))) {
           LOG_WARN("push partition info failed", K(ret), K(count));
         }
       }
     }
+    if (OB_FAIL(ret) && OB_NOT_NULL(storage)) {
+      storage->~PartitionInfoStorage();
+      allocator.free(storage);
+      partition_infos_ = NULL;
+      partition_infos_allocator_ = NULL;
+    }
   }
   return ret;
+}
+
+const ObTablePartitionInfoArray &ObSqlCtx::get_partition_infos() const
+{
+  typedef common::ObSEArray<ObTablePartitionInfo *, 1> EmptyPartitionInfoArray;
+  static const EmptyPartitionInfoArray EMPTY_PARTITION_INFOS;
+  if (OB_NOT_NULL(partition_infos_)) {
+    return *partition_infos_;
+  } else {
+    return EMPTY_PARTITION_INFOS;
+  }
+}
+
+int64_t ObSqlCtx::get_partition_info_count() const
+{
+  return OB_NOT_NULL(partition_infos_) ? partition_infos_->count() : 0;
 }
 
 int ObSqlCtx::set_related_user_var_names(const ObIArray<ObString> &user_var_names,

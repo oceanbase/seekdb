@@ -23,10 +23,9 @@ using namespace palf;
 using namespace share;
 namespace logservice
 {
-ObReplayHandler::ObReplayHandler(storage::ObLS *ls)
+ObReplayHandler::ObReplayHandler()
 {
   reset();
-  ls_ = ls;
 }
 
 ObReplayHandler::~ObReplayHandler()
@@ -39,7 +38,6 @@ void ObReplayHandler::reset()
   for (int i = 0; i < ObLogBaseType::MAX_LOG_BASE_TYPE; i++) {
     handlers_[i] = NULL;
   }
-  ls_ = NULL;
 }
 
 int ObReplayHandler::register_handler(const ObLogBaseType &type,

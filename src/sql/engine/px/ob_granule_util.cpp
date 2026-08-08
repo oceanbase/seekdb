@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_granule_util.h"
-#include "share/rc/ob_module_provider.h"
+#include "data_plane/access/ob_parallel_range_task_planner.h"
+#include "share/config/ob_server_config.h"
 #include "src/sql/engine/px/ob_dfo.h"
 #include "sql/das/ob_das_simple_op.h"
 #include "src/sql/engine/px/ob_granule_iterator_op.h"
@@ -30,20 +31,6 @@ namespace sql
 {
 
 
-
-int ObParallelBlockRangeTaskParams::valid() const
-{
-  int ret = OB_SUCCESS;
-  if (min_task_count_per_thread_ <= 0
-      || max_task_count_per_thread_ <= 0
-      || min_task_access_size_ <= 0
-      || parallelism_ <= 0
-      || expected_task_load_ <= 0) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params is invalid", K(*this), K(ret));
-  }
-  return ret;
-}
 
 int ObGranuleUtil::use_partition_granule(ObGranulePumpArgs &args, bool &partition_granule)
 {
@@ -190,7 +177,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   //  5. calculate task ranges for each partition, and get the result
 
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
   // 1. check the validity of input parameters
   if (input_ranges.count() < 1 || tablets.count() < 1 || parallelism < 1 || tablet_size < 1) {
     ret = OB_INVALID_ARGUMENT;
@@ -245,10 +231,11 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   // 3. calc the total number of tasks for all partitions
   int64_t esti_task_cnt_by_data_size = 0;
   if (OB_SUCC(ret)) {
-    ObParallelBlockRangeTaskParams params;
+    data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
     params.parallelism_ = parallelism;
-    params.expected_task_load_ = tablet_size/1024;
-    if (OB_FAIL(compute_total_task_count(params, total_size, esti_task_cnt_by_data_size))) {
+    params.expected_task_load_kb_ = tablet_size/1024;
+    if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(
+        params, total_size, esti_task_cnt_by_data_size))) {
       LOG_WARN("compute task count failed", K(ret));
     } else {
       esti_task_cnt_by_data_size += empty_partition_cnt;
@@ -310,61 +297,6 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
                                       K(granule_idx.count()), K(granule_tablets), K(granule_ranges), K(granule_idx));
       }
     }
-  }
-  return ret;
-}
-
-int ObGranuleUtil::compute_total_task_count(const ObParallelBlockRangeTaskParams &params,
-                                      int64_t total_size,
-                                      int64_t &total_task_count)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_total_task_count = -1;
-  if (OB_FAIL(params.valid())) {
-    LOG_WARN("params is invalid" , K(ret));
-  } else {
-    // total size
-    int64_t total_access_size = total_size;
-    // default value is 2 MB
-    int64_t min_task_access_size = NON_ZERO_VALUE(params.min_task_access_size_);
-    // default value of expected_task_load_ is 128 MB
-    int64_t expected_task_load = max(params.expected_task_load_, min_task_access_size);
-
-    LOG_TRACE("compute task count: ", K(total_access_size), K(expected_task_load));
-
-    // lower bound size: dop*128M*13
-    int64_t lower_bound_size = params.parallelism_ * expected_task_load * params.min_task_count_per_thread_;
-    // hight bound size: dop*128M*100
-    int64_t upper_bound_size = params.parallelism_ * expected_task_load * params.max_task_count_per_thread_;
-
-    if (total_access_size < 0 || lower_bound_size < 0 || upper_bound_size < 0 ) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("params is invalid",
-        K(total_access_size), K(lower_bound_size), K(upper_bound_size), K(params));
-    } else if (total_access_size < lower_bound_size) {
-      // the data size is less than lower bound size
-      // when the amount of data is small,
-      // more tasks can easily achieve better dynamic load balancing
-      tmp_total_task_count = min(params.min_task_count_per_thread_ * params.parallelism_,
-                                 total_access_size/min_task_access_size);
-      tmp_total_task_count = max(tmp_total_task_count, total_access_size / expected_task_load);
-      LOG_TRACE("the data is less than lower bound size", K(ret), K(tmp_total_task_count),
-                K(total_size), K(params));
-    } else if (total_access_size > upper_bound_size) {
-      // the data size is greater than upper bound size
-      tmp_total_task_count = params.max_task_count_per_thread_ * params.parallelism_;
-      LOG_TRACE("the data size is greater upper bound size", K(ret), K(tmp_total_task_count),
-                K(total_size), K(params));
-    } else {
-      // the data size is between lower bound size and upper bound size
-      tmp_total_task_count = total_access_size / expected_task_load;
-      LOG_TRACE("the data size is between lower bound size and upper bound size",
-        K(ret), K(tmp_total_task_count), K(total_size), K(params));
-    }
-  }
-  if (OB_SUCC(ret)) {
-    // the result of task count must be greater than or equal to zero
-    total_task_count = tmp_total_task_count;
   }
   return ret;
 }
@@ -433,7 +365,6 @@ int ObGranuleUtil::get_tasks_for_partition(ObExecContext &exec_ctx,
                                            bool range_independent)
 {
   int ret = OB_SUCCESS;
-  ObAccessService *access_service = share::g_mp->access_service();
   ObArrayArray<ObStoreRange> multi_range_split_array;
   if (expected_task_cnt < 1) {
     ret = OB_INVALID_ARGUMENT;

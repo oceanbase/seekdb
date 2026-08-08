@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_parallel_handler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
 #include "lib/profile/ob_trace_id.h"
 #include "sql/engine/ob_exec_context.h"
@@ -29,7 +29,7 @@ int64_t ObDASParallelTaskFactory::free_count_;
 
 void OB_WEAK_SYMBOL request_finish_callback();
 
-int ObDASParallelHandler::init(observer::ObSrvTask *task)
+int ObDASParallelHandler::init(rpc::ObSrvTask *task)
 {
   int ret = OB_SUCCESS;
   if (NULL == task) {
@@ -49,7 +49,7 @@ int ObDASParallelHandler::deep_copy_all_das_tasks(ObDASTaskFactory &das_factory,
                                                   ObDasAggregatedTask &das_task_wrapper)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(share::g_mp->data_access_service()->collect_das_copy_refs(src_task_list,
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->collect_das_copy_refs(src_task_list,
                                                                         copy_context))) {
     LOG_WARN("fail to collect DAS copy references", K(ret));
   } else {
@@ -173,7 +173,7 @@ int ObDASParallelHandler::run()
           ObDASCopyContext::get_copy_context() = saved_context;
           if (OB_FAIL(ret)) {
             LOG_WARN("fail to deep copy all das tasks", K(ret));
-          } else if (OB_FAIL(share::g_mp->data_access_service()->parallel_execute_das_task(new_task_list))) {
+          } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->parallel_execute_das_task(new_task_list))) {
             LOG_WARN("fail to parallel execute das task", K(ret), KPC(task));
           }
         }

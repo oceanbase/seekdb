@@ -1,5 +1,3 @@
-#include "rootserver/ob_local_management_service.h"
-#include "rootserver/ob_local_ddl_serial_call.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -19,8 +17,10 @@
 #define USING_LOG_PREFIX PL
 
 #include "ob_dbms_ai_service.h"
-#include "observer/ai_service/ob_ai_service_executor.h"
-#include "observer/ai_service/ob_ai_service_struct.h"
+#include "query/ai/ob_ai_endpoint_admin.h"
+#include "query/command/ob_root_command_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/ob_rpc_struct.h"
 #include "src/pl/ob_pl.h"
@@ -98,6 +98,7 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
+  query::ObIAiEndpointAdmin *endpoint_admin = ctx.ai_endpoint_admin_;
   ctx.set_is_sensitive(true);
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
@@ -125,9 +126,13 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
   } else {
     ObArenaAllocator tmp_allocator;
     ObIJsonBase *j_base = nullptr;
-    if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
+    if (OB_FAIL(get_json_base_(ctx, tmp_allocator, params, j_base))) {
       LOG_WARN("failed to get json base", K(ret), K(params));
-    } else if (OB_FAIL(ObAiServiceExecutor::create_ai_model_endpoint(tmp_allocator, endpoint_name, *j_base))) {
+    } else if (OB_ISNULL(endpoint_admin)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("ai endpoint admin is not initialized", K(ret));
+    } else if (OB_FAIL(endpoint_admin->create_endpoint(
+                          tmp_allocator, endpoint_name, *j_base))) {
       LOG_WARN("failed to insert ai service endpoint", K(ret), K(endpoint_name));
     }
   }
@@ -140,6 +145,7 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
+  query::ObIAiEndpointAdmin *endpoint_admin = ctx.ai_endpoint_admin_;
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
     LOG_WARN("failed to pre check", K(ret));
@@ -165,9 +171,13 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
   } else {
     ObIJsonBase *j_base = nullptr;
     ObArenaAllocator tmp_allocator;
-    if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
+    if (OB_FAIL(get_json_base_(ctx, tmp_allocator, params, j_base))) {
       LOG_WARN("failed to get json base", K(ret), K(params));
-    } else if (OB_FAIL(ObAiServiceExecutor::alter_ai_model_endpoint(tmp_allocator, endpoint_name, *j_base))) {
+    } else if (OB_ISNULL(endpoint_admin)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("ai endpoint admin is not initialized", K(ret));
+    } else if (OB_FAIL(endpoint_admin->alter_endpoint(
+                          tmp_allocator, endpoint_name, *j_base))) {
       LOG_WARN("failed to alter ai service endpoint", K(ret), K(endpoint_name));
     }
   }
@@ -180,6 +190,7 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
 {
   int ret = OB_SUCCESS;
   ObString endpoint_name;
+  query::ObIAiEndpointAdmin *endpoint_admin = ctx.ai_endpoint_admin_;
 
   if (OB_FAIL(precheck_version_and_param_count_(1, params))) {
     LOG_WARN("failed to pre check", K(ret));
@@ -197,7 +208,10 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
     LOG_WARN("ai service endpoint name is empty", K(ret), K(params), K(endpoint_name));
     ObString var_name = "name";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
-  } else if (OB_FAIL(ObAiServiceExecutor::drop_ai_model_endpoint(endpoint_name))) {
+  } else if (OB_ISNULL(endpoint_admin)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ai endpoint admin is not initialized", K(ret));
+  } else if (OB_FAIL(endpoint_admin->drop_endpoint(endpoint_name))) {
     LOG_WARN("failed to drop ai service endpoint", K(ret), K(endpoint_name));
   }
 
@@ -218,14 +232,22 @@ int ObDBMSAiService::precheck_version_and_param_count_(int expect_param_count, s
   return ret;
 }
 
-int ObDBMSAiService::get_json_base_(ObArenaAllocator &allocator, sql::ParamStore &params, ObIJsonBase *&j_base)
+int ObDBMSAiService::get_json_base_(
+    ObPLExecCtx &ctx,
+    ObArenaAllocator &allocator,
+    sql::ParamStore &params,
+    ObIJsonBase *&j_base)
 {
   int ret = OB_SUCCESS;
   ObString j_str;
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
   uint32_t parse_flag = 0; // mysql mode 
 
-  if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, params.at(1), j_str))) {
+  if (OB_ISNULL(ctx.exec_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("exec context is null", K(ret));
+  } else if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(
+                 *ctx.exec_ctx_, &allocator, params.at(1), j_str))) {
     LOG_WARN("fail to read real string data", K(ret), K(params.at(1)));
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, in_type, in_type, j_base, parse_flag))) {
     LOG_WARN("fail to get json base", K(ret), K(j_str));
@@ -244,6 +266,9 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
   
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
+  query::ObIRootCommandService *root_commands =
+      OB_ISNULL(ctx.exec_ctx_) ? nullptr
+                               : ctx.exec_ctx_->get_root_command_service();
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
     LOG_WARN("failed to pre check", K(ret));
@@ -287,16 +312,20 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     ObArenaAllocator tmp_allocator;
     ObIJsonBase *j_base = nullptr;
     ObAiServiceModelInfo model_info;
-    if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
+    if (OB_FAIL(get_json_base_(ctx, tmp_allocator, params, j_base))) {
       LOG_WARN("failed to get json base", K(ret), K(params));
     } else if (OB_FAIL(model_info.parse_from_json_base(model_name, *j_base))) {
       LOG_WARN("failed to parse ai model info", K(ret), K(model_name)); 
     } else {
-      ObCreateAiModelArg arg(model_info);
+      obcall::ObCreateAiModelArg arg(model_info);
       arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(arg.check_valid())) {
         LOG_WARN("invalid create ai model arg", K(ret), K(arg));
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->create_ai_model(arg); }))) {
+      } else if (OB_ISNULL(root_commands)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("root command service is not initialized", K(ret));
+      } else if (OB_FAIL(query::serialize_root_service_call(
+                           [&]{ return root_commands->create_ai_model(arg); }))) {
         LOG_WARN("failed to create ai model", K(ret), K(arg));
       }
     }
@@ -313,6 +342,9 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   
   ObSchemaGetterGuard schema_guard;
   const ObAiModelSchema *ai_model_schema = nullptr;
+  query::ObIRootCommandService *root_commands =
+      OB_ISNULL(ctx.exec_ctx_) ? nullptr
+                               : ctx.exec_ctx_->get_root_command_service();
 
   if (OB_FAIL(precheck_version_and_param_count_(1, params))) {
     LOG_WARN("failed to pre check", K(ret));
@@ -348,9 +380,13 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else {
-    ObDropAiModelArg arg(model_name);
+    obcall::ObDropAiModelArg arg(model_name);
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
-      if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return GCTX.local_management_service_->drop_ai_model(arg); }))) {
+      if (OB_ISNULL(root_commands)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("root command service is not initialized", K(ret));
+      } else if (OB_FAIL(query::serialize_root_service_call(
+                           [&]{ return root_commands->drop_ai_model(arg); }))) {
       LOG_WARN("failed to drop ai model", K(ret), K(arg));
     }
 

@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_DDL_OB_DDL_INDEPENDENT_DAG_
 #define _OCEANBASE_STORAGE_DDL_OB_DDL_INDEPENDENT_DAG_
 
-#include "observer/scheduler/ob_independent_dag.h"
+#include "storage/scheduler/ob_independent_dag.h"
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_pipeline.h"
 

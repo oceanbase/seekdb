@@ -18,9 +18,9 @@
 #define OCEANBASE_LOGSERVICE_OB_REPLAY_STATUS_
 
 #include <stdint.h>
-#include "logservice/ob_log_base_header.h"
-#include "logservice/ob_log_base_type.h"
-#include "logservice/palf/lsn.h"
+#include "share/log/ob_log_base_header.h"
+#include "share/log/ob_log_base_type.h"
+#include "share/log/palf/lsn.h"
 #include "share/scn.h"
 #include "logservice/palf/palf_callback.h"
 #include "logservice/palf/palf_iterator.h"

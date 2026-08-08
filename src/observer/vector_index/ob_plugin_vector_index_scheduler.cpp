@@ -15,12 +15,12 @@
  */
 #define USING_LOG_PREFIX SERVER
 #include "ob_plugin_vector_index_scheduler.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_table_dml_param.h"
 #include "storage/ob_value_row_iterator.h"
 #include "storage/ddl/ob_direct_load_struct.h"
@@ -45,7 +45,7 @@ int ObPluginVectorIndexLoadScheduler::init_task_executors(ObLS &ls)
 int ObPluginVectorIndexLoadScheduler::init(ObLS *ls, common::ObTimer &scheduler_timer)
 {
   int ret = OB_SUCCESS;
-  ObPluginVectorIndexService *vector_index_service = share::g_mp->plugin_vector_index_service();
+  ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls) || !scheduler_timer.inited()) {
     ret = OB_ERR_UNEXPECTED; 
     LOG_WARN("vector index load task failed",
@@ -756,7 +756,7 @@ int ObPluginVectorIndexLoadScheduler::generate_vec_idx_memdata_dag(ObPluginVecto
   ObVectorIndexTask *memdata_sync_task = nullptr;
 
   ObDagScheduler *dag_scheduler = nullptr;
-  if (OB_ISNULL(dag_scheduler = share::g_mp->dag_scheduler())) {
+  if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag scheduler must not be null", K(ret));
   } else if (OB_FAIL(dag_scheduler->alloc_dag(dag))) {
@@ -1541,14 +1541,20 @@ int ObVectorIndexTask::process_one()
 
   if (OB_FAIL(ObPluginVectorIndexUtils::get_task_read_snapshot(read_snapshot_))) {
     LOG_WARN("memdata sync fail to get task read snapshot", KR(ret), KPC(task_ctx_));
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("LOB read service is not installed", KR(ret));
   } else if (OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(task_ctx_->index_tablet_id_, adpt_guard))) {
     LOG_WARN("memdata sync fail to get adapter instance", KR(ret), KPC(task_ctx_));
-  } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(adpt_guard.get_adatper(),
-                                                               read_snapshot_,
-                                                               allocator_))) {
-    LOG_WARN("memdata sync fail to refresh memdata", KR(ret), KPC(task_ctx_));
-  } else if (OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(task_ctx_->index_tablet_id_, new_adpt_guard))) {
-    LOG_WARN("memdata sync fail to get adapter instance", KR(ret), KPC(task_ctx_));
+  } else {
+    const common::ObLobReadOptions lob_read_options(*::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>());
+    if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(
+            adpt_guard.get_adatper(), read_snapshot_, allocator_, lob_read_options))) {
+      LOG_WARN("memdata sync fail to refresh memdata", KR(ret), KPC(task_ctx_));
+    } else if (OB_FAIL(vec_idx_mgr_->get_adapter_inst_guard(
+                   task_ctx_->index_tablet_id_, new_adpt_guard))) {
+      LOG_WARN("memdata sync fail to get adapter instance", KR(ret), KPC(task_ctx_));
+    }
   }
   
   if (OB_SUCC(ret)) {

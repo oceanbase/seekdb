@@ -56,12 +56,14 @@ int ObDatumRowkey::murmurhash(const uint64_t seed, const ObStorageDatumUtils &da
   } else {
     hash = seed;
     if (is_ext_rowkey()) {
-      if (OB_FAIL(datum_utils.get_ext_hash_funcs().hash_func_(datums_[0], hash, hash))) {
+      if (OB_FAIL(datum_utils.get_ext_hash_funcs().hash_func_(
+              datums_[0], hash, hash, nullptr))) {
         STORAGE_LOG(WARN, "fail to calc hash", K(ret));
       }
     } else {
       for (int64_t i = 0; i < datum_cnt_ && OB_SUCC(ret); i++) {
-        if (OB_FAIL(datum_utils.get_hash_funcs().at(i).hash_func_(datums_[i], hash, hash))) {
+        if (OB_FAIL(datum_utils.get_hash_funcs().at(i).hash_func_(
+                datums_[i], hash, hash, nullptr))) {
           STORAGE_LOG(WARN, "fail to calc hash", K(ret));
         }
       }

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_server_snapshot_handler.h"
-#include "share/rc/ob_module_provider.h"
-#include "observer/omt/ob_server_runtime.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/api/storage/runtime/ob_i_server_runtime.h"
 #include "src/storage/ls/ob_ls.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 
@@ -32,7 +32,7 @@ namespace storage
 int ObServerSnapshotHandler::create_server_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock last_super_block = runtime->get_super_block();
   ObServerSnapshotMeta snapshot;
   snapshot.snapshot_id_ = snapshot_id;
@@ -48,7 +48,7 @@ int ObServerSnapshotHandler::create_server_snapshot(const ObServerSnapshotID &sn
   } else if (OB_UNLIKELY(!last_super_block.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get runtime super block", K(ret), K(last_super_block));
-  } else if (OB_FAIL(share::g_mp->local_storage_meta_service()->add_snapshot(snapshot))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->add_snapshot(snapshot))) {
     LOG_WARN("fail to add snapshot", K(ret), K(snapshot));
   }
 
@@ -108,7 +108,7 @@ int ObServerSnapshotHandler::get_ls_meta_entry(
 {
   int ret = OB_SUCCESS;
   ObServerSnapshotMeta snapshot;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
   if (OB_UNLIKELY(!snapshot_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -168,7 +168,7 @@ void ObServerSnapshotHandler::dec_meta_block_ref(const ObIArray<blocksstable::Ma
 int ObServerSnapshotHandler::delete_server_snapshot(const ObServerSnapshotID &snapshot_id)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock last_super_block = runtime->get_super_block();
   ObLocalStorageCheckpointReader ls_snapshot_reader;
   ObServerSnapshotMeta snapshot;
@@ -197,7 +197,7 @@ int ObServerSnapshotHandler::delete_server_snapshot(const ObServerSnapshotID &sn
   } else if (OB_FAIL(ls_snapshot_reader.read_single_meta_item(
       snapshot.ls_meta_entry_, del_ls_snapshot_op, ls_meta_block_list))) {
     LOG_WARN("fail to delete ls snapshot", K(ret), K(snapshot));
-  } else if (OB_FAIL((share::g_mp->local_storage_meta_service()->delete_snapshot(snapshot_id)))) {
+  } else if (OB_FAIL((::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->delete_snapshot(snapshot_id)))) {
     LOG_WARN("fail to delete snapshot", K(ret), K(snapshot_id));
   } else {
     dec_meta_block_ref(ls_meta_block_list);
@@ -276,7 +276,7 @@ int ObServerSnapshotHandler::inner_delete_tablet_by_addrs(
     char *buf = nullptr;
     int64_t pos = 0;
     do {
-      if (OB_FAIL(share::g_mp->local_storage_meta_service()->read_from_disk(
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->read_from_disk(
           deleted_tablet_addrs.at(i),
           arena_allocator,
           buf,
@@ -318,7 +318,7 @@ int ObServerSnapshotHandler::delete_tablet_snapshot(
 int ObServerSnapshotHandler::get_all_server_snapshots(ObIArray<ObServerSnapshotID> &snapshot_ids)
 {
   int ret = OB_SUCCESS;
-  omt::ObServerRuntime *runtime = static_cast<omt::ObServerRuntime*>(share::server_runtime());
+  ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
   const ObServerRuntimeSuperBlock super_block = runtime->get_super_block();
 
   if (OB_UNLIKELY(runtime->is_hidden())) {
@@ -338,7 +338,7 @@ int ObServerSnapshotHandler::get_all_server_snapshots(ObIArray<ObServerSnapshotI
   return ret;
 }
 
-int ObServerSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskHandler* startup_accel_handler,
+int ObServerSnapshotHandler::create_all_tablet(ObStartupAccelTaskHandler* startup_accel_handler,
                                                const blocksstable::MacroBlockId &tablet_meta_entry)
 {
   int ret = OB_SUCCESS;
@@ -371,7 +371,7 @@ int ObServerSnapshotHandler::create_all_tablet(observer::ObStartupAccelTaskHandl
   }
 
   if (OB_SUCC(ret)) {
-    if (OB_FAIL((share::g_mp->local_storage_meta_service()->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
+    if (OB_FAIL((::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->clone_ls(startup_accel_handler, tablet_meta_entry)))) {
       LOG_WARN("fail to clone one ls", K(ret));
     }
   }

@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_ddl_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_base.h"
-#include "sql/engine/vector/ob_uniform_base.h"
+#include "query/engine/vector/ob_discrete_base.h"
+#include "query/engine/vector/ob_uniform_base.h"
 
 namespace oceanbase
 {

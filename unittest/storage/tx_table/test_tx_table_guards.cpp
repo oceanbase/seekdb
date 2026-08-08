@@ -20,6 +20,8 @@
 #define private public
 #define UNITTEST
 #include "storage/tx_table/ob_tx_table.h"
+#undef protected
+#undef private
 
 namespace oceanbase
 {
@@ -134,14 +136,3 @@ TEST_F(TestTxTableGuards, check_on_single_dest_2) {
 
 } // namespace unittest
 } // namespace oceanbase
-
-
-int main(int argc, char **argv)
-{
-  system("rm -rf test_tx_table_guards.log*");
-  OB_LOGGER.set_file_name("test_tx_table_guards.log");
-  OB_LOGGER.set_log_level("DEBUG");
-  STORAGE_LOG(INFO, "begin unittest: test tx table guards");
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

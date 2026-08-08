@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_lob_location.h"
-#include "observer/ob_server.h"
-#include "sql/das/ob_das_utils.h"
+#include "data_plane/access/ob_data_access_retry.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -68,7 +68,7 @@ int ObLobLocationUtil::refresh_local_location(ObLobAccessParam &param,
 
   if (!has_retry_info) {
     // Local access has no location route to refresh.
-  } else if (OB_FAIL(ObDASUtils::wait_das_retry(retry_cnt))) {
+  } else if (OB_FAIL(data_plane::ObDataAccessRetry::wait(retry_cnt))) {
     LOG_WARN("wait das retry failed", K(ret), K(last_err), K(retry_cnt));
   } else {
     ObMemLobLocationInfo *location_info = nullptr;

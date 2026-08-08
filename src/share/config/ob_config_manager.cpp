@@ -20,9 +20,17 @@
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/config/ob_system_config.h"
+#include "share/config/ob_config_rpc_types.h"
 
 namespace oceanbase
 {
+namespace obcall
+{
+
+OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_);
+
+} // namespace obcall
+
 namespace common
 {
 ObConfigManager::~ObConfigManager()

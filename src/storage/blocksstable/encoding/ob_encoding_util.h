@@ -549,7 +549,7 @@ inline static int compare_datum(
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
   //TODo @yunsong, support datum compare
-  if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret))) {
+  if (OB_FAIL(cmp_func(datum1, datum2, cmp_ret, nullptr))) {
     STORAGE_LOG(WARN, "Failed to compare datum", K(ret), K(datum1), K(datum2));
   } else {
     switch (cmp_op) {

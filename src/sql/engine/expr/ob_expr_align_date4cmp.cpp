@@ -129,7 +129,8 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     date_arg_obj_type = expr.args_[0]->datum_meta_.type_;
     res_type = ObObjType(res_type_datum->get_int());
-    if(OB_FAIL(datum_to_ob_time(expr, date_datum, date_arg_obj_type, date_arg_type, ob_time))) {
+    if (OB_FAIL(datum_to_ob_time(ctx.exec_ctx_, expr, date_datum, date_arg_obj_type,
+                                date_arg_type, ob_time))) {
       LOG_WARN("datum_to_ob_time fail.", K(ret), K(date_datum), K(date_arg_obj_type));
     }
   }
@@ -372,7 +373,8 @@ int ObExprAlignDate4Cmp::str_to_ob_time(const ObString &date, DateArgType &date_
   return ret;
 }
 
-int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
+int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
+                                          const ObExpr &expr,
                                           const ObDatum* date_datum,
                                           const ObObjType& date_arg_obj_type,
                                           DateArgType &date_arg_type,
@@ -384,7 +386,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
   } else if (ob_is_string_type(date_arg_obj_type)) {
     ObArenaAllocator lob_allocator(ObModIds::OB_LOB_ACCESS_BUFFER, OB_MALLOC_NORMAL_BLOCK_SIZE);
     ObString str = date_datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data(&lob_allocator, date_arg_obj_type,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data(exec_ctx, &lob_allocator, date_arg_obj_type,
                               CS_TYPE_BINARY, expr.args_[0]->obj_meta_.has_lob_header(), str))) {
       LOG_WARN("fail to get real string data", K(ret), K(date_datum));
     } else if (OB_FAIL(str_to_ob_time(str, date_arg_type, ob_time))) {

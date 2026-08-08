@@ -1,0 +1,90 @@
+# owner: liujixiong.ljx
+# owner group: storage
+# description: simulate stuck in check complement data dag elapsed.
+#
+--disable_query_log
+# Notice 
+# 1. `obproxy` can not be created if specify init_unit_cpu = 1;
+# 2. Tenant `mysql` and `obtest` can not be created without init_unit_cpu=num.
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob1.mysql set @@global.ob_query_timeout = 100000000000;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+ob1.mysql alter system set ddl_thread_score = 8;
+
+--echo
+--echo To test dag exit when status mismatches REDEFINITION.
+ob_connect(conn_obtest1, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+SET SESSION _FORCE_PARALLEL_DDL_DOP = 8;
+create table t1(c1 int, c2 int) partition by hash(c1) partitions 32;
+insert into t1 values(1, 2);
+insert /*+query_timeout(1000000000)*/ into t1 select (@test_counter_s1 := @test_counter_s1 + 1), (@test_counter_s2 := @test_counter_s2 + 1) from table(generator(320000));
+SET @test_counter_s1 = NULL;
+SET @test_counter_s2 = NULL;
+create unique index idx on t1(c1, c2);
+
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_WHEN_APPEND_ROW wait_for signal_1 execute 10000';
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_BEFORE_REPORT_FINISH wait_for signal_2 execute 10000';
+sleep 2;
+send alter table t1 drop column c2;
+sleep 10;
+
+connection conn_sys;
+ALTER SYSTEM CHANGE TENANT obtest;
+UPDATE OCEANBASE.__ALL_DDL_TASK_STATUS SET STATUS = 99;
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_WHEN_APPEND_ROW clear';
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_1';
+sleep 2;
+
+UPDATE OCEANBASE.__ALL_DDL_TASK_STATUS SET STATUS = 3;
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_BEFORE_REPORT_FINISH clear';
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_2';
+sleep 2;
+
+connection conn_obtest1;
+--error 4072
+reap;
+desc t1;
+drop table t1;
+
+--echo
+--echo To test ddl waits dag exit when status = FAIL.
+connection conn_obtest1;
+create table t1(c1 int, c2 int) partition by hash(c1) partitions 2;
+insert into t1 values(1, 2);
+SET @test_counter_s1 = 0;
+SET @test_counter_s2 = 0;
+insert into t1 select (@test_counter_s1 := @test_counter_s1 + 1), (@test_counter_s2 := @test_counter_s2 + 1) from table(generator(100));
+SET @test_counter_s1 = NULL;
+SET @test_counter_s2 = NULL;
+create unique index idx on t1(c1, c2);
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_AFTER_REPORT_FINISH wait_for signal_3 execute 10000';
+sleep 2;
+send alter table t1 drop column c2;
+sleep 20;
+
+connection conn_sys;
+# FAIL status expected, to wait all dags exit.
+SELECT STATUS FROM OCEANBASE.__ALL_DDL_TASK_STATUS;
+ob1.mysql set ob_global_debug_sync = 'HOLD_DDL_COMPLEMENT_DAG_AFTER_REPORT_FINISH clear';
+sleep 2;
+ob1.mysql set ob_global_debug_sync = 'now broadcast signal_3';
+sleep 2;
+
+connection conn_obtest1;
+--error 1062
+reap;
+desc t1;
+drop table t1;
+
+
+# TODO YIREN, ADD CASE, one partition fail to case status = FAIL, one partition fill lob data via dag.

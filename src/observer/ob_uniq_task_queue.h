@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_OB_UNIQ_TASK_QUEUE_H_
 #define OCEANBASE_OBSERVER_OB_UNIQ_TASK_QUEUE_H_
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "lib/allocator/ob_malloc.h"
 #include "lib/container/ob_se_array.h"

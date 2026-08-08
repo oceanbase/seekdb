@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "ob_schedule_dag_func.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
@@ -32,7 +32,7 @@ namespace compaction
 {
 
 #define CREATE_DAG(T)                                                          \
-  if (OB_FAIL(share::g_mp->dag_scheduler()                                      \
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()                                      \
                   ->create_and_add_dag<T>(&param, is_emergency))) {            \
     if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {                         \
       LOG_WARN("failed to create merge dag", K(ret), K(param));                \

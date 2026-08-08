@@ -18,11 +18,13 @@
 #define OB_SPARSE_UTILS_H_
 
 #include "ob_i_sparse_retrieval_iter.h"
-#include "sql/das/ob_das_ir_define.h"
-#include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
 
 namespace oceanbase
 {
+namespace sql
+{
+struct ObFtsEvalNode;
+}
 namespace storage
 {
 
@@ -62,7 +64,7 @@ struct ObSRDaaTBooleanRelevanceCollector : ObSRDaaTRelevanceCollector
       allocator_(nullptr), dim_cnt_(0), boolean_compute_node_(nullptr), boolean_relevances_() {}
   virtual ~ObSRDaaTBooleanRelevanceCollector() {};
 
-  int init(ObIAllocator *allocator, const int64_t dim_cnt, ObFtsEvalNode *node);
+  int init(ObIAllocator *allocator, const int64_t dim_cnt, sql::ObFtsEvalNode *node);
   virtual void reset() override;
   virtual void reuse() override;
   virtual int collect_one_dim(const int64_t dim_idx, const double) override;
@@ -70,7 +72,7 @@ struct ObSRDaaTBooleanRelevanceCollector : ObSRDaaTRelevanceCollector
 private:
   ObIAllocator *allocator_;
   int64_t dim_cnt_;
-  ObFtsEvalNode *boolean_compute_node_;
+  sql::ObFtsEvalNode *boolean_compute_node_;
   ObFixedArray<double, ObIAllocator> boolean_relevances_;
 };
 

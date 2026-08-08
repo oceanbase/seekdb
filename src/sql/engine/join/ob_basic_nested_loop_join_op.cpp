@@ -18,6 +18,7 @@
 
 #include "ob_basic_nested_loop_join_op.h"
 #include "sql/engine/join/ob_nested_loop_join_op.h"
+#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {

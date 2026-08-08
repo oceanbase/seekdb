@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_PRIV_ST_TRANSFORM_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/omt/ob_srs_service.h"
+#include "share/geo/ob_srs_provider.h"
 
 namespace oceanbase
 {

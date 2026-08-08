@@ -18,7 +18,7 @@
 
 
 #include "ob_storage_meta_cache.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/blocksstable/ob_storage_cache_suite.h"
 #include "storage/meta_mem/ob_storage_meta_mem_mgr.h"
@@ -492,7 +492,7 @@ int ObStorageMetaCache::get_meta(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(meta_handle.cache_handle_.new_value(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else if (OB_FAIL(get(key, meta_handle.cache_handle_.get_cache_value()->value_,
       meta_handle.cache_handle_.get_cache_value()->cache_handle_))) {
@@ -575,7 +575,7 @@ int ObStorageMetaCache::prefetch(
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -609,11 +609,11 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
   if (OB_UNLIKELY(!key.is_valid() || type >= ObStorageMetaValue::MAX)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
-  } else if (OB_FAIL(handle.cache_handle_.new_value(share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
+  } else if (OB_FAIL(handle.cache_handle_.new_value(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_meta_cache_io_allocator()))) {
     LOG_WARN("fail to new cache handle value", K(ret));
   } else {
     void *buf = nullptr;
-    common::ObIAllocator &io_allocator = share::g_mp->storage_meta_mem_mgr()->get_meta_cache_io_allocator();
+    common::ObIAllocator &io_allocator = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_meta_cache_io_allocator();
     ObStorageMetaIOCallback *callback = nullptr;
     if (OB_ISNULL(buf = io_allocator.alloc(sizeof(ObStorageMetaIOCallback)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

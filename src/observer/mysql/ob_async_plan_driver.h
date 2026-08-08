@@ -26,6 +26,7 @@ namespace sql
 {
 struct ObSqlCtx;
 class ObSQLSessionInfo;
+class ObQueryRetryCtrl;
 }
 
 
@@ -34,15 +35,14 @@ namespace observer
 
 class ObMPPacketSender;
 class ObMySQLResultSet;
-class ObQueryRetryCtrl;
 class ObSqlEndTransCb;
 class ObAsyncPlanDriver : public ObQueryDriver
 {
 public:
-  ObAsyncPlanDriver(const ObGlobalContext &gctx,
+  ObAsyncPlanDriver(const share::ObGlobalContext &gctx,
                     const sql::ObSqlCtx &ctx,
                     sql::ObSQLSessionInfo &session,
-                    ObQueryRetryCtrl &retry_ctrl,
+                    sql::ObQueryRetryCtrl &retry_ctrl,
                     ObMPPacketSender &sender);
   virtual ~ObAsyncPlanDriver();
 

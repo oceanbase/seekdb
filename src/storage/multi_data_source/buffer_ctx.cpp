@@ -15,7 +15,7 @@
  */
 
 #include "buffer_ctx.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
 
 namespace oceanbase
@@ -28,7 +28,7 @@ namespace mds
 void BufferCtxNode::destroy_ctx() {
   if (OB_NOT_NULL(ctx_)) {
     ctx_->~BufferCtx();
-    share::g_mp->mds_service()->get_buffer_ctx_allocator().free(ctx_);
+    ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(ctx_);
     ctx_ = nullptr;
   }
 }

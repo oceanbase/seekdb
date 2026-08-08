@@ -1,0 +1,222 @@
+###############################################################################
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test sequence id comparation
+#    Old RS may not revoked completly and new RS may not started completly.
+#    Switch RS several times and let ddl epoch promoted
+#
+###############################################################################
+ob1=OBI(cluster=1:1:1:1:1,proxy_num=0,init_unit_cpu=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'true';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+
+--echo =========================================
+--echo      construct initial parameters
+--echo =========================================
+# get servers' addr in z1, z2, z3, z4, z5
+let $z1_dst_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst = $z1_dst_ip:$z1_dst_port;
+
+let $z2_dst_ip = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst = $z2_dst_ip:$z2_dst_port;
+
+let $z3_dst_ip = deploy_get_value(ob1.z3.obs0.ip);
+let $z3_dst_port = deploy_get_value(ob1.z3.obs0.port);
+let $z3_dst = $z3_dst_ip:$z3_dst_port;
+
+let $z4_dst_ip = deploy_get_value(ob1.z4.obs0.ip);
+let $z4_dst_port = deploy_get_value(ob1.z4.obs0.port);
+let $z4_dst = $z4_dst_ip:$z4_dst_port;
+
+let $z5_dst_ip = deploy_get_value(ob1.z5.obs0.ip);
+let $z5_dst_port = deploy_get_value(ob1.z5.obs0.port);
+let $z5_dst = $z5_dst_ip:$z5_dst_port;
+
+--echo =========================================
+--echo           create mysql tenant
+--echo =========================================
+ob_connect(sys_conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# create mysql tenant with FFF
+source include/create_unit_config.inc;
+ob1.mysql CREATE RESOURCE POOL mysql_pool UNIT = "2c2g", UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3', 'z4', 'z5');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST=('mysql_pool'), LOCALITY = "F@z1, F@z2, F@z3", PRIMARY_ZONE = "z3" SET ob_tcp_invited_nodes='%';
+let $sys_tenant_id = 1;
+let $tenant_id = deploy_get_value(ob1.select SELECT tenant_id FROM oceanbase.DBA_OB_TENANTS WHERE tenant_name = "mysql", tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql", meta_tenant_id, 1);
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $tenant_id, resource_pool_id, 1);
+
+--echo ========================================
+--echo        disable parallel create
+--echo ========================================
+alter system set _enable_parallel_table_creation = false;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_tenant_parameter_stat where tenant_id = $tenant_id and name like "%_enable_parallel_table_creation%" and value like "%false%", 5, 20;
+alter system set _parallel_ddl_control = 'CREATE_INDEX:OFF, TRUNCATE_TABLE:ON';
+sleep 3;
+
+--echo =========================================
+--echo      creata table and index in zone1
+--echo =========================================
+ob_connect(mysql_conn1, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+create table t1(c1 int);
+create table t2(c1 int);
+insert into t1 values (1), (2), (3);
+insert into t2 values (1), (2), (3);
+--echo expect 3 lines
+select * from t1 order by c1 desc;
+--echo expect 3 lines
+select * from t2 order by c1 desc;
+create index t1_index1 on t1(c1);
+create index t2_index1 on t2(c1);
+insert into t1 values (4), (5), (6);
+insert into t2 values (4), (5), (6);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+--echo expect 6 lines
+select * from t2 order by c1 desc;
+
+--echo =========================================
+--echo      creata table and index in zone2
+--echo =========================================
+ob_connect(mysql_conn2, ob1.z2.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+create table t3(c1 int);
+create table t4(c1 int);
+insert into t3 values (1), (2), (3);
+insert into t4 values (1), (2), (3);
+--echo expect 3 lines
+select * from t3 order by c1 desc;
+--echo expect 3 lines
+select * from t4 order by c1 desc;
+create index t3_index1 on t3(c1);
+create index t4_index1 on t4(c1);
+insert into t3 values (4), (5), (6);
+insert into t4 values (4), (5), (6);
+--echo expect 6 lines
+select * from t3 order by c1 desc;
+--echo expect 6 lines
+select * from t4 order by c1 desc;
+
+--echo =========================================
+--echo      creata table and index in zone3
+--echo =========================================
+ob_connect(mysql_conn3, ob1.z3.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+create table t5(c1 int);
+create table t6(c1 int);
+insert into t5 values (1), (2), (3);
+insert into t6 values (1), (2), (3);
+--echo expect 3 lines
+select * from t5 order by c1 desc;
+--echo expect 3 lines
+select * from t6 order by c1 desc;
+create index t5_index1 on t5(c1);
+create index t6_index1 on t6(c1);
+insert into t5 values (4), (5), (6);
+insert into t6 values (4), (5), (6);
+--echo expect 6 lines
+select * from t5 order by c1 desc;
+--echo expect 6 lines
+select * from t6 order by c1 desc;
+
+--echo =========================================
+--echo        test zone1 can refresh schema
+--echo =========================================
+ob_connect(mysql_conn1, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+select * from t2 order by c1 desc;
+select * from t3 order by c1 desc;
+select * from t4 order by c1 desc;
+select * from t5 order by c1 desc;
+select * from t6 order by c1 desc;
+
+--echo =========================================
+--echo        test zone2 can refresh schema
+--echo =========================================
+ob_connect(mysql_conn2, ob1.z2.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+select * from t2 order by c1 desc;
+select * from t3 order by c1 desc;
+select * from t4 order by c1 desc;
+select * from t5 order by c1 desc;
+select * from t6 order by c1 desc;
+
+--echo =========================================
+--echo        test zone3 can refresh schema
+--echo =========================================
+ob_connect(mysql_conn3, ob1.z3.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+select * from t2 order by c1 desc;
+select * from t3 order by c1 desc;
+select * from t4 order by c1 desc;
+select * from t5 order by c1 desc;
+select * from t6 order by c1 desc;
+
+--echo =========================================
+--echo        test zone4 can refresh schema
+--echo =========================================
+ob_connect(mysql_conn4, ob1.z4.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+select * from t2 order by c1 desc;
+select * from t3 order by c1 desc;
+select * from t4 order by c1 desc;
+select * from t5 order by c1 desc;
+select * from t6 order by c1 desc;
+
+--echo =========================================
+--echo        test zone5 can refresh schema
+--echo =========================================
+ob_connect(mysql_conn5, ob1.z5.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+--echo expect 6 lines
+select * from t1 order by c1 desc;
+select * from t2 order by c1 desc;
+select * from t3 order by c1 desc;
+select * from t4 order by c1 desc;
+select * from t5 order by c1 desc;
+select * from t6 order by c1 desc;
+
+--echo ===========================================
+--echo          switch RS to another zone
+--echo ===========================================
+ob_connect(sys_conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--echo make sure current RS on which zone
+let $ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = 1 and role = "LEADER", svr_ip, 1);
+let $port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.CDB_OB_LS_LOCATIONS WHERE tenant_id = 1 and role = "LEADER", svr_port, 1);
+let $current_rs = $ip:$port;
+
+--echo switch RS to another zone
+if ($current_rs != $z1_dst)
+{
+  --disable_all_result_log
+  alter tenant sys primary_zone = "z1;z2";
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.GV\$OB_LOG_STAT where tenant_id = 1 and ls_id = 1 and role = "LEADER" and svr_ip = "$z1_dst_ip" and svr_port = $z1_dst_port, 1, 30;
+  --enable_all_result_log
+  connection sys_conn1;
+}
+if ($current_rs == $z1_dst)
+{
+  --disable_all_result_log
+  alter tenant sys primary_zone = "z2;z1";
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.GV\$OB_LOG_STAT where tenant_id = 1 and ls_id = 1 and role = "LEADER" and svr_ip = "$z2_dst_ip" and svr_port = $z2_dst_port, 1, 30;
+  --enable_all_result_log
+  connection sys_conn1;
+}
+
+--echo ==========================================
+--echo            check schema refresh
+--echo ==========================================
+ob1.z1.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z2.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z3.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z4.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+ob1.z5.obs0.check_log_until_success -c "sequence_id is not comparable or local schema is far behind, refresh all tenant schema(new_sequence_id={seq_id:.*, sys_leader_epoch:2, enable_new_seq_id:true}, local_sequence_id={seq_id:.*, sys_leader_epoch:1, enable_new_seq_id:true})";
+

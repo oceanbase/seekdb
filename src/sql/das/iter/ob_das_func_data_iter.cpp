@@ -179,7 +179,7 @@ int ObDASFuncDataIter::inner_init(ObDASIterParam &param)
       main_lookup_rtdef_ = merge_param.main_lookup_rtdef_;
       main_lookup_iter_ = merge_param.main_lookup_iter_;
       read_count_ = 0;
-      sql::ObExprBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(merge_param.doc_id_expr_->datum_meta_.type_,
+      common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(merge_param.doc_id_expr_->datum_meta_.type_,
                                                                         merge_param.doc_id_expr_->datum_meta_.cs_type_);
       cmp_func_ = basic_funcs->null_first_cmp_;
       if (main_lookup_iter_ && OB_FAIL(init_main_lookup_scan_param(main_lookup_param_,
@@ -368,11 +368,18 @@ int ObDASFuncDataIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 int ObDASFuncDataIter::build_tr_merge_iters_rangekey()
 {
   int ret = OB_SUCCESS;
+  const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_ISNULL(tr_merge_iters_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, tr merge iters is nullptr", K(ret));
+  } else if (OB_ISNULL(eval_ctx_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null evaluation context", K(ret));
+  } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(datum_access_ctx))) {
+    LOG_WARN("get datum access context failed", K(ret));
   } else {
-    lib::ob_sort(doc_ids_.begin(), doc_ids_.end(), FtsDocIdCmp(cmp_func_, &ret));
+    lib::ob_sort(doc_ids_.begin(), doc_ids_.end(),
+                 FtsDocIdCmp(cmp_func_, datum_access_ctx, &ret));
     if (OB_FAIL(ret)) {
       LOG_WARN("fail to sort doc id", K(ret));
     }
@@ -436,7 +443,7 @@ int ObDASFuncDataIter::init_main_lookup_scan_param(
       LOG_WARN("unexpected null snapshot", K(ret), KPC(ctdef), KPC(rtdef));
     }
     if (OB_NOT_NULL(trans_desc)) {
-      param.tx_id_ = trans_desc->get_tx_id();
+      param.tx_id_ = data_plane::tx_desc_id(trans_desc);
     } else {
       param.tx_id_.reset();
     }

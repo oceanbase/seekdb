@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "share/config/ob_server_config.h"
 #include "share/io/ob_io_manager.h"
 #include "share/redolog/ob_log_file_handler.h"
 

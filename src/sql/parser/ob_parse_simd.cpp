@@ -17,7 +17,7 @@
 #include "share/ob_define.h"
 #include "ob_fast_parser.h"
 #if defined(__GNUC__) && defined(__x86_64__) 
-#include "storage/vector_type/ob_vector_op_common.h"
+#include "data_plane/vector/ob_vector_op_common.h"
 #endif
 
 namespace oceanbase

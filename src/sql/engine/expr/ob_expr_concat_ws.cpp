@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_concat_ws.h"
+#include "sql/engine/expr/ob_expr_add.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 
@@ -203,7 +204,7 @@ int ObExprConcatWs::calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObString sep_str;
   ObSEArray<ObExpr*, 32> words;
 
-  if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, sep_datum, sep_expr->datum_meta_, sep_expr->obj_meta_.has_lob_header(), sep_str))) {
+  if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, sep_datum, sep_expr->datum_meta_, sep_expr->obj_meta_.has_lob_header(), sep_str))) {
     LOG_WARN("fail to get real data.", K(ret), K(sep_datum));
   }
 
@@ -273,7 +274,8 @@ int ObExprConcatWs::calc_text(
       ObTextStringIter input_iter(word_meta.type_, word_meta.cs_type_, word_datum.get_string(), has_lob_header);
       ObTextStringIterState state;
       ObString src_block_data;
-      if (OB_FAIL(input_iter.init(0, NULL, &temp_allocator))) {
+      if (OB_FAIL(ObTextStringHelper::build_text_iter(
+              input_iter, ctx.exec_ctx_, &temp_allocator))) {
         LOG_WARN("init input_iter fail", K(ret), K(input_iter));
       }
       while (OB_SUCC(ret)

@@ -18,7 +18,7 @@
 #define OB_AI_FUNC_UTILS_H_
 
 #include "ob_ai_func.h"
-#include "observer/vector_index/ob_json_helper.h"
+#include "share/json/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
 namespace oceanbase 
@@ -293,11 +293,11 @@ public:
   static int get_rerank_provider(ObIAllocator &allocator, const ObString &provider, ObAIFuncIRerank *&rerank_provider);
   static int get_header(ObIAllocator &allocator,
                         const ObAIFuncExprInfo &info,
-                        const ObAiModelEndpointInfo &endpoint_info,
+                        const share::ObAiModelEndpointInfo &endpoint_info,
                         ObArray<ObString> &headers);
   static int get_complete_body(ObIAllocator &allocator, 
                                const ObAIFuncExprInfo &info,
-                               const ObAiModelEndpointInfo &endpoint_info,
+                               const share::ObAiModelEndpointInfo &endpoint_info,
                                ObString &prompt,
                                ObString &content, 
                                ObJsonObject *config,
@@ -305,27 +305,27 @@ public:
   static int set_json_format_config(ObIAllocator &allocator, const ObString &provider, ObJsonObject *config);
   static int get_embed_body(ObIAllocator &allocator, 
                             const ObAIFuncExprInfo &info,
-                            const ObAiModelEndpointInfo &endpoint_info,
+                            const share::ObAiModelEndpointInfo &endpoint_info,
                             ObArray<ObString> &contents,
                             ObJsonObject *config,
                             ObJsonObject *&body);
   static int get_rerank_body(ObIAllocator &allocator, 
                              const ObAIFuncExprInfo &info,
-                             const ObAiModelEndpointInfo &endpoint_info,
+                             const share::ObAiModelEndpointInfo &endpoint_info,
                              ObString &query,
                              ObJsonArray *document_array,
                              ObJsonObject *config,
                              ObJsonObject *&body);
   static int parse_complete_output(ObIAllocator &allocator, 
-                                   const ObAiModelEndpointInfo &endpoint_info,
+                                   const share::ObAiModelEndpointInfo &endpoint_info,
                                    ObJsonObject *http_response,
                                    ObIJsonBase *&result);
   static int parse_embed_output(ObIAllocator &allocator, 
-                                const ObAiModelEndpointInfo &endpoint_info,
+                                const share::ObAiModelEndpointInfo &endpoint_info,
                                 ObJsonObject *http_response,
                                 ObIJsonBase *&result);
   static int parse_rerank_output(ObIAllocator &allocator, 
-                                 const ObAiModelEndpointInfo &endpoint_info,
+                                 const share::ObAiModelEndpointInfo &endpoint_info,
                                  ObJsonObject *http_response,
                                  ObIJsonBase *&result);
   static int set_string_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res, ObString &res_str);
@@ -333,7 +333,7 @@ public:
   static int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
                                            const int64_t dimension, float *&vector);
   static int decode_float_embedding_array(const ObIJsonBase &embedding_jbase, ObIAllocator &allocator,
-                                          ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
+                                          share::ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                               share::schema::ObSchemaGetterGuard &guard, ObAIFuncExprInfo *&info);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info);
@@ -345,7 +345,7 @@ private:
 class ObAIFuncModel
 {
 public:
-  ObAIFuncModel(ObIAllocator &allocator, const ObAIFuncExprInfo &info, const ObAiModelEndpointInfo &endpoint_info)
+  ObAIFuncModel(ObIAllocator &allocator, const ObAIFuncExprInfo &info, const share::ObAiModelEndpointInfo &endpoint_info)
   : allocator_(&allocator),
     info_(info),
     endpoint_info_(endpoint_info)
@@ -367,7 +367,7 @@ public:
    const ObString get_request_model_name();
    ObIAllocator *allocator_;
    const ObAIFuncExprInfo &info_;
-   const ObAiModelEndpointInfo &endpoint_info_;
+   const share::ObAiModelEndpointInfo &endpoint_info_;
    DISALLOW_COPY_AND_ASSIGN(ObAIFuncModel);
 };
 
