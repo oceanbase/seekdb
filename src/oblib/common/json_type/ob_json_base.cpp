@@ -6548,24 +6548,6 @@ int ObJsonBaseUtil::compare_double_uint(double a, uint64_t b, int &res)
   return ret;
 }
 
-template<class T>
-int ObJsonBaseUtil::double_to_number(double d, T &allocator, number::ObNumber &num)
-{
-  INIT_SUCC(ret);
-  char buf[DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE] = {0};
-  uint64_t length = ob_gcvt(d, ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE,
-                            sizeof(buf) - 1, buf, NULL);
-  ObString str(sizeof(buf), static_cast<int32_t>(length), buf);
-  ObPrecision res_precision = PRECISION_UNKNOWN_YET;
-  ObScale res_scale = NUMBER_SCALE_UNKNOWN_YET;
-
-  if (OB_FAIL(num.from_sci_opt(str.ptr(), str.length(), allocator, 
-                                &res_precision, &res_scale))) {
-  }
-
-  return ret;
-}
-
 int ObJsonBaseUtil::number_to_uint(number::ObNumber &nmb, uint64_t &value)
 {
   INIT_SUCC(ret);
