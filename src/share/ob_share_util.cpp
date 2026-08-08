@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/io/ob_io_manager.h"
 #include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
@@ -227,25 +226,21 @@ int ObShareUtil::gen_default_server_runtime_schema(
     schema::ObServerRuntimeSchema &runtime_schema)
 {
   int ret = OB_SUCCESS;
+  UNUSED(sql_client);
   runtime_schema.reset();
-  int64_t schema_version = 0;
+  // The server runtime is a synthetic singleton that exists from the core
+  // schema. baseline_schema_version is a lower bound for schema snapshots,
+  // not the version of every schema object visible in those snapshots.
+  const int64_t schema_version = OB_CORE_SCHEMA_VERSION;
   if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
   } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
   } else {
-    ObGlobalStatProxy proxy(sql_client);
-    if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
-    } else if (-1 == schema_version) {
-      LOG_INFO("use bootstrap schema version", KR(ret));
-      schema_version = 1;
-    }
-    if (OB_SUCC(ret)) {
-      runtime_schema.set_schema_version(schema_version);
-      runtime_schema.set_locked(false);
-      runtime_schema.set_read_only(false);
-      runtime_schema.set_in_recyclebin(false);
-      runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
-      // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
-    }
+    runtime_schema.set_schema_version(schema_version);
+    runtime_schema.set_locked(false);
+    runtime_schema.set_read_only(false);
+    runtime_schema.set_in_recyclebin(false);
+    runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
+    // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
   }
   LOG_INFO("finish constructing server runtime schema", KR(ret), K(runtime_schema), K(schema_version));
   return ret;
