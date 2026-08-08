@@ -183,7 +183,7 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
 //   1. If epoch mismatch (global abort already signaled) → rollback → cleanup.
 //   2. Serial commit spin (with epoch check each iteration).
 //   3. If task_fail_ > 0 → rollback + inc_epoch → cleanup.
-//   4. Plugin commit → advance refresh_scn → trans.end(true).
+//   4. Plugin commit → persist applied_scn → trans.end(true).
 //      On failure: rollback + inc_epoch → cleanup.
 //      On success: release_batch (pop ring + advance next_commit_sn) → cleanup.
 //   5. Cleanup: dec_active_batch_count, OB_DELETE(ctx) (dtor calls destroy_plugins).
@@ -234,7 +234,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
       LOG_WARN("batch processing failed, triggered global abort",
                K(ctx->batch_sn_), K(executor_id_), K(ctx->schema_version_));
     } else {
-      // ── Success path: plugin commit + advance scn + trans commit. ──
+      // ── Success path: plugin commit + persist applied scn + trans commit. ──
       for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
         ObCSPlugin *plugin = ctx->plugins_[i];
         if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->commit())) {
@@ -243,20 +243,21 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
       }
 
       if (OB_SUCC(ret)) {
-        SCN curr_refresh_scn;
-        SCN ctx_refresh_scn;
+        SCN curr_applied_scn;
+        SCN ctx_applied_scn;
         int64_t affected_rows = 0;
         if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-                ctx->trans_, true, curr_refresh_scn))) {
+                ctx->trans_, true, curr_applied_scn))) {
           LOG_WARN("get_change_stream_refresh_scn fail", KR(ret));
-        } else if (curr_refresh_scn.get_val_for_gts() > static_cast<uint64_t>(ctx->refresh_scn_)) {
+        } else if (curr_applied_scn.get_val_for_gts()
+                   > static_cast<uint64_t>(ctx->max_commit_scn_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("refresh scn unexpected", KR(ret), K(ctx->refresh_scn_), K(curr_refresh_scn));
-        } else if (OB_FAIL(ctx_refresh_scn.convert_for_tx(ctx->refresh_scn_))) {
+          LOG_WARN("applied scn unexpected", KR(ret), K(ctx->max_commit_scn_), K(curr_applied_scn));
+        } else if (OB_FAIL(ctx_applied_scn.convert_for_tx(ctx->max_commit_scn_))) {
           LOG_WARN("convert scn failed", KR(ret));
         } else if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_refresh_scn(
-                ctx->trans_, ctx_refresh_scn, affected_rows))) {
-          LOG_WARN("advance refresh_scn failed", KR(ret));
+                ctx->trans_, ctx_applied_scn, affected_rows))) {
+          LOG_WARN("advance persisted applied_scn failed", KR(ret));
         }
       }
 
@@ -270,9 +271,13 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
                  KR(ret), K(ctx->batch_sn_));
         dispatcher.inc_epoch();
       } else {
-        if (OB_FAIL(dispatcher.update_refresh_scn(ctx->refresh_scn_))) {
-          LOG_WARN("update refresh_scn after batch commit failed",
-                   KR(ret), K(ctx->batch_sn_), K(ctx->refresh_scn_));
+        ObChangeStreamMgr *mgr = share::g_mp->change_stream_mgr();
+        if (OB_NOT_NULL(mgr)) {
+          (void)mgr->update_refresh_scn(ctx->max_commit_scn_);
+        }
+        if (OB_FAIL(dispatcher.update_applied_scn(ctx->max_commit_scn_))) {
+          LOG_WARN("update applied_scn after batch commit failed",
+                   KR(ret), K(ctx->batch_sn_), K(ctx->max_commit_scn_));
           ret = OB_SUCCESS;
         }
       }
@@ -289,7 +294,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
         dispatcher.release_batch(ctx);
         FLOG_INFO("CSWorker: batch finish",
                  K(ctx->batch_sn_), K(ctx->row_count_), K(ctx->process_cnt_), K(ctx->tx_list_.count()),
-                 K(ctx->refresh_scn_), K(executor_id_), K(ctx->create_time_),
+                 K(ctx->max_commit_scn_), K(executor_id_), K(ctx->create_time_),
                  "batch_cost", end_time - ctx->create_time_,
                  "fetcher_delay",last_tx_in_dispatch - first_tx_commit,
                  "dispatch_wait", ctx->process_time_ - ctx->create_time_,
@@ -297,7 +302,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
                  "batch_end", end_time - start_time,
                  "result_delay", end_time - first_tx_commit,
                  K(dispatcher.get_next_commit_sn()),
-                 K(dispatcher.get_refresh_scn()));
+                 K(dispatcher.get_applied_scn()));
       }
     }
   }

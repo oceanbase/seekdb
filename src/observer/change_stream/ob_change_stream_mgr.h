@@ -24,6 +24,7 @@
 #include "observer/change_stream/ob_change_stream_fetcher.h"
 #include "observer/change_stream/ob_change_stream_dispatcher.h"
 #include "observer/change_stream/ob_change_stream_worker.h"
+#include "lib/atomic/ob_atomic.h"
 namespace oceanbase
 {
 namespace share
@@ -48,11 +49,17 @@ public:
 
   bool is_inited() const { return is_inited_; }
 
-  /// Block until change_stream_refresh_scn >= current safe visible scn, or timeout.
+  /// Capture one schema-consistent GTS target and prove all relevant async-index
+  /// work is complete before publishing refresh_scn_.
   /// Can be called from any node (RS / observer) as long as sql_client is valid.
   static int wait_refresh_scn(
       common::ObISQLClient &sql_client,
       const int64_t timeout_us);
+
+  int64_t get_refresh_scn() const { return ATOMIC_LOAD(&refresh_scn_); }
+  int update_refresh_scn(const int64_t refresh_scn);
+  /// Recovery baseline follows the persisted applied_scn exactly and may move backward.
+  void reset_refresh_scn(const int64_t applied_scn) { ATOMIC_STORE(&refresh_scn_, applied_scn); }
 
   /// Fetcher: consumes CLOG by transaction, pushes committed tx to Dispatcher.
   ObCSFetcher &get_fetcher() { return fetcher_; }
@@ -64,6 +71,7 @@ public:
 
 private:
   bool is_inited_;
+  int64_t refresh_scn_;
   ObCSFetcher fetcher_;
   ObCSDispatcher dispatcher_;
   ObCSWorker worker_;
