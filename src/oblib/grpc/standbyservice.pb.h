@@ -2884,16 +2884,16 @@ class FetchLogReq final :
   // accessors -------------------------------------------------------
 
   enum : int {
-    kStartScnFieldNumber = 1,
+    kStartLsnFieldNumber = 1,
     kMaxBytesFieldNumber = 2,
   };
-  // uint64 start_scn = 1;
-  void clear_start_scn();
-  uint64_t start_scn() const;
-  void set_start_scn(uint64_t value);
+  // uint64 start_lsn = 1;
+  void clear_start_lsn();
+  uint64_t start_lsn() const;
+  void set_start_lsn(uint64_t value);
   private:
-  uint64_t _internal_start_scn() const;
-  void _internal_set_start_scn(uint64_t value);
+  uint64_t _internal_start_lsn() const;
+  void _internal_set_start_lsn(uint64_t value);
   public:
 
   // uint64 max_bytes = 2;
@@ -2912,7 +2912,7 @@ class FetchLogReq final :
   template <typename T> friend class ::PROTOBUF_NAMESPACE_ID::Arena::InternalHelper;
   typedef void InternalArenaConstructable_;
   typedef void DestructorSkippable_;
-  uint64_t start_scn_;
+  uint64_t start_lsn_;
   uint64_t max_bytes_;
   mutable ::PROTOBUF_NAMESPACE_ID::internal::CachedSize _cached_size_;
   friend struct ::TableStruct_standbyservice_2eproto;
@@ -4332,24 +4332,24 @@ inline void FetchStandbyPalfBaseInfoRes::set_size(uint64_t value) {
 
 // FetchLogReq
 
-// uint64 start_scn = 1;
-inline void FetchLogReq::clear_start_scn() {
-  start_scn_ = uint64_t{0u};
+// uint64 start_lsn = 1;
+inline void FetchLogReq::clear_start_lsn() {
+  start_lsn_ = uint64_t{0u};
 }
-inline uint64_t FetchLogReq::_internal_start_scn() const {
-  return start_scn_;
+inline uint64_t FetchLogReq::_internal_start_lsn() const {
+  return start_lsn_;
 }
-inline uint64_t FetchLogReq::start_scn() const {
-  // @@protoc_insertion_point(field_get:standbyservice.FetchLogReq.start_scn)
-  return _internal_start_scn();
+inline uint64_t FetchLogReq::start_lsn() const {
+  // @@protoc_insertion_point(field_get:standbyservice.FetchLogReq.start_lsn)
+  return _internal_start_lsn();
 }
-inline void FetchLogReq::_internal_set_start_scn(uint64_t value) {
+inline void FetchLogReq::_internal_set_start_lsn(uint64_t value) {
 
-  start_scn_ = value;
+  start_lsn_ = value;
 }
-inline void FetchLogReq::set_start_scn(uint64_t value) {
-  _internal_set_start_scn(value);
-  // @@protoc_insertion_point(field_set:standbyservice.FetchLogReq.start_scn)
+inline void FetchLogReq::set_start_lsn(uint64_t value) {
+  _internal_set_start_lsn(value);
+  // @@protoc_insertion_point(field_set:standbyservice.FetchLogReq.start_lsn)
 }
 
 // uint64 max_bytes = 2;

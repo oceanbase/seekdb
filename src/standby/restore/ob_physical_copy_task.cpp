@@ -44,7 +44,7 @@ ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::~ObCopyMacroBlockHelperReader(
 }
 
 int ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::init(
-    restore::ObIRestoreHelper *proto_helper,
+    restore::ObStandbyRestoreHelper *proto_helper,
     const ObITable::TableKey &table_key,
     const ObCopyMacroRangeInfo &range_info,
     const share::SCN &backfill_tx_scn,
@@ -82,8 +82,7 @@ int ObPhysicalCopyTask::ObCopyMacroBlockHelperReader::get_next_macro_block(CopyM
 
 /******************ObPhysicalCopyTask*********************/
 ObPhysicalCopyTask::ObPhysicalCopyTask()
-  : ObITask(TASK_TYPE_STANDBY_RESTORE),
-    is_inited_(false),
+  : is_inited_(false),
     copy_ctx_(nullptr),
     finish_task_(nullptr),
     copy_table_key_(),
@@ -147,8 +146,6 @@ int ObPhysicalCopyTask::process()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("physical copy task do not init", K(ret));
-  } else if (copy_ctx_->standby_restore_dag_->get_standby_restore_dag_net_ctx()->is_failed()) {
-    FLOG_INFO("standby restore dag net is already failed, skip physical copy task", KPC(copy_ctx_));
   } else if (OB_FAIL(finish_task_->get_tablet_finish_task(tablet_finish_task))) {
     LOG_WARN("failed to get tablet finish task", K(ret), KPC(copy_ctx_));
   } else if (OB_FAIL(tablet_finish_task->get_tablet_status(status))) {
@@ -187,13 +184,6 @@ int ObPhysicalCopyTask::process()
       if (OB_FAIL(tablet_finish_task->set_tablet_status(status))) {
         LOG_WARN("failed to set copy tablet status", K(ret), K(status), KPC(copy_ctx_));
       }
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = ObStandbyRestoreDagUtils::deal_with_fo(ret, copy_ctx_->standby_restore_dag_))) {
-      LOG_WARN("failed to deal with fo", K(ret), K(tmp_ret), KPC(copy_ctx_));
     }
   }
 
@@ -261,7 +251,7 @@ int ObPhysicalCopyTask::fetch_macro_block_(
       LOG_WARN("fail to get macro block reader", K(ret));
     } else if (OB_FAIL(get_macro_block_writer_(reader, &index_block_rebuilder, writer))) {
       LOG_WARN("failed to get macro block writer", K(ret), K(copy_table_key_));
-    } else if (OB_FAIL(writer->process(copied_ctx, *copy_ctx_->standby_restore_dag_->get_standby_restore_dag_net_ctx()))) {
+    } else if (OB_FAIL(writer->process(copied_ctx))) {
       LOG_ERROR("failed to process writer", K(ret), K(copy_table_key_),
           KPC(copy_macro_range_info_), K(copied_ctx), KPC(copy_ctx_));
     } else if (copy_macro_range_info_->macro_block_count_ != copied_ctx.get_macro_block_count()) {
@@ -354,7 +344,7 @@ int ObPhysicalCopyTask::get_macro_block_writer_(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory", K(ret));
     } else if (OB_FAIL(tmp_writer->init(copy_ctx_->tenant_id_, copy_ctx_->ls_id_, copy_ctx_->tablet_id_,
-        this->get_dag()->get_dag_id(), sstable_param, reader, index_block_rebuilder, copy_ctx_->extra_info_))) {
+        copy_ctx_->copy_id_, sstable_param, reader, index_block_rebuilder, copy_ctx_->extra_info_))) {
       STORAGE_LOG(WARN, "failed to init macro block writer", K(ret), KPC(copy_ctx_));
     } else {
       writer = tmp_writer;
@@ -365,30 +355,6 @@ int ObPhysicalCopyTask::get_macro_block_writer_(
       free_macro_block_writer_(tmp_writer);
     }
   }
-  return ret;
-}
-
-int ObPhysicalCopyTask::generate_next_task(ObITask *&next_task)
-{
-  int ret = OB_SUCCESS;
-  ObPhysicalCopyTask *tmp_next_task = nullptr;
-  bool is_iter_end = false;
-
-  if (!is_inited_) {
-    ret = OB_NOT_INIT;
-    LOG_ERROR("not init", K(ret));
-  } else if (OB_FAIL(finish_task_->check_is_iter_end(is_iter_end))) {
-    LOG_WARN("failed to check is iter end", K(ret));
-  } else if (is_iter_end) {
-    ret = OB_ITER_END;
-  } else if (OB_FAIL(dag_->alloc_task(tmp_next_task))) {
-    LOG_WARN("failed to alloc task", K(ret));
-  } else if (OB_FAIL(tmp_next_task->init(copy_ctx_, finish_task_))) {
-    LOG_WARN("failed to init next task", K(ret), K(*copy_ctx_));
-  } else {
-    next_task = tmp_next_task;
-  }
-
   return ret;
 }
 

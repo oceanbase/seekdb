@@ -1,7 +1,3 @@
-if(NOT OB_ENABLE_STANDBY)
-  return()
-endif()
-
 oblib_add_library(oblib_grpc
   ob_grpc_context.cpp
   ob_grpc_server.cpp

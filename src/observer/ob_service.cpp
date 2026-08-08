@@ -230,7 +230,8 @@ int ObService::init(common::ObMySQLProxy &sql_proxy,
     FLOG_WARN("init tsc timestamp failed", KR(ret));
   } else if (OB_FAIL(schema_release_task_.init(schema_updater_))) {
     FLOG_WARN("init schema release task failed", KR(ret));
-  } else if (OB_FAIL(standby::ObStandbyService::init(submit_standby_schema_refresh_task))) {
+  } else if (OB_FAIL(standby::ObStandbyService::init(
+      submit_standby_schema_refresh_task, GCONF.enable_rpc_tls))) {
     FLOG_WARN("init standby service failed", KR(ret));
   } else {
     need_bootstrap_ = need_bootstrap;
@@ -269,27 +270,6 @@ int ObService::start()
       }
     }
     need_bootstrap_ = false;
-  } else {
-    // Restore the persisted role after a normal restart.
-    share::ObServerInfo server_info;
-    if (OB_FAIL(share::ObServerInfoProxy::load_server_info(
-        GCTX.config_mgr_, GCTX.server_role_, server_info))) {
-      LOG_ERROR("failed to load server role state on restart",
-               KR(ret));
-    } else {
-      if (server_info.is_primary()) {
-        GCTX.server_role_ = share::ObServerRole::PRIMARY_ROLE;
-      } else if (server_info.is_standby()) {
-        GCTX.server_role_ = share::ObServerRole::STANDBY_ROLE;
-      } else {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid persisted server role", KR(ret), K(server_info));
-      }
-      if (OB_SUCC(ret)) {
-        share::set_server_role(GCTX.server_role_);
-        LOG_INFO("restored server role state", K(server_info), K(GCTX.server_role_));
-      }
-    }
   }
   if (OB_SUCC(ret) && OB_FAIL(standby::ObStandbyService::activate_current_role())) {
     LOG_ERROR("failed to activate current server role", KR(ret), K(GCTX.server_role_));

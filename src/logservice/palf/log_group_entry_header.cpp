@@ -215,19 +215,6 @@ void LogGroupEntryHeader::update_header_checksum()
   update_header_checksum_();
 }
 
-int LogGroupEntryHeader::update_committed_end_lsn(const LSN &lsn)
-{
-  int ret = OB_SUCCESS;
-  if (!lsn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(ERROR, "invalid committed end lsn", K(ret), K(lsn));
-  } else {
-    committed_end_lsn_ = lsn;
-    update_header_checksum_();
-  }
-  return ret;
-}
-
 void LogGroupEntryHeader::update_header_checksum_()
 {
   flag_ &= ~CRC16_MASK;

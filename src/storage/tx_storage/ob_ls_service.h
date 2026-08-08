@@ -47,6 +47,7 @@ public:
 
   static int server_module_init(ObLSService* &ls_service);
   int init();
+  void set_startup_append_mode(const bool append_mode) { startup_append_mode_ = append_mode; }
   int start();
   int stop();
   int wait();
@@ -74,8 +75,8 @@ public:
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
   // Switch how the single local log stream applies durable log entries.
-  int switch_to_local_append_mode();
-  int switch_to_local_replay_mode();
+  int switch_to_local_append_mode(const int64_t deadline_us);
+  int switch_to_local_replay_mode(const int64_t deadline_us);
 
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
@@ -139,6 +140,7 @@ private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_;
+  bool startup_append_mode_;
   ObLS *ls_;
 
   common::ObConcurrentFIFOAllocator ls_allocator_;

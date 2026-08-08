@@ -306,15 +306,19 @@ int PalfHandleImpl::submit_log(
 }
 
 int PalfHandleImpl::submit_imported_group(
+    const LSN &source_lsn,
+    const SCN &source_scn,
     const char *buf,
     const int64_t buf_len)
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BUFFER_SIZE) {
+  } else if (!source_lsn.is_valid() || !source_scn.is_valid()
+             || OB_ISNULL(buf) || buf_len <= 0 || buf_len > MAX_LOG_BUFFER_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid imported group", K(ret), KP(buf), K(buf_len));
+    PALF_LOG(WARN, "invalid imported group", K(ret), K(source_lsn), K(source_scn),
+        KP(buf), K(buf_len));
   } else {
     RLockGuard guard(lock_);
     if (!palf_env_impl_->check_disk_space_enough()) {
@@ -323,7 +327,7 @@ int PalfHandleImpl::submit_imported_group(
       ret = OB_STATE_NOT_MATCH;
       PALF_LOG(WARN, "cannot submit imported group", K(ret), KPC(this),
           K(buf_len), "state", state_mgr_.get_state());
-    } else if (OB_FAIL(sw_.submit_imported_group(buf, buf_len))) {
+    } else if (OB_FAIL(sw_.submit_imported_group(source_lsn, source_scn, buf, buf_len))) {
       if (OB_EAGAIN != ret) {
         PALF_LOG(WARN, "submit imported group failed", K(ret), KPC(this), K(buf_len));
       }

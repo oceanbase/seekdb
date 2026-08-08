@@ -59,7 +59,7 @@ ObPhysicalCopyCtx::ObPhysicalCopyCtx()
     ls_id_(),
     tablet_id_(),
     helper_(nullptr),
-    standby_restore_dag_(nullptr),
+    copy_id_(),
     sstable_index_builder_(nullptr),
     table_key_(),
     total_macro_count_(0),
@@ -91,7 +91,7 @@ bool ObPhysicalCopyCtx::is_valid() const
              && tablet_id_.is_valid()
              && OB_NOT_NULL(helper_)
              && helper_->is_valid()
-             && OB_NOT_NULL(standby_restore_dag_)
+             && copy_id_.is_valid()
              && OB_NOT_NULL(sstable_index_builder_)
              && table_key_.is_valid()
              && total_macro_count_ >= 0

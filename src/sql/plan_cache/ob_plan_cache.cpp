@@ -470,19 +470,26 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to cast cache obj to physical plan.", K(ret));
       } else {
+        const bool is_internal_maintenance =
+            pc_ctx.sql_ctx_.session_info_->is_inner()
+            && !pc_ctx.sql_ctx_.session_info_->is_user_session();
+        const bool is_standby_control_stmt = !share::server_is_primary()
+            && ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_);
         MEMCPY(pc_ctx.sql_ctx_.sql_id_,
                plan->stat_.sql_id_.ptr(),
                plan->stat_.sql_id_.length());
         MEMCPY(pc_ctx.sql_ctx_.format_sql_id_,
                plan->stat_.format_sql_id_.ptr(),
                plan->stat_.format_sql_id_.length());
-        if (pc_ctx.sql_ctx_.session_info_->is_inner()
-            && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
-          // Internal maintenance follows its own role checks.
-        } else if (!share::server_is_primary() && !pc_ctx.sql_traits_.is_readonly_stmt_) {
+        if (!is_internal_maintenance
+            && !share::server_is_primary()
+                   && !pc_ctx.sql_traits_.is_readonly_stmt_
+                   && !ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_)) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           LOG_WARN("standby server is read only", KR(ret), K(pc_ctx.sql_traits_));
-         } else if (GCONF.enable_perf_event) {
+         } else if (!is_internal_maintenance
+                    && !is_standby_control_stmt
+                    && GCONF.enable_perf_event) {
            bool read_only = false;
            if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_runtime_read_only(read_only))) {
            } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(

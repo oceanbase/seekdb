@@ -145,7 +145,7 @@ public:
   int offline();
   int online();
   int online_without_lock();
-  int online_for_physical_restore_without_lock();
+  int online_in_replay_mode_without_lock();
   bool is_offline() const
   { return running_state_.is_offline(); }
   bool is_stopped() const
@@ -197,6 +197,9 @@ public:
   // get current ls meta.
   // @param[out] ls_meta, store ls's current meta.
   int get_ls_meta(ObLSMeta &ls_meta) const;
+  int get_physical_restore_base(
+      ObLSMeta &ls_meta,
+      share::SCN &checkpoint_scn) const;
   // update the ls meta of ls.
   // @param[in] ls_meta, which is used to update the ls's meta.
   int set_ls_meta(const ObLSMeta &ls_meta);
@@ -227,6 +230,12 @@ public:
     K_(tablet_gc_handler));
 private:
   friend class ObLSService;
+  enum class LocalLogMode
+  {
+    APPEND,
+    REPLAY,
+  };
+
   void update_state_seq_();
   int stop_();
   void wait_();
@@ -236,12 +245,12 @@ private:
   int online_compaction_();
   int offline_tx_(const int64_t start_ts);
   int online_tx_();
-  int online_without_lock_(const bool start_in_append_mode);
-  int start_local_log_();
-  int start_local_replay_();
-  int stop_local_log_(const bool keep_import_callbacks);
-  int switch_to_local_append_mode_();
-  int switch_to_local_replay_mode_();
+  int online_without_lock_(const LocalLogMode log_mode);
+  int online_local_log_(const LocalLogMode log_mode);
+  int start_local_log_(const int64_t deadline_us = INT64_MAX);
+  int stop_local_log_(const int64_t deadline_us = INT64_MAX);
+  int switch_to_local_append_mode_(const int64_t deadline_us);
+  int switch_to_local_replay_mode_(const int64_t deadline_us);
   int update_tablet_table_store_without_lock_(
       const ObTabletID &tablet_id,
       const ObUpdateTableStoreParam &param,
@@ -289,10 +298,6 @@ public:
     return ls_meta_.set_tablet_change_checkpoint_scn(ls_epoch_, tablet_change_checkpoint_scn);
   }
   int set_restore_status(const ObRestoreStatus &restore_status);
-  int get_physical_restore_checkpoint_scn(share::SCN &checkpoint_scn) const
-  {
-    return checkpoint_executor_.get_physical_restore_checkpoint_scn(checkpoint_scn);
-  }
   // get restore status
   // @param [out] restore status.
   // int get_restore_status(share::ObRestoreStatus &status);

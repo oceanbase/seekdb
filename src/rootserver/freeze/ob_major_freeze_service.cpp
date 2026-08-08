@@ -50,17 +50,14 @@ int ObMajorFreezeService::activate()
   int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-  } else if (OB_FAIL(start_or_resume_local_major_freeze())) {
+  } else if (OB_FAIL(start_or_resume_local_major_freeze(true))) {
   }
   if (OB_SUCC(ret) && ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()) {
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(local_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("local major freeze is null after activate", KR(ret));
-    } else {
-      int tmp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (tmp_ret = local_major_freeze_->on_become_primary())) {
-      }
+    } else if (OB_FAIL(local_major_freeze_->on_become_primary())) {
     }
   }
   const int64_t cost_us = ObTimeUtility::current_time() - start_time_us;
@@ -82,12 +79,9 @@ int ObMajorFreezeService::inner_switch_to_follower()
   ObRecursiveMutexGuard switch_guard(switch_lock_);
   const int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  if (ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()
-      && GCTX.is_standby_server()) {
-    // A standby replays freeze-info writes but schedules its own local compaction.
-    // Keep the primary freeze runtime alive even though local log append is disabled.
-    if (OB_FAIL(start_or_resume_local_major_freeze())) {
-      LOG_WARN("fail to keep local major freeze running for standby", KR(ret));
+  if (ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == get_service_type()) {
+    if (OB_FAIL(start_or_resume_local_major_freeze(false))) {
+      LOG_WARN("fail to keep local major freeze running in replay mode", KR(ret));
     }
   } else {
     SpinRLockGuard r_guard(rw_lock_);
@@ -100,22 +94,22 @@ int ObMajorFreezeService::inner_switch_to_follower()
   return ret;
 }
 
-int ObMajorFreezeService::start_or_resume_local_major_freeze()
+int ObMajorFreezeService::start_or_resume_local_major_freeze(const bool append_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(local_major_freeze_)) {
     SpinWLockGuard w_guard(rw_lock_);
-    if (OB_FAIL(alloc_local_major_freeze())) {
+    if (OB_FAIL(alloc_local_major_freeze(append_mode))) {
       LOG_WARN("fail to alloc local_major_freeze", KR(ret));
     }
   } else {
     SpinRLockGuard r_guard(rw_lock_);
-    local_major_freeze_->resume();
+    local_major_freeze_->resume(append_mode);
   }
   return ret;
 }
 
-int ObMajorFreezeService::alloc_local_major_freeze()
+int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
@@ -142,7 +136,7 @@ int ObMajorFreezeService::alloc_local_major_freeze()
     // impossible
   } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
              *GCTX.config_, *GCTX.schema_service_))) {
-  } else if (OB_FAIL(local_major_freeze_->start())) {
+  } else if (OB_FAIL(local_major_freeze_->start(append_mode))) {
   }
 
   if (OB_SUCC(ret)) {

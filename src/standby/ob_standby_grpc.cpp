@@ -18,6 +18,7 @@
 
 #include "standby/ob_standby_grpc.h"
 #include "standby/ob_standby_grpc_service.h"
+#include "standby/ob_standby_service.h"
 #include "grpc/ob_grpc_server.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -88,10 +89,10 @@ public:
                          grpc::ServerWriter<standbyservice::FetchLogRes>* writer) override;
 };
 
-void register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server)
+int register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server)
 {
   static ObStandbyGrpcServiceImpl standby_grpc_service;
-  grpc_server.register_service(&standby_grpc_service);
+  return grpc_server.register_service(&standby_grpc_service);
 }
 
 ObStandbyLSViewTabletCountResult::ObStandbyLSViewTabletCountResult()
@@ -180,11 +181,9 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_ls_view(
     } else {
       ObStandbyLSViewMeta ls_view_meta;
       ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
-      if (OB_FAIL(ls->get_ls_meta(ls_view_meta.ls_meta_))) {
-        LOG_WARN("failed to get ls meta", K(ret), K(ls_id));
-      } else if (OB_FAIL(ls->get_physical_restore_checkpoint_scn(
-                     ls_view_meta.physical_checkpoint_scn_))) {
-        LOG_WARN("failed to get physical restore checkpoint", K(ret), K(ls_id));
+      if (OB_FAIL(ls->get_physical_restore_base(
+              ls_view_meta.ls_meta_, ls_view_meta.physical_checkpoint_scn_))) {
+        LOG_WARN("failed to get physical restore base", K(ret), K(ls_id));
       } else if (!ls_view_meta.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid standby ls view meta", K(ret), K(ls_view_meta));
@@ -643,22 +642,27 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
 {
   int ret = OB_SUCCESS;
   static const int64_t MAX_FETCH_BYTES = 64L * 1024L * 1024L;
-  share::SCN start_scn = share::SCN::base_scn();
-  int64_t sent_bytes = 0;
-
-  if (OB_ISNULL(context) || OB_ISNULL(request) || OB_ISNULL(writer)
-      || request->max_bytes() > MAX_FETCH_BYTES) {
+  if (OB_ISNULL(context) || OB_ISNULL(request) || OB_ISNULL(writer)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid fetch log request", K(ret), KP(context), KP(request), KP(writer));
-  } else if (request->start_scn() > 0
-             && OB_FAIL(start_scn.convert_for_logservice(request->start_scn()))) {
-    LOG_WARN("invalid fetch log start scn", K(ret), "start_scn", request->start_scn());
+    return obgrpc::ob_error_to_grpc_status(ret);
+  }
+
+  const palf::LSN start_lsn(request->start_lsn());
+  int64_t sent_bytes = 0;
+  if (request->max_bytes() > MAX_FETCH_BYTES) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("fetch log request is too large", K(ret), "max_bytes", request->max_bytes());
+  } else if (request->max_bytes() > 0 && !start_lsn.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid fetch log start lsn", K(ret), K(start_lsn));
   } else {
     SERVER_MODULE_SCOPE {
       ObLSService *ls_service = share::server_service<ObLSService>();
       ObLS *ls = nullptr;
       logservice::ObLogHandler *log_handler = nullptr;
-      palf::LSN start_lsn;
+      palf::LSN begin_lsn;
+      palf::LSN end_lsn;
       palf::PalfGroupBufferIterator iterator;
       if (OB_ISNULL(ls_service)) {
         ret = OB_ERR_UNEXPECTED;
@@ -669,31 +673,24 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("log stream or handler is null", K(ret), KP(ls), KP(log_handler));
       } else if (request->max_bytes() > 0
-                 && OB_FAIL(log_handler->locate_by_scn_coarsely(start_scn, start_lsn))) {
-        if (OB_ENTRY_NOT_EXIST == ret || OB_ERR_OUT_OF_UPPER_BOUND == ret) {
-          ret = OB_SUCCESS;
-        } else if (OB_ERR_OUT_OF_LOWER_BOUND == ret) {
-          palf::PalfBaseInfo begin_base_info;
-          if (OB_FAIL(log_handler->get_begin_lsn(start_lsn))) {
-            LOG_WARN("failed to get source log begin lsn", K(ret), K(start_scn));
-          } else if (OB_FAIL(log_handler->get_palf_base_info(start_lsn, begin_base_info))) {
-            LOG_WARN("failed to get source log begin base info", K(ret), K(start_scn), K(start_lsn));
-          } else if (begin_base_info.prev_log_info_.scn_ != start_scn) {
-            ret = OB_ERR_OUT_OF_LOWER_BOUND;
-            LOG_ERROR("standby requested logs older than the retained source history",
-                K(ret), K(start_scn), K(start_lsn), K(begin_base_info));
-          }
-        } else {
-          LOG_WARN("failed to locate fetch log start scn", K(ret), K(start_scn));
-        }
+                 && OB_FAIL(log_handler->get_begin_lsn(begin_lsn))) {
+        LOG_WARN("failed to get source log begin lsn", K(ret), K(start_lsn));
+      } else if (request->max_bytes() > 0
+                 && OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
+        LOG_WARN("failed to get source log end lsn", K(ret), K(start_lsn));
+      } else if (request->max_bytes() > 0 && start_lsn < begin_lsn) {
+        ret = OB_ERR_OUT_OF_LOWER_BOUND;
+        LOG_ERROR("standby requested logs older than the retained source history",
+            K(ret), K(start_lsn), K(begin_lsn));
+      } else if (request->max_bytes() > 0 && start_lsn > end_lsn) {
+        ret = OB_ERR_OUT_OF_UPPER_BOUND;
+        LOG_ERROR("standby requested logs beyond the source end",
+            K(ret), K(start_lsn), K(end_lsn));
       }
-      if (OB_SUCC(ret) && request->max_bytes() > 0 && start_lsn.is_valid()
+      if (OB_SUCC(ret) && request->max_bytes() > 0 && start_lsn < end_lsn
           && OB_FAIL(log_handler->seek(start_lsn, iterator))) {
-        if (OB_ENTRY_NOT_EXIST == ret || OB_ERR_OUT_OF_UPPER_BOUND == ret) {
-          ret = OB_SUCCESS;
-        } else {
-          LOG_WARN("failed to seek fetch log iterator", K(ret), K(start_scn), K(start_lsn));
-        }
+        LOG_ERROR("source log range contains an unreadable gap",
+            K(ret), K(start_lsn), K(begin_lsn), K(end_lsn));
       }
       while (OB_SUCC(ret) && iterator.is_inited()
              && sent_bytes < static_cast<int64_t>(request->max_bytes())) {
@@ -713,7 +710,6 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
           LOG_WARN("failed to read source log group", K(ret));
         } else if (FALSE_IT(size = group_entry.get_group_entry_size())) {
         } else if (FALSE_IT(log_scn = group_entry.get_scn())) {
-        } else if (log_scn <= start_scn) {
         } else {
           standbyservice::FetchLogRes response;
           response.set_buf(buf, size);
@@ -963,7 +959,7 @@ int ObStandbyGrpcClient::init(const common::ObAddr& addr, int64_t timeout)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid addr", K(ret), K(addr));
   } else {
-    ret = grpc_client_.init(addr, timeout);
+    ret = grpc_client_.init(addr, timeout, ObStandbyService::is_rpc_tls_enabled());
     if (OB_SUCC(ret)) {
       is_inited_ = true;
       LOG_INFO("ObStandbyGrpcClient init success", K(addr), K(timeout));
@@ -1060,7 +1056,7 @@ int ObStandbyGrpcClient::fetch_standby_palf_base_info(
 }
 
 int ObStandbyGrpcClient::fetch_log(
-    const share::SCN &start_scn,
+    const palf::LSN &start_lsn,
     const int64_t max_bytes,
     const std::function<int(const char *, int64_t, const palf::LSN &,
                             const share::SCN &)> &consume_log)
@@ -1068,14 +1064,14 @@ int ObStandbyGrpcClient::fetch_log(
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (!start_scn.is_valid() || max_bytes <= 0 || !consume_log) {
+  } else if (!start_lsn.is_valid() || max_bytes <= 0 || !consume_log) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fetch log argument", K(ret), K(start_scn), K(max_bytes));
+    LOG_WARN("invalid fetch log argument", K(ret), K(start_lsn), K(max_bytes));
   } else {
     standbyservice::FetchLogReq request;
     standbyservice::FetchLogRes response;
     grpc::ClientContext context;
-    request.set_start_scn(start_scn.get_val_for_logservice());
+    request.set_start_lsn(start_lsn.val_);
     request.set_max_bytes(max_bytes);
     grpc_client_.ctx_.set_grpc_context(context);
     std::unique_ptr<grpc::ClientReader<standbyservice::FetchLogRes>> reader(
@@ -1101,11 +1097,12 @@ int ObStandbyGrpcClient::fetch_log(
               K(log_scn), "size", response.size());
         }
       }
+      if (OB_FAIL(ret)) {
+        context.TryCancel();
+      }
       const grpc::Status status = reader->Finish();
       if (OB_SUCC(ret) && OB_FAIL(grpc_client_.translate_error(status))) {
         LOG_WARN("fetch log stream failed", K(ret));
-      } else if (OB_FAIL(ret)) {
-        context.TryCancel();
       }
     }
   }
@@ -1122,7 +1119,7 @@ int ObStandbyGrpcClient::get_log_end_scn(share::SCN &end_scn)
     standbyservice::FetchLogReq request;
     standbyservice::FetchLogRes response;
     grpc::ClientContext context;
-    request.set_start_scn(share::SCN::base_scn().get_val_for_logservice());
+    request.set_start_lsn(0);
     request.set_max_bytes(0);
     grpc_client_.ctx_.set_grpc_context(context);
     std::unique_ptr<grpc::ClientReader<standbyservice::FetchLogRes>> reader(

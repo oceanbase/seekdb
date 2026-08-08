@@ -93,11 +93,6 @@ int64_t get_rpc_cert_expire_time()
   return parse_cert_expire_time_us("wallet/cert.pem");
 }
 
-bool __attribute__((weak)) ob_grpc_is_rpc_tls_enabled()
-{
-  return false;
-}
-
 std::shared_ptr<grpc::ServerCredentials> create_server_credentials(
     std::shared_ptr<grpc::experimental::CertificateProviderInterface> &provider_out)
 {

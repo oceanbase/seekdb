@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STANDBY_OB_STANDBY_SERVICE_H_
 #define OCEANBASE_STANDBY_OB_STANDBY_SERVICE_H_
 
+#include <functional>
 #include "standby/ob_standby_schema_refresh_trigger.h"
 #include "standby/control/ob_standby_role_transition_service.h"
 
@@ -47,23 +48,31 @@ struct ObStandbyStartupProfile
 class ObStandbyService final
 {
 public:
-  static int init(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task);
+  static int init(
+      ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task,
+      const bool rpc_tls_enabled);
   static int stop();
   static int wait();
   static void destroy();
   static int start_rpc_service(int rpc_port);
+  static bool is_rpc_tls_enabled();
   static ObStandbyStartupProfile startup_profile(const bool embed_mode);
+  static int restore_persisted_role();
   static int bootstrap();
   static int activate_current_role();
   static int start_role_services(const bool embed_mode);
-  static int wait_startup_ready(const bool embed_mode);
+  static int wait_startup_ready(
+      const bool embed_mode,
+      const std::function<bool()> &is_stopping);
   static share::ObITenantRoleTransitionService *role_transition_service();
 
 private:
   ObStandbyService();
   ~ObStandbyService();
   static ObStandbyService &instance_();
-  int init_(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task);
+  int init_(
+      ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task,
+      const bool rpc_tls_enabled);
   int stop_();
   int wait_();
   void destroy_();
@@ -71,6 +80,7 @@ private:
 
 private:
   bool is_inited_;
+  bool rpc_tls_enabled_;
   obgrpc::ObGrpcServer *grpc_server_;
   ObStandbySchemaRefreshTrigger schema_refresh_trigger_;
   ObStandbyRoleTransitionService role_transition_service_;

@@ -51,10 +51,6 @@ public:
       const ObStandbyBootstrapParam &param,
       common::ObAddr &primary_addr);
 private:
-  static int get_bootstrap_source_(
-      const ObStandbyBootstrapParam &param,
-      const bool allow_missing_source,
-      common::ObAddr &primary_addr);
   static int create_sys_ls_(
       const ObStandbyBootstrapParam &param,
       const palf::PalfBaseInfo &palf_base_info,

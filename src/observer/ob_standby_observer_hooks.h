@@ -22,11 +22,7 @@ namespace oceanbase
 namespace observer
 {
 
-using ObStandbyObserverHook = void (*)();
-
-int register_standby_observer_hooks(
-    ObStandbyObserverHook stop_server,
-    ObStandbyObserverHook reset_max_id_cache);
+int register_standby_observer();
 
 } // namespace observer
 } // namespace oceanbase

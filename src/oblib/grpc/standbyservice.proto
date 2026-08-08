@@ -111,7 +111,7 @@ message FetchStandbyPalfBaseInfoRes {
 }
 
 message FetchLogReq {
-  uint64 start_scn = 1;
+  uint64 start_lsn = 1;
   uint64 max_bytes = 2;
 }
 

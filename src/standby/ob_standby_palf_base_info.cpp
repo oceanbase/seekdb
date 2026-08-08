@@ -22,7 +22,6 @@
 #include "logservice/ob_log_handler.h"
 #include "logservice/palf/log_group_entry.h"
 #include "share/rc/ob_server_runtime.h"
-#include "standby/ob_standby_bootstrap_policy.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -143,8 +142,9 @@ int ObStandbyPalfBaseInfoBuilder::build(
       }
 
       if (OB_SUCC(ret)
-          && ObStandbyBootstrapPolicy::need_located_replay_start_log(
-              arg.replay_start_scn_, result.source_end_scn_)
+          && arg.replay_start_scn_.is_valid()
+          && result.source_end_scn_.is_valid()
+          && !(result.source_end_scn_ < arg.replay_start_scn_)
           && !result.located_log_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("source end scn covers standby replay start scn, but replay start log is not located",

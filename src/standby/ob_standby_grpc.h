@@ -155,7 +155,7 @@ public:
   int fetch_standby_palf_base_info(const standby::ObFetchStandbyPalfBaseInfoArg &arg,
                                    standby::ObFetchStandbyPalfBaseInfoResult &result);
   int fetch_log(
-      const share::SCN &start_scn,
+      const palf::LSN &start_lsn,
       const int64_t max_bytes,
       const std::function<int(const char *, int64_t, const palf::LSN &,
                               const share::SCN &)> &consume_log);

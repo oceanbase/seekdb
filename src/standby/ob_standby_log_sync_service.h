@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STANDBY_OB_STANDBY_LOG_SYNC_SERVICE_H_
 #define OCEANBASE_STANDBY_OB_STANDBY_LOG_SYNC_SERVICE_H_
 
+#include <functional>
 #include "lib/lock/ob_mutex.h"
 #include "lib/net/ob_addr.h"
 #include "lib/task/ob_timer.h"
@@ -39,11 +40,12 @@ public:
   static int wait();
   static void destroy();
 
+  static int validate_switch_to_primary(const bool is_failover);
   static int prepare_switch_to_primary(const bool is_failover);
   static int pause();
   static int resume();
   static int set_startup_target_scn(const share::SCN &target_scn);
-  static int wait_startup_replay();
+  static int wait_startup_replay(const std::function<bool()> &is_stopping);
   static int get_local_progress(share::SCN &end_scn, share::SCN &sync_scn);
 
   void runTimerTask() override;
@@ -58,11 +60,12 @@ private:
   int stop_();
   int wait_();
   void destroy_();
+  int validate_switch_to_primary_(const bool is_failover);
   int prepare_switch_to_primary_(const bool is_failover);
   int pause_();
   int resume_();
   int set_startup_target_scn_(const share::SCN &target_scn);
-  int wait_startup_replay_();
+  int wait_startup_replay_(const std::function<bool()> &is_stopping);
   int get_source_addr_(common::ObAddr &source_addr) const;
   int query_source_end_scn_(const common::ObAddr &source_addr, share::SCN &end_scn);
   int sync_once_(const common::ObAddr &source_addr, bool &made_progress);
@@ -70,17 +73,18 @@ private:
                         const int64_t size,
                         const palf::LSN &source_lsn,
                         const share::SCN &source_scn);
-  int wait_local_replay_();
+  int wait_local_replay_(const int64_t deadline_us);
+  int get_fatal_error_() const;
+  void record_fatal_error_(const int error);
 
 private:
   static const int64_t SYNC_INTERVAL_US = 100 * 1000L;
   static const int64_t RPC_TIMEOUT_US = 10 * 1000 * 1000L;
-  static const int64_t SWITCH_TIMEOUT_US = 30 * 1000 * 1000L;
-  static const int64_t STARTUP_TIMEOUT_US = 60 * 1000 * 1000L;
   static const int64_t FETCH_BATCH_BYTES = 16 * 1024 * 1024L;
 
   common::ObTimer timer_;
-  lib::ObMutex lock_;
+  mutable lib::ObMutex lock_;
+  lib::ObMutex sync_lock_;
   bool is_inited_;
   bool is_scheduled_;
   bool paused_;
