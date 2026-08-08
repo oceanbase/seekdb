@@ -16,6 +16,7 @@
 
 #include "log_task.h"
 #include "log_sliding_window.h"
+#include "lib/checksum/ob_crc64.h"
 
 namespace oceanbase
 {
@@ -134,6 +135,8 @@ LogTask::LogTask()
      freeze_ts_(OB_INVALID_TIMESTAMP),
      submit_ts_(OB_INVALID_TIMESTAMP),
      flushed_ts_(OB_INVALID_TIMESTAMP),
+     segment_head_(NULL),
+     segment_tail_(NULL),
      lock_()
 {
   reset();
@@ -150,6 +153,9 @@ void LogTask::destroy()
 
 void LogTask::reset()
 {
+  LogBufferSegment::destroy_list(segment_head_);
+  segment_head_ = NULL;
+  segment_tail_ = NULL;
   state_map_.reset_all();
   header_.reset();
   ref_cnt_ = 0;
@@ -250,6 +256,120 @@ int LogTask::set_group_header(const LSN &lsn, const SCN &scn, const LogGroupEntr
     header_.committed_end_lsn_ = group_entry_header.get_committed_end_lsn();  // Out-of-order log reception requires this value after filling in the preceding gaps
     header_.accum_checksum_ = group_entry_header.get_accum_checksum();
     set_valid();  // set valid
+  }
+  return ret;
+}
+
+int LogTask::insert_segment(LogBufferSegment *segment)
+{
+  int ret = OB_SUCCESS;
+  if (NULL == segment || !segment->get_begin_lsn().is_valid()
+      || segment->get_entry_size() <= 0 || NULL == segment->get_entry_buf()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (is_pre_submit()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (NULL == segment_head_) {
+    segment_head_ = segment;
+    segment_tail_ = segment;
+  } else if (segment->get_end_lsn() <= segment_head_->get_begin_lsn()) {
+    segment->set_next(segment_head_);
+    segment_head_ = segment;
+  } else {
+    LogBufferSegment *prev = segment_head_;
+    LogBufferSegment *next = prev->get_next();
+    while (NULL != next && next->get_begin_lsn() < segment->get_begin_lsn()) {
+      prev = next;
+      next = next->get_next();
+    }
+    if (prev->get_end_lsn() > segment->get_begin_lsn()
+        || (NULL != next && segment->get_end_lsn() > next->get_begin_lsn())) {
+      ret = OB_ERR_UNEXPECTED;
+      PALF_LOG(ERROR, "log segment overlaps existing segment", K(ret), KPC(segment),
+          KPC(prev), KPC(next), KPC(this));
+    } else {
+      segment->set_next(next);
+      prev->set_next(segment);
+      if (NULL == next) {
+        segment_tail_ = segment;
+      }
+    }
+  }
+  return ret;
+}
+
+int LogTask::calculate_group_checksum(int64_t &data_checksum) const
+{
+  int ret = OB_SUCCESS;
+  if (header_.is_padding_log_) {
+    data_checksum = 0;
+  } else if (NULL == segment_head_) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    int64_t checksum = 0;
+    for (LogBufferSegment *segment = segment_head_; NULL != segment;
+         segment = segment->get_next()) {
+      const int64_t entry_checksum = segment->get_data_checksum();
+      checksum = common::ob_crc64(checksum, &entry_checksum, sizeof(entry_checksum));
+    }
+    data_checksum = checksum;
+  }
+  return ret;
+}
+
+int LogTask::detach_group_write_buf(const LogGroupEntryHeader &header,
+                                    LogGroupWriteBuf &group_write_buf)
+{
+  int ret = OB_SUCCESS;
+  const LSN expected_begin = header_.begin_lsn_ + LogGroupEntryHeader::HEADER_SER_SIZE;
+  const LSN expected_end = header_.begin_lsn_ + LogGroupEntryHeader::HEADER_SER_SIZE
+      + header_.data_len_;
+  LSN cursor = expected_begin;
+  if (!is_freezed() || 0 != get_ref_cnt() || NULL == segment_head_
+      || NULL == segment_tail_ || !header.is_valid()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    for (LogBufferSegment *segment = segment_head_; OB_SUCC(ret) && NULL != segment;
+         segment = segment->get_next()) {
+      if (segment->get_begin_lsn() != cursor) {
+        ret = OB_ERR_UNEXPECTED;
+        PALF_LOG(ERROR, "log segments are not lsn-continuous", K(ret), K(cursor),
+            KPC(segment), KPC(this));
+      } else {
+        cursor = segment->get_end_lsn();
+      }
+    }
+    if (OB_SUCC(ret) && cursor != expected_end) {
+      ret = OB_ERR_UNEXPECTED;
+      PALF_LOG(ERROR, "log segment range does not match group", K(ret), K(cursor),
+          K(expected_begin), K(expected_end), KPC(this));
+    } else if (OB_SUCC(ret) && OB_FAIL(group_write_buf.init(
+                   header, segment_head_, segment_tail_, header_.data_len_))) {
+      PALF_LOG(WARN, "init group write buffer failed", K(ret), K(header), KPC(this));
+    } else if (OB_SUCC(ret)) {
+      segment_head_ = NULL;
+      segment_tail_ = NULL;
+    }
+  }
+  return ret;
+}
+
+int LogTask::restore_group_write_buf(LogGroupWriteBuf &group_write_buf)
+{
+  int ret = OB_SUCCESS;
+  LogBufferSegment *head = NULL;
+  LogBufferSegment *tail = NULL;
+  int64_t data_len = 0;
+  if (NULL != segment_head_ || NULL != segment_tail_ || !group_write_buf.is_valid()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else {
+    group_write_buf.take_segments(head, tail, data_len);
+    if (NULL == head || NULL == tail || data_len != header_.data_len_) {
+      ret = OB_ERR_UNEXPECTED;
+      LogBufferSegment::destroy_list(head);
+    } else {
+      segment_head_ = head;
+      segment_tail_ = tail;
+    }
   }
   return ret;
 }

@@ -46,29 +46,40 @@ int LogWriteBuf::merge(const LogWriteBuf &rhs, bool &has_merged)
 {
   int ret = OB_SUCCESS;
   has_merged = false;
-  int64_t lhs_size = this->get_total_size();
-  int64_t lhs_count = this->get_buf_count();
-  int64_t rhs_size = rhs.get_total_size();
-  int64_t rhs_count = rhs.get_buf_count();
-  if (2 <= lhs_count || 2 <= rhs_count) {
-    PALF_LOG(INFO, "no need to merge", K(ret), K(lhs_count), K(rhs_count));
+  const int64_t lhs_size = this->get_total_size();
+  const int64_t lhs_count = this->get_buf_count();
+  const int64_t rhs_size = rhs.get_total_size();
+  const int64_t rhs_count = rhs.get_buf_count();
+  if (this == &rhs || !is_valid() || !rhs.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (MAX_LOG_BUFFER_SIZE < lhs_size || MAX_LOG_BUFFER_SIZE < rhs_size) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(ERROR, "the size if greater than MAX_LOG_BUFFER_SIZE, unexpected error!!!",
         K(ret), K(lhs_size), K(rhs_size), K(lhs_count), K(rhs_count));
   } else if (MAX_LOG_BUFFER_SIZE < lhs_size + rhs_size) {
     PALF_LOG(INFO, "the size is overflow", K(ret), K(lhs_size), K(rhs_size), KPC(this), K(rhs));
-  } else if (write_buf_[0].buf_ == rhs.write_buf_[0].buf_) {
-    ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(ERROR, "the pointer is same, unexpected error", K(ret), KP(write_buf_[0].buf_),
-        KP(rhs.write_buf_[0].buf_));
-  } else if (write_buf_[0].buf_ + lhs_size != rhs.write_buf_[0].buf_) {
-    //ret = OB_ERR_UNEXPECTED;
-    PALF_LOG(INFO, "write_buf is not continous, no need merge", K(ret), KPC(this), K(rhs));
   } else {
-    write_buf_[0].buf_len_ += rhs_size;
-    has_merged = true;
-    PALF_LOG(TRACE, "merge success", KPC(this), K(rhs), K(has_merged));
+    // The DIO layer gathers all fragments into one aligned bounce buffer.  The
+    // source addresses therefore do not need to be physically contiguous.
+    for (int64_t i = 0; OB_SUCC(ret) && i < rhs_count; ++i) {
+      if (OB_FAIL(write_buf_.push_back(rhs.write_buf_[i]))) {
+        PALF_LOG(WARN, "append write fragment failed", K(ret), K(i), K(rhs_count));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      has_merged = true;
+      PALF_LOG(TRACE, "merge fragmented write buffer success", KPC(this), K(rhs), K(has_merged));
+    } else {
+      const int merge_ret = ret;
+      while (write_buf_.count() > lhs_count) {
+        write_buf_.pop_back();
+      }
+      // Batch reduction is optional.  If growing the fragment array fails,
+      // keep both source buffers intact and let LogStorage issue two writes.
+      ret = OB_SUCCESS;
+      PALF_LOG(WARN, "merge fragmented write buffer fell back to separate writes",
+          K(merge_ret), K(lhs_count), K(rhs_count));
+    }
   }
   return ret;
 }
@@ -94,16 +105,52 @@ int LogWriteBuf::push_back(const char *buf,
   }
   return ret;
 }
+
+int LogWriteBuf::push_fill(const char fill_char, const int64_t fill_len)
+{
+  int ret = OB_SUCCESS;
+  if (fill_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    InnerStruct inner_struct;
+    inner_struct.buf_len_ = fill_len;
+    inner_struct.is_fill_ = true;
+    inner_struct.fill_char_ = fill_char;
+    ret = write_buf_.push_back(inner_struct);
+  }
+  return ret;
+}
+
 int LogWriteBuf::get_write_buf(const int64_t idx,
                                const char *&buf,
                                int64_t &buf_len) const
 {
   int ret = OB_SUCCESS;
-  if (idx >= write_buf_.count()) {
+  if (idx < 0 || idx >= write_buf_.count()) {
+    ret = OB_ARRAY_OUT_OF_RANGE;
+  } else if (write_buf_[idx].is_fill_) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    buf = write_buf_[idx].buf_;
+    buf_len = write_buf_[idx].buf_len_;
+  }
+  return ret;
+}
+
+int LogWriteBuf::get_write_buf(const int64_t idx,
+                               const char *&buf,
+                               int64_t &buf_len,
+                               bool &is_fill,
+                               char &fill_char) const
+{
+  int ret = OB_SUCCESS;
+  if (idx < 0 || idx >= write_buf_.count()) {
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else {
     buf = write_buf_[idx].buf_;
     buf_len = write_buf_[idx].buf_len_;
+    is_fill = write_buf_[idx].is_fill_;
+    fill_char = write_buf_[idx].fill_char_;
   }
   return ret;
 }
@@ -125,7 +172,8 @@ bool LogWriteBuf::check_memory_is_continous() const
 {
   bool bool_ret = true;
   for (int64_t i = 0; i < write_buf_.count()-1; i++) {
-    if (write_buf_[i].buf_ + write_buf_[i].buf_len_ != write_buf_[i+1].buf_) {
+    if (write_buf_[i].is_fill_ || write_buf_[i + 1].is_fill_
+        || write_buf_[i].buf_ + write_buf_[i].buf_len_ != write_buf_[i+1].buf_) {
       bool_ret = false;
       break;
     }
@@ -137,7 +185,11 @@ void LogWriteBuf::memcpy_to_continous_memory(char *dest_buf) const
 {
   int64_t pos = 0;
   for (int64_t i = 0; i < write_buf_.count(); i++) {
-    MEMCPY(dest_buf+pos, write_buf_[i].buf_, write_buf_[i].buf_len_);
+    if (write_buf_[i].is_fill_) {
+      MEMSET(dest_buf + pos, write_buf_[i].fill_char_, write_buf_[i].buf_len_);
+    } else {
+      MEMCPY(dest_buf + pos, write_buf_[i].buf_, write_buf_[i].buf_len_);
+    }
     pos += write_buf_[i].buf_len_;
   }
 }
@@ -151,10 +203,16 @@ DEFINE_SERIALIZE(LogWriteBuf)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, total_size))) {
     PALF_LOG(ERROR, "LogWriteBuf serialize failed", K(ret), K(pos), K(new_pos), K(buf_len));
+  } else if (new_pos + total_size > buf_len) {
+    ret = OB_BUF_NOT_ENOUGH;
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < write_buf_.count(); i++) {
       const int64_t tmp_buf_len = write_buf_[i].buf_len_;
-      MEMCPY(buf+new_pos, write_buf_[i].buf_, tmp_buf_len);
+      if (write_buf_[i].is_fill_) {
+        MEMSET(buf + new_pos, write_buf_[i].fill_char_, tmp_buf_len);
+      } else {
+        MEMCPY(buf + new_pos, write_buf_[i].buf_, tmp_buf_len);
+      }
       new_pos += tmp_buf_len;
     }
   }

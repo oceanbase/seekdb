@@ -54,6 +54,7 @@ class LogSharedQueueTh;
 class IPalfEnvImpl;
 class LogEngine;
 class LogCache;
+class PalfLogBuffer;
 
 struct PalfStat {
   OB_UNIS_VERSION(1);
@@ -114,6 +115,11 @@ public:
   virtual int submit_log(const PalfAppendOptions &opts,
                          const char *buf,
                          const int64_t buf_len,
+                         const share::SCN &ref_scn,
+                         LSN &lsn,
+                         share::SCN &scn) = 0;
+  virtual int submit_log(const PalfAppendOptions &opts,
+                         PalfLogBuffer &buffer,
                          const share::SCN &ref_scn,
                          LSN &lsn,
                          share::SCN &scn) = 0;
@@ -280,6 +286,11 @@ public:
   int submit_log(const PalfAppendOptions &opts,
                  const char *buf,
                  const int64_t buf_len,
+                 const share::SCN &ref_scn,
+                 LSN &lsn,
+                 share::SCN &scn) override final;
+  int submit_log(const PalfAppendOptions &opts,
+                 PalfLogBuffer &buffer,
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn) override final;

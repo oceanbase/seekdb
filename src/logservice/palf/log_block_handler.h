@@ -57,10 +57,18 @@ public:
                 int64_t &output_len,
                 offset_t &offset);
 
+  // Gather every fragment into the same aligned buffer and finish alignment
+  // once, so one logical batch is persisted by one pwrite.
+  int align_buf(const LogWriteBuf &write_buf,
+                char *&output,
+                int64_t &output_len,
+                offset_t &offset);
+
   // @brief this function used to truncate 'aligned_data_buf_', move
   // the tail unaligned part to head
   void truncate_buf();
   void reset_buf();
+  bool need_align() const { return need_align_(); }
 
   TO_STRING_KV(K_(buf_write_offset), K_(buf_padding_size), K_(align_size), K_(aligned_buf_size),
       K_(aligned_used_ts), K_(truncate_used_ts));
@@ -160,6 +168,8 @@ private:
   int inner_write_once_(const offset_t offset,
       const char *buf,
       const int64_t buf_len);
+  int inner_write_fragments_(const offset_t offset,
+      const LogWriteBuf &write_buf);
   int inner_writev_once_(const offset_t offset,
       const LogWriteBuf &write_buf);
   int inner_write_impl_(const ObIOFd &io_fd, const char *buf, const int64_t count, const int64_t offset);

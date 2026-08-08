@@ -25,6 +25,7 @@
 #include "palf/palf_handle.h"
 #include "palf/palf_base_info.h"
 #include "palf/palf_iterator.h"
+#include "palf/palf_log_buffer.h"
 
 namespace oceanbase
 {
@@ -157,6 +158,13 @@ public:
                      AppendCb *cb,
                      palf::LSN &lsn,
                      share::SCN &scn) override final;
+
+  int append_owned(palf::PalfLogBuffer &buffer,
+                   const share::SCN &ref_scn,
+                   const bool need_nonblock,
+                   AppendCb *cb,
+                   palf::LSN &lsn,
+                   share::SCN &scn);
 
   // @description: get ref_scn of APPEND mode
   // @return
@@ -337,6 +345,12 @@ private:
               AppendCb *cb,
               palf::LSN &lsn,
               share::SCN &scn);
+  int append_owned_(palf::PalfLogBuffer &buffer,
+                    const share::SCN &ref_scn,
+                    const bool need_nonblock,
+                    AppendCb *cb,
+                    palf::LSN &lsn,
+                    share::SCN &scn);
 
   template<typename StartPoint, typename IteratorType>
   int seek_log_iterator_dispatch_(const StartPoint &start_point,

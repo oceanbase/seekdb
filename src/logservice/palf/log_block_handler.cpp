@@ -89,6 +89,9 @@ int LogDIOAlignedBuf::align_buf(const char *input,
         K(input_len), K(offset));
   } else if (false == need_align_()) {
     PALF_LOG(TRACE, "no need align", K(ret));
+  } else if (buf_write_offset_ + input_len + align_size_ - 1 > aligned_buf_size_) {
+    ret = OB_BUF_NOT_ENOUGH;
+    PALF_LOG(ERROR, "aligned buffer is not enough", K(ret), K(input_len), KPC(this));
   } else {
     int64_t start_ts = ObTimeUtility::fast_current_time();
     memcpy(static_cast<char*>(aligned_data_buf_) + buf_write_offset_, input, input_len);
@@ -99,6 +102,50 @@ int LogDIOAlignedBuf::align_buf(const char *input,
     offset = lower_align(offset, align_size_);
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     aligned_used_ts_ += cost_ts;
+  }
+  return ret;
+}
+
+int LogDIOAlignedBuf::align_buf(const LogWriteBuf &write_buf,
+                                char *&output,
+                                int64_t &output_len,
+                                offset_t &offset)
+{
+  int ret = OB_SUCCESS;
+  const int64_t input_len = write_buf.get_total_size();
+  if (!write_buf.is_valid() || input_len <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (false == need_align_()) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (buf_write_offset_ + input_len + align_size_ - 1 > aligned_buf_size_) {
+    ret = OB_BUF_NOT_ENOUGH;
+    PALF_LOG(ERROR, "aligned buffer is not enough for fragmented write", K(ret),
+        K(input_len), KPC(this), K(write_buf));
+  } else {
+    const int64_t start_ts = ObTimeUtility::fast_current_time();
+    const int64_t buf_cnt = write_buf.get_buf_count();
+    for (int64_t i = 0; OB_SUCC(ret) && i < buf_cnt; ++i) {
+      const char *buf = NULL;
+      int64_t buf_len = 0;
+      bool is_fill = false;
+      char fill_char = 0;
+      if (OB_FAIL(write_buf.get_write_buf(i, buf, buf_len, is_fill, fill_char))) {
+        PALF_LOG(ERROR, "get fragmented write buffer failed", K(ret), K(i), K(write_buf));
+      } else if (is_fill) {
+        MEMSET(aligned_data_buf_ + buf_write_offset_, fill_char, buf_len);
+        buf_write_offset_ += buf_len;
+      } else {
+        MEMCPY(aligned_data_buf_ + buf_write_offset_, buf, buf_len);
+        buf_write_offset_ += buf_len;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      align_buf_();
+      output = aligned_data_buf_;
+      output_len = buf_write_offset_;
+      offset = lower_align(offset, align_size_);
+      aligned_used_ts_ += ObTimeUtility::fast_current_time() - start_ts;
+    }
   }
   return ret;
 }
@@ -415,23 +462,89 @@ int LogBlockHandler::inner_write_once_(const offset_t offset,
   return ret;
 }
 
-int LogBlockHandler::inner_writev_once_(const offset_t offset,
-    const LogWriteBuf &write_buf)
+int LogBlockHandler::inner_write_fragments_(const offset_t offset,
+                                            const LogWriteBuf &write_buf)
 {
   int ret = OB_SUCCESS;
-  int64_t write_size = 0;
   const int64_t write_buf_cnt = write_buf.get_buf_count();
   offset_t curr_write_offset = offset;
   for (int64_t i = 0; OB_SUCC(ret) && i < write_buf_cnt; i++) {
     const char *buf = NULL;
     int64_t buf_len = 0;
-    if (OB_FAIL(write_buf.get_write_buf(i, buf, buf_len))) {
+    bool is_fill = false;
+    char fill_char = 0;
+    if (OB_FAIL(write_buf.get_write_buf(i, buf, buf_len, is_fill, fill_char))) {
       PALF_LOG(ERROR, "LogWriteBuf get_write_buf failed", K(ret), K(i));
-    } else if (OB_FAIL(inner_write_once_(curr_write_offset, buf, buf_len))) {
+    } else if (!is_fill && OB_FAIL(inner_write_once_(curr_write_offset, buf, buf_len))) {
       PALF_LOG(ERROR, "inner_write_once_ failed", K(ret), K(offset));
-    } else {
-      // NB: Advance write offset
+    } else if (is_fill) {
+      char fill_buf[LOG_DIO_ALIGN_SIZE];
+      MEMSET(fill_buf, fill_char, sizeof(fill_buf));
+      int64_t written_size = 0;
+      while (OB_SUCC(ret) && written_size < buf_len) {
+        const int64_t write_size = MIN(buf_len - written_size,
+                                       static_cast<int64_t>(sizeof(fill_buf)));
+        if (OB_FAIL(inner_write_once_(curr_write_offset + written_size,
+                                      fill_buf,
+                                      write_size))) {
+          PALF_LOG(ERROR, "write virtual fill fragment failed", K(ret), K(i),
+              K(curr_write_offset), K(written_size), K(write_size));
+        } else {
+          written_size += write_size;
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
       curr_write_offset += buf_len;
+    }
+  }
+  return ret;
+}
+
+int LogBlockHandler::inner_writev_once_(const offset_t offset,
+    const LogWriteBuf &write_buf)
+{
+  int ret = OB_SUCCESS;
+  const int64_t write_buf_cnt = write_buf.get_buf_count();
+  if (write_buf_cnt <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!dio_aligned_buf_.need_align()) {
+    ret = inner_write_fragments_(offset, write_buf);
+  } else {
+    char *aligned_buf = NULL;
+    int64_t aligned_buf_len = 0;
+    offset_t aligned_block_offset = offset;
+    const int64_t input_len = write_buf.get_total_size();
+    ret = dio_aligned_buf_.align_buf(write_buf, aligned_buf,
+                                     aligned_buf_len, aligned_block_offset);
+    if (OB_BUF_NOT_ENOUGH == ret) {
+      PALF_LOG(WARN, "DIO gather buffer is full, fall back to fragmented writes",
+          K(ret), K(offset), K(write_buf));
+      ret = inner_write_fragments_(offset, write_buf);
+    } else if (OB_FAIL(ret)) {
+      PALF_LOG(ERROR, "gather fragmented write buffer failed", K(ret), K(offset), K(write_buf));
+    } else if (OB_FAIL(inner_write_impl_(io_fd_, aligned_buf, aligned_buf_len,
+                                         aligned_block_offset))) {
+      PALF_LOG(ERROR, "pwrite gathered buffer failed", K(ret), K(offset),
+          K(aligned_block_offset), K(aligned_buf_len));
+    } else {
+      dio_aligned_buf_.truncate_buf();
+      const int64_t total_write_size = ATOMIC_AAF(&total_write_size_, input_len);
+      const int64_t total_write_size_after_dio =
+          ATOMIC_AAF(&total_write_size_after_dio_, aligned_buf_len);
+      const int64_t count = ATOMIC_AAF(&count_, 1);
+      const int64_t ob_pwrite_used_ts = ATOMIC_LOAD(&ob_pwrite_used_ts_);
+      if (palf_reach_time_interval(PALF_IO_STAT_PRINT_INTERVAL_US, trace_time_)) {
+        const int64_t each_pwrite_cost = ob_pwrite_used_ts / count;
+        PALF_LOG(INFO, "[PALF STAT WRITE LOG INFO TO DISK]", K(ret), K(offset), KPC(this),
+            K(aligned_buf_len), K(aligned_block_offset), "buf_len", input_len,
+            K(total_write_size), K(total_write_size_after_dio), K(ob_pwrite_used_ts),
+            K(count), K(each_pwrite_cost));
+        ATOMIC_STORE(&total_write_size_, 0);
+        ATOMIC_STORE(&total_write_size_after_dio_, 0);
+        ATOMIC_STORE(&count_, 0);
+        ATOMIC_STORE(&ob_pwrite_used_ts_, 0);
+      }
     }
   }
   return ret;

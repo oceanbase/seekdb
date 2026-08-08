@@ -99,6 +99,35 @@ int LogGroupEntryHeader::generate(const bool is_padding_log,
   return ret;
 }
 
+int LogGroupEntryHeader::generate(const bool is_padding_log,
+                                  const int64_t data_len,
+                                  const SCN &max_scn,
+                                  const int64_t log_id,
+                                  const LSN &committed_end_lsn,
+                                  const int64_t data_checksum)
+{
+  int ret = OB_SUCCESS;
+  if (data_len <= 0 || false == max_scn.is_valid()
+      || false == is_valid_log_id(log_id)
+      || false == committed_end_lsn.is_valid()
+      || (is_padding_log && PADDING_LOG_DATA_CHECKSUM != data_checksum)) {
+    ret = OB_INVALID_ARGUMENT;
+    PALF_LOG(ERROR, "Invalid arguments", K(ret), K(is_padding_log), K(data_len),
+        K(max_scn), K(log_id), K(committed_end_lsn), K(data_checksum));
+  } else {
+    magic_ = LogGroupEntryHeader::MAGIC;
+    version_ = LOG_GROUP_ENTRY_HEADER_VERSION;
+    group_size_ = static_cast<int32_t>(data_len);
+    max_scn_ = max_scn;
+    log_id_ = log_id;
+    committed_end_lsn_ = committed_end_lsn;
+    if (is_padding_log) {
+      flag_ = (flag_ | PADDING_TYPE_MASK);
+    }
+  }
+  return ret;
+}
+
 int LogGroupEntryHeader::calculate_log_checksum_(const bool is_padding_log,
                                                  const LogWriteBuf &log_write_buf,
                                                  const int64_t data_len,

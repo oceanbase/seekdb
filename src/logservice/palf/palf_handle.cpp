@@ -78,6 +78,18 @@ int PalfHandle::append(const PalfAppendOptions &opts,
   return ret;
 }
 
+int PalfHandle::append(const PalfAppendOptions &opts,
+                       PalfLogBuffer &buffer,
+                       const SCN &ref_scn,
+                       LSN &lsn,
+                       SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  CHECK_VALID;
+  ret = palf_handle_impl_->submit_log(opts, buffer, ref_scn, lsn, scn);
+  return ret;
+}
+
 int PalfHandle::seek(const LSN &lsn, PalfBufferIterator &iter)
 {
   CHECK_VALID;

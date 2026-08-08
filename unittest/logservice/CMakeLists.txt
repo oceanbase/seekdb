@@ -5,6 +5,7 @@ endfunction()
 
 log_unittest(test_log_checksum)
 log_unittest(test_log_entry_and_group_entry)
+log_unittest(test_palf_log_buffer)
 log_unittest(test_lsn)
 log_unittest(test_log_meta_entry_header)
 log_unittest(test_log_meta_info)

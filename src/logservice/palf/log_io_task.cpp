@@ -149,7 +149,8 @@ int LogIOTask::push_task_into_cb_thread_pool_(LogIOTaskCbThreadPool *cb_thread_p
 }
 
 LogIOFlushLogTask::LogIOFlushLogTask(const int64_t palf_epoch)
-	: LogIOTask(palf_epoch), flush_log_cb_ctx_(), write_buf_(), is_inited_(false)
+	: LogIOTask(palf_epoch), flush_log_cb_ctx_(), write_buf_(), group_write_buf_(),
+    io_size_(0), is_inited_(false)
 {}
 
 LogIOFlushLogTask::~LogIOFlushLogTask()
@@ -170,10 +171,53 @@ int LogIOFlushLogTask::init(const FlushLogCbCtx &flush_log_cb_ctx,
   } else {
     flush_log_cb_ctx_ = flush_log_cb_ctx;
     write_buf_ = write_buf;
+    io_size_ = write_buf.get_total_size();
     is_inited_ = true;
     PALF_LOG(TRACE, "LogIOFlushLogTask init success", K(ret), K(flush_log_cb_ctx_), K(write_buf_));
   }
   return ret;
+}
+
+int LogIOFlushLogTask::init(const FlushLogCbCtx &flush_log_cb_ctx,
+                            LogGroupWriteBuf &group_write_buf)
+{
+  int ret = OB_SUCCESS;
+  if (IS_INIT) {
+    ret = OB_INIT_TWICE;
+  } else if (false == flush_log_cb_ctx.is_valid() || !group_write_buf.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(group_write_buf_.move_from(group_write_buf))) {
+    PALF_LOG(WARN, "move group write buffer failed", K(ret));
+  } else if (OB_FAIL(group_write_buf_.build_write_buf(write_buf_))) {
+    PALF_LOG(WARN, "build fragmented write buffer failed", K(ret), K_(group_write_buf));
+  } else {
+    flush_log_cb_ctx_ = flush_log_cb_ctx;
+    io_size_ = write_buf_.get_total_size();
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+int LogIOFlushLogTask::move_group_write_buf_to(LogGroupWriteBuf &group_write_buf)
+{
+  int ret = OB_SUCCESS;
+  if (!group_write_buf_.is_valid()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(group_write_buf.move_from(group_write_buf_))) {
+    PALF_LOG(WARN, "restore group write buffer failed", K(ret));
+  } else {
+    write_buf_.reset();
+    io_size_ = 0;
+    is_inited_ = false;
+    flush_log_cb_ctx_.reset();
+  }
+  return ret;
+}
+
+void LogIOFlushLogTask::release_payload_after_write()
+{
+  group_write_buf_.reset();
+  write_buf_.reset();
 }
 
 void LogIOFlushLogTask::destroy()
@@ -181,6 +225,8 @@ void LogIOFlushLogTask::destroy()
   if (IS_INIT) {
     is_inited_ = false;
     write_buf_.reset();
+    group_write_buf_.reset();
+    io_size_ = 0;
     flush_log_cb_ctx_.reset();
     PALF_LOG(TRACE, "LogIOFlushLogTask destroy", KP(this));
   }
@@ -197,6 +243,7 @@ int LogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPalfHand
                  flush_log_cb_ctx_.lsn_, write_buf_, flush_log_cb_ctx_.scn_))) {
     PALF_LOG(ERROR, "LogEngine pwrite failed", K(ret), K(write_buf_));
     // Advance reuse lsn for group_buffer firstly, then callback asynchronous.
+  } else if (FALSE_IT(release_payload_after_write())) {
   } else if (OB_FAIL(guard.get_palf_handle_impl()->advance_reuse_lsn(flush_log_end_lsn))) {
     PALF_LOG(ERROR, "advance_reuse_lsn failed", K(ret), K(flush_log_end_lsn), K_(flush_log_cb_ctx));
   } else if (OB_FAIL(push_task_into_cb_thread_pool_(cb_thread_pool, this))) {
@@ -228,7 +275,7 @@ void LogIOFlushLogTask::free_this_(IPalfEnvImpl *palf_env_impl)
 
 int64_t LogIOFlushLogTask::get_io_size_() const
 {
-  return write_buf_.get_total_size();
+  return io_size_;
 }
 
 LogIOFlushMetaTask::LogIOFlushMetaTask(const int64_t palf_epoch) :
@@ -381,7 +428,11 @@ void LogIOTruncatePrefixBlocksTask::free_this_(IPalfEnvImpl *palf_env_impl)
   palf_env_impl->get_log_allocator()->free_log_io_truncate_prefix_blocks_task(this);
 }
 
-int64_t BatchLogIOFlushLogTask::SINGLE_TASK_MAX_SIZE = MAX_LOG_BUFFER_SIZE;
+// Leave one alignment unit for the unaligned tail retained by LogDIOAlignedBuf.
+// A larger single group is still written normally; it is simply not reduced
+// into a multi-group batch.
+int64_t BatchLogIOFlushLogTask::SINGLE_TASK_MAX_SIZE =
+    MAX_LOG_BUFFER_SIZE - LOG_DIO_ALIGN_SIZE;
 
 BatchLogIOFlushLogTask::BatchLogIOFlushLogTask()
     : io_task_array_(),
@@ -447,11 +498,14 @@ void BatchLogIOFlushLogTask::destroy()
 int BatchLogIOFlushLogTask::push_back(LogIOFlushLogTask *task)
 {
   int ret = OB_SUCCESS;
-  const int64_t task_size = task->get_io_size_();
+  const int64_t task_size = NULL == task ? 0 : task->get_io_size_();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOFlushMetaTask not inited!!!", K(ret), KPC(this));
-  } else if (accum_size_ > SINGLE_TASK_MAX_SIZE) {
+  } else if (NULL == task || task_size <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (task_size > SINGLE_TASK_MAX_SIZE
+      || accum_size_ > SINGLE_TASK_MAX_SIZE - task_size) {
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_FAIL(io_task_array_.push_back(task))) {
     PALF_LOG(WARN, "push failed", K(ret));
@@ -553,11 +607,17 @@ int BatchLogIOFlushLogTask::do_task_(LogIOTaskCbThreadPool *cb_thread_pool, IPal
       if (OB_FAIL(guard.get_palf_handle_impl()->inner_append_log(lsn_array_, log_write_buf_array_,
                                                                  scn_array_))) {
         PALF_LOG(ERROR, "inner_append_log failed", K(ret), KPC(this));
-      } else if (OB_FAIL(guard.get_palf_handle_impl()->advance_reuse_lsn(flushed_log_end_lsn))) {
-        PALF_LOG(ERROR, "advance_reuse_lsn failed", K(ret), K(flushed_log_end_lsn));
-      } else if (OB_FAIL(push_flush_cb_to_thread_pool_(cb_thread_pool, palf_env_impl))) {
-        PALF_LOG(ERROR, "push_flush_cb_to_thread_pool_ failed", K(ret), KPC(this));
       } else {
+        for (int64_t i = 0; i < io_task_array_.count(); ++i) {
+          if (NULL != io_task_array_[i]) {
+            io_task_array_[i]->release_payload_after_write();
+          }
+        }
+        if (OB_FAIL(guard.get_palf_handle_impl()->advance_reuse_lsn(flushed_log_end_lsn))) {
+          PALF_LOG(ERROR, "advance_reuse_lsn failed", K(ret), K(flushed_log_end_lsn));
+        } else if (OB_FAIL(push_flush_cb_to_thread_pool_(cb_thread_pool, palf_env_impl))) {
+          PALF_LOG(ERROR, "push_flush_cb_to_thread_pool_ failed", K(ret), KPC(this));
+        }
       }
     }
   }

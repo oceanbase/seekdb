@@ -49,6 +49,14 @@ public:
                const int64_t log_id,
                const LSN &committed_end_lsn,
                int64_t &data_checksum);
+  // Generate a group header when the caller has already calculated the
+  // checksum by walking immutable segments in LSN order.
+  int generate(const bool is_padding_log,
+               const int64_t data_len,
+               const share::SCN &max_scn,
+               const int64_t log_id,
+               const LSN &committed_end_lsn,
+               const int64_t data_checksum);
   bool is_valid() const;
   void reset();
   LogGroupEntryHeader& operator=(const LogGroupEntryHeader &header);
