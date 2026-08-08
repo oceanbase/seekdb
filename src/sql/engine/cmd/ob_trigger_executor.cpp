@@ -139,7 +139,6 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
   const ObTriggerInfo *trigger_info = NULL;
   if (OB_FAIL(schema_guard.get_trigger_info( arg.trigger_info_.get_database_id(),
                                             trigger_name, trigger_info))) {
-    LOG_WARN("failed to get trigger info", K(ret));
   } else if (NULL == trigger_info) {
     ret = OB_ERR_TRIGGER_NOT_EXIST;
     LOG_WARN("trigger not exist", K(db_name), K(trigger_name), K(ret));
@@ -147,7 +146,6 @@ int ObCreateTriggerExecutor::analyze_dependencies(ObSchemaGetterGuard &schema_gu
     if (OB_FAIL(ObTriggerResolver::analyze_trigger(schema_guard, session_info, plan_cache,
                                                    pl_sql_runtime, pl_engine, sql_proxy,
                                                    allocator, *trigger_info, db_name, arg.dependency_infos_))) {
-      LOG_WARN("analyze trigger failed", K(trigger_info), K(db_name), K(ret));
     }
     if (OB_FAIL(ret) && ret != OB_ERR_UNEXPECTED) {
         LOG_USER_WARN(OB_ERR_TRIGGER_COMPILE_ERROR, "TRIGGER",

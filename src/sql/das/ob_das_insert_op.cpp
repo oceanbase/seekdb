@@ -155,7 +155,6 @@ int ObDASInsertOp::insert_index_with_fetch(data_plane::ObDmlExecution &execution
           write_context,
           execution,
           das_snapshot_opt_info_.use_specify_snapshot_))) {
-    LOG_WARN("init index dml param failed", K(ret), KPC(ins_ctdef), KPC(ins_rtdef));
   } else if (OB_FAIL(as->insert_rows_fetch_duplicates(
           tablet_id,
           *trans_desc_,
@@ -177,7 +176,6 @@ int ObDASInsertOp::insert_index_with_fetch(data_plane::ObDmlExecution &execution
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("duplicated_row is null", K(ret));
       } else if (OB_FAIL(result_iter->get_duplicated_iter_array().push_back(duplicated_rows))) {
-        LOG_WARN("fail to push duplicated_row iter", K(ret));
       } else {
         is_duplicated_ = true;
       }
@@ -219,10 +217,8 @@ int ObDASInsertOp::insert_row_with_fetch()
                                               das_snapshot_opt_info_.isolation_level_,
                                               THIS_WORKER.get_timeout_ts(),
                                               *das_snapshot_opt_info_.get_response_snapshot()))) {
-      LOG_WARN("fail to get read snapshot", K(ret), K(THIS_WORKER.get_timeout_ts()));
     } else {
       snapshot = das_snapshot_opt_info_.get_response_snapshot();
-      LOG_TRACE("succ get read snapshot", K(tablet_id_), KPC(snapshot));
     }
   }
 
@@ -238,7 +234,6 @@ int ObDASInsertOp::insert_row_with_fetch()
           write_branch_id_,
           write_flag,
           write_context))) {
-    LOG_WARN("fail to acquire write context", K(ret));
   } else if (OB_ISNULL(buf = op_alloc_.alloc(sizeof(ObDASConflictIterator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ObDASConflictIterator", K(ret));
@@ -261,7 +256,6 @@ int ObDASInsertOp::insert_row_with_fetch()
                                              &ins_ctdef_->table_rowkey_cids_,
                                              tablet_id_,
                                              snapshot))) {
-    LOG_WARN("fail to insert primary table", K(ret));
   }
 
   // 2. insert unique index
@@ -274,7 +268,6 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (!is_local_unique_index) {
       // insert it later
     } else if (OB_FAIL(dml_iter.rewind(index_ins_ctdef, nullptr/*fts_doc_word_info*/))) {
-      LOG_WARN("rewind dml iter failed", K(ret));
     } else if (OB_FAIL(insert_index_with_fetch(execution,
                                                as,
                                                dml_iter,
@@ -285,7 +278,6 @@ int ObDASInsertOp::insert_row_with_fetch()
                                                &ins_ctdef_->table_rowkey_cids_,
                                                index_tablet_id,
                                                snapshot))) {
-      LOG_WARN("fail to insert local unique index", K(ret), K(index_ins_ctdef->table_param_.get_data_table()));
     }
   }
 
@@ -298,9 +290,7 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (is_local_unique_index) {
       // insert it before
     } else if (is_duplicated_) {
-      LOG_TRACE("is duplicated before, not need write non_unique index");
     } else if (OB_FAIL(dml_iter.rewind(index_ins_ctdef, nullptr/*fts_doc_word_info*/))) {
-      LOG_WARN("rewind dml iter failed", K(ret));
     } else {
       if (OB_FAIL(insert_index_with_fetch(execution,
                                           as,
@@ -312,8 +302,6 @@ int ObDASInsertOp::insert_row_with_fetch()
                                           &(index_ins_ctdef->column_ids_),
                                           index_tablet_id,
                                           snapshot))) {
-        // For non-unique local index, there should be no primary key conflict.
-        LOG_WARN("fail to insert non_unique index", K(ret), K(index_ins_ctdef->table_param_.get_data_table()));
       }
     }
   }
@@ -376,7 +364,6 @@ int ObDASInsertOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(insert_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to insert buffer failed", K(ret), K(row), K(insert_buffer_));
   }
   return ret;
 }
@@ -407,7 +394,6 @@ int ObDASConflictIterator::get_next_row(ObDatumRow *&row)
     }
     if (curr_iter_ == duplicated_iter_list_.end()) {
       ret = OB_ITER_END;
-      LOG_DEBUG("fetch conflict row iterator end");
     } else {
       blocksstable::ObDatumRowIterator *dup_row_iter = *curr_iter_;
       if (OB_ISNULL(dup_row_iter)) {
@@ -423,7 +409,6 @@ int ObDASConflictIterator::get_next_row(ObDatumRow *&row)
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), KP(dup_row));
       } else {
-        LOG_DEBUG("get one duplicate key", KPC(dup_row));
       }
     }
   } while (OB_SUCC(ret) && find_next_iter);

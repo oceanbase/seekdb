@@ -74,7 +74,6 @@ int ObMPBase::response(const int retcode)
   int ret = OB_SUCCESS;
   if (!THIS_WORKER.need_retry()) {
     if (OB_FAIL(flush_buffer(true))) {
-      LOG_WARN("failed to flush_buffer", K(ret));
     }
   }
   return ret;
@@ -158,7 +157,6 @@ int ObMPBase::handoff_async_request(ObSqlEndTransCb &end_trans_cb)
       LOG_ERROR("failed to hand off async mysql request ownership", K(ret));
       const int abort_ret = end_trans_cb.abort_request_handoff();
       if (OB_SUCCESS != abort_ret) {
-        LOG_ERROR("failed to abort async mysql request handoff", K(abort_ret), K(ret));
       } else {
         // The main sender still owns the request. Let response() finish it,
         // then cleanup() can safely release the callback's session lease.
@@ -233,11 +231,9 @@ int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_sche
     const ObSysVarSchema *sysvar = NULL;
     sysvar = sys_variable_schema.get_sysvar_schema(i);
     if (sysvar != NULL) {
-      LOG_DEBUG("load system variable", K(*sysvar));
       if (OB_FAIL(session.load_sys_variable(calc_buf, sysvar->get_name(), sysvar->get_data_type(),
                                             sysvar->get_value(), sysvar->get_min_val(),
                                             sysvar->get_max_val(), sysvar->get_flags(), true))) {
-        LOG_WARN("load sys variable failed", K(ret), K(*sysvar));
       }
     }
   }
@@ -245,9 +241,7 @@ int ObMPBase::load_system_variables(const ObSysVariableSchema &sys_variable_sche
     //Set the maximum version number of the system variable
     //Serialize and cache the system variable sequence that affects the plan
     if (OB_FAIL(session.gen_sys_var_in_pc_str())) {
-      LOG_WARN("fail to gen sys var in pc str", K(ret));
     } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
-      LOG_WARN("fail to gen configs in pc string", K(ret));
     } else {
       session.set_global_vars_version(sys_variable_schema.get_schema_version());
       session.set_enable_mysql_compatible_dates(
@@ -275,9 +269,7 @@ int ObMPBase::create_session(ObSMConnection *conn, ObSQLSessionInfo *&sess_info)
     LOG_ERROR("get connection fail", K(ret));
   } else {
     if (OB_FAIL(OBSERVER.get_sql_session_mgr().create_session(conn, sess_info))) {
-      LOG_WARN("create session fail", "sessid", conn->sessid_, K(ret));
     } else {
-      LOG_DEBUG("create session successfully", "sessid", conn->sessid_);
       conn->is_sess_alloc_.store(true, std::memory_order_release);
       sess_info->set_user_session();
       sess_info->set_shadow(false);
@@ -300,7 +292,6 @@ int ObMPBase::free_session()
     ctx.sessid_ = conn->sessid_;
     ctx.has_inc_active_num_ = conn->has_inc_active_num_;
     if (OB_FAIL(OBSERVER.get_sql_session_mgr().free_session(ctx))) {
-      LOG_WARN("fail to free session", K(ctx), K(ret));
     } else {
       LOG_INFO("free session successfully", K(ctx));
       conn->is_sess_free_.store(true, std::memory_order_release);
@@ -333,7 +324,6 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     if (debug_sync_timeout > 0) {
       int tmp_ret = GDS.set_thread_local_actions(session.get_debug_sync_actions());
       if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
-        LOG_WARN("set session debug sync actions to thread local actions failed", K(tmp_ret));
       }
     }
     // construct sql context
@@ -398,7 +388,6 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
     bool need_revert_session = false;
     if (NULL == session_info) {
       if (OB_FAIL(get_session(session_info))) {
-        LOG_WARN("get session failed");
       } else if (OB_ISNULL(session_info)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid session info", K(ret), K(session_info));
@@ -408,12 +397,10 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-        LOG_WARN("fail to get runtime refreshed schema version", K(ret));
       } else if (FALSE_IT(last_version = session_info->get_last_ddl_schema_version())) {
       } else if (local_version >= last_version) {
         // skip
       } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-        LOG_WARN("failed to refresh schema", K(ret), K(last_version));
       }
       if (need_revert_session && OB_LIKELY(NULL != session_info)) {
         revert_session(session_info);
@@ -438,8 +425,7 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
   if (OB_ISNULL(fields) || row.get_count() != fields->count()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fields is null", K(ret), KP(fields));
-  } else if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) { 
-    LOG_WARN("deep copy row fail.", K(ret));
+  } else if (OB_FAIL(ob_write_row(allocator, row, tmp_row))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
       ObObj &value = tmp_row.get_cell(i); 
@@ -454,15 +440,12 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
                                           cast_ctx,
                                           value,
                                           value))) {
-          LOG_WARN("failed to cast object", K(ret), K(value), K(i),
-                    K(value.get_type()), K(fields->at(i).type_.get_type()));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_packed) {
         // do nothing
       } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
-        LOG_WARN("fail to get result charset", K(ret));
       } else {
         if (ob_is_string_tc(value.get_type())
             && CS_TYPE_INVALID != value.get_collation_type()
@@ -477,7 +460,6 @@ int ObMPBase::response_row(ObSQLSessionInfo &session,
                                     &allocator,
                                     &session,
                                     exec_ctx))) {
-          LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((value.is_collection_sql_type() || value.is_geometry())
                    && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value,
                                     &allocator,
@@ -511,13 +493,9 @@ int ObMPBase::update_charset_sys_vars(ObSMConnection &conn, ObSQLSessionInfo &se
   int64_t cs_type = conn.client_cs_type_;
   if (ObCharset::is_valid_collation(cs_type)) {
     if (OB_FAIL(sess_info.update_sys_variable(SYS_VAR_CHARACTER_SET_CLIENT, cs_type))) {
-      SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
     } else if (OB_FAIL(sess_info.update_sys_variable(SYS_VAR_CHARACTER_SET_RESULTS, cs_type))) {
-      SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
     } else if (OB_FAIL(sess_info.update_sys_variable(SYS_VAR_CHARACTER_SET_CONNECTION, cs_type))) {
-      SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
     } else if (OB_FAIL(sess_info.update_sys_variable(SYS_VAR_COLLATION_CONNECTION, cs_type))) {
-      SQL_ENG_LOG(WARN, "failed to update sys var", K(ret));
     }
   }
   return ret;
@@ -537,7 +515,6 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
     LOG_ERROR("null conn", K(ret));
   } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
                                   schema_guard))) {
-    OB_LOG(WARN,"fail get schema guard", K(ret));
   } else {
     share::schema::ObUserLoginInfo login_info = session->get_login_info();
     share::schema::ObSessionPrivInfo session_priv;
@@ -545,15 +522,12 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
     // disconnect previous user connection first.
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(session->on_user_disconnect())) {
-      LOG_WARN("user disconnect failed", K(ret));
     }
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
                 enable_role_id_array, NULL, user_info))) {
-      OB_LOG(WARN, "User access denied", K(login_info), K(ret));
     } else if (OB_FAIL(session->on_user_connect(session_priv, user_info))) {
-      OB_LOG(WARN, "user connect failed", K(ret), K(session_priv));
     } else {
       uint64_t db_id = OB_INVALID_ID;
       const ObSysVariableSchema *sys_variable_schema = NULL;
@@ -562,24 +536,18 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
       session->set_db_priv_set(session_priv.db_priv_set_);
       session->set_enable_role_array(enable_role_id_array);
       if (OB_FAIL(session->set_runtime(login_info.runtime_name_))) {
-        OB_LOG(WARN, "fail to set runtime", "runtime name", login_info.runtime_name_, K(ret));
       } else if (OB_FAIL(session->set_real_client_ip_and_port(login_info.client_ip_, session->get_client_addr_port()))) {
-          LOG_WARN("failed to set_real_client_ip", K(ret));
       } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
-        LOG_WARN("get sys variable schema failed", K(ret));
       } else if (OB_ISNULL(sys_variable_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sys variable schema is null", K(ret));
       } else if (OB_FAIL(session->load_all_sys_vars(*sys_variable_schema, true))) {
-        LOG_WARN("load system variables failed", K(ret));
       } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
-        OB_LOG(WARN, "failed to update database variables", K(ret));
       } else if (!session->get_database_name().empty() &&
                   OB_FAIL(schema_guard.get_database_id(session->get_database_name(),
                                                       db_id))) {
         OB_LOG(WARN, "failed to get database id", K(ret));
       } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
-        LOG_WARN("fail to update charset sys vars", K(ret));
       } else {
         session->set_database_id(db_id);
         session->reset_user_var();

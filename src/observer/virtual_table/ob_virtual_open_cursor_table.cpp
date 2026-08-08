@@ -61,8 +61,7 @@ int ObVirtualOpenCursorTable::set_addr(const common::ObAddr &addr)
     ret = OB_ERR_UNEXPECTED;		
   } else {		
     ObString ipstr = ObString::make_string(ipbuf);		
-    if (OB_FAIL(ob_write_string(*allocator_, ipstr, ipstr_))) {		
-      SERVER_LOG(WARN, "failed to write string", K(ret));		
+    if (OB_FAIL(ob_write_string(*allocator_, ipstr, ipstr_))) {
     }		
     port_ = addr.get_port();		
   }		
@@ -85,9 +84,7 @@ int ObVirtualOpenCursorTable::inner_get_next_row(ObNewRow *&row)
                                      schema_guard_,
                                      ipstr_,
                                      port_))) {
-        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
       } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -192,21 +189,18 @@ int ObVirtualOpenCursorTable::FillScanner::get_session_cursor_sql_text(ObSQLSess
       ObPsStmtInfoGuard guard;
       ObPsStmtInfo *ps_info = NULL;
       if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
-        SERVER_LOG(WARN,"get stmt info guard failed", K(ret), K(cursor_id), K(inner_stmt_id));
       } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN,"get stmt info is null", K(ret));
       } else {
         ObString sql = ps_info->get_ps_sql();
         if (OB_FAIL(ob_write_string(*allocator_, ObString(min(sql.length(), 60), sql.ptr()), sql_text))) {
-          SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(sql));
         }
       }
     }
   } else {
     ObString sql = cursor->get_non_session_sql_text();
     if (OB_FAIL(ob_write_string(*allocator_, ObString(min(sql.length(), 60), sql.ptr()), sql_text))) {
-      SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(sql));
     }
   }
   return ret;
@@ -219,7 +213,6 @@ int ObVirtualOpenCursorTable::FillScanner::get_non_session_cursor_sql_text(ObSQL
   int ret = OB_SUCCESS;
   ObString sql = cursor->get_non_session_sql_text();
   if (OB_FAIL(ob_write_string(*allocator_, ObString(min(sql.length(), 60), sql.ptr()), sql_text))) {
-    SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(sql));
   }
   return ret;
 }
@@ -461,7 +454,6 @@ int ObVirtualOpenCursorTable::FillScanner::init(ObIAllocator *allocator,
     SERVER_LOG(WARN,
                "some parameter is NULL", K(ret), K(allocator), K(scanner), K(cur_row), K(session_info));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
-    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else {
     allocator_ = allocator;
     scanner_ = scanner;

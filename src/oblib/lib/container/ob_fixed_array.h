@@ -68,7 +68,6 @@ public:
     if (OB_UNLIKELY(NULL == data_)) {
       if (capacity_ > 0) {
         if (OB_FAIL(reserve(capacity_))) {
-          OB_LOG(WARN, "fail to reserve array", K(ret));
         }
       } else {
         ret = OB_NOT_INIT;
@@ -82,14 +81,12 @@ public:
       if (OB_LIKELY(count_ >= init_cnt_)) {
         // current position not inited
         if (OB_FAIL(construct_assign(data_[count_], obj))) {
-          OB_LOG(WARN, "failed to copy data", K(ret));
         } else {
           count_++;
           init_cnt_ = static_cast<uint32_t>(count_);
         }
       } else {
         if (OB_FAIL(copy_assign(data_[count_], obj))) {
-          OB_LOG(WARN, "failed to copy data", K(ret));
         } else {
           count_++;
         }
@@ -112,7 +109,6 @@ public:
       ret = OB_ENTRY_NOT_EXIST;
     } else {
       if (OB_FAIL(copy_assign(obj, data_[--count_]))) {
-        OB_LOG(WARN, "failed to copy data", K(ret));
       }
     }
     return ret;
@@ -127,7 +123,6 @@ public:
       ret = OB_ARRAY_OUT_OF_RANGE;
     } else {
       if (OB_FAIL(copy_assign(obj, data_[idx]))) {
-        OB_LOG(WARN, "failed to copy obj", K(ret));
       }
     }
     return ret;
@@ -144,7 +139,6 @@ public:
   inline void destroy()
   {
     if (OB_ISNULL(allocator_)) {
-      OB_LOG(DEBUG, "fail to destory fixed array", K(allocator_));
     } else {
       if (NULL != data_) {
         for (uint32_t i = 0; i < init_cnt_; ++i) {
@@ -170,7 +164,6 @@ public:
       OB_LOG(WARN, "invalid argument", K(ret), K(capacity));
     } else if (NULL == data_) {
       if (OB_FAIL(init(capacity))) {
-        OB_LOG(WARN, "fail to init array", K(ret), K(capacity));
       }
     } else {}
     if (OB_SUCC(ret) && capacity > capacity_) {
@@ -225,14 +218,12 @@ public:
       if (OB_LIKELY(NULL == data_) && OB_LIKELY(other_cnt > 0)) {
         //need init capacity
         if (OB_FAIL(init(other_cnt))) {
-          LIB_LOG(WARN, "init capacity failed", K(other_cnt));
         }
       } else {
         clear();
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < other_cnt; ++i) {
         if (OB_FAIL(push_back(other.at(i)))) {
-          LIB_LOG(WARN, "push back other element failed", K(ret), K(i));
         }
       }
     }
@@ -246,7 +237,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "fail to preprare allocate array", K(ret), K(capacity));
     } else if (OB_FAIL(reserve(capacity))) {
-      OB_LOG(WARN, "fail to reserver array", K(ret), K(capacity));
     }
     if (OB_SUCC(ret)) {
       for (int64_t i = init_cnt_; i < capacity; i++) {
@@ -315,7 +305,6 @@ private:
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "fail to preprare allocate array", K(ret), K(capacity));
     } else if (OB_FAIL(reserve(capacity))) {
-      OB_LOG(WARN, "fail to reserver array", K(ret), K(capacity));
     }
     if (OB_SUCC(ret)) {
       for (int64_t i = init_cnt_; i < capacity; i++) {

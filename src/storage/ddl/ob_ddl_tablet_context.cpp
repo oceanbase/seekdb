@@ -56,7 +56,6 @@ int ObDDLTabletContext::MergeCtx::init(const ObDirectLoadType direct_load_type)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(ObIDDLMergeHelper::get_merge_helper(arena_, direct_load_type, merge_helper_))) {
-    LOG_WARN("failed to get merge helper", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -100,7 +99,6 @@ int ObDDLSlice::init(const ObTabletID &tablet_id, const int64_t slice_idx)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx));
   } else if (OB_FAIL(chunk_queue_.init(queue_cap, "DDL_ChunkQueue"))) {
-    LOG_WARN("init chunk queue failed", K(ret));
   } else {
     tablet_id_ = tablet_id;
     slice_idx_ = slice_idx;
@@ -179,7 +177,6 @@ int init_tablet_param(ObTablet *tablet, ObStorageSchema *storage_schema, const O
     tablet_param.is_micro_index_clustered_ = tablet_meta.micro_index_clustered_;
     tablet_param.storage_schema_ = storage_schema;
     if (OB_FAIL(tablet->get_ddl_kv_mgr(ddl_kv_mgr_handle, true /*try_create]*/))) {
-      LOG_WARN("failed to create ddl kv mgr", K(ret));
     }
   }
   return ret;
@@ -207,41 +204,30 @@ int ObDDLTabletContext::init(
     lob_read_service_ = &lob_read_service;
     bucket_count_ = ddl_thread_count * 2;
     if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
-      LOG_WARN("create slice map failed", K(ret), K(bucket_count_));
     } else if (OB_FAIL(bucket_lock_.init(bucket_count_))) {
-      LOG_WARN("init bucket lock failed", K(ret), K(bucket_count_));
     } else {
       ObLS *ls = nullptr;
       ObTabletHandle tablet_handle;
       ObTabletBindingMdsUserData mds_data;
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-        LOG_WARN("get ls failed", K(ret));
       } else if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, tablet_id, tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-        LOG_WARN("ddl get tablet failed", K(ret), K(ls), K(tablet_id));
       } else if (OB_FAIL(init_tablet_param(tablet_handle.get_obj(), ddl_table_schema.storage_schema_, direct_load_type, arena_, tablet_param_))) {
-        LOG_WARN("init tablet param failed", K(ret));
       } else if (OB_FAIL(merge_ctx_.init(direct_load_type))) {
-        LOG_WARN("failed to init merge ctx", K(ret));
       }
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_ddl_data(share::SCN::max_scn(), mds_data))) {
-        LOG_WARN("failed to get ddl data from tablet", K(ret), K(tablet_id));
       } else if (mds_data.lob_meta_tablet_id_.is_valid()) {
         lob_meta_tablet_id_ = mds_data.lob_meta_tablet_id_;
         ObTabletHandle lob_meta_tablet_handle;
         if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, lob_meta_tablet_id_, lob_meta_tablet_handle, ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-          LOG_WARN("ddl get tablet failed", K(ret), K(ls), KPC(this));
         } else if (OB_FAIL(init_tablet_param(lob_meta_tablet_handle.get_obj(), ddl_table_schema.lob_meta_storage_schema_, direct_load_type, arena_, lob_meta_tablet_param_))) {
-          LOG_WARN("init lob meta tablet param failed", K(ret));
         } else if (OB_FAIL(lob_merge_ctx_.init(direct_load_type))) {
-          LOG_WARN("failed to init merge ctx", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(init_vector_index_context(snapshot_version, ddl_table_schema))) {
-        LOG_WARN("init vector index context failed", K(ret));
       } else {
         is_inited_ = true;
         LOG_INFO("[CS-Replica] init tablet context", K(tablet_id), K(direct_load_type), K(tablet_param_));
@@ -262,7 +248,6 @@ int ObDDLTabletContext::init_vector_index_context(const int64_t snapshot_version
     } else {
       vector_index_ctx_ = new (buf) ObVectorIndexTabletContext();
       if (OB_FAIL(vector_index_ctx_->init(tablet_id_, tablet_param_.storage_schema_->get_index_type(), snapshot_version, ddl_table_schema))) {
-        LOG_WARN("init vector index ctx failed", K(ret));
       }
     }
   }
@@ -351,9 +336,7 @@ int ObDDLTabletContext::get_or_create_slice(const int64_t slice_idx, ObDDLSlice 
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(tmp_slice->init(tablet_id_, slice_idx))) {
-        LOG_WARN("init slice failed", K(ret));
       } else if (OB_FAIL(slice_map_.set_refactored(slice_idx, tmp_slice))) {
-        LOG_WARN("add slice to map failed", K(ret));
       } else {
         ddl_slice = tmp_slice;
         is_new_slice = true;
@@ -381,7 +364,6 @@ int ObDDLTabletContext::remove_slice(const int64_t slice_idx)
     ObDDLSlice *ddl_slice = nullptr;
     ObBucketWLockGuard guard(bucket_lock_, slice_idx % bucket_count_);
     if (OB_FAIL(slice_map_.erase_refactored(slice_idx, &ddl_slice))) {
-      LOG_WARN("erase slice failed", K(ret));
     } else if (OB_ISNULL(ddl_slice)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl slice is null", K(ret), KP(ddl_slice));
@@ -401,7 +383,6 @@ int ObDDLTabletContext::get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_FAIL(ddl_slices.reserve(slice_map_.size()))) {
-    LOG_WARN("reserve slice array failed", K(ret));
   } else {
     SLICE_MAP::iterator slice_iter = slice_map_.begin();
     for (; slice_iter != slice_map_.end(); ++slice_iter) {
@@ -410,7 +391,6 @@ int ObDDLTabletContext::get_all_slices(ObIArray<ObDDLSlice *> &ddl_slices)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl slice is null", K(ret), K(ddl_slice));
       } else if (OB_FAIL(ddl_slices.push_back(ddl_slice))) {
-        LOG_WARN("push back ddl slice failed", K(ret));
       }
     }
   }

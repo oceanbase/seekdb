@@ -74,9 +74,7 @@ int ObSrvDeliver::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(unix_socket_login_queue_.init(UNIX_SOCKET_LOGIN_THREAD_CNT, qhandler_))) {
-    SERVER_LOG(ERROR, "init unix socket login queue thread fail", K(ret));
   } else if (OB_FAIL(unix_socket_login_queue_.start())) {
-    SERVER_LOG(ERROR, "start unix socket login queue thread fail", K(ret));
   } else {
     SERVER_LOG(INFO, "init ObSrvDeliver done");
   }
@@ -126,7 +124,6 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
           LOG_ERROR("deliver unix socket login request fail", K(req));
         }
       } else if (OB_FAIL(dispatch_req(req))) {
-        LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(req));
       }
     } else {
       const obmysql::ObMySQLRawPacket &pkt
@@ -173,7 +170,6 @@ int ObSrvDeliver::deliver(rpc::ObRequest &req)
     LOG_WARN("deliver request in unexpected state", KP(&req), K(req_stat), K(lbt()));
 #endif
   }
-  LOG_DEBUG("deliver ob_request:", K(req));
   if (ObRequest::OB_MYSQL == req.get_type()) {
     if (OB_FAIL(deliver_mysql_request(req))) {
       LOG_WARN("deliver mysql request fail", K(req), K(ret));

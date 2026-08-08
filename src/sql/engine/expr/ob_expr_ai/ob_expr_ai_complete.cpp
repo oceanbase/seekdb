@@ -67,7 +67,6 @@ int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
     } else if (param_num == 3) {
       ObObjType in_type = types_stack[CONFIG_IDX].get_type();
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, CONFIG_IDX, N_AI_COMPLETE))) {
-        LOG_WARN("wrong type for json config.", K(ret), K(types_stack[CONFIG_IDX].get_type()));
       } else if (ob_is_string_type(in_type) && types_stack[CONFIG_IDX].get_collation_type() != CS_TYPE_BINARY) {
         if (types_stack[CONFIG_IDX].get_charset_type() != CHARSET_UTF8MB4) {
           types_stack[CONFIG_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -93,7 +92,6 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
   ObDatum *arg_prompt = nullptr;
   ObDatum *arg_config = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_prompt, arg_config))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (arg_model_id->is_null() || arg_prompt->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters is null", K(ret));
@@ -122,7 +120,6 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
       ObJsonObject *prompt_object = nullptr;
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
-        LOG_WARN("get_json_doc failed", K(ret));
       } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("j_base is not json object", K(ret));
@@ -137,18 +134,14 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
         LOG_WARN("prompt object is not support", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
-        LOG_WARN("fail to replace all str args in template", K(ret));
       }
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
-      LOG_WARN("fail to get real string data", K(ret));
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_config)) {
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-        LOG_WARN("fail to get real string data", K(ret));
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
-        LOG_WARN("fail to get json object", K(ret));
       }
     }
 
@@ -162,20 +155,16 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
 
     if (OB_FAIL(ret)){
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
-      LOG_WARN("fail to get ai func info", K(ret));
     } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
                    model_id, temp_allocator, resolved_endpoint))) {
-      LOG_WARN("failed to resolve endpoint info", K(ret), K(model_id));
     } else {
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;
       if (OB_FAIL(model.call_completion(prompt, config, result))) {
-        LOG_WARN("fail to call completion", K(ret));
       } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
-        LOG_WARN("fail to set string result", K(ret));
       }
     }
   }

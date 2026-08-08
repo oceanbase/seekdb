@@ -109,7 +109,6 @@ OB_DEF_DESERIALIZE(ObDASTableLoc)
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
       tablet_loc->loc_meta_ = loc_meta_;
       if (OB_FAIL(tablet_locs_.push_back(tablet_loc))) {
-        LOG_WARN("store tablet locs failed", K(ret));
       }
     }
     OB_UNIS_DECODE(*tablet_loc);
@@ -175,10 +174,8 @@ int ObDASTableLoc::add_tablet_loc(ObDASTabletLoc *tablet_loc)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet loc is null", KR(ret), KP(tablet_loc));
   } else if (OB_FAIL(tablet_locs_.push_back(tablet_loc))) {
-    LOG_WARN("push into tablet locs list failed", KR(ret), KPC(tablet_loc));
   } else if (tablet_locs_map_.created()) {
     if (OB_FAIL(tablet_locs_map_.set(tablet_loc->tablet_id_, tablet_loc))) {
-      LOG_WARN("insert into tablet locs map failed", KR(ret), KPC(tablet_loc));
     }
   }
   return ret;
@@ -238,12 +235,10 @@ int TabletHashMap::set(const ObTabletID key, ObDASTabletLoc *value)
     ret = OB_NOT_INIT;
     LOG_WARN("hash map was not created", KR(ret));
   } else if (OB_FAIL(key.hash(hash_val))) {
-    LOG_WARN("hash failed", KR(ret));
   } else {
     TabletHashNode *&bucket = buckets_[hash_val % bucket_num_];
     TabletHashNode *dst_node = NULL;
     if (OB_FAIL(find_node(key, bucket, dst_node))) {
-      LOG_WARN("find node failed", KR(ret));
     } else if (NULL != dst_node) {
       ret = OB_HASH_EXIST;
       LOG_WARN("key already exists", KR(ret), K(key), KP(value));
@@ -272,12 +267,10 @@ int TabletHashMap::get(const ObTabletID key, ObDASTabletLoc *&value)
     ret = OB_NOT_INIT;
     LOG_WARN("hash map was not created", KR(ret));
   } else if (OB_FAIL(key.hash(hash_val))) {
-    LOG_WARN("hash failed", KR(ret));
   } else {
     TabletHashNode *&bucket = buckets_[hash_val % bucket_num_];
     TabletHashNode *dst_node = NULL;
     if (OB_FAIL(find_node(key, bucket, dst_node))) {
-      LOG_WARN("find node failed", KR(ret));
     } else if (NULL == dst_node) {
       ret = OB_HASH_NOT_EXIST;
     } else {
@@ -294,13 +287,11 @@ int ObDASTableLoc::create_tablet_locs_map()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet locs map was already created", KR(ret), K(tablet_locs_map_.created()));
   } else if (OB_FAIL(tablet_locs_map_.create(DAS_TABLET_LOC_MAP_BUCKET_SIZE))) {
-    LOG_WARN("create tablet locs map failed", KR(ret));
   } else {
     for (DASTabletLocListIter tablet_node = tablet_locs_begin();
          OB_SUCC(ret) && tablet_node != tablet_locs_end(); ++tablet_node) {
       ObDASTabletLoc *tablet_loc = *tablet_node;
       if (OB_FAIL(tablet_locs_map_.set(tablet_loc->tablet_id_, tablet_loc))) {
-        LOG_WARN("insert into tablet locs map failed", KR(ret), KPC(tablet_loc));
       }
     }
   }

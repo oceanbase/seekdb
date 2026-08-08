@@ -46,7 +46,6 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", K(ret));
   } else if (OB_FAIL(ObShareUtil::check_if_server_role_is_standby( is_standby))) {
-    LOG_WARN("fail to execute check_if_server_role_is_standby", KR(ret));
   } else if (is_standby) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", KR(ret));
@@ -94,10 +93,8 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
           ObTimeoutCtx ctx;
           int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
-            LOG_WARN("fail to set timeout ctx", KR(ret));
           } else if (OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
                       ctx, session, error_message.published_schema_version_))) {
-            LOG_WARN("fail to wait for local schema visibility", KR(ret), K_(error_message.published_schema_version));
           } else {
             int64_t refresh_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("parallel ddl wait schema", KR(ret), K(refresh_time),
@@ -217,7 +214,6 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
           int tmp_ret = OB_SUCCESS;
           rpc::frame::ObResultCode result_code;
           if (OB_SUCCESS != (tmp_ret = result_code.deserialize(error_message.user_message_, forward_user_msg_len, pos))) {
-            LOG_WARN("deserialize rpc result code failed", K(ret), K(tmp_ret), K(forward_user_msg_len), K(error_message));
           } else if (OB_UNLIKELY(OB_SUCCESS != result_code.rcode_)) {
             FORWARD_USER_ERROR(result_code.rcode_, result_code.msg_);
           } else {
@@ -238,7 +234,6 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       } else {
         if (OB_FAIL(ret)) {
         } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
-          LOG_WARN("fail to check whether is primary server", KR(ret), K(is_primary_server));
         } else if (!is_primary_server) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
@@ -310,9 +305,7 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session,
   const int64_t start_time = ObTimeUtility::current_time();
   ObTimeoutCtx ctx;
   if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
-    LOG_WARN("fail to set timeout ctx", KR(ret));
   } else if (OB_FAIL(root_commands.parallel_create_table(arg, res))) {
-    LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
     if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::wait_local_schema_visible(
@@ -359,9 +352,7 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
   while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !schema_visible) {
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
-      LOG_WARN("fail to handle session exception", KR(ret));
     } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(refreshed_schema_version))) {
-      LOG_WARN("get refreshed schema_version fail", KR(ret));
     } else if (refreshed_schema_version >= schema_version) {
       schema_visible = true;
     } else {

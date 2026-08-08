@@ -32,14 +32,11 @@ int ObAllVirtualApplyStat::inner_get_next_row(common::ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "log service is unavailable", K(ret));
     } else if (OB_FAIL(log_service->stat_apply(apply_stat))) {
-      SERVER_LOG(WARN, "stat apply failed", K(ret));
     } else if (OB_FAIL(insert_stat_(apply_stat))) {
-      SERVER_LOG(WARN, "insert stat failed", K(ret), K(apply_stat));
     } else {
       SERVER_LOG(INFO, "stat apply success", K(apply_stat));
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "iterate apply stat failed", K(ret));
     } else {
       start_to_read_ = true;
       row = &cur_row_;

@@ -401,7 +401,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       LIB_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
     } else if (OB_FAIL(node.deserialize(buf, data_len, pos))) {
-      LIB_LOG(WARN, "failed to decode node", K(ret));
     }
 
     return ret;
@@ -425,7 +424,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       LIB_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
     } else if (OB_FAIL(node.deserialize(allocator, buf, data_len, pos))) {
-      LIB_LOG(WARN, "failed to decode node", K(ret));
     }
 
     return ret;
@@ -463,7 +461,6 @@ public:
   {
     int ret = OB_SUCCESS;
      if (OB_FAIL(node.destroy(allocator))) {
-      LIB_LOG(WARN, "failed to destroy node", K(ret));
     }
     node.~DLinkNode();
 
@@ -501,7 +498,6 @@ int deserialize_dlist(
         LIB_LOG(ERROR, "failed to new node", K(ret));
       } else if (OB_SUCCESS != (ret = ObDlistDeserialzeHelper<has_normal_deserialize<DLinkNode>::has_ >() (
          *tmp_node,  allocator, buf, data_len, pos))) {
-        LIB_LOG(WARN, "failed to decode node", K(ret));
       } else if (!list.add_last(tmp_node)) {
         ret = OB_ERR_SYS;
         LIB_LOG(WARN, "failed to add node", K(ret));
@@ -510,7 +506,6 @@ int deserialize_dlist(
       if (OB_FAIL(ret) && NULL != tmp_node) {
         int tmp_ret = ObDlistNodeDestoryHelper<has_normal_deserialize<DLinkNode>::has_>()(*tmp_node, allocator);
         if (OB_SUCCESS != tmp_ret) {
-          LIB_LOG(WARN, "failed to destroy node", K(tmp_ret));
         }
         allocator.free(tmp_buf);
         tmp_buf = NULL;
@@ -538,7 +533,6 @@ int serialize_dlist(const ObDList<DLinkNode> &list, char *buf, const int64_t buf
       ret = OB_ERR_SYS;
       LIB_LOG(WARN, "node must not null", K(ret));
     } else if (OB_FAIL(node->serialize(buf, buf_len, pos))) {
-      LIB_LOG(WARN, "failed to serialize node", K(ret));
     }
   }
   return ret;

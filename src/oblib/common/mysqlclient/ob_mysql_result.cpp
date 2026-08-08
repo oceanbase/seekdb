@@ -63,7 +63,6 @@ int ObMySQLResult::get_single_int(const int64_t row_idx, const int64_t col_idx, 
     } else {
       // get the single row
       if (OB_FAIL(this->next())) {
-        LOG_WARN("too few result rows", K(ret), K(row_idx));
       } else {
         ret = get_int(col_idx, int_val);
       }

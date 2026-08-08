@@ -53,9 +53,7 @@ int ObAllVirtualSchedulerRunningJob::inner_get_next_row(ObNewRow *&row)
       if (OB_FAIL(fill_scanner_.init(&scanner_,
                                      &cur_row_,
                                      output_column_ids_))) {
-        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
       } else if (OB_FAIL(session_mgr_->for_each_session(fill_scanner_))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -225,7 +223,6 @@ int ObAllVirtualSchedulerRunningJob::FillScanner::init(common::ObScanner *scanne
     SERVER_LOG(WARN,
                "some parameter is NULL", K(ret), K(scanner), K(cur_row));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
-    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else {
     scanner_ = scanner;
     cur_row_ = cur_row;

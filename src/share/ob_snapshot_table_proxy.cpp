@@ -124,7 +124,6 @@ int ObSnapshotTableProxy::fill_snapshot_item(
   const uint64_t snapshot_scn_val = info.snapshot_scn_.get_val_for_inner_table_field();
 
   if (OB_FAIL(gen_event_ts(event_ts))) {
-    LOG_WARN("fail to gen event ts", KR(ret), K(info));
   } else if (OB_FAIL(dml.add_gmt_create(event_ts))
              || OB_FAIL(dml.add_column("snapshot_type", info.snapshot_type_))
              || OB_FAIL(dml.add_uint64_column("snapshot_scn", snapshot_scn_val))
@@ -147,14 +146,12 @@ int ObSnapshotTableProxy::add_snapshot(
   } else {
     ObArray<ObTabletID> tablet_id_array;
     if (OB_FAIL(tablet_id_array.push_back(ObTabletID(snapshot.tablet_id_)))) {
-      LOG_WARN("push back tablet id failed", K(ret));
     } else if (OB_FAIL(batch_add_snapshot(trans,
         snapshot.snapshot_type_,
         snapshot.schema_version_,
         snapshot.snapshot_scn_,
         snapshot.comment_,
         tablet_id_array))) {
-      LOG_WARN("batch add snapshot failed", K(ret), K(snapshot));
     }
   }
   return ret;
@@ -191,7 +188,6 @@ int ObSnapshotTableProxy::batch_add_snapshot(
     info.schema_version_ = schema_version;
     info.comment_ = comment;
     if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update_nowait(trans, snapshot_gc_scn))) {
-      LOG_WARN("fail to select gc timstamp for update", KR(ret), K(info));
     }
     while (OB_SUCC(ret) && report_idx < tablet_id_array.count()) {
       sql.reuse();
@@ -202,29 +198,23 @@ int ObSnapshotTableProxy::batch_add_snapshot(
         info.tablet_id_ = tablet_id_array.at(report_idx + i).id();
         dml.reuse();
         if (OB_FAIL(check_snapshot_valid(snapshot_gc_scn, info, is_valid))) {
-          LOG_WARN("fail to check snapshot valid", KR(ret), K(info));
         } else if (!is_valid) {
           ret = OB_SNAPSHOT_DISCARDED;
           LOG_WARN("invalid snapshot info", KR(ret), K(info));
         } else if (OB_FAIL(fill_snapshot_item(info, dml))) {
-          LOG_WARN("fail to fill one item", K(ret), K(info));
         } else {
           if (0 == i) {
             if (OB_FAIL(dml.splice_column_names(columns))) {
-              LOG_WARN("fail to splice column names", K(ret));
             } else if (OB_FAIL(sql.assign_fmt("INSERT /*+ use_plan_cache(none) */ INTO %s (%s) VALUES",
                     OB_ALL_ACQUIRED_SNAPSHOT_TNAME, columns.ptr()))) {
-              LOG_WARN("fail to assign sql string", K(ret));
             }
           }
 
           if (OB_SUCC(ret)) {
             values.reset();
             if (OB_FAIL(dml.splice_values(values))) {
-              LOG_WARN("fail to splice values", K(ret));
             } else if (OB_FAIL(sql.append_fmt("%s(%s)",
                     0 == i ? " " : " , ", values.ptr()))) {
-              LOG_WARN("fail to assign sql string", K(ret));
             }
           }
         }
@@ -233,7 +223,6 @@ int ObSnapshotTableProxy::batch_add_snapshot(
       if (OB_SUCC(ret)) {
         int64_t affected_rows = 0;
         if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
-          LOG_WARN("fail to execute sql", K(ret));
         } else if (OB_UNLIKELY(affected_rows != cur_batch_cnt)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid affected rows", K(ret), K(affected_rows), K(cur_batch_cnt));
@@ -267,7 +256,6 @@ int ObSnapshotTableProxy::remove_snapshot(
              || (info.tablet_id_ > 0 && OB_FAIL(dml.add_pk_column("tablet_id", info.tablet_id_)))) {
     LOG_WARN("fail to add column", KR(ret), K(info));
   } else if (OB_FAIL(exec.exec_delete(OB_ALL_ACQUIRED_SNAPSHOT_TNAME, dml, affected_rows))) {
-    LOG_WARN("fail to exec delete", KR(ret), K(info));
   }
   return ret;
 }
@@ -298,7 +286,6 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
       for (int64_t i = 0; OB_SUCC(ret) && i < cur_batch_cnt; ++i) {
         const uint64_t &tablet_id = tablet_ids.at(report_idx + i).id();
         if (OB_FAIL(tablet_list.append_fmt("%s %lu", i == 0 ? "" : ",", tablet_id))) {
-          LOG_WARN("fail to add column", K(ret), K(tablet_id));
         }
       }
       if (FAILEDx(sql.append_fmt(
@@ -314,7 +301,6 @@ int ObSnapshotTableProxy::batch_remove_snapshots(
         " AND schema_version = %ld", schema_version))) {
         LOG_WARN("fail to append schema version", KR(ret), K(sql), K(schema_version));
       } else if (OB_FAIL(proxy.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_UNLIKELY(affected_rows < 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows is unexpected", KR(ret), K(affected_rows));
@@ -346,7 +332,6 @@ int extract_snapshot(const ObMySQLResult &result, ObSnapshotInfo &snapshot)
   if (FAILEDx(snapshot_scn.convert_for_inner_table_field(snapshot_scn_val))) {
     LOG_WARN("fail to convert_for_inner_table_field", KR(ret), K(tablet_id), K(snapshot_scn_val));
   } else if (OB_FAIL(snapshot.init(tablet_id, snapshot_type, snapshot_scn, schema_version, NULL/*comment*/))) {
-    LOG_WARN("fail to init snapshot info", KR(ret), K(tablet_id), K(snapshot_scn));
   }
 
   return ret;
@@ -363,9 +348,7 @@ int ObSnapshotTableProxy::get_all_snapshots(
       ObMySQLResult *result = NULL;
 
       if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s", OB_ALL_ACQUIRED_SNAPSHOT_TNAME))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));
@@ -382,9 +365,7 @@ int ObSnapshotTableProxy::get_all_snapshots(
               break;
             }
           } else if (OB_FAIL(extract_snapshot(*result, snapshot))) {
-            LOG_WARN("fail to extract snapshot", KR(ret));
           } else if (OB_FAIL(snapshots.push_back(snapshot))) {
-            LOG_WARN("fail to push back snapshot info", KR(ret));
           }
         }
         FLOG_INFO("get all snapshots", K(ret), K(snapshots.count()), K(snapshots));
@@ -412,9 +393,7 @@ int ObSnapshotTableProxy::get_all_snapshots(
       if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d ORDER BY tablet_id, snapshot_scn",
                                  OB_ALL_ACQUIRED_SNAPSHOT_TNAME,
                                  snapshot_type))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));
@@ -431,9 +410,7 @@ int ObSnapshotTableProxy::get_all_snapshots(
               break;
             }
           } else if (OB_FAIL(extract_snapshot(*result, snapshot))) {
-            LOG_WARN("fail to extract snapshot", KR(ret));
           } else if (OB_FAIL(snapshots.push_back(snapshot))) {
-            LOG_WARN("fail to push back snapshot info", KR(ret));
           }
         }
         FLOG_INFO("get all snapshots of type", K(ret), K(snapshot_type), K(snapshots.count()), K(snapshots));
@@ -475,12 +452,9 @@ int ObSnapshotTableProxy::get_max_snapshot_info(
       sqlclient::ObMySQLResult *result = NULL;
       ObTimeoutCtx ctx;
       if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-        LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
       } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s "
           "ORDER BY SNAPSHOT_SCN DESC LIMIT 1", OB_ALL_ACQUIRED_SNAPSHOT_TNAME))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));
@@ -492,7 +466,6 @@ int ObSnapshotTableProxy::get_max_snapshot_info(
           LOG_WARN("fail to get next", KR(ret), K(sql));
         }
       } else if (OB_FAIL(extract_snapshot(*result, snapshot_info))) {
-        LOG_WARN("fail to extract snapshot", KR(ret));
       } else if (OB_ITER_END != result->next()) {
         if (OB_SUCC(ret)) {
           ret = OB_ERR_UNEXPECTED;
@@ -522,13 +495,10 @@ int ObSnapshotTableProxy::get_snapshot(
       sqlclient::ObMySQLResult *result = NULL;
       ObTimeoutCtx ctx;
       if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-        LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
       } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d AND snapshot_scn = %lu "
           , OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type, 
           snapshot_scn.get_val_for_inner_table_field()))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));
@@ -537,7 +507,6 @@ int ObSnapshotTableProxy::get_snapshot(
           LOG_WARN("fail to get next", KR(ret), K(snapshot_type));
         }
       } else if (OB_FAIL(extract_snapshot(*result, snapshot_info))) {
-        LOG_WARN("fail to extract snapshot", KR(ret));
       } else if (OB_ITER_END != result->next()) {
         if (OB_SUCC(ret)) {
           ret = OB_ERR_UNEXPECTED;
@@ -573,14 +542,11 @@ int ObSnapshotTableProxy::check_snapshot_exist(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid snapshot type", KR(ret), K(snapshot_type));
   } else if (OB_FAIL(share::ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE snapshot_type = %d "
           " LIMIT 1", OB_ALL_ACQUIRED_SNAPSHOT_TNAME, snapshot_type))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(snapshot_type));
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));

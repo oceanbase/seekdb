@@ -63,7 +63,6 @@ int ObAllVirtualMdsEventHistory::range_scan_(char *temp_buffer, int64_t buf_len)
     }
     return ret;
   }))) {
-    MDS_LOG(WARN, "scan read failed", KR(ret), K(*this));
   }
   return ret;
 }
@@ -103,7 +102,6 @@ int ObAllVirtualMdsEventHistory::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_ranges_())) {
-      MDS_LOG(WARN, "fail to get index scan ranges", KR(ret), K(*this));
     } else {
       char *temp_buffer = nullptr;
       constexpr int64_t BUFFER_SIZE = 32_MB;
@@ -273,11 +271,9 @@ int ObAllVirtualMdsEventHistory::get_primary_key_ranges_()
         if (OB_SUCC(ret)) {
           if (tablet_low == tablet_high) {
             if (OB_FAIL(tablet_points_.push_back(tablet_low))) {
-              MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
             }
           } else if (OB_SUCCESS != (ret =
             (tablet_ranges_.push_back(ObTuple<common::ObTabletID, common::ObTabletID>(tablet_low, tablet_high))))) {
-            MDS_LOG(WARN, "fail to push back", KR(ret), K(*this));
           }
         }
       }

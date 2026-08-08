@@ -39,11 +39,8 @@ int ObSkipIndexColMeta::append_skip_index_meta(
     STORAGE_LOG(WARN, "invalid skip index attribute", K(ret), K(skip_idx_attr));
   } else if (skip_idx_attr.has_min_max() && is_major) {
     if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_MIN)))) {
-      STORAGE_LOG(WARN, "failed to push min skip idx meta", K(ret));
     } else if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_MAX)))) {
-      STORAGE_LOG(WARN, "failed to push max skip idx meta", K(ret));
     } else if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_NULL_COUNT)))) {
-      STORAGE_LOG(WARN, "failed to push null count skip index meta", K(ret));
     } else {
       has_null_count_column = true;
       has_min_max_column = true;
@@ -52,9 +49,7 @@ int ObSkipIndexColMeta::append_skip_index_meta(
 
   if (OB_SUCC(ret) && skip_idx_attr.has_loose_min_max() && !has_min_max_column) {
     if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_MIN)))) {
-      STORAGE_LOG(WARN, "failed to push min skip idx meta for loose min", K(ret));
     } else if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_MAX)))) {
-      STORAGE_LOG(WARN, "failed to push max skip idx meta for loose max", K(ret));
     } else {
       has_min_max_column = true;
     }
@@ -65,19 +60,16 @@ int ObSkipIndexColMeta::append_skip_index_meta(
         && OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_NULL_COUNT)))) {
       STORAGE_LOG(WARN, "failed to push null count skip index meta", K(ret));
     } else if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_SUM)))) {
-      STORAGE_LOG(WARN, "failed to push sum skip index meta", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && skip_idx_attr.has_bm25_token_freq_param()) {
     if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_TOKEN_FREQ)))) {
-      STORAGE_LOG(WARN, "failed to push bm25 token freq skip index meta", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && skip_idx_attr.has_bm25_doc_len_param()) {
     if (OB_FAIL(skip_idx_metas.push_back(ObSkipIndexColMeta(col_idx, ObSkipIndexColType::SK_IDX_BM25_MAX_SCORE_DOC_LEN)))) {
-      STORAGE_LOG(WARN, "failed to push bm25 doc len skip index meta", K(ret));
     }
   }
 
@@ -116,9 +108,7 @@ int ObSkipIndexColMeta::calc_skip_index_maximum_size(
     uint32_t null_count_upper_size = 0;
     uint32_t sum_store_size = 0;
     if (OB_FAIL(get_skip_index_store_upper_size(datum_type, precision, data_type_upper_size))) {
-      LOG_WARN("failed to get datum stored upper size", K(ret), K(datum_type));
     } else if (OB_FAIL(get_skip_index_store_upper_size(NULL_CNT_COL_TYPE, 0, null_count_upper_size))) {
-      LOG_WARN("failed to get null count col upper size", K(ret), K(datum_type));
     } else if (can_agg_sum(obj_type) && OB_FAIL(get_sum_store_size(obj_type, sum_store_size))) {
       LOG_WARN("failed to get sum store size", K(ret), K(obj_type));
     } else {
@@ -145,8 +135,6 @@ int get_prefix_for_string_tc_datum(
     int32_t error = 0;
     const ObString &src_str = orig_datum.get_string();
     if (OB_FAIL(common::ObCharset::well_formed_len(collation_type, src_str.ptr(), max_prefix_byte_len, prefix_len, error))) {
-      LOG_WARN("failed to get well formed len", K(ret), K(orig_datum), K(obj_type),
-          K(collation_type), K(max_prefix_byte_len));
     } else {
       prefix_datum.pack_ = prefix_len;
       prefix_datum.set_string(src_str.ptr(), prefix_len);
@@ -176,8 +164,6 @@ int get_prefix_for_text_tc_datum(
     const int64_t lob_header_size = text_data - orig_datum.ptr_;
     const int64_t max_prefix_len = max_prefix_byte_len - lob_header_size;
     if (OB_FAIL(common::ObCharset::well_formed_len(collation_type, text_data, max_prefix_len, prefix_len, error))) {
-      LOG_WARN("failed to get well formend len for text type", K(ret), K(orig_datum), K(obj_type),
-        K(collation_type), K(max_prefix_byte_len), K(lob_header_size), K(max_prefix_len), K(lob_data));
     } else {
       ObLobCommon *new_lob_data = new (prefix_datum_buf) ObLobCommon();
       MEMCPY(new_lob_data->buffer_, text_data, prefix_len);
@@ -218,8 +204,6 @@ int check_skip_index_valid(const share::schema::ObTableSchema &table_schema)
         column_schema->get_meta_type().get_type(),
         column_schema->get_accuracy().get_precision(),
         column_agg_maximum_size))) {
-      LOG_WARN("failed to calculate maximum store size for skip index aggregate data size",
-          K(ret), KPC(column_schema));
     } else if (FALSE_IT(aggregate_row_size += column_agg_maximum_size)) {
     } else if (OB_UNLIKELY(aggregate_row_size > ObSkipIndexColMeta::SKIP_INDEX_ROW_SIZE_LIMIT)) {
       // TODO: adjust storage format to resolve thie limitation？

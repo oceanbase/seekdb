@@ -112,7 +112,6 @@ int ObLSTabletIterator::get_tablet_ids(ObIArray<ObTabletID> &ids) const
   int ret = OB_SUCCESS;
   ids.reset();
   if (OB_FAIL(ids.assign(tablet_ids_))) {
-    LOG_WARN("fail to get tablet ids", K(ret));
   }
   return ret;
 }

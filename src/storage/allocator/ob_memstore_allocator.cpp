@@ -57,13 +57,11 @@ void ObMemstoreAllocator::init_handle(AllocHandle& handle)
     LockGuard guard(lock_);
     hlist_.init_handle(handle);
   }
-  COMMON_LOG(TRACE, "MTALLOC.init", KP(&handle.mt_));
 }
 
 void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 {
   ObTimeGuard time_guard("ObMemstoreAllocator::destroy_handle", 100 * 1000);
-  COMMON_LOG(TRACE, "MTALLOC.destroy", KP(&handle.mt_));
   arena_.free(handle.arena_handle_);
   time_guard.click();
   {
@@ -82,7 +80,6 @@ void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
-  COMMON_LOG(TRACE, "MTALLOC.set_frozen", KP(&handle.mt_));
   LockGuard guard(lock_);
   hlist_.set_frozen(handle);
 }

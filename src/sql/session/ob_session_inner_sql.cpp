@@ -70,8 +70,6 @@ int ObSessionInnerSql::open_()
                  ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
                          session, connection_guard_))) {
-    LOG_WARN("acquire session inner SQL connection failed", KR(ret),
-             K(server_session_id()));
   } else if (OB_ISNULL(native_connection_ = connection_guard_.get_ptr())) {
     ret = common::OB_ERR_UNEXPECTED;
   } else {
@@ -103,7 +101,6 @@ int ObSessionInnerSql::execute_write(const common::ObSqlString &sql,
                                native_connection_))) {
     ret = common::OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(connection->execute_write(sql.ptr(), affected_rows))) {
-    LOG_WARN("execute session inner write failed", KR(ret), K(sql));
   }
   if (OB_FAIL(ret)) {
     last_error_ = ret;
@@ -122,7 +119,6 @@ int ObSessionInnerSql::execute_read(const common::ObSqlString &sql,
                                native_connection_))) {
     ret = common::OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(connection->execute_read(sql.ptr(), result))) {
-    LOG_WARN("execute session inner read failed", KR(ret), K(sql));
   }
   if (OB_FAIL(ret)) {
     last_error_ = ret;

@@ -121,7 +121,6 @@ public:
                                                        get_accuracy(),
                                                        common::CS_TYPE_INVALID,
                                                        length))) {
-        SQL_RESV_LOG(WARN, "failed to get length", K(ret), K(common::lbt()), N_TYPE, get_type());
       }
     }
     return length;
@@ -148,14 +147,12 @@ public:
                                                        get_accuracy(),
                                                        get_collation_type(),
                                                        length))) {
-        SQL_RESV_LOG(WARN, "failed to get length of varchar", K(ret));
       }
     } else {
       if (OB_FAIL(common::ObField::get_field_mb_length(get_type(),
                                                        get_accuracy(),
                                                        common::CS_TYPE_INVALID,
                                                        length))) {
-        SQL_RESV_LOG(WARN, "failed to get length of non-varchar", K(ret), K(common::lbt()), N_TYPE, get_type());
       }
     }
     return ret;
@@ -170,14 +167,12 @@ public:
                                                        get_accuracy(),
                                                        collation_type,
                                                        length))) {
-        SQL_RESV_LOG(WARN, "failed to get length of varchar", K(ret));
       }
     } else {
       if (OB_FAIL(common::ObField::get_field_mb_length(get_type(),
                                                        get_accuracy(),
                                                        common::CS_TYPE_INVALID,
                                                        length))) {
-        SQL_RESV_LOG(WARN, "failed to get length of non-varchar", K(ret), K(common::lbt()), N_TYPE, get_type());
       }
     }
     return ret;

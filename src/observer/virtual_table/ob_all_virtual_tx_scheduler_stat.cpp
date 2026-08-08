@@ -76,11 +76,9 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "transaction service is null", KR(ret));
     } else if (OB_FAIL(txs->iterate_tx_scheduler_stat(tx_scheduler_stat_iter_))) {
-      SERVER_LOG(WARN, "iterate transaction scheduler error", KR(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_scheduler_stat_iter_.set_ready())) {
-      SERVER_LOG(WARN, "ObTransSchedulerIterator set ready error", KR(ret));
     }
   }
 

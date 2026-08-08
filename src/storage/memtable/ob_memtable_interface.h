@@ -169,7 +169,6 @@ public:
       ret = OB_NOT_SUPPORTED;
       STORAGE_LOG(WARN, "split a single range is not supported", KR(ret), K(input_range), K(part_cnt));
     } else if (OB_FAIL(range_array.push_back(input_range))) {
-      STORAGE_LOG(WARN, "push back to range array failed", K(ret));
     }
     return ret;
   }

@@ -85,7 +85,6 @@ int ObMulBinHeaderSerializer::serialize()
 {
   INIT_SUCC(ret);
   if (OB_FAIL(buffer_->reserve(MUL_MODE_BIN_HEADER_LEN))) {
-    LOG_WARN("failed to reserve", K(ret), K(buffer_->length()));
   } else if (is_scalar_data_type(type_)) {
     if (is_extend_type(type_)) {
       ObMulModeExtendStorageType tmp = get_extend_storage_type(type_);
@@ -93,10 +92,8 @@ int ObMulBinHeaderSerializer::serialize()
           || OB_FAIL(buffer_->append(reinterpret_cast<const char*>(&tmp.second), sizeof(uint8_t))))
       LOG_WARN("failed to append", K(ret), K(buffer_->length()));
     } else if (OB_FAIL(buffer_->append(reinterpret_cast<const char*>(&type_), sizeof(uint8_t)))) {
-      LOG_WARN("failed to append", K(ret), K(buffer_->length()));
     }
   } else if (OB_FAIL(buffer_->reserve(header_size()))) {
-    LOG_WARN("failed to reserve", K(ret), K(buffer_->length()));
   } else {
     buffer_->set_length(start() + header_size());
     new (buffer_->ptr() + start())ObMulModeBinHeader(static_cast<uint8_t>(type_),

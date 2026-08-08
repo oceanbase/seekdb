@@ -173,7 +173,6 @@ int ObRbMemMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRbMemMgr init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr))) {
-    LOG_WARN("init allocator failed.", K(ret));
   } else {
     allocator_.set_nway(RB_ALLOC_CONCURRENCY);
     vec_idx_used_ = 0;

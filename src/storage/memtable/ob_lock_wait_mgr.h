@@ -80,13 +80,9 @@ public:
     ObDependencyResource resource;
     #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id)
     if (OB_FAIL(mapper_.get_hash_holder(hash_, trans_id))) {
-      DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
-      DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource.set_args(user_key))) {
-      DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
-      DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
     }
     #undef PRINT_WRAPPER
     need_remove = false;

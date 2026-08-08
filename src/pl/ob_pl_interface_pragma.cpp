@@ -96,7 +96,6 @@ int ObPLInterfaceService::init()
     for (int64_t i = INTERFACE_START; OB_SUCC(ret) && i < INTERFACE_END; ++i) {
       ObPLInterfaceType type = static_cast<ObPLInterfaceType>(i);
       if (OB_FAIL(interface_map_.set_refactored(ObString(OB_PL_INTERFACE[i].name), type))) {
-        LOG_WARN("fail insert ps id to hash map", K(i), K(OB_PL_INTERFACE[i].name), K(type),K(ret));
       }
     }
   }

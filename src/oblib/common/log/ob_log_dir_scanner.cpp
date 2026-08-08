@@ -150,23 +150,17 @@ int ObLogDirScanner::search_log_dir_(const char *log_dir)
     func_ret = readdir_r(plog_dir, pentry, &pentry);
     while (OB_SUCC(ret) && 0 == func_ret && NULL != pentry) {
       if (OB_FAIL(log_file.assign(pentry->d_name, file_type))) {
-        SHARE_LOG(WARN, "assign log file fail", K(file_type), KCSTRING(pentry->d_name));
       } else {
         if (ObSimpleLogFile::LOG == file_type) {
           if (OB_FAIL(log_files.push_back(log_file))) {
-            SHARE_LOG(WARN, "fail to push log file", KCSTRING(log_file.name));
           } else {
-            SHARE_LOG(DEBUG, "find a valid log file", KCSTRING(log_file.name));
           }
         } else if (ObSimpleLogFile::CKPT == file_type) {
-          SHARE_LOG(DEBUG, "find a valid checkpoint file", KCSTRING(log_file.name));
           if (max_ckpt_id_ < log_file.id) {
             max_ckpt_id_ = log_file.id;
             has_ckpt_ = true;
           }
         } else {
-          _SHARE_LOG(DEBUG, "ignore file(\"%s\"): \"%s\" is not valid log file",
-                    pentry->d_name, pentry->d_name);
         }
         if (OB_SUCC(ret)) {
           func_ret = readdir_r(plog_dir, pentry, &pentry);

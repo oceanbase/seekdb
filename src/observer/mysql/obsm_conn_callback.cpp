@@ -77,15 +77,12 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   RLOCAL(common::ObMysqlRandom, thread_scramble_rand);
   int64_t autocommit = 0;
   if (OB_FAIL(sm_conn_init(conn))) {
-    LOG_WARN("init conn fail", K(ret));
   } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
                  *GCTX.schema_service_, share::SYS_VAR_AUTOCOMMIT, autocommit))) {
-    LOG_WARN("get global autocommit failed", K(ret));
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected global autocommit", K(ret), K(autocommit));
   } else if (OB_FAIL(create_scramble_string(conn.scramble_buf_, sizeof(conn.scramble_buf_), thread_scramble_rand))) {
-    LOG_WARN("create scramble string failed", K(ret));
   } else {
     conn.autocommit_snapshot_ = autocommit;
     sess.sql_session_id_ = conn.sessid_;
@@ -148,7 +145,6 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
         ObMPDisconnect disconnect_processor(ctx);
         rpc::frame::ObReqProcessor *processor = static_cast<rpc::frame::ObReqProcessor *>(&disconnect_processor);
         if (OB_FAIL(processor->run())) {
-          LOG_WARN("free session fail and related session id can not be reused", K(ret), K(ctx));
         }
       }
    }
@@ -177,7 +173,6 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
     sql::ObSQLSessionInfo *sess_info = NULL;
     sql::ObSessionGetterGuard guard(*::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>(), conn.sessid_);
     if (OB_FAIL(guard.get_session(sess_info))) {
-      LOG_WARN("fail to get session", K(conn.sessid_));
     } else if (OB_ISNULL(sess_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session info is NULL", K(conn.sessid_));

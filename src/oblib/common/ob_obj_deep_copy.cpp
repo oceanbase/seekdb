@@ -38,7 +38,6 @@ int deep_copy_obj(ObIAllocator &allocator, const ObObj &src, ObObj &dst)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Fail to allocate memory, ", K(size), K(ret));
       } else if (OB_FAIL(dst.deep_copy(src, buf, size, pos))){
-        LOG_WARN("Fail to deep copy obj, ", K(ret));
       } else { }//do nothing
     } else {
       dst = src;
@@ -53,7 +52,6 @@ int deep_copy_objparam(ObIAllocator &allocator, const ObObjParam &src, ObObjPara
   if (!src.need_deep_copy()) {
     dst = src;
   } else if (OB_FAIL(deep_copy_obj(allocator, src, dst))) {
-    LOG_WARN("failed to deep copy obj", K(ret));
   } else {
     dst.set_accuracy(src.get_accuracy());
     dst.unset_result_flag(dst.get_result_flag());

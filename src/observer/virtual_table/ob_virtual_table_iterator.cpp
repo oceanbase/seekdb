@@ -80,7 +80,6 @@ int ObVirtualTableIterator::free_convert_ctx()
     } else {
       key_ranges_.reset();
       if (OB_FAIL(key_ranges_.assign(saved_key_ranges_))) {
-        LOG_WARN("failed to assign key ranges", K(ret));
       }
       saved_key_ranges_.reset();
       //Since ObObj's destructor does not do meaningful operations, in order to save performance, ObObj's destructor call is omitted, and the cells_memory is directly released.
@@ -127,7 +126,6 @@ int ObVirtualTableIterator::convert_key(const ObRowkey &src, ObRowkey &dst, comm
                                         cast_ctx,
                                         src_key_objs[nth_obj],
                                         new_key_obj[nth_obj]))) {
-          LOG_WARN("fail to cast obj", K(ret), K(allocator_), K(key_cols.at(nth_obj)->get_data_type()), K(src_key_objs[nth_obj]));
         }
       }
     }//end for
@@ -157,7 +155,6 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("column schema is null", K(ret));
         } else if (OB_FAIL(column_names.push_back(&col_schema->get_column_name_str()))) {
-          LOG_WARN("fail to push back column name", K(ret));
         }
       }
       if (OB_SUCC(ret) && column_ids.count() != column_names.count()) {
@@ -178,7 +175,6 @@ int ObVirtualTableIterator::get_key_cols(common::ObIArray<const ObColumnSchemaV2
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("column schema is null", K(ret), K(*column_name));
             } else if (OB_FAIL(key_cols.push_back(col_schema))) {
-              LOG_WARN("fail to push back column name", K(ret));
             }
           }
           if (OB_SUCC(ret) && key_cols.count() != column_names.count()) {
@@ -203,7 +199,6 @@ int ObVirtualTableIterator::convert_key_ranges()
     common::ObSEArray<common::ObNewRange, 16> tmp_range;
     common::ObArray<const ObColumnSchemaV2*> key_cols;
     if (OB_FAIL(get_key_cols(key_cols))) {
-      LOG_WARN("failed to get key types", K(ret));
     } else if (key_cols.empty() && 1 == key_ranges_.count() && key_ranges_.at(0).is_whole_range()) {
       ObNewRange new_range;
       new_range.table_id_ = key_ranges_.at(0).table_id_;
@@ -214,21 +209,16 @@ int ObVirtualTableIterator::convert_key_ranges()
         new_range.table_id_ = key_ranges_.at(i).table_id_;
         new_range.border_flag_ = key_ranges_.at(i).border_flag_;
         if (OB_FAIL(convert_key(key_ranges_.at(i).start_key_, new_range.start_key_, key_cols))) {
-          LOG_WARN("fail to convert start key", K(ret), K(allocator_));
         } else if (OB_FAIL(convert_key(key_ranges_.at(i).end_key_, new_range.end_key_, key_cols))) {
-          LOG_WARN("fail to convert end key", K(ret), K(allocator_));
         } else if (OB_FAIL(tmp_range.push_back(new_range))) {
-          LOG_WARN("fail to push back new range", K(ret), K(allocator_));
         }
       }//end for
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(saved_key_ranges_.assign(key_ranges_))) {
-        LOG_WARN("fail to assign new range", K(ret), K(allocator_));
       } else {
         key_ranges_.reset();
         if (OB_FAIL(key_ranges_.assign(tmp_range))) {
-          LOG_WARN("fail to assign new range", K(ret), K(allocator_));
         }
       }
     }
@@ -261,11 +251,9 @@ int ObVirtualTableIterator::init_convert_ctx()
       convert_row_.cells_ = cells;
       convert_row_.count_ = reserved_column_cnt_;
       if (OB_FAIL(convert_key_ranges())) {
-        LOG_WARN("fail to convert key ranges", K(ret), K(key_ranges_), K(reserved_column_cnt_));
       }
     }
   }
-  LOG_DEBUG("key ranges", K(ret), K(key_ranges_));
   return ret;
 }
 
@@ -288,14 +276,11 @@ int ObVirtualTableIterator::open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to new cell array", K(ret), K(reserved_column_cnt_));
   } else if (OB_FAIL(init_sql_schema_guard_())) {
-    LOG_WARN("failed to init SqlSchemaGuard", K(ret));
   } else {
     cur_row_.cells_ = cells;
     cur_row_.count_ = reserved_column_cnt_;
     if (OB_FAIL(init_convert_ctx())) {
-      LOG_WARN("fail to init convert context", K(ret));
     } else if (OB_FAIL(inner_open())) {
-      LOG_WARN("fail to inner open", K(ret));
     }
   }
   return ret;
@@ -311,7 +296,6 @@ int ObVirtualTableIterator::get_all_columns_schema()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("col_schema is NULL", K(ret), K(column_id));
     } else if (OB_FAIL(cols_schema_.push_back(col_schema))) {
-      LOG_WARN("failed to push back column schema", K(ret));
     }
   }
   return ret;
@@ -343,7 +327,6 @@ int ObVirtualTableIterator::convert_output_row(ObNewRow *&cur_row)
                                               cast_ctx_,
                                               cur_row->get_cell(i),
                                               convert_row_.cells_[i]))) {
-        LOG_WARN("failed to cast extended virtual table object", K(ret), K(column_id));
       }
     }
     cur_row = &convert_row_;
@@ -361,7 +344,6 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
     ret = OB_TIMEOUT;
     LOG_WARN("iterate virtual table row timeout", KR(ret), KTIME(abs_timeout_ts));
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("iterate virtual table row failed", KR(ret), KTIME(abs_timeout_ts));
   } else if (OB_FAIL(inner_get_next_row(cur_row))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to inner get next row", K(ret), KPC(scan_param_));
@@ -381,7 +363,6 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("table schema is NULL", K(ret));
   } else if (OB_FAIL(convert_output_row(cur_row))) {
-    LOG_WARN("failed to convert row", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
     const uint64_t column_id = output_column_ids_.at(i);
@@ -403,7 +384,6 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
         && !cur_row->cells_[i].has_lob_header()) { // cannot be json type;
         ObObj &obj_convert = cur_row->cells_[i];
       if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(obj_convert, row_calc_buf_))) {
-        LOG_WARN("fail to add lob header", KR(ret), "object", cur_row->cells_[i]);
       }
     }
     if (OB_SUCC(ret) && ob_is_string_tc(col_schema->get_data_type())
@@ -425,12 +405,9 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
       if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(output_obj, cur_row->cells_[i],
                                                             res_type, is_strict, cast_ctx,
                                                             type_infos))) {
-        LOG_WARN("fail to convert skip null check", KR(ret), "object", cur_row->cells_[i]);
       } else {
         cur_row->cells_[i] = output_obj;
         if (OB_SUCCESS != cast_ctx.warning_) {
-          LOG_WARN("invalid row result, check schema", "warning_num", cast_ctx.warning_,
-                   "object", cur_row->cells_[i], K(res_type));
         }
       }
     }
@@ -438,7 +415,6 @@ int ObVirtualTableIterator::get_next_row(ObNewRow *&row)
   if (OB_SUCC(ret)) {
     row = cur_row;
   }
-  LOG_DEBUG("check result row", K(ret), KPC(row));
   return ret;
 }
 
@@ -490,7 +466,6 @@ int ObVirtualTableIterator::get_next_row()
       ObExpr *expr = scan_param_->output_exprs_->at(i);
       ObDatum &datum = expr->locate_datum_for_write(scan_param_->op_->get_eval_ctx());
       if (OB_FAIL(datum.from_obj(row->cells_[i], expr->obj_datum_map_))) {
-        LOG_WARN("convert ObObj to ObDatum failed", K(ret));
       } else if (is_lob_storage(row->cells_[i].get_type()) &&
                  OB_FAIL(ob_adjust_lob_datum(scan_param_->op_->get_eval_ctx().exec_ctx_,
                                              row->cells_[i], expr->obj_meta_,
@@ -509,9 +484,7 @@ int ObVirtualTableIterator::close()
     ret = OB_NOT_INIT;
     LOG_WARN("cur_row is not init", K(ret), K(cur_row_));
   } else if (OB_FAIL(inner_close())) {
-    LOG_WARN("fail to execute inner close", K(ret));
   } else if (OB_FAIL(free_convert_ctx())) {
-    LOG_WARN("fail to free convert context", K(ret));
   } else {
     if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -545,12 +518,10 @@ int ObVirtualTableIterator::check_priv(const ObString &level_str,
   if (OB_SUCC(ret)) {
     if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(schema_guard_->check_db_show(session_priv, enable_role_id_array, db_name, passed))) {
-          LOG_WARN("Check db show failed", K(ret));
       }
     } else if (0 == level_str.case_compare("table_acc")) {
       //if (OB_FAIL(priv_mgr.check_table_show(session_priv,
       if (OB_FAIL(schema_guard_->check_table_show(session_priv, enable_role_id_array, db_name, table_name, passed))) {
-        LOG_WARN("Check table show failed", K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;

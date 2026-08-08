@@ -88,7 +88,6 @@ int ObSqlEndTransCb::take_request_ownership(ObMPPacketSender& packet_sender)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(packet_sender.handoff_request_to(packet_sender_))) {
-      LOG_ERROR("failed to hand off async mysql request", K(ret), K(state_));
     } else {
       state_ = next_state;
     }
@@ -263,14 +262,12 @@ void ObSqlEndTransCb::complete_callback_locked(int cb_param,
       ok_param.warnings_count_ = static_cast<uint16_t>(
           session_info->get_warnings_buffer().get_readable_warning_count());
       if (OB_SUCCESS != (ret = packet_sender_.send_ok_packet(*session_info, ok_param))) {
-        SERVER_LOG(WARN, "encode ok packet fail", K(ok_param), "ret", ret);
       }
     } else {
       //error + possible ok packet
       const char *error_msg = session_info->get_warnings_buffer().get_err_msg();
       if (OB_SUCCESS !=
           (ret = packet_sender_.send_error_packet(cb_param, error_msg))) {
-        SERVER_LOG(WARN, "encode error packet fail", "ret", ret);
       }
     }
     //succ or not reset warning buffer

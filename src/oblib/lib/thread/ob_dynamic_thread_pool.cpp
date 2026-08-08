@@ -73,11 +73,8 @@ int ObDynamicThreadPool::init(const char* thread_name)
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "cannot init twice", K(ret));
   } else if (OB_FAIL(task_queue_.init(MAX_TASK_NUM))) {
-    COMMON_LOG(WARN, "failed to init task queue", K(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DYNAMIC_THREAD_POOL_COND_WAIT))) {
-    STORAGE_LOG(WARN, "failed to init cond", K(ret));
   } else if (OB_FAIL(task_thread_cond_.init(ObWaitEventIds::DYNAMIC_THREAD_POOL_COND_WAIT))) {
-    STORAGE_LOG(WARN, "failed to init cond", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -189,13 +186,11 @@ int ObDynamicThreadPool::check_thread_status()
     if (i < thread_num) {
       if (!thread_info.is_alive_) {
         if (OB_SUCCESS != (tmp_ret = start_thread(thread_info))) {
-          COMMON_LOG(WARN, "failed to start thread", K(tmp_ret));
         }
       }
     } else {
       if (thread_info.is_alive_) {
         if (OB_SUCCESS != (tmp_ret = stop_thread(thread_info))) {
-          COMMON_LOG(WARN, "failed to start thread", K(tmp_ret));
         }
       }
     }
@@ -312,7 +307,6 @@ int ObDynamicThreadPool::add_task(ObDynamicThreadTask *task)
     ret = OB_IN_STOP_STATE;
     COMMON_LOG(WARN, "thread pool is stopped", K(ret));
   } else if (OB_FAIL(task_queue_.push(task))) {
-    COMMON_LOG(WARN, "failed to push task", K(ret));
   } else {
     ObThreadCondGuard guard(task_thread_cond_);
     task_thread_cond_.signal();
@@ -371,9 +365,7 @@ int ObSimpleThreadPoolDynamicMgr::init()
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "cannot init twice", K(ret));
   } else if (OB_FAIL(lib::ThreadPool::init())) {
-    COMMON_LOG(WARN, "init simple thread pool dynamic mgr failed", K(ret));
   } else if (OB_FAIL(lib::ThreadPool::start())) {
-    COMMON_LOG(WARN, "start simple thread pool dynamic mgr failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -432,7 +424,6 @@ int ObSimpleThreadPoolDynamicMgr::bind(ObSimpleDynamicThreadPool *pool)
   } else {
     SpinWLockGuard guard(pool_list_lock_);
     if (OB_FAIL(pool_list_.push_back(pool))) {
-      COMMON_LOG(WARN, "bind simple thread pool failed", KP(pool));
     } else {
       pool->has_bind_ = true;
       COMMON_LOG(INFO, "bind simple thread pool success", K(*pool));

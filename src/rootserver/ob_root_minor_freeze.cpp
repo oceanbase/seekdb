@@ -82,13 +82,10 @@ int ObRootMinorFreeze::try_minor_freeze(const obcall::ObMinorFreezeArg &arg) con
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_cancel())) {
-    LOG_WARN("minor freeze canceled", K(ret));
   } else {
     obcall::Int64 result;
     if (OB_FAIL(rootserver_local_runtime()->minor_freeze(arg, result))) {
-      LOG_WARN("local minor freeze failed", K(ret), K(arg));
     } else if (OB_FAIL(static_cast<int>(result))) {
-      LOG_WARN("local minor freeze returned error", K(ret), K(arg));
     }
   }
 

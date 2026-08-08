@@ -37,9 +37,7 @@ int ObCodeGenerator::generate(const ObLogPlan &log_plan,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_exprs(log_plan, phy_plan))) {
-    LOG_WARN("fail to get all raw exprs", K(ret));
   } else if (OB_FAIL(generate_operators(log_plan, phy_plan))) {
-    LOG_WARN("fail to generate plan", K(ret));
   }
 
   return ret;
@@ -66,7 +64,6 @@ int ObCodeGenerator::generate_exprs(const ObLogPlan &log_plan,
     expr_cg.set_batch_size(phy_plan.get_batch_size());
     if (OB_FAIL(expr_cg.generate(log_plan.get_optimizer_context().get_all_exprs(),
                                  phy_plan.get_expr_frame_info()))) {
-      LOG_WARN("fail to generate expr", K(ret));
     } else {
       phy_plan.get_next_expr_id() = phy_plan.get_expr_frame_info().need_ctx_cnt_;
     }
@@ -81,7 +78,6 @@ int ObCodeGenerator::generate_operators(const ObLogPlan &log_plan,
   int ret = OB_SUCCESS;
   ObStaticEngineCG static_engin_cg;
   if (OB_FAIL(static_engin_cg.generate(log_plan, phy_plan))) {
-    LOG_WARN("fail to code generate", K(ret));
   }
   return ret;
 }
@@ -103,7 +99,6 @@ int ObCodeGenerator::detect_batch_size(
     LOG_WARN("unexpected null plan root", K(ret));
   } else if (OB_FAIL(ObStaticEngineCG::exist_registered_vec_op(*log_plan.get_plan_root(), true,
                                                                has_registered_vec_op))) {
-    LOG_WARN("check exist registetered vectorized operator failed", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(session)) {
@@ -116,9 +111,7 @@ int ObCodeGenerator::detect_batch_size(
     int64_t lob_rowsets_max_rows = GCONF._lob_rowsets_max_rows;
     const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     if (OB_FAIL(opt_params->get_integer_opt_param(ObOptParamHint::LOB_ROWSETS_MAX_ROWS, lob_rowsets_max_rows))) {
-      LOG_WARN("get integer opt param failed", K(ret));
     } else if (OB_FAIL(opt_params->get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, rowsets_enabled))) {
-      LOG_WARN("fail to check rowsets enabled", K(ret));
     } else if (rowsets_enabled) {
       // TODO bin.lb; check all sub plans
       OZ(ObStaticEngineCG::check_vectorize_supported(vectorize,
@@ -171,13 +164,9 @@ int ObCodeGenerator::detect_batch_size(
         static const int64_t max = rowsets_max_rows * 2;
         batch_size = common::ObRandom::rand(min, max);
       }
-      LOG_TRACE("detect_batch_size", K(vectorize), K(scan_cardinality), K(batch_size),
-                K(rowsets_max_rows), K(tmp_ret));
     }
     // TODO qubin.qb: remove the tracelog when rowsets/batch_size is displayed
     // in plan
-    LOG_TRACE("detect_batch_size", K(vectorize), K(scan_cardinality), K(batch_size),
-              K(rowsets_enabled), K(batch_size), K(has_registered_vec_op));
   }
   return ret;
 }

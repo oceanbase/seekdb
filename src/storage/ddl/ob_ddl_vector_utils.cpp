@@ -266,9 +266,7 @@ int ObDDLVectorUtils::reshape_storage_vector(const ObObjMeta &col_type,
       const VecValueTypeClass value_tc = get_vec_value_tc(
           col_type.get_type(), col_type.get_scale(), col_type.get_stored_precision());
       if (OB_FAIL(new_vector(VEC_DISCRETE, value_tc, allocator, result_vector))) {
-        LOG_WARN("failed to allocate discrete storage vector", KR(ret), K(value_tc));
       } else if (OB_FAIL(prepare_vector(result_vector, selector.get_max(), allocator))) {
-        LOG_WARN("failed to prepare discrete storage vector", KR(ret), K(selector));
       }
     } else if (VEC_DISCRETE != format
                && VEC_UNIFORM != format
@@ -354,7 +352,6 @@ int ObDDLVectorUtils::check_rowkey_length(const ObDDLBatchRows &batch_rows,
         if (col_desc.col_type_.is_lob_storage()) {
           // For LOB columns, use the new sum_lob_length method
           if (OB_FAIL(vector->sum_lob_length(rowkey_len, row_count))) {
-            LOG_WARN("fail to sum lob bytes usage", KR(ret), K(col_idx), K(col_desc));
           }
         } else {
           // For non-LOB columns, use the existing sum_bytes_usage method
@@ -391,7 +388,6 @@ int ObDDLVectorUtils::make_const_tablet_id_vector(const ObTabletID &tablet_id,
     LOG_WARN("invalid args", KR(ret), K(tablet_id));
   } else {
     if (OB_FAIL(new_vector(VEC_UNIFORM_CONST, tablet_id_value_tc, allocator, vector))) {
-      LOG_WARN("fail to new uniform const vector", KR(ret));
     } else {
       ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
       ObStorageDatum *storage_datum = nullptr;
@@ -668,7 +664,6 @@ int ObDDLVectorUtils::make_const_multi_version_vector(const int64_t value,
   int ret = OB_SUCCESS;
   vector = nullptr;
   if (OB_FAIL(new_vector(VEC_UNIFORM_CONST, multi_version_value_tc, allocator, vector))) {
-    LOG_WARN("fail to new uniform const vector", KR(ret));
   } else {
     ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
     ObStorageDatum *storage_datum = nullptr;

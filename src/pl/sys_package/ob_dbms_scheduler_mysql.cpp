@@ -121,8 +121,6 @@ int ObDBMSSchedulerMysql::set_attribute(
                                                                           params.at(2).get_string(),
                                                                           is_stat_window_attr,
                                                                           dml))) {
-      LOG_WARN("failed to is stats maintenance window attr", K(ret), K(params.at(0).get_string()),
-                                        K(params.at(1).get_string()), K(params.at(2).get_string()));
     } else if (is_stat_window_attr) {
       OZ (dml.splice_update_sql(OB_ALL_SCHEDULER_JOB_TNAME, sql));
       OZ (execute_sql(ctx, sql, affected_rows));
@@ -188,7 +186,6 @@ int ObDBMSSchedulerMysql::_generate_job_id(int64_t &max_job_id)
     ret = OB_NOT_INIT;
     LOG_WARN("scheduler service is not initialized", K(ret));
   } else if (OB_FAIL(scheduler->allocate_job_id(max_job_id))) {
-    LOG_WARN("allocate job id failed", K(ret));
   }
   return ret;
 }

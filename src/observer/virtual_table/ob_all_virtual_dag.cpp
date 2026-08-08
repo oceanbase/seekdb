@@ -44,10 +44,8 @@ int ObDagInfoIterator<T>::open()
     SERVER_MODULE_SCOPE {
       if (typeid(T) == typeid(share::ObDagInfo)) {
         if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_all_dag_info(allocator_, dag_infos_))) {
-          STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
         }
       } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_all_dag_scheduler_info(allocator_, dag_infos_))) {
-        STORAGE_LOG(WARN, "failed to get all dag info", K(ret));
       }
     } else {
       ret = OB_NOT_INIT;
@@ -103,7 +101,6 @@ int ObAllVirtualDag::init()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualDag has been inited, ", K(ret));
   } else if (OB_FAIL(dag_info_iter_.open())) {
-    SERVER_LOG(WARN, "Fail to open merge info iter, ", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -122,7 +119,6 @@ int ObAllVirtualDag::inner_get_next_row(common::ObNewRow *&row)
       STORAGE_LOG(WARN, "Fail to get next merge info, ", K(ret));
     }
   } else if (OB_FAIL(fill_cells(dag_info_))) {
-    STORAGE_LOG(WARN, "Fail to fill cells, ", K(ret), K(dag_info_));
   } else {
     row = &cur_row_;
   }
@@ -231,7 +227,6 @@ int ObAllVirtualDagScheduler::init()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualDagScheduler has been inited, ", K(ret));
   } else if (OB_FAIL(dag_scheduler_info_iter_.open())) {
-    SERVER_LOG(WARN, "Fail to open merge info iter, ", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -250,7 +245,6 @@ int ObAllVirtualDagScheduler::inner_get_next_row(common::ObNewRow *&row)
       STORAGE_LOG(WARN, "Fail to get next merge info, ", K(ret));
     }
   } else if (OB_FAIL(fill_cells(dag_scheduler_info_))) {
-    STORAGE_LOG(WARN, "Fail to fill cells, ", K(ret), K(dag_scheduler_info_));
   } else {
     row = &cur_row_;
   }

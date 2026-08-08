@@ -40,7 +40,6 @@ int ObServerStorageMetaPersister::init(ObStorageLogger *server_slogger)
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE, attr, MEM_LIMIT))) {
-    LOG_WARN("fail to init fifo allocator", K(ret));
   } else {
     server_slogger_ = server_slogger;
     is_inited_ = true;
@@ -62,7 +61,6 @@ int ObServerStorageMetaPersister::prepare_create_runtime(const ObServerRuntimeMe
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_prepare_create_runtime_slog_(meta))) {
-    LOG_WARN("fail to write prepare create runtime slog", K(ret), K(meta));
   }
   return ret;
 }
@@ -74,7 +72,6 @@ int ObServerStorageMetaPersister::commit_create_runtime()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_commit_create_runtime_slog_())) {
-    LOG_WARN("fail to write commit create runtime slog", K(ret));
   }
   return ret;
 }
@@ -86,7 +83,6 @@ int ObServerStorageMetaPersister::abort_create_runtime()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_abort_create_runtime_slog_())) {
-    LOG_WARN("fail to write abort create runtime slog", K(ret));
   }
   return ret;
 }
@@ -100,7 +96,6 @@ int ObServerStorageMetaPersister::update_runtime_super_block(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_update_runtime_super_block_slog_(super_block))) {
-    LOG_WARN("fail to write runtime super block slog", K(ret), K(super_block));
   }
   return ret;
 }
@@ -113,7 +108,6 @@ int ObServerStorageMetaPersister::update_server_resources(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(write_update_server_resources_slog_(runtime_config))) {
-    LOG_WARN("fail to write update server resources slog", K(ret), K(runtime_config));
   }
   return ret;
 }
@@ -126,21 +120,17 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
   bool exist = true;
 
   if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(clog_dir))) {
-    LOG_WARN("failed to get server clog dir", K(ret));
   } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(clog_dir, exist))) {
-    LOG_WARN("fail to check exist", K(ret));
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
     bool directory_empty = true;
     if (OB_TMP_FAIL(common::FileDirectoryUtils::is_empty_directory(clog_dir, directory_empty))) {
-      LOG_WARN("fail to check directory whether is empty", KR(tmp_ret), K(clog_dir));
     }
     if (!directory_empty) {
       LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg",
           "clog directory must be empty before rollback cleanup", K(clog_dir));
     }
     if (OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(clog_dir))) {
-      LOG_WARN("fail to delete clog dir", K(ret), K(clog_dir));
     }
   }
 
@@ -151,7 +141,6 @@ int ObServerStorageMetaPersister::clear_runtime_log_dirs()
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("failed to construct server slog path", K(ret));
     } else if (OB_FAIL(common::FileDirectoryUtils::is_exists(slog_dir, exist))) {
-      LOG_WARN("fail to check exist", K(ret));
     } else if (exist && OB_FAIL(common::FileDirectoryUtils::delete_directory_rec(slog_dir))) {
       LOG_WARN("fail to delete slog dir", K(ret), K(slog_dir));
     }
@@ -170,7 +159,6 @@ int ObServerStorageMetaPersister::write_prepare_create_runtime_slog_(
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write create runtime prepare slog", K(ret), K(log_param));
   }
   return ret;
 }
@@ -185,7 +173,6 @@ int ObServerStorageMetaPersister::write_commit_create_runtime_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
   return ret;
 }
@@ -200,7 +187,6 @@ int ObServerStorageMetaPersister::write_abort_create_runtime_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
   return ret;
 }
@@ -224,7 +210,6 @@ int ObServerStorageMetaPersister::write_update_runtime_super_block_slog_(
         ObRedoLogMainType::OB_REDO_LOG_SERVER_RUNTIME,
         ObRedoLogSubType::OB_REDO_LOG_UPDATE_RUNTIME_SUPER_BLOCK);
     if (OB_FAIL(server_slogger_->write_log(log_param))) {
-      LOG_WARN("fail to write runtime super block slog", K(ret), K(log_param));
     }
   }
   return ret;
@@ -242,7 +227,6 @@ int ObServerStorageMetaPersister::write_update_server_resources_slog_(
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write server resources slog", K(ret), K(log_param));
   }
   return ret;
 }

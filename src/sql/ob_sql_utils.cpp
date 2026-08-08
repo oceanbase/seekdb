@@ -59,7 +59,6 @@ ObSqlArrayExpandGuard::ObSqlArrayExpandGuard(ParamStore &params, ObIAllocator &a
       if (array_param->count_ > 0) {
         ArrayObjPair array_pair(&params.at(i), params.at(i));
         if (OB_FAIL(array_obj_list_.push_back(array_pair))) {
-          LOG_WARN("store array obj list failed", K(ret));
         } else {
           params.at(i) = array_param->data_[0];
         }
@@ -160,7 +159,6 @@ int ObSQLUtils::md5(const ObString &stmt, char *sql_id, int32_t len)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("md5 res null pointer", K(ret), K(res));
     } else if (OB_FAIL(to_hex_cstr(md5_sum_buf, md5_sum_len, sql_id, len))) {
-      LOG_WARN("transform to hex str error", K(ret));
     } else { }//do nothing
   }
   return ret;
@@ -172,7 +170,6 @@ int ObSQLUtils::replace_questionmarks(ParseNode *tree,
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret), K(is_stack_overflow));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
@@ -264,14 +261,12 @@ int ObSQLUtils::calc_const_or_calculable_expr(
   } else if (raw_expr->is_const_raw_expr()) {
     bool need_check = false;
     if (OB_FAIL(calc_const_expr(raw_expr, params, result, need_check))) {
-      SQL_LOG(WARN, "failed to calc const expr", K(ret));
     } else {
       is_valid = true;
     }
   } else if (raw_expr->is_static_scalar_const_expr()) {
     bool hit_cache = false;
     if (OB_FAIL(get_result_from_ctx(*exec_ctx, raw_expr, result, is_valid, hit_cache))) {
-      LOG_WARN("failed to get result from ctx", K(ret));
     } else if (hit_cache && (is_valid || ignore_failure)) {
       // do nothing
     } else if (OB_FAIL(calc_const_expr(*exec_ctx, raw_expr,
@@ -288,7 +283,6 @@ int ObSQLUtils::calc_const_or_calculable_expr(
         }
       }
       if (ignore_failure && !IS_SPATIAL_EXPR(raw_expr->get_expr_type())) {
-        LOG_TRACE("failed to calc const expr, ignore the failure", K(ret));
         ret = OB_SUCCESS;
       }
     } else {
@@ -296,7 +290,6 @@ int ObSQLUtils::calc_const_or_calculable_expr(
     }
     if (OB_SUCC(ret) && !hit_cache) {
       if (OB_FAIL(store_result_to_ctx(*exec_ctx, raw_expr, result, is_valid))) {
-        LOG_WARN("failed to store result to ctx", K(ret));
       }
     }
     bool add_calc_failure_cons = false;
@@ -309,7 +302,6 @@ int ObSQLUtils::calc_const_or_calculable_expr(
       if (NULL == constraints) {
         // do nothing
       } else if (OB_FAIL(add_calc_failure_constraint(raw_expr, *constraints))) {
-        LOG_WARN("failed to add calc failure constraint", K(ret));
       }
     }
   } else {
@@ -335,10 +327,8 @@ int ObSQLUtils::calc_simple_expr_without_row(
   } else if (raw_expr->is_const_raw_expr()) {
     bool need_check = false;
     if (OB_FAIL(calc_const_expr(raw_expr, params, result, need_check))) {
-      SQL_LOG(WARN, "failed to calc const expr", KPC(raw_expr), K(ret));
     } else { /*do nothing*/ }
   } else if (OB_FAIL(calc_const_expr(session, *raw_expr, result, allocator, *params, NULL, force_copy_extend_type))) {
-    SQL_LOG(WARN, "Get const_expr value error", KPC(raw_expr), K(ret));
   }
 
   return ret;
@@ -369,21 +359,18 @@ int ObSQLUtils::clear_expr_eval_flags_norecursive(const ObExpr &expr, ObEvalCtx 
   ObSEArray<const ObExpr*, 8> exprs;
 
   if (OB_FAIL(exprs.push_back(&expr))) {
-    LOG_WARN("failed to push back", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     do {
       const ObExpr *current = NULL;
       if (OB_FAIL(exprs.pop_back(current))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         if (current->eval_func_ != NULL || T_OP_ROW == current->type_) {
           current->get_eval_info(ctx).clear_evaluated_flag();
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < current->arg_cnt_; i++) {
           if (OB_FAIL(exprs.push_back(current->args_[i]))) {
-            LOG_WARN("failed to push back", K(ret));
           }
         }
       }
@@ -443,7 +430,6 @@ int ObSQLUtils::calc_const_expr(const ObRawExpr *expr,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(params), K(ret));
     } else if (OB_FAIL(get_param_value(const_expr->get_value(), *params, result, need_check))) {
-      LOG_WARN("get param value error", K(ret));
     } else {  /*do nothing*/ }
   } else {
     need_check = true;
@@ -470,7 +456,6 @@ int ObSQLUtils::calc_calculable_expr(ObSQLSessionInfo *session,
                                      result,
                                      *allocator,
                                      params_array))) {
-    SQL_LOG(WARN, "failed to calc const expr", K(*expr), K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -491,7 +476,6 @@ int ObSQLUtils::calc_const_expr(ObExecContext &exec_ctx,
                                      allocator,
                                      params_array,
                                      &exec_ctx))) {
-    SQL_LOG(WARN, "failed to calc const expr", K(*expr), K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -510,7 +494,6 @@ int ObSQLUtils::calc_const_expr(ObSQLSessionInfo *session,
     LOG_WARN("invalid null session", K(ret));
   } else {
     if (OB_FAIL(se_calc_const_expr(session, &expr, params_array, allocator, exec_ctx, result, force_copy_extend_type))) {
-      LOG_WARN("failed to calc const expr", K(ret));
     }
   }
   return ret;
@@ -536,7 +519,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                                 && (&params == &out_ctx->get_physical_plan_ctx()->get_param_store()));
   if (!use_tmp_phy_plan_ctx && !out_ctx->get_physical_plan_ctx()->is_param_datum_frame_inited()) {
     if (OB_FAIL(out_ctx->get_physical_plan_ctx()->init_datum_param_store())) {
-      LOG_WARN("init datum param store failed", K(ret));
     }
   }
   CREATE_WITH_TEMP_CONTEXT(param) {
@@ -552,12 +534,10 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
       phy_plan_ctx = &tmp_phy_plan_ctx;
       for (int i = 0; OB_SUCC(ret) && i < params.count(); i++) {
         if (OB_FAIL(phy_plan_ctx->get_param_store_for_update().push_back(params.at(i)))) {
-          LOG_WARN("failed to push back element", K(ret));
         }
       } // end for
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(phy_plan_ctx->init_datum_param_store())) {
-        LOG_WARN("init datum param store failed", K(ret));
       }
     }
     // pass the outside timeout timestamp if available
@@ -608,7 +588,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
             ObSubSchemaCtx & subschema_ctx = out_ctx->get_physical_plan_ctx()->get_subschema_ctx();
             int tmp_ret = OB_SUCCESS;
             if (OB_TMP_FAIL(exec_ctx.get_physical_plan_ctx()->get_subschema_ctx().assgin(subschema_ctx))) {
-              LOG_WARN("failed to assgin subschema_ctx", K(tmp_ret));
             }
           }
         }
@@ -618,7 +597,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
         ObRawExprFactory expr_factory(tmp_allocator);
         ObExpr *calc_expr = nullptr;
         if (OB_FAIL(ObRawExprCopier::copy_expr(expr_factory, expr, copied_expr))) {
-          LOG_WARN("failed to copy raw expr", K(ret));
         } else if (OB_ISNULL(copied_expr)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null expr", K(ret), K(expr), K(copied_expr));
@@ -628,8 +606,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
         } else {
           pre_calc_frame = new(frame_buf)ObPreCalcExprFrameInfo(tmp_allocator);
           if (OB_FAIL(expr_cg.generate_calculable_expr(copied_expr, *pre_calc_frame, calc_expr))) {
-            LOG_WARN("failed to generate calculable expr", K(ret));
-            // set current time before do pre calculation
           } else if (OB_ISNULL(calc_expr)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid null expr", K(ret));
@@ -640,7 +616,6 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
           } else if (OB_FAIL(ObPlanCacheObject::pre_calculation(false,
                                                                 *pre_calc_frame,
                                                                 exec_ctx))) {
-            LOG_WARN("failed to pre calculate", K(ret));
           } else {
             ObDatum res_datum;
             ObObj tmp_result;
@@ -648,10 +623,8 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
             if (FALSE_IT(res_datum = calc_expr->locate_expr_datum(eval_ctx))) {
               LOG_WARN("locate expr datum failed", K(ret));
             } else if (OB_FAIL(res_datum.to_obj(tmp_result, calc_expr->obj_meta_))) {
-              LOG_WARN("to object failed", K(ret));
             } else if (!tmp_result.is_ext()) {
               if (OB_FAIL(deep_copy_obj(allocator, tmp_result, result))) {
-                LOG_WARN("failed to deep copy obj", K(ret));
               }
             } else {
               // ext type
@@ -665,14 +638,11 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                 //                   sdo_elem_info_array (1,2,1),
                 //                   sdo_ordinate_array (10,25, 20,30, 25,25, 30,30)));
                 if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(allocator, tmp_result, result))) {
-                  LOG_WARN("failed to deep copy pl extend obj", K(ret), K(tmp_result));
                 }
               } else if (OB_NOT_NULL(out_ctx)) {
                 if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(out_ctx->get_allocator(), tmp_result, result))) {
-                  LOG_WARN("failed to deep copy pl extend obj", K(ret), K(tmp_result));
                 } else if (OB_ISNULL(out_ctx->get_pl_ctx())) {
                   if (OB_FAIL(out_ctx->init_pl_ctx())) {
-                    LOG_WARN("failed to init pl ctx", K(ret));
                   }
                 }
                 if (OB_FAIL(ret)) {
@@ -680,11 +650,9 @@ int ObSQLUtils::se_calc_const_expr(ObSQLSessionInfo *session,
                   ret = OB_INVALID_ARGUMENT;
                   LOG_WARN("pl ctx is null", K(ret));
                 } else if (OB_FAIL(out_ctx->get_pl_ctx()->add(result))) {
-                  LOG_WARN("failed to add pl obj to pl ctx", K(ret));
                 }
               } else { // shallow copy extend type
                 if (OB_FAIL(deep_copy_obj(allocator, tmp_result, result))) {
-                  LOG_WARN("failed to deep copy obj", K(ret));
                 }
               }
             }
@@ -742,7 +710,6 @@ int ObSQLUtils::check_and_convert_db_name(const ObCollationType cs_type, const b
       LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, static_cast<int32_t>(origin_name.length()), origin_name.ptr());
       LOG_WARN("database name is too long", K(origin_name), K(ret));
     } else if (OB_FAIL(ret)) {
-      LOG_WARN("fail to check ident name", K(origin_name), K(ret));
     } else {
       name = last_name;
     }
@@ -760,13 +727,11 @@ int ObSQLUtils::cvt_db_name_to_org(share::schema::ObSchemaGetterGuard &schema_gu
   if (session != NULL && !session->is_inner()) {
     ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
     if (OB_FAIL(session->get_name_case_mode(case_mode))) {
-      LOG_WARN("fail to get name case mode", K(ret));
     } else if (case_mode == OB_ORIGIN_AND_INSENSITIVE || case_mode == OB_LOWERCASE_AND_INSENSITIVE) {
       const ObDatabaseSchema *db_schema = NULL;
       if (OB_FAIL(schema_guard.get_database_schema(
                                                    name,
                                                    db_schema))) {
-        LOG_WARN("fail to get database schema", K(name), K(ret));
       } else if (db_schema != NULL) {
         name = db_schema->get_database_name();
         if (allocator != NULL) {
@@ -831,7 +796,6 @@ int ObSQLUtils::check_and_convert_table_name(const ObCollationType cs_type,
         LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, (int)strlen(origin_name), origin_name);
         LOG_WARN("table name is too long", K(origin_name), K(max_ident_len), K(ret), K(stmt_type), K(is_index_table));
       } else if (OB_FAIL(ret)) {
-        LOG_WARN("fail to check ident name", K(origin_name), K(ret));
       }
     }
   }
@@ -867,7 +831,6 @@ int ObSQLUtils::check_index_name(const ObCollationType cs_type, ObString &name)
       LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, name.length(), name.ptr());
       LOG_WARN("index name is too long", K(name), K(ret));
     } else if (OB_FAIL(ret)) {
-      LOG_WARN("fail to check ident name", K(name), K(ret));
     }
   }
   return ret;
@@ -932,7 +895,6 @@ int ObSQLUtils::check_and_copy_column_alias_name(const ObCollationType cs_type, 
                                      CS_TYPE_UTF8MB4_GENERAL_CI,
                                      allocator,
                                      name))) {
-    LOG_WARN("fail to copy column alias name", K(origin_name), K(ret));
   } else {
     if (name.length() < origin_name.length() && !is_auto_gen) {
       if (0 == name.length()) {
@@ -1324,8 +1286,6 @@ void ObSQLUtils::get_default_cast_mode(const bool is_explicit_cast,
     }
   }
   cast_mode |= CM_FORMAT_NUMBER_WITH_LIMIT;
-  LOG_DEBUG("in get_default_cast_mode", K(is_explicit_cast),
-      K(result_flag), K(stmt_type), K(cast_mode), K(sql_mode));
 }
 
 int ObSQLUtils::get_cast_mode_for_replace(const ObRawExpr *expr,
@@ -1340,9 +1300,7 @@ int ObSQLUtils::get_cast_mode_for_replace(const ObRawExpr *expr,
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false,/* explicit_cast */
                                                        0,    /* result_flag */
                                                        session, cast_mode))) {
-    LOG_WARN("failed to get default cast mode", K(ret));
   } else if (OB_FAIL(ObSQLUtils::set_cs_level_cast_mode(expr->get_collation_level(), cast_mode))) {
-    LOG_WARN("failed to set cs level cast mode", K(ret));
   } else {
     if (dst_type.is_string_type() &&
         expr->get_result_type().has_result_flag(ZEROFILL_FLAG)) {
@@ -1394,7 +1352,6 @@ int ObSQLUtils::get_cs_level_from_cast_mode(const ObCastMode cast_mode,
     } else {
       cs_level = tmp_cs_level;
     }
-    LOG_TRACE(" get_cs_level_from_cast_mode debug",K(default_level),K(cs_level));
   }
   return ret;
 }
@@ -1420,7 +1377,6 @@ int ObSQLUtils::check_well_formed_str(const ObString &src_str,
                                                 str_len,
                                                 well_formed_length,
                                                 well_formed_error))) {
-    LOG_WARN("fail to check well_formed_len", K(ret), K(src_str), K(cs_type));
   } else if (well_formed_length < str_len) {
     // MySQL is such judged, actually it can also be judged by well_formed_error
     int32_t diff = static_cast<int32_t>(str_len - well_formed_length);
@@ -1431,8 +1387,6 @@ int ObSQLUtils::check_well_formed_str(const ObString &src_str,
     int64_t charset_name_len = strlen(charset_name);
     if (OB_FAIL(common::hex_print(src_str.ptr() + well_formed_length,
                                   diff, hex_buf, sizeof(hex_buf), hex_len))) {
-      LOG_WARN("Failed to transform to hex cstr", K(ret), K(src_str),
-                K(well_formed_length));
     } else if (ret_error) {
       ret = OB_ERR_INVALID_CHARACTER_STRING;
       LOG_USER_ERROR(OB_ERR_INVALID_CHARACTER_STRING,
@@ -1467,13 +1421,10 @@ int ObSQLUtils::check_well_formed_str(const ObObj &src,
     ObString src_str;
     ObString dst_str;
     bool is_null = false;
-    if (OB_FAIL(src.get_varchar(src_str))) { // must be varchar type
-      LOG_WARN("fail to get varchar", K(ret), K(src));
+    if (OB_FAIL(src.get_varchar(src_str))) {
     } else if (OB_FAIL(check_well_formed_str(src_str, src.get_collation_type(),
                                              dst_str, is_null,
                                              is_strict_mode, ret_error))) {
-      LOG_WARN("check_well_formed_str failed", K(ret), K(src_str), K(is_strict_mode),
-                                               K(ret_error));
     } else if (is_null) {
       dest.set_null();
     } else {
@@ -1518,7 +1469,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to alloc mem", K(ret));
     } else if (OB_FAIL(query_sql.serialize(buf, size, pos_s))) {
-        LOG_WARN("fail to serialize key", K(ret));
     } else if (FALSE_IT(outline_key.assign_ptr(buf,
                         static_cast<ObString::obstr_size_t>(pos_s)))) {
       // do nothing
@@ -1545,7 +1495,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
     sql_info.need_check_fp_ = false;
     int64_t format_len = query_sql.length() * 2;
     if (OB_FAIL(parser.parse(query_sql, parse_result))) {
-      LOG_WARN("Generate syntax tree failed", "sql", query_sql, K(ret));
     } else if (OB_ISNULL(parse_result.result_tree_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("parse result tree not inited", K(parse_result.result_tree_), K(ret));
@@ -1559,7 +1508,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
       LOG_WARN("invalid args", K(type_node));
     } else if (!IS_DML_STMT(type_node->type_)) {
       ret = OB_SQL_DML_ONLY;
-      LOG_TRACE("statement not dml sql", K(type_node));
     } else if (check_param && OB_FAIL(ObSqlParameterization::transform_syntax_tree(allocator,
                                                                     *session,
                                                                     NULL,
@@ -1577,7 +1525,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
                                                                         no_param_sql,
                                                                         raw_params,
                                                                         parse_mode))) {
-      LOG_WARN("fail to fast_parameterize_sql", K(ret));
     } else if (need_format 
           && OB_FAIL(ObSqlParameterization::formalize_sql_filter_hint(allocator, no_param_sql, no_param_sql, raw_params))) {
       LOG_WARN("failed to formalize fast parser sql", K(no_param_sql), K(ret));
@@ -1585,8 +1532,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
                                                                             sql_info,
                                                                             special_params))) {
       if (OB_NOT_SUPPORTED == ret) {
-        LOG_TRACE("fail to check and generate not params",
-                 K(ret), K(query_sql), K(no_param_sql));
       } else {
         LOG_WARN("fail to check and generate not params",
                  K(ret), K(query_sql), K(no_param_sql));
@@ -1596,7 +1541,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("fail to alloc buf", K(ret));
     } else if (OB_FAIL(ObSqlParameterization::construct_sql(no_param_sql, special_params, buf, format_len, pos))) {
-      LOG_WARN("fail to construct_sql", K(ret), K(no_param_sql), K(special_params.count()));
     } else if (FALSE_IT(constructed_sql.assign_ptr(buf, pos))) {
       // do nothing
     } else if (need_format 
@@ -1619,7 +1563,6 @@ int ObSQLUtils::get_outline_key(ObIAllocator &allocator,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_ERROR("fail to alloc mem", K(ret));
         } else if (OB_FAIL(constructed_sql.serialize(buf, size, pos_s))) {
-          LOG_WARN("fail to serialize key", K(ret));
         } else {
           outline_key.assign_ptr(buf, static_cast<ObString::obstr_size_t>(pos_s));
           has_questionmark_in_sql = INT64_MAX != type_node->value_ && type_node->value_ > 0;
@@ -1640,7 +1583,6 @@ int ObSQLUtils::filter_hint_in_query_sql(ObIAllocator &allocator,
   ObParser parser(allocator, session.get_sql_mode(), session.get_charsets4parser());
   ParseResult parse_result;
   if (OB_FAIL(parser.parse(sql, parse_result, FP_NO_PARAMERIZE_AND_FILTER_HINT_MODE))) {
-    SQL_PC_LOG(WARN, "fail to parse query while filter hint", K(ret));
   } else {
     param_sql.assign(parse_result.no_param_sql_, parse_result.no_param_sql_len_);
     parser.free_result(parse_result);
@@ -1661,9 +1603,7 @@ int ObSQLUtils::construct_outline_sql(ObIAllocator &allocator,
   ObSqlString sql_helper;
   // This interface will remove both comments and hints
   if (OB_FAIL(filter_hint_in_query_sql(allocator, session, orig_sql, filter_sql))) {
-    LOG_WARN("fail to filter hint", K(ret));
   } else if (OB_FAIL(filter_head_space(filter_sql))) {
-    LOG_WARN("fail to filter head space", K(ret));
   }
   if (OB_SUCC(ret)) {
     char empty_split = find_first_empty_char(filter_sql);
@@ -1671,11 +1611,7 @@ int ObSQLUtils::construct_outline_sql(ObIAllocator &allocator,
     if (OB_FAIL(sql_helper.assign_fmt("%.*s %.*s%.*s", first_token.length(), first_token.ptr(),
                                       outline_content.length(), outline_content.ptr(),
                                       filter_sql.length(), filter_sql.ptr()))) {
-       LOG_WARN("failed to construct new sql", K(first_token), K(orig_sql),
-                                 K(filter_sql), K(outline_content), K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, sql_helper.string(), outline_sql))) {
-      LOG_WARN("failed to write string", K(first_token), K(orig_sql),
-                                         K(filter_sql), K(outline_content), K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -1729,9 +1665,7 @@ int ObSQLUtils::reconstruct_sql(ObIAllocator &allocator, const ObStmt *stmt, ObS
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected stmt type", K(stmt->get_stmt_type()), K(stmt->get_query_ctx()->get_sql_stmt()), K(ret));
   } else if (OB_FAIL(sql_printer.do_print(allocator, sql))) {
-    LOG_WARN("failed to print sql", K(ret));
   }
-  LOG_TRACE("succeed to reconstruct sql", K(sql), KPC(stmt));
   return ret;
 }
 
@@ -1744,9 +1678,7 @@ int ObISqlPrinter::do_print(ObIAllocator &allocator, ObString &result)
   SMART_VAR(char[OB_MAX_SQL_LENGTH], buf) {
     MEMSET(buf, 0, sizeof(buf));
     if (OB_FAIL(inner_print(buf, sizeof(buf), res_len))) {
-        LOG_WARN("failed to print", K(sizeof(buf)), K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, ObString(res_len, buf), result))) {
-      LOG_WARN("fail to deep copy string", K(ret));
     }
   }
   if (OB_SIZE_OVERFLOW == ret) {
@@ -1754,9 +1686,7 @@ int ObISqlPrinter::do_print(ObIAllocator &allocator, ObString &result)
     SMART_VAR(char[OB_MAX_SQL_LENGTH * 2], buf) {
       MEMSET(buf, 0, sizeof(buf));
       if (OB_FAIL(inner_print(buf, sizeof(buf), res_len))) {
-        LOG_WARN("failed to print", K(sizeof(buf)), K(ret));
       } else if (OB_FAIL(ob_write_string(allocator, ObString(res_len, buf), result))) {
-        LOG_WARN("fail to deep copy string", K(ret));
       }
     }
   }
@@ -1772,9 +1702,7 @@ int ObISqlPrinter::do_print(ObIAllocator &allocator, ObString &result)
         LOG_WARN("failed to alloc memory for sql", K(ret), K(length));
       } else if (FALSE_IT(MEMSET(buf, 0, length))) {
       } else if (OB_FAIL(inner_print(buf, length, res_len))) {
-        LOG_WARN("failed to print", K(sizeof(buf)), K(ret));
       } else if (OB_FAIL(ob_write_string(allocator, ObString(res_len, buf), result))) {
-        LOG_WARN("fail to deep copy string", K(ret));
       }
       if (OB_SUCC(ret)) {
         is_succ = true;
@@ -1844,7 +1772,6 @@ int ObSQLUtils::print_sql(char *buf,
       printer.set_is_first_stmt_for_hint(true);
       printer.enable_print_temp_table_as_cte();
       if (OB_FAIL(printer.do_print())) {
-        LOG_WARN("fail to print select stmt", K(ret));
       } else { /*do nothing*/ }
     }
       break;
@@ -1861,7 +1788,6 @@ int ObSQLUtils::print_sql(char *buf,
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
-        LOG_WARN("fail to print insert stmt", K(ret));
       } else { /*do nothing*/ }
     }
       break;
@@ -1877,7 +1803,6 @@ int ObSQLUtils::print_sql(char *buf,
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
-        LOG_WARN("fail to print delete stmt", K(ret));
       } else { /*do nothing*/ }
     }
       break;
@@ -1893,7 +1818,6 @@ int ObSQLUtils::print_sql(char *buf,
       printer.set_is_root(true);
       printer.set_is_first_stmt_for_hint(true);
       if (OB_FAIL(printer.do_print())) {
-        LOG_WARN("fail to print update stmt", K(ret));
       } else { /*do nothing*/ }
     }
       break;
@@ -1924,9 +1848,7 @@ int ObSQLUtils::wrap_expr_ctx(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get tz info pointer failed", K(ret));
   } else if (OB_FAIL(get_tz_offset(tz_info, tz_offset))) {
-    LOG_WARN("get tz offset failed", K(ret));
   } else if (OB_FAIL(get_default_cast_mode(stmt_type, my_session, expr_ctx.cast_mode_))) {
-    LOG_WARN("Failed to get default cast mode", K(ret));
   } else {
     expr_ctx.exec_ctx_ = &exec_ctx;
     expr_ctx.calc_buf_ = &allocator;
@@ -1934,7 +1856,6 @@ int ObSQLUtils::wrap_expr_ctx(
     expr_ctx.my_session_ = my_session;
     expr_ctx.tz_offset_ = tz_offset;
     if (OB_FAIL(wrap_column_convert_ctx(expr_ctx, expr_ctx.column_conv_ctx_))) {
-      LOG_WARN("wrap column convert ctx failed", K(ret));
     }
   }
   return ret;
@@ -1967,9 +1888,7 @@ int RelExprChecker::add_expr(ObRawExpr *&expr)
   int ret = OB_SUCCESS;
   if (OB_HASH_NOT_EXIST == (ret = duplicated_checker_.exist_refactored(reinterpret_cast<uint64_t>(expr)))) {
     if (OB_FAIL(duplicated_checker_.set_refactored(reinterpret_cast<uint64_t>(expr)))) {
-      LOG_WARN("set expr to duplicated checker failed", K(ret), K(duplicated_checker_.size()));
     } else if (OB_FAIL(rel_array_.push_back(expr))) {
-      LOG_WARN("push expr to relation array failed", K(ret));
     }
   } else if (OB_HASH_EXIST == ret) {
     ret = OB_SUCCESS;
@@ -2005,9 +1924,7 @@ int FastRelExprChecker::add_expr(ObRawExpr *&expr)
   } else if (expr->has_flag(BE_USED)) {
     // do nothing
   } else if (OB_FAIL(rel_array_.push_back(expr))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(expr->add_flag(BE_USED))) {
-    LOG_WARN("failed to add flag", K(ret));
   }
   return ret;
 }
@@ -2026,9 +1943,7 @@ int RelExprPointerChecker::add_expr(ObRawExpr *&expr)
     ObRawExprPointer pointer;
     expr_id = rel_array_.count();
     if (OB_FAIL(expr_id_map_.set_refactored(reinterpret_cast<uint64_t>(expr), expr_id))) {
-      LOG_WARN("set expr to duplicated checker failed", K(ret), K(duplicated_checker_.size()));
     } else if (OB_FAIL(rel_array_.push_back(pointer))) {
-      LOG_WARN("failed to push back new array", K(ret));
     }
   } else if (OB_SUCCESS == flag) {
     // do nothing
@@ -2038,7 +1953,6 @@ int RelExprPointerChecker::add_expr(ObRawExpr *&expr)
   }
   if (OB_SUCC(ret) && expr_id < rel_array_.count()) {
     if (OB_FAIL(rel_array_.at(expr_id).add_ref(&expr))) {
-      LOG_WARN("failed to push expr into array", K(ret));
     }
   }
   return ret;
@@ -2048,7 +1962,6 @@ int AllExprPointerCollector::add_expr(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rel_array_.push_back(&expr))) {
-    LOG_WARN("push expr to relation array failed", K(ret));
   }
 
   return ret;
@@ -2065,7 +1978,6 @@ int FastUdtExprChecker::add_expr(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTransformUtils::extract_udt_exprs(expr, rel_array_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   }
   return ret;
 }
@@ -2080,7 +1992,6 @@ int JsonObjectStarChecker::add_expr(ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTransformUtils::extract_json_object_exprs(expr, rel_array_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   }
   return ret;
 }
@@ -2093,12 +2004,10 @@ int SemanticVectorDistExprChecker::add_expr(ObRawExpr *&expr)
     LOG_WARN("expr is null", K(ret));
   } else if (expr->get_expr_type() == T_FUN_SYS_SEMANTIC_VECTOR_DISTANCE) {
     if (OB_FAIL(add_var_to_array_no_dup(rel_array_, expr))) {
-      LOG_WARN("failed to add semantic_distance expr to array", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(add_expr(expr->get_param_expr(i))))) {
-        LOG_WARN("failed to check param expr", K(ret));
       }
     }
   }
@@ -2111,7 +2020,6 @@ bool check_stack_overflow_c()
   bool is_overflow = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(oceanbase::common::check_stack_overflow(is_overflow))) {
-    LOG_ERROR("fail to check stack overflow", K(ret));
   }
   return is_overflow;
 }
@@ -2127,7 +2035,6 @@ int ObSQLUtils::extract_pre_query_range(const ObQueryRangeProvider &query_range_
   if (OB_FAIL(query_range_provider.get_tablet_ranges(allocator, exec_ctx, key_ranges,
                                                      dummy_all_single_value_ranges,
                                                      dtc_params))) {
-    LOG_WARN("failed to get tablet ranges", K(ret));
   }
   return ret;
 }
@@ -2145,7 +2052,6 @@ int ObSQLUtils::extract_geo_query_range(const ObQueryRangeProvider &query_range_
                                                      dummy_all_single_value_ranges,
                                                      dtc_params,
                                                      mbr_filters))) {
-    LOG_WARN("failed to get tablet ranges", K(ret));
   }
   return ret;
 }
@@ -2195,9 +2101,7 @@ int ObSQLUtils::get_partition_range(ObObj *start_row_key,
                                     range_key_count,
                                     table_id,
                                     part_range))) {
-        LOG_WARN("get partition range in opt failed", K(ret));
       }
-      LOG_DEBUG("opt logic", K(part_range), KPC(part_expr));
     } else {
       // part expr only have one column.
       if (OB_FAIL(get_range_for_scalar(
@@ -2211,7 +2115,6 @@ int ObSQLUtils::get_partition_range(ObObj *start_row_key,
                                     eval_ctx,
                                     part_range,
                                     allocator))) {
-        LOG_WARN("get partition range in part expr for scalar failed", K(ret));
       }
     }
   // conclude virtual generated column & part expr not NULL
@@ -2227,7 +2130,6 @@ int ObSQLUtils::get_partition_range(ObObj *start_row_key,
                                     eval_ctx,
                                     part_range,
                                     allocator))) {
-      LOG_WARN("get partition range in part expr for scalar failed", K(ret));
     }
   }
 
@@ -2275,7 +2177,6 @@ int ObSQLUtils::get_range_for_scalar(ObObj *start_row_key,
                                     part_type,
                                     part_expr_arg,
                                     eval_ctx))) {
-            LOG_WARN("get partition range common failed", K(ret));
           } else {
             tmp_start_row_key[i] = *function_obj;
             tmp_end_row_key[i] = *function_obj;
@@ -2299,7 +2200,6 @@ int ObSQLUtils::get_range_for_scalar(ObObj *start_row_key,
                                     part_type,
                                     part_expr,
                                     eval_ctx))) {
-      LOG_WARN("get partition range common failed", K(ret));
     } else {
       tmp_start_row_key[0] = *function_obj;
       tmp_end_row_key[0] = *function_obj;
@@ -2312,7 +2212,6 @@ int ObSQLUtils::get_range_for_scalar(ObObj *start_row_key,
     part_range.border_flag_.set_inclusive_start();
     part_range.border_flag_.set_inclusive_end();
   }
-  LOG_DEBUG("get partition range", K(ret), K(part_range), KPC(part_expr), K(count));
   return ret;
 }
 
@@ -2342,16 +2241,13 @@ int ObSQLUtils::get_partition_range_common(
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
   if (OB_FAIL(part_expr->eval(eval_ctx, datum))) {
-    LOG_WARN("failed to calc expr", K(ret));
   } else if (OB_FAIL(datum->to_obj(*function_obj,
                                   part_expr->obj_meta_,
                                   part_expr->obj_datum_map_))) {
-    LOG_WARN("convert datum to obj failed", K(ret));
   } else if (part_type == share::schema::ObPartitionFuncType::PARTITION_FUNC_TYPE_HASH &&
       OB_FAIL(ObSQLUtils::revise_hash_part_object(*function_obj))) {
     LOG_WARN("failed to revise hash partition object", K(ret));
   }
-  LOG_DEBUG("get_partition_range_common", K(ret), KPC(part_expr));
   return ret;
 }
 
@@ -2398,7 +2294,6 @@ int ObSQLUtils::merge_solidified_var_into_collation(const ObLocalSessionVar &ses
   if (OB_SUCC(ret)) {
     ObSessionSysVar *local_var = NULL;
     if (OB_FAIL(session_vars_snapshot.get_local_var(SYS_VAR_COLLATION_CONNECTION, local_var))) {
-      LOG_WARN("get local session var failed", K(ret));
     } else if (NULL != local_var) {
       cs_type = static_cast<ObCollationType>(local_var->val_.get_int());
     }
@@ -2419,7 +2314,6 @@ int ObSQLUtils::get_solidified_vars_from_ctx(const ObRawExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(query_ctx->get_local_session_vars(session_var_id, local_vars))) {
-    LOG_WARN("failed to get local session vars", K(ret));
   }
   return ret;
 }
@@ -2433,12 +2327,10 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
   if (OB_INVALID_INDEX_INT64 == session_var_id) {
     // do nothing
   } else if (OB_FAIL(get_solidified_vars_from_ctx(expr, local_vars))) {
-    LOG_WARN("failed to get local session vars", K(ret));
   } else if (OB_ISNULL(local_vars)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(merge_solidified_vars_into_type_ctx(type_ctx, *local_vars))) {
-    LOG_WARN("failed to merge_solidified_vars_into_type_ctx", K(ret));
   }
   return ret;
 }
@@ -2451,7 +2343,6 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
   //coll_type_ for mysql mode
   ObCollationType cs_type = type_ctx.get_coll_type();
   if (OB_FAIL(merge_solidified_var_into_collation(session_vars_snapshot, cs_type))) {
-    LOG_WARN("get collation failed", K(ret));
   } else {
     type_ctx.set_coll_type(cs_type);
   }
@@ -2465,19 +2356,16 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), KP(tz_info_map));
     } else if (OB_FAIL(session_vars_snapshot.get_local_var(SYS_VAR_TIME_ZONE, local_var))) {
-      LOG_WARN("get local var failed", K(ret));
     } else if (NULL != local_var) {
       if (OB_FAIL(type_ctx.get_local_tz_wrap().init_time_zone(local_var->val_.get_string(),
                                                               OB_INVALID_VERSION,
                                                               *(const_cast<ObTZInfoMap *>(tz_info_map))))) {
-        LOG_WARN("get init_time_zone failed", K(ret), K(local_var->val_.get_string()));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(merge_solidified_var_into_dtc_params(&session_vars_snapshot,
                                                         type_ctx.get_local_tz_wrap().get_time_zone_info(),
                                                         type_ctx.get_dtc_params()))) {
-        LOG_WARN("get dtc params failed", K(ret));
       }
     }
   }
@@ -2485,7 +2373,6 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
   if (OB_SUCC(ret)) {
     ObSQLMode sql_mode = type_ctx.get_sql_mode();
     if (OB_FAIL(merge_solidified_var_into_sql_mode(&session_vars_snapshot, sql_mode))) {
-      LOG_WARN("get sql mode failed", K(ret));
     } else {
       type_ctx.set_sql_mode(sql_mode);
     }
@@ -2495,7 +2382,6 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
   if (OB_SUCC(ret)) {
     int64_t max_allowed_packet = type_ctx.get_max_allowed_packet();
     if (OB_FAIL(merge_solidified_var_into_max_allowed_packet(&session_vars_snapshot, max_allowed_packet))) {
-      LOG_WARN("get sql mode failed", K(ret));
     } else {
       type_ctx.set_max_allowed_packet(max_allowed_packet);
     }
@@ -2523,7 +2409,6 @@ int ObSQLUtils::merge_solidified_var_into_sql_mode(const ObLocalSessionVar *loca
   if (NULL == local_vars) {
     //do nothing
   } else if (OB_FAIL(local_vars->get_local_var(SYS_VAR_SQL_MODE, local_var))) {
-    LOG_WARN("get local session var failed", K(ret));
   } else if (NULL != local_var) {
     if (ObUInt64Type == local_var->val_.get_type()) {
       sql_mode = local_var->val_.get_uint64();
@@ -2545,7 +2430,6 @@ int ObSQLUtils::merge_solidified_var_into_max_allowed_packet(const ObLocalSessio
   if (NULL == local_vars) {
     //do nothing
   } else if (OB_FAIL(local_vars->get_local_var(SYS_VAR_MAX_ALLOWED_PACKET, local_var))) {
-    LOG_WARN("get local session var failed", K(ret));
   } else if (NULL != local_var) {
     if (ObIntType == local_var->val_.get_type()) {
       max_allowed_packet = local_var->val_.get_int();
@@ -2609,7 +2493,6 @@ int ObSQLUtils::make_whole_range(ObIAllocator &allocator,
     LOG_WARN("Failed to new whole range");
   } else if (OB_FAIL(make_whole_range(allocator, ref_table_id,
                                       rowkey_count, *whole_range))) {
-    LOG_WARN("Failed to make whole range inner", K(ret));
   }
   return ret;
 }
@@ -2700,7 +2583,6 @@ int ObSQLUtils::update_session_last_schema_version(ObMultiVersionSchemaService &
   int64_t received_schema_version = OB_INVALID_VERSION;
   
   if (OB_FAIL(schema_service.get_published_schema_version(received_schema_version))) {
-    LOG_WARN("fail to get runtime received broadcast version", K(ret));
   } else {
     session_info.set_last_ddl_schema_version(received_schema_version);
   }
@@ -2895,7 +2777,6 @@ int ObVirtualTableResultConverter::get_all_columns_schema()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("col_schema is NULL", K(ret), K(column_id));
     } else if (OB_FAIL(cols_schema_.push_back(col_schema))) {
-      LOG_WARN("failed to push back column schema", K(ret));
     } else {
       LOG_TRACE("trace column type", K(col_schema->get_data_type()), K(col_schema->get_collation_type()));
     }
@@ -2925,7 +2806,6 @@ int ObVirtualTableResultConverter::init_output_row(int64_t cell_cnt)
     convert_row_.cells_ = cells;
     convert_row_.count_ = cell_cnt;
     inited_row_ = true;
-    LOG_DEBUG("debug output row", K(cell_cnt), K(max_col_cnt_));
   }
   return ret;
 }
@@ -3015,13 +2895,10 @@ int ObVirtualTableResultConverter::convert_key(const ObRowkey &src, ObRowkey &ds
                                         key_cast_ctx_,
                                         src_key_objs[nth_obj],
                                         new_key_obj[nth_obj]))) {
-          LOG_WARN("fail to cast obj", K(ret), K(key_types_->at(nth_obj)),
-            K(src_key_objs[nth_obj]));
         }
       }
     }//end for
     if (OB_SUCC(ret)) {
-      LOG_TRACE("trace range key", K(ret), K(new_key_obj[0]));
       dst.assign(new_key_obj, src.get_obj_cnt());
     }
   }
@@ -3041,7 +2918,6 @@ int ObSQLUtils::check_table_version(bool &equal,
     
     if (OB_FAIL(schema_guard.get_schema_version(
         TABLE_SCHEMA, table_version.get_object_id(), latest_table_version))) {
-      LOG_WARN("failed to get table schema version", K(ret), K(table_version.get_object_id()));
     }
     if (table_version.get_version() != latest_table_version) {
       equal = false;
@@ -3064,7 +2940,6 @@ int ObSQLUtils::generate_view_definition_for_resolve(ObIAllocator &allocator,
                                                           view_definition,
                                                           CS_TYPE_UTF8MB4_GENERAL_CI,
                                                           connection_collation))) {
-    LOG_WARN("fail to copy and convert string charset", K(ret));
   }
   return ret;
 }
@@ -3151,7 +3026,6 @@ int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
   } else if (OB_FAIL(generate_new_name_with_escape_character(allocator,
                                                       identifier_name,
                                                       print_name))) {
-    LOG_WARN("failed to generate new name with escape character", K(ret));
   } else if (ObCharset::charset_type_by_coll(connection_collation)
       == CHARSET_UTF8MB4) {
     if (OB_UNLIKELY(pos + print_name.length() > buf_len)) {
@@ -3173,7 +3047,6 @@ int ObSQLUtils::print_identifier(char *buf, const int64_t buf_len, int64_t &pos,
                                            buf + pos,
                                            buf_len - pos,
                                            result_len))) {
-      LOG_WARN("fail to convert charset", K(ret), K(buf_len), K(pos));
     } else {
       pos += result_len;
     }
@@ -3317,9 +3190,7 @@ int ObSQLUtils::create_encode_sortkey_expr(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(expr_factory.create_raw_expr(T_FUN_SYS_ENCODE_SORTKEY, encode_expr))) {
-    LOG_WARN("failed to create encode_expr", K(ret));
   } else if (OB_FAIL(encode_expr->init_param_exprs(order_keys.count() * 3))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else {
     // Assemble encode sortkey.
     for (int64_t i = start_key; OB_SUCC(ret) && i < order_keys.count(); i++) {
@@ -3333,9 +3204,7 @@ int ObSQLUtils::create_encode_sortkey_expr(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(order_keys.at(i).expr_), K(ret));
       } else if (OB_FAIL(expr_factory.create_raw_expr(T_VARCHAR, nulls_pos_expr))) {
-        LOG_WARN("failed to create null_pos expr", K(ret));
       } else if (OB_FAIL(expr_factory.create_raw_expr(T_VARCHAR, order_expr))) {
-        LOG_WARN("failed to create order expr", K(ret));
       } else {
         switch (order_keys.at(i).order_type_) {
           case NULLS_LAST_ASC: {
@@ -3372,11 +3241,9 @@ int ObSQLUtils::create_encode_sortkey_expr(
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(encode_expr->formalize(exec_ctx->get_my_session()))) {
-      LOG_WARN("failed to formalize expr", K(ret));
     }  else {
       encode_sortkey.expr_ = encode_expr;
       encode_sortkey.order_type_ = NULLS_FIRST_ASC;
-      LOG_DEBUG("debug encode sortkey", K(*encode_expr));
     }
   }
   return ret;
@@ -3416,7 +3283,6 @@ int ObSqlGeoUtils::check_srid_by_srs(
       OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
     LOG_WARN("failed to get srs guard", K(srid), K(ret));    
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
-    LOG_WARN("get srs failed", K(srid), K(ret));
   }
 
   return ret;
@@ -3429,7 +3295,6 @@ int ObSqlGeoUtils::check_srid(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_srid_by_srs(srs_provider, input_srid))) {
-    LOG_WARN("invalid srid", K(ret), K(input_srid));
   } else if (UINT32_MAX == column_srid) {
     // do nothing, accept all.
   } else if (input_srid != column_srid) {
@@ -3444,7 +3309,6 @@ int ObPreCalcExprConstraint::assign(const ObPreCalcExprConstraint &other, common
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(pre_calc_expr_info_.assign(other.pre_calc_expr_info_, allocator))) {
-    LOG_WARN("failed to copy pre calculable expression info");
   } else {
     expect_result_ = other.expect_result_;
   }
@@ -3461,7 +3325,6 @@ int ObPreCalcExprConstraint::check_is_match(ObDatumObjParam &datum_param,
   bool is_udt_type = false;
   bool is_udt_null = false;
   if (OB_FAIL(datum_param.to_objparam(obj_param, &exec_ctx.get_allocator()))) {
-    LOG_WARN("failed to obj param", K(ret));
   } else {
     switch (expect_result_) {
       case PRE_CALC_RESULT_NULL:
@@ -3484,7 +3347,6 @@ int ObPreCalcExprConstraint::check_is_match(ObDatumObjParam &datum_param,
         bool is_precise = false;
         bool expect_precise = PRE_CALC_PRECISE == expect_result_;
         if (OB_FAIL(ObPreRangeGraph::is_precise_like_range(obj_param, escape, is_precise))) {
-          LOG_WARN("failed to check precise constraint.", K(ret));
         } else {
           is_match = is_precise == expect_precise;
         }
@@ -3705,7 +3567,6 @@ int ObSQLUtils::store_result_to_ctx(ObExecContext &exec_ctx,
         // pl extend type is already deep copied in se_calc_const_expr
         val = result;
       } else if (OB_FAIL(ob_write_obj(exec_ctx.get_allocator(), result, val))) {
-        LOG_WARN("failed to write obj", K(result), K(ret));
       }
     } else {
       val.set_nop_value();
@@ -3716,7 +3577,6 @@ int ObSQLUtils::store_result_to_ctx(ObExecContext &exec_ctx,
              OB_FAIL(query_ctx->calculable_expr_results_.create(20, ObModIds::OB_SQL_COMPILE))) {
     LOG_WARN("failed to create calculable expr results map", K(ret));
   } else if (OB_FAIL(query_ctx->calculable_expr_results_.set_refactored(key, val))) {
-    LOG_WARN("failed to set result", K(ret));
   }
   return ret;
 }
@@ -3743,7 +3603,6 @@ int ObSQLUtils::add_calc_failure_constraint(const ObRawExpr *raw_expr,
   if (OB_SUCC(ret) && !existed) {
     ObExprConstraint cons(const_cast<ObRawExpr*>(raw_expr), PRE_CALC_ERROR);
     if (OB_FAIL(constraints.push_back(cons))) {
-      LOG_WARN("failed to push back pre calc constraints", K(ret));
     }
   }
   return ret;
@@ -3756,7 +3615,6 @@ int ObSQLUtils::create_multi_stmt_param_store(common::ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(param_store.reserve(param_num))) {
-    LOG_WARN("failed to reserve param num", K(param_num), K(ret));
   } else {
     void *ptr = NULL;
     void *data_ptr = NULL;
@@ -3777,7 +3635,6 @@ int ObSQLUtils::create_multi_stmt_param_store(common::ObIAllocator &allocator,
         param.set_extend(reinterpret_cast<int64_t>(array_params), T_EXT_SQL_ARRAY);
         param.set_param_meta();
         if (OB_FAIL(param_store.push_back(param))) {
-          LOG_WARN("failed to push back param", K(ret));
         }
       }
     }
@@ -3808,7 +3665,6 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(new_view_schema.assign(old_view_schema))) {
-    LOG_WARN("failed to assign table schema", K(ret));
   } else if ((0 == old_view_schema.get_object_status()
              || 0 == old_view_schema.get_column_count()
              || (old_view_schema.is_sys_view()
@@ -3823,9 +3679,7 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get select stmt", K(ret));
       } else if (OB_FAIL(new_view_schema.get_view_column_comment(column_comments))) {
-        LOG_WARN("failed to get view column comment", K(ret));
       } else if (OB_FAIL(new_view_schema.delete_all_view_columns())) {
-        LOG_WARN("failed to delete all columns", K(ret));
       } else if (OB_ISNULL(select_stmt->get_ref_obj_table())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ref obj is null", K(ret));
@@ -3835,7 +3689,6 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
                                                                 session_info,
                                                                 dummy_column_list,
                                                                 column_comments))) {
-        LOG_WARN("failed to update view column info", K(ret));
       } else if (!new_view_schema.is_view_table() || new_view_schema.get_column_count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get wrong schema", K(ret), K(new_view_schema));
@@ -3853,7 +3706,6 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
         }
       } else if (OB_FAIL(process_reference_obj_table(*select_stmt->get_ref_obj_table(),
         new_view_schema.get_table_id(), &new_view_schema, dependency_info_queue))) {
-        LOG_WARN("failed to process reference obj table", K(ret), K(new_view_schema), K(old_view_schema));
       }
     }
   }
@@ -3903,7 +3755,6 @@ int ObSQLUtils::check_sys_view_changed(const share::schema::ObTableSchema &old_v
   if (OB_SUCC(ret) && !changed) {
     if (OB_FAIL(dependency_info_queue.add_consistent_sys_view_id_to_set(
         old_view_schema.get_table_id()))) {
-      LOG_WARN("failed to add sys view", K(ret));
     }
   }
   return ret;
@@ -3997,11 +3848,7 @@ int ObSQLUtils::reconstruct_ps_sql(ObSqlString & reconstruct_sql, const ObString
   for (int64_t const_token_index = 0; OB_SUCC(ret) && const_token_index < const_tokens.count();
        const_token_index++) {
     if (OB_FAIL(reconstruct_sql.append(tmp_ps_sql.split_on('?')))) {
-      LOG_WARN("fail to append before part of ps sql", K(ret),
-               K(const_token_index), K(reconstruct_sql), K(tmp_ps_sql));
     } else if (OB_FAIL(append_obj_param(reconstruct_sql, *const_tokens.at(const_token_index)))) {
-      LOG_WARN("fail to append 's const param ", K(ret), K(const_token_index), K(reconstruct_sql),
-               K(*const_tokens.at(const_token_index)));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(reconstruct_sql.append(tmp_ps_sql))) {
@@ -4019,22 +3866,17 @@ int ObSQLUtils::append_obj_param(ObSqlString & reconstruct_sql, const common::Ob
     if (obj_param.is_datetime()) {
       int32_t tmp_date = 0;
       if (OB_FAIL(databuff_printf(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len, "%s '", LITERAL_PREFIX_DATE))) {
-        LOG_WARN("fail to print literal prefix", K(ret));
       } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
       } else if (OB_FAIL(
                    ObTimeConverter::datetime_to_date(obj_param.get_datetime(), NULL, tmp_date))) {
-        LOG_WARN("fail to datetime_to_date", "datetime", obj_param.get_datetime(), K(ret));
       } else if (OB_FAIL(ObTimeConverter::date_to_str(tmp_date, reconstruct_sql.ptr(), reconstruct_sql.capacity(), len))) {
-        LOG_WARN("fail to date_to_str", K(tmp_date), K(ret));
       } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
       } else if (OB_FAIL(databuff_printf(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len, "'"))) {
-        LOG_WARN("fail to print single date time quote", K(ret));
       } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
       }
     } else {
       if (FALSE_IT(reconstruct_sql.set_length(len))) {
       } else if (OB_FAIL(obj_param.print_sql_literal(reconstruct_sql.ptr(), reconstruct_sql.capacity(), len))) {
-        LOG_WARN("fail to print sql literal", K(ret), K(reconstruct_sql), K(obj_param));
       } else if (FALSE_IT(reconstruct_sql.set_length(len))) {
       }
     }
@@ -4042,7 +3884,6 @@ int ObSQLUtils::append_obj_param(ObSqlString & reconstruct_sql, const common::Ob
     if (ret == OB_SIZE_OVERFLOW) {
       const int64_t need_len = reconstruct_sql.length() + 100;
       if (OB_FAIL(reconstruct_sql.reserve(need_len))) {
-        LOG_WARN("reserve data failed", K(ret), K(need_len));
       } else {
         ret = OB_SIZE_OVERFLOW;
       }
@@ -4068,7 +3909,6 @@ int ObSQLUtils::get_outline_sql(const share::schema::ObOutlineInfo &outline_info
                                                 outline_info.get_sql_text_str(),
                                                 is_need_filter_hint,
                                                 outline_sql))) {
-    LOG_WARN("fail to construct outline sql", K(ret), K(outline_info.get_outline_content_str()), K(outline_info.get_sql_text_str()), K(outline_sql));
   }
   return ret;
 }

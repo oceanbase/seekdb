@@ -31,13 +31,11 @@ int ObMapType::print(ObStringBuffer &format_str, uint32_t begin, uint32_t print_
     print_size = length_;
   }
   if (OB_FAIL(format_str.append("{"))) {
-    OB_LOG(WARN, "fail to append \"{\"", K(ret));
   }
   for (int i = begin; i < begin + print_size && OB_SUCC(ret); i++) {
     if (i > begin && OB_FAIL(format_str.append(","))) {
       OB_LOG(WARN, "fail to append \",\" to buffer", K(ret));
     } else if (OB_FAIL(print_element_at(format_str, i))) {
-      OB_LOG(WARN, "failed to print element", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(format_str.append("}"))) {
@@ -54,20 +52,15 @@ int ObMapType::print_element_at(ObStringBuffer &format_str, uint32_t idx) const
     OB_LOG(WARN, "unexpected idx", K(ret), K(idx), K(length_));
   } else if (keys_->is_null(idx)) {
     if (OB_FAIL(format_str.append("NULL"))) {
-      OB_LOG(WARN, "fail to append NULL to buffer", K(ret));
     }
   } else if (OB_FAIL(keys_->print_element_at(format_str, idx))) {
-    OB_LOG(WARN, "failed to print element", K(ret), K(idx), K(keys_->get_element_type()));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(format_str.append(":"))) {
-    OB_LOG(WARN, "fail to append :", K(ret));
   } else if (values_->is_null(idx)) {
     if (OB_FAIL(format_str.append("NULL"))) {
-      OB_LOG(WARN, "fail to append NULL to buffer", K(ret));
     }
   } else if (OB_FAIL(values_->print_element_at(format_str, idx))) {
-    OB_LOG(WARN, "failed to print element", K(ret), K(idx), K(values_->get_element_type()));
   }
   return ret;
 }
@@ -83,7 +76,6 @@ int ObMapType::get_raw_binary(char *res_buf, int64_t buf_len)
     MEMCPY(res_buf + pos, &this->length_, sizeof(this->length_));
     pos += sizeof(this->length_);
     if (OB_FAIL(get_data_binary(res_buf + pos,  buf_len - pos))) {
-      OB_LOG(WARN, "get data binary failed", K(ret), K(buf_len));
     }
   }
   return ret;
@@ -97,10 +89,8 @@ int ObMapType::get_data_binary(char *res_buf, int64_t buf_len)
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "buf len isn't enough", K(ret), K(buf_len));
   } else if (OB_FAIL(keys_->get_data_binary(res_buf + pos, buf_len - pos))) {
-    OB_LOG(WARN, "get keys data binary failed", K(ret), K(buf_len), K(pos));
   } else if (OB_FALSE_IT(pos += keys_->get_data_binary_len())) {
   } else if (OB_FAIL(values_->get_data_binary(res_buf + pos, buf_len - pos))) {
-    OB_LOG(WARN, "get values data binary failed", K(ret), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -116,7 +106,6 @@ int ObMapType::init(ObString &raw_data)
     length_ = *reinterpret_cast<uint32_t *>(raw_str);
     ObString data_str(raw_data.length() - sizeof(length_), raw_data.ptr() + sizeof(length_));
     if (OB_FAIL(init(length_, data_str))) {
-      LOG_WARN("init failed", K(ret), K(length_), K(raw_data));
     }
   }
   return ret;
@@ -128,12 +117,10 @@ int ObMapType::init(uint32_t length, ObString &data_binary)
   char *binary_ptr = data_binary.ptr();
   length_ = length;
   if (OB_FAIL(keys_->init(length_, data_binary))) {
-    OB_LOG(WARN, "init keys failed", K(ret), K(length_), K(data_binary));
   } else {
     int64_t pos = keys_->get_data_binary_len();
     ObString value_data_str(data_binary.length() - pos, binary_ptr + pos);
     if (OB_FAIL(values_->init(length_, value_data_str))) {
-      OB_LOG(WARN, "init values failed", K(ret), K(length_), K(value_data_str));
     }
   }
   return ret;
@@ -168,10 +155,8 @@ int ObMapType::init(ObDatum *attrs, uint32_t attr_count, bool with_length)
       length_ = attrs[0].get_int_bytes() / sizeof(uint8_t);
     }
     if (OB_FAIL(keys_->init(attrs + idx, key_attr_count, false))) {
-      OB_LOG(WARN, "failed to init keys attrs", K(ret), K(attr_count), K(key_attr_count));
     } else if (OB_FALSE_IT(idx += key_attr_count)) {
     } else if (OB_FAIL(values_->init(attrs + idx, attr_count - idx, false))) {
-      OB_LOG(WARN, "failed to init values attrs", K(ret), K(attr_count), K(count));
     }
   }
   if (OB_FAIL(ret)) {
@@ -185,9 +170,7 @@ int ObMapType::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(keys_->init())) {
-    OB_LOG(WARN, "init keys failed", K(ret));
   } else if (OB_FAIL(values_->init())) {
-    OB_LOG(WARN, "init values failed", K(ret));
   } else if (keys_->size() != values_->size()) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "keys size and values size is not equal", K(ret), K(keys_->size()), K(values_->size()));
@@ -205,9 +188,7 @@ int ObMapType::flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &attr_i
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "attrs is null", K(ret));
   } else if (OB_FAIL(keys_->flatten(attrs, attr_count, attr_idx))) {
-    OB_LOG(WARN, "flatten keys failed", K(ret), K(attr_idx), K(keys_->size()));
   } else if (OB_FAIL(values_->flatten(attrs, attr_count, attr_idx))) {
-    OB_LOG(WARN, "flatten values failed", K(ret), K(attr_idx), K(values_->size()));
   }
   return ret;
 }
@@ -255,9 +236,7 @@ int ObMapType::clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool read
     ObMapType *map_ptr = new (buf) ObMapType();
     map_ptr->set_array_type(this->map_type_);
     if (OB_FAIL(keys_->clone_empty(alloc, map_ptr->keys_, read_only))) {
-      OB_LOG(WARN, "keys clone empty failed", K(ret));
     } else if (OB_FAIL(values_->clone_empty(alloc, map_ptr->values_, read_only))) {
-      OB_LOG(WARN, "values clone empty failed", K(ret));
     } else {
       output = map_ptr;
     }
@@ -292,7 +271,6 @@ int ObMapType::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
   int ret = OB_SUCCESS;
   ObIArrayType *dst_map = NULL;
   if (OB_FAIL(clone_empty(alloc, dst_map, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (keys_->get_format() != ArrayFormat::Fixed_Size) {
     ret = OB_NOT_SUPPORTED;
     OB_LOG(WARN, "only support fixed size array for distinct operation", K(ret), K(keys_->get_format()));
@@ -370,15 +348,12 @@ int ObMapType::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
 
     for (int i = 0; i < idx_count && OB_SUCC(ret); i++) {
       if (OB_FAIL(dst_key->insert_from(*keys_, idx_arr[i]))) {
-        OB_LOG(WARN, "append key element failed", K(ret), K(i));
       } else if (OB_FAIL(dst_value->insert_from(*values_, idx_arr[i]))) {
-        OB_LOG(WARN, "append value element failed", K(ret), K(i));
       }
     } // end for
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dst_map->init())) {
-      OB_LOG(WARN, "init dst map failed", K(ret));
     } else {
       output = dst_map;
     }

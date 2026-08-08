@@ -93,7 +93,6 @@ int ObExprVecVector::cg_expr(
   int ret = OB_SUCCESS;
   ObDatum *datum = nullptr;
   if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, datum))) {
-    LOG_WARN("fail to eval arg expr", K(ret), KPC(raw_ctx.args_[0]));
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null datum", K(ret), KPC(raw_ctx.args_[0]));
@@ -114,7 +113,6 @@ int ObExprVecVector::cg_expr(
       int64_t timeout = 0;
       int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
       if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
-        LOG_WARN("failed to get session query timeout", K(ret));
       } else {
         timeout += query_st;
         int64_t lob_len = 0;
@@ -123,18 +121,13 @@ int ObExprVecVector::cg_expr(
         int64_t buff_len = 0;
         ObTextStringDatumResult text_result(ObLongTextType, &raw_ctx, &eval_ctx, &expr_datum);
         if (OB_FAIL(lob.get_lob_data_byte_len(lob_len))) {
-          LOG_WARN("fail to get vector byte len", K(ret), K(lob));
         } else if (OB_FAIL(text_result.init(lob_len, nullptr))) {
-          LOG_WARN("init lob result failed");
         } else if (OB_FAIL(text_result.get_reserved_buffer(vec_buff_ptr, buff_len))) {
-          LOG_WARN("fail to get reserved buffer", K(ret));
         } else if (FALSE_IT(vector_buff.assign_buffer(vec_buff_ptr, buff_len))) {
         } else if (OB_FAIL(data_plane::read_lob_to_buffer(
                        ctx_allocator, lob, timeout,
                        eval_ctx.exec_ctx_.get_my_session()->get_tx_desc(), vector_buff))) {
-          LOG_WARN("fail to do query vector", K(ret));
         } else if (OB_FAIL(text_result.lseek(vector_buff.length(), 0))) {
-          LOG_WARN("result lseek failed", K(ret));
         } else {
           ObString res_str;
           text_result.get_result_buffer(res_str);

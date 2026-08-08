@@ -55,7 +55,6 @@ int ObFTDocWordScanIterator::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext doc word scan iterator twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version))) {
-    LOG_WARN("fail to init scan param", K(ret), K(table_id), K(tablet_id), K(snapshot), K(schema_version));
   } else {
     is_inited_ = true;
   }
@@ -86,7 +85,6 @@ int ObFTDocWordScanIterator::reuse()
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->reuse_scan_iter(false/*switch param*/, doc_word_iter_))) {
-    LOG_WARN("fail to reuse storage scan iter", K(ret));
   } else {
     scan_param_.key_ranges_.reuse();
     scan_param_.mbr_filters_.reuse();
@@ -105,7 +103,6 @@ int ObFTDocWordScanIterator::do_table_rescan()
     ret = OB_ERR_UNDEFINED;
     LOG_WARN("unexpected error, doc word iter is nullptr", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->table_rescan(scan_param_, doc_word_iter_))) {
-    LOG_WARN("fail to table rescan", K(ret));
   }
 #ifdef OB_BUILD_PACKAGE
   LOG_TRACE("doc word rescan", K(ret), K(scan_param_));
@@ -177,7 +174,6 @@ int ObFTDocWordScanIterator::init_scan_param(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_id), KPC(snapshot), K(schema_version));
   } else if (OB_FAIL(build_table_param(table_id, table_param_, scan_param_.column_ids_))) {
-    LOG_WARN("fail to build table param", K(ret), K(table_id));
   } else {
     scan_param_.tablet_id_ = tablet_id;
     scan_param_.schema_version_ = schema_version;
@@ -204,7 +200,6 @@ int ObFTDocWordScanIterator::init_scan_param(
     scan_param_.table_param_ = &table_param_;
     scan_param_.key_ranges_.reset();
     if (OB_FAIL(scan_param_.snapshot_.assign(*snapshot))) {
-      LOG_WARN("fail to assign snapshot", K(ret), KPC(snapshot));
     } else {
       scan_param_.tx_id_ = scan_param_.snapshot_.core_.tx_id_;
     }
@@ -227,19 +222,15 @@ int ObFTDocWordScanIterator::build_table_param(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get runtime schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get table scheam", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, table scheam is nullptr", K(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
-    LOG_WARN("fail to get all column ids", K(ret), KPC(table_schema));
   } else if (OB_UNLIKELY(4 != column_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, column count isn't 4 for fts doc word", K(ret), K(column_ids));
   } else if (OB_FAIL(table_param.convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-    LOG_WARN("fail to convert table param", K(ret), K(column_ids), KPC(table_schema));
   } else {
     if (OB_FAIL(table_schema->get_docid_col_id(generated_doc_id_col))) {
       if (ret == OB_ERR_INDEX_KEY_NOT_FOUND) {
@@ -286,7 +277,6 @@ int ObFTDocWordScanIterator::build_key_range(const uint64_t table_id,
     range.border_flag_.set_inclusive_start();
     range.border_flag_.set_inclusive_end();
     if (OB_FAIL(rowkey_range.push_back(range))) {
-      LOG_WARN("fail to push back key range", K(ret), K(range));
     }
   }
   return ret;
@@ -299,7 +289,6 @@ int ObFTDocWordScanIterator::do_table_scan()
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K(is_inited_));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>()->table_scan(scan_param_, doc_word_iter_))) {
-    LOG_WARN("fail to do table scan", K(ret), K(scan_param_));
   }
 #ifdef OB_BUILD_PACKAGE
   LOG_TRACE("doc word scan", K(ret), K(scan_param_));

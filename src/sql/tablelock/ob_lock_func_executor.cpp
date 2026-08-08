@@ -125,7 +125,6 @@ int ObGetLockExecutor::generate_lock_id_(const ObString &lock_name,
                  MAX_LOCK_HANDLE_ID,
                  lock_id,
                  hash_val))) {
-    LOG_WARN("generate unique id for lock handle failed", K(ret));
   } else {
     snprintf(lock_handle, MAX_LOCK_HANDLE_LEGNTH, "%" PRIu64 "%" PRIu64, lock_id, hash_val);
   }

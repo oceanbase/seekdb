@@ -45,7 +45,6 @@ int ObLocalStorageMetaService::server_module_init(ObLocalStorageMetaService *&me
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(meta_service->init())) {
-    LOG_WARN("fail to init ObLocalStorageMetaService", K(ret));
   }
   return ret;
 }
@@ -61,17 +60,11 @@ int ObLocalStorageMetaService::init()
         OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
         ObLogConstants::MAX_LOG_FILE_SIZE,
         OB_FILE_SYSTEM_ROUTER.get_slog_file_spec()))) {
-    LOG_WARN("failed to init slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(slogger_))) {
-    LOG_WARN("fail to init runtime checkpoint slog hander", K(ret));
   } else if (OB_FAIL(persister_.init(slogger_, ckpt_slog_handler_))) {
-    LOG_WARN("fail to init persister", K(ret));
   } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
-    LOG_WARN("fail to init replayer", K(ret));
   } else if (OB_FAIL(object_rwriter_.init())) {
-    LOG_WARN("fail to init object reader writer", K(ret));
   } else if (OB_FAIL(object_raw_rwriter_.init())) {
-    LOG_WARN("fail to init raw object reader writer", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -88,11 +81,8 @@ int ObLocalStorageMetaService::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_.start())) {
-    LOG_WARN("fail to start slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
-    LOG_WARN("fail to start runtime checkpoint slog handler", K(ret));
   } else if (OB_FAIL(replayer_.start_replay(super_block))) {
-    LOG_WARN("fail to start replayer", K(ret));
   }
   if (OB_SUCC(ret)) {
     is_started_ = true;
@@ -141,7 +131,6 @@ int ObLocalStorageMetaService::get_active_cursor(common::ObLogCursor &log_cursor
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_.get_active_cursor(log_cursor))) {
-    LOG_WARN("fail to get active cursor", K(ret));
   }
   return ret;
 }
@@ -155,7 +144,6 @@ int ObLocalStorageMetaService::get_meta_block_list(
     LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ckpt_slog_handler_.get_meta_block_list(meta_block_list))) {
-      LOG_WARN("fail to get meta block list", K(ret));
     }
   }
   return ret;
@@ -168,7 +156,6 @@ int ObLocalStorageMetaService::write_checkpoint(bool is_force)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
-    LOG_WARN("fail to write checkpoint", K(ret));
   }
   return ret;
 }
@@ -180,7 +167,6 @@ int ObLocalStorageMetaService::add_snapshot(const ObServerSnapshotMeta &snapshot
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.add_snapshot(snapshot))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -192,7 +178,6 @@ int ObLocalStorageMetaService::delete_snapshot(const share::ObServerSnapshotID &
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.delete_snapshot(snapshot_id))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -204,7 +189,6 @@ int ObLocalStorageMetaService::swap_snapshot(const ObServerSnapshotMeta &snapsho
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.swap_snapshot(snapshot))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -218,7 +202,6 @@ int ObLocalStorageMetaService::clone_ls(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.clone_ls(startup_accel_handler, tablet_meta_entry))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -232,11 +215,9 @@ int ObLocalStorageMetaService::read_from_disk(
   int ret = OB_SUCCESS;
   if (ObMetaDiskAddr::DiskType::FILE == addr.type()) {
     if (OB_FAIL(ckpt_slog_handler_.read_empty_shell_file(addr, allocator, buf, buf_len))) {
-      LOG_WARN("fail to read empty shell", K(ret), K(addr), K(buf), K(buf_len));
     }
   } else {
     if (OB_FAIL(read_from_block(addr, allocator, buf, buf_len))) {
-      LOG_WARN("fail to read from block", K(ret), K(addr), K(buf), K(buf_len));
     }
   }
   return ret;
@@ -255,11 +236,8 @@ int ObLocalStorageMetaService::read_from_block(
   read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
   read_info.addr_ = addr;
   if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, read_handle))) {
-    LOG_WARN("fail to read tablet from macro block", K(ret), K(read_info));
   } else if (OB_FAIL(read_handle.wait())) {
-    LOG_WARN("fail to wait for read handle", K(ret));
   } else if (OB_FAIL(read_handle.get_data(allocator, buf, buf_len))) {
-    LOG_WARN("fail to get data from read handle", K(ret), KP(buf), K(buf_len));
   }
   return ret;
 }

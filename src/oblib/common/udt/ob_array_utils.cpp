@@ -27,11 +27,9 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
   for (uint32_t i = 0; OB_SUCC(ret) && i < depth; i++) {
     if (coll_type == ObNestedType::OB_ARRAY_TYPE) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ARRAY("))) {
-        LOG_WARN("failed to convert len to string", K(ret));
       }
     } else if (coll_type == ObNestedType::OB_VECTOR_TYPE) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "VECTOR("))) {
-        LOG_WARN("failed to convert len to string", K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -40,7 +38,6 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", ob_sql_type_str(elem_type.get_obj_type())))) {
-    LOG_WARN("failed to convert len to string", K(ret));
   } else if (elem_type.get_obj_type() == ObDecimalIntType
              && OB_FAIL(databuff_printf(buf, buf_len, pos, "(%d,%d)", elem_type.get_precision(), elem_type.get_scale()))) {
     LOG_WARN("failed to add deciaml precision to string", K(ret));
@@ -50,7 +47,6 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
   } 
   for (uint32_t i = 0; OB_SUCC(ret) && i < depth; i++) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, ")"))) {
-      LOG_WARN("failed to add ) to string", K(ret));
     }
   }
   return ret;
@@ -72,7 +68,6 @@ int ObArrayUtil::append(ObIArrayType &array, const ObObjType elem_type, const Ob
   int ret = OB_SUCCESS;
   if (datum->is_null()) {
     if (OB_FAIL(array.push_null())) {
-      LOG_WARN("failed to push back null value", K(ret));
     }
   } else {
     switch (elem_type) {
@@ -126,7 +121,6 @@ int ObArrayUtil::append(ObIArrayType &array, const ObObjType elem_type, const Ob
       case ObVarcharType: {
         ObArrayBinary *binary_array = static_cast<ObArrayBinary *>(&array);
         if (OB_FAIL(binary_array->push_back(datum->get_string()))) {
-          LOG_WARN("failed to push back null value", K(ret));
         }
         break;
       }

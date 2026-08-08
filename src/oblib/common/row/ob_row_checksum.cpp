@@ -37,9 +37,7 @@ DEFINE_SERIALIZE(ObRowChecksumValue)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, checksum_))) {
-    LOG_WARN("encode int failed", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, column_count_))) {
-    LOG_WARN("encode int failed", K(ret));
   }
   if (OB_SUCC(ret) && column_count_ > 0) {
     const int64_t n = sizeof(column_checksum_array_[0]) * column_count_;
@@ -60,9 +58,7 @@ DEFINE_DESERIALIZE(ObRowChecksumValue)
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_i64(buf, data_len, pos,
       reinterpret_cast<int64_t *>(&checksum_)))) {
-    LOG_WARN("decode int failed", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &column_count_))) {
-    LOG_WARN("decode int failed", K(ret));
   }
   if (OB_SUCC(ret) && column_count_ > 0) {
     const int64_t n = sizeof(column_checksum_array_[0]) * column_count_;

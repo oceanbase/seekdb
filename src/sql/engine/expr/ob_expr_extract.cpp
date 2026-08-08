@@ -151,9 +151,7 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum1))) {
-    LOG_WARN("eval param1 value failed");
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
-    LOG_WARN("eval param2 value failed");
   } else {
     ObDateUnitType extract_field = static_cast<ObDateUnitType>(param_datum1->get_int());
     ObObjType date_type = expr.args_[1]->datum_meta_.type_;
@@ -173,7 +171,6 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                                     cast_mode, tz_info,
                                     cur_ts_value, 
                                     date_sql_mode, has_lob_header, is_null, value))) {
-      LOG_WARN("failed to calculate extract expression", K(ret));
     } else if (is_null) {
       expr_datum.set_null();
     } else {
@@ -186,7 +183,6 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
 int ObExprExtract::calc_extract_mysql_batch(
     const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const int64_t batch_size)
 {
-  LOG_DEBUG("eval mysql extract in batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   ObDatum *results = expr.locate_batch_datums(ctx);
 
@@ -201,9 +197,7 @@ int ObExprExtract::calc_extract_mysql_batch(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_unit_datum))) {
-      LOG_WARN("eval date_unit_datum failed", K(ret));
     } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch result args0", K(ret));
     } else {
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(), session, cast_mode);
@@ -228,7 +222,6 @@ int ObExprExtract::calc_extract_mysql_batch(
           if (OB_FAIL(ObExprExtract::calc(
                   ctx.exec_ctx_, date_type, datum_array[j], extract_field, scale, cast_mode,
                   tz_info, cur_ts_value, date_sql_mode, has_lob_header, is_null, value))) {
-            LOG_WARN("failed to calculate extract expression", K(ret));
           } else {
             if (is_null) {
               results[j].set_null();

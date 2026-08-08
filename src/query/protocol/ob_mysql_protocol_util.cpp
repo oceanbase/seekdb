@@ -221,8 +221,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
     precision = field->accuracy_.get_precision();
     zerofill = field->flags_ & ZEROFILL_FLAG;
     zflength = field->length_;
-    OB_LOG(DEBUG, "get field accuracy for semantic cell", K(field->accuracy_),
-           K(zerofill), K(obj));
   }
 
   if (OB_SUCC(ret)) {
@@ -363,7 +361,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(
                 obj.get_datetime(),
                 obj.is_timestamp() ? dtc_params.tz_info_ : NULL, ob_time))) {
-          OB_LOG(WARN, "convert datetime to semantic parts failed", K(ret));
         } else if (OB_UNLIKELY(!HAS_TYPE_DATE(ob_time.mode_))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
@@ -384,7 +381,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObTime ob_time(DT_TYPE_DATE);
         if (OB_FAIL(
                 ObTimeConverter::date_to_ob_time(obj.get_date(), ob_time))) {
-          OB_LOG(WARN, "convert date to semantic parts failed", K(ret));
         } else if (OB_UNLIKELY(!HAS_TYPE_DATE(ob_time.mode_))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
@@ -404,7 +400,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObTime ob_time(DT_TYPE_TIME);
         if (OB_FAIL(
                 ObTimeConverter::time_to_ob_time(obj.get_time(), ob_time))) {
-          OB_LOG(WARN, "convert time to semantic parts failed", K(ret));
         } else {
           out.kind_ = ObMySQLCellValueKind::TIME;
           out.days_ = static_cast<uint32_t>(ob_time.parts_[DT_DATE] +
@@ -428,7 +423,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
       if (BINARY == type) {
         int64_t year = 0;
         if (OB_FAIL(ObTimeConverter::year_to_int(obj.get_year(), year))) {
-          OB_LOG(WARN, "convert year to semantic value failed", K(ret));
         } else {
           out.kind_ = ObMySQLCellValueKind::YEAR;
           out.year_ = static_cast<uint16_t>(year);
@@ -475,9 +469,7 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObJsonBuffer json_buf(&allocator);
         json_bin.set_seek_flag(true);
         if (OB_FAIL(json_bin.reset_iter())) {
-          OB_LOG(WARN, "reset json iterator failed", K(ret), K(value));
         } else if (OB_FAIL(json_base->print(json_buf, true, value.length()))) {
-          OB_LOG(WARN, "format json cell failed", K(ret), K(value));
         } else {
           ret = set_copied_bytes(scratch_allocator,
                                  ObMySQLCellValueKind::LENENC_BYTES,
@@ -614,7 +606,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObTime ob_time(DT_TYPE_MYSQL_DATE);
         if (OB_FAIL(ObTimeConverter::mdate_to_ob_time(obj.get_mysql_date(),
                                                       ob_time))) {
-          OB_LOG(WARN, "convert mysql date to semantic parts failed", K(ret));
         } else if (OB_UNLIKELY(!HAS_TYPE_DATE(ob_time.mode_))) {
           ret = OB_ERR_UNEXPECTED;
         } else {
@@ -634,8 +625,6 @@ int ObSMUtils::build_cell_value(const ObObj &obj, MYSQL_PROTOCOL_TYPE type,
         ObTime ob_time(DT_TYPE_MYSQL_DATETIME);
         if (OB_FAIL(ObTimeConverter::mdatetime_to_ob_time(
                 obj.get_mysql_datetime(), ob_time))) {
-          OB_LOG(WARN, "convert mysql datetime to semantic parts failed",
-                 K(ret));
         } else if (OB_UNLIKELY(!HAS_TYPE_DATE(ob_time.mode_))) {
           ret = OB_ERR_UNEXPECTED;
         } else {

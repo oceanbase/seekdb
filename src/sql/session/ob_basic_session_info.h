@@ -554,7 +554,6 @@ public:
   int get_sys_var_in_pc_str(common::ObString &str) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
-      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
     } else {
       str = sys_var_in_pc_str_;
     }
@@ -564,7 +563,6 @@ public:
   int get_sys_var_config_hash_val(uint64_t &val) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(gen_sys_var_in_pc_str_lazy())) {
-      SQL_LOG(WARN, "fail to generate sys var in pc str", K(ret));
     } else {
       val = sys_var_config_hash_val_;
     }

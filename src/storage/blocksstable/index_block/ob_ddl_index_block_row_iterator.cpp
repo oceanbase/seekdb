@@ -133,7 +133,6 @@ int ObDDLIndexBlockRowIterator::locate_key(const ObDatumRowkey &rowkey)
       is_iter_start_ = true;
       is_iter_finish_ = false;
     }
-    LOG_TRACE("Binary search rowkey in ddl block", K(ret), K(rowkey), KPC(this));
   }
   return ret;
 }
@@ -168,7 +167,6 @@ int ObDDLIndexBlockRowIterator::locate_range(const ObDatumRange &range,
     is_iter_start_ = true;
     is_iter_finish_ = false;
   }
-  LOG_TRACE("Locate range in ddl block by range", K(ret), K(range), KPC(this));  
   return ret;
 }
 
@@ -257,7 +255,6 @@ int ObDDLIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null rowkey", K(ret), K(cur_tree_value_), KP(cur_rowkey));
       } else if (OB_FAIL(rowkey.compare(*cur_rowkey, *datum_utils_, cmp_ret, false))) {
-        LOG_WARN("Failed to compare rowkey", K(ret), K(rowkey), KPC(cur_rowkey));
       }
 
       if (OB_FAIL(ret)) {
@@ -352,7 +349,6 @@ int ObDDLIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
     ret = OB_NOT_INIT;
     LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(inner_get_current(idx_row_header, endkey))) {
-    LOG_WARN("read cur idx row failed", K(ret), KPC(idx_row_header), K(endkey));
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
@@ -455,7 +451,6 @@ int ObDDLIndexBlockRowIterator::get_index_row_count(const ObDatumRange &range,
                                                     is_reverse_scan_,
                                                     tmp_iter,
                                                     cur_tree_value))) {
-    LOG_WARN("locate rowkey failed", K(ret), K(range), KPC(datum_utils_), KPC(cur_tree_value));
   } else {
     if (OB_NOT_NULL(cur_tree_value)) {
       ++index_row_count; //first

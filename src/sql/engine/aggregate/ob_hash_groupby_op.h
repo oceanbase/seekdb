@@ -177,7 +177,6 @@ OB_INLINE const ObGroupRowItem *ObGroupRowHashTable::get(const ObGroupRowItem &i
     ObGroupRowItem *it = locate_bucket(*buckets_, hash_val).item_;
     while (NULL != it && OB_SUCC(ret)) {
       if (OB_FAIL(likely_equal(*it, item, result))) {
-        LOG_WARN("failed to cmp", K(ret));
       } else if (result) {
         res = it;
         break;
@@ -479,7 +478,6 @@ private:
     int ret = OB_SUCCESS;
     // set both hash table and array if array is valid.
     if (OB_FAIL(local_group_rows_.set(cur_item))) {
-      SQL_ENG_LOG(WARN, "hash table set failed", K(ret));
     } else if (group_rows_arr_.is_valid_) {
       group_rows_arr_.set(cur_item, batch_idx);
     }

@@ -32,7 +32,6 @@ int ObDTLIntermResultGC::operator() (common::hash::HashMapPair<ObDTLIntermResult
   if (dis > CLEAR_TIME_THRESHOLD) {
     ++clean_cnt_;
     if (OB_FAIL(expire_keys_.push_back(entry.first))) {
-      LOG_WARN("clear interm res, but push back failed.", K(ret), K(expire_keys_.count()));
     }
   }
 
@@ -56,7 +55,6 @@ void ObAtomicGetIntermResultInfoCall::operator() (common::hash::HashMapPair<ObDT
   } else {
     ret_ = OB_HASH_NOT_EXIST;
   }
-  LOG_DEBUG("debug start read", K(entry.second->is_read_), K(entry.first));
 }
 
 void ObAtomicGetIntermMemProfileCall::operator() (common::hash::HashMapPair<ObDTLMemProfileKey,
@@ -85,9 +83,7 @@ void ObAtomicAppendBlockCall::operator() (common::hash::HashMapPair<ObDTLIntermR
     } else {
       int row_cnt_before_append = DTL_IR_STORE_DO(*(entry.second), get_row_cnt_in_memory);
       if (OB_FAIL(DTL_IR_STORE_DO_APPEND_BLOCK(*entry.second, block_buf_, size_, true))) {
-        LOG_WARN("store of result info append_block failed", K(ret));
       } else if (OB_FAIL(interm_res_manager_->process_dump(*(entry.second), mem_profile_info_))) {
-        LOG_WARN("process_dump failed", K(ret));
       } else {
         int64_t row_cnt_after_append = DTL_IR_STORE_DO(*(entry.second), get_row_cnt_in_memory);
         mem_profile_info_->update_row_count(row_cnt_after_append - row_cnt_before_append);
@@ -114,9 +110,7 @@ void ObAtomicAppendPartBlockCall::operator() (common::hash::HashMapPair<ObDTLInt
       int64_t row_cnt_before_append = DTL_IR_STORE_DO(*(entry.second), get_row_cnt_in_memory);
       if (OB_FAIL(DTL_IR_STORE_DO_APPEND_BLOCK_PAYLOAD(*entry.second,
                                   block_buf_ + start_pos_, length_, rows_, true))) {
-        LOG_WARN("store of result info append_block_payload failed", K(ret));
       } else if (OB_FAIL(interm_res_manager_->process_dump(*(entry.second), mem_profile_info_))) {
-        LOG_WARN("process_dump failed", K(ret));
       } else {
         int64_t row_cnt_after_append = DTL_IR_STORE_DO(*(entry.second), get_row_cnt_in_memory);
         mem_profile_info_->update_row_count(row_cnt_after_append - row_cnt_before_append);
@@ -141,11 +135,9 @@ int ObDTLIntermResultManager::init()
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(interm_res_map_.create(bucket_num,
                                  interm_res_hash_buck_attr, interm_res_hash_buck_attr))) {
-    LOG_WARN("create interm_res hash table failed", K(ret));
   } else if (OB_FAIL(mem_profile_map_.create(
                         static_cast<int64_t>(share::server_cpu_count() * cpu_quota_concurrency * 2),
                         mem_profile_hash_buck_attr, mem_profile_hash_buck_attr))) {
-    LOG_WARN("create mem_profile hash table failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -217,7 +209,6 @@ int ObDTLIntermResultManager::get_interm_result_info(ObDTLIntermResultKey &key,
   int ret = OB_SUCCESS;
   ObDTLIntermResultInfo *tmp_result_info = NULL;
   if (OB_FAIL(interm_res_map_.get_refactored(key, tmp_result_info))) {
-    LOG_TRACE("fail to get row store in result manager", K(ret), K(key.channel_id_));
   } else {
     result_info = *tmp_result_info;
   }
@@ -269,7 +260,6 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
     // For the px module,
     // the dir_id has already been set in the previous access_mem_profile.
     if (OB_FAIL(data_plane::tmp_file_alloc_dir(dir_id_))) {
-      LOG_WARN("allocate file directory failed", K(ret));
     } else {
       DTL_IR_STORE_DO(*result_info, set_dir_id, dir_id_);
     }
@@ -281,7 +271,6 @@ int ObDTLIntermResultManager::insert_interm_result_info(ObDTLIntermResultKey &ke
       LOG_WARN("fail to set row store in result manager", K(ret));
       dec_interm_result_ref_count(result_info);
     } else {
-      LOG_DEBUG("debug insert interm result info", K(key));
     }
   }
   return ret;
@@ -312,7 +301,6 @@ int ObDTLIntermResultManager::free_interm_result_info(ObDTLIntermResultInfo *res
     if (mem_profile_key.is_valid()) {
       if (OB_FAIL(mem_profile_map_.get_refactored(mem_profile_key,
                                                   mem_profile_info))) {
-        LOG_WARN("get mem_profile failed", K(ret), K(mem_profile_key));
       } else if (OB_NOT_NULL(mem_profile_info)) {
         mem_profile_info->update_row_count(-DTL_IR_STORE_DO(*result_info, get_row_cnt_in_memory));
       }
@@ -321,7 +309,6 @@ int ObDTLIntermResultManager::free_interm_result_info(ObDTLIntermResultInfo *res
     ob_free(result_info);
     if (mem_profile_key.is_valid()) {
       if (OB_FAIL(dec_mem_profile_ref_count(mem_profile_key, mem_profile_info))) {
-        LOG_WARN("dec mem_profile ref_count failed", K(ret), K(mem_profile_key));
       }
     }
   }
@@ -334,10 +321,8 @@ int ObDTLIntermResultManager::erase_interm_result_info(const ObDTLIntermResultKe
   int ret = OB_SUCCESS;
   ObDTLIntermResultInfo *result_info = NULL;
   if (OB_FAIL(interm_res_map_.erase_refactored(key, &result_info))) {
-    LOG_TRACE("fail to get row store in result manager", K(key), K(ret));
   } else {
     if (OB_FAIL(dec_interm_result_ref_count(result_info))) {
-      LOG_WARN("Fail to dec interm_result ref_count", K(ret));
     }
   }
   return ret;
@@ -347,12 +332,10 @@ int ObDTLIntermResultManager::clear_timeout_result_info()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(interm_res_map_.foreach_refactored(gc_))) {
-    LOG_WARN("fail to get row store in result manager", K(ret));
   } else {
     for (int i = 0; i < gc_.expire_keys_.count(); ++i) {
       ObDTLIntermResultKey &key = gc_.expire_keys_.at(i);
       if (OB_FAIL(erase_interm_result_info(key))) {
-        LOG_WARN("fail to erase row store", K(key), K(ret));
       }
     }
   }
@@ -365,10 +348,8 @@ int ObDTLIntermResultManager::atomic_get_interm_result_info(ObDTLIntermResultKey
   int ret = OB_SUCCESS;
   ObAtomicGetIntermResultInfoCall call(guard, this);
   if (OB_FAIL(interm_res_map_.atomic_refactored(key, call))) {
-    LOG_TRACE("fail to get row store in result manager", K(ret));
   } else if (OB_SUCCESS != call.ret_) {
     ret = call.ret_;
-    LOG_TRACE("fail to get row store in result manager", K(ret));
   }
   return ret;
 }
@@ -378,11 +359,8 @@ int ObDTLIntermResultManager::atomic_append_block(ObDTLIntermResultKey &key,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(interm_res_map_.atomic_refactored(key, call))) {
-    LOG_WARN("fail to get row store in result manager", K(ret));
   } else if (OB_FAIL(call.ret_)) {
-    LOG_WARN("ObAtomicAppendBlockCall fail", K(ret));
   } else {
-    LOG_DEBUG("debug append block to interm result info", K(key));
   }
   return ret;
 }
@@ -392,11 +370,8 @@ int ObDTLIntermResultManager::atomic_append_part_block(ObDTLIntermResultKey &key
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(interm_res_map_.atomic_refactored(key, call))) {
-    LOG_WARN("fail to get row store in result manager", K(ret));
   } else if (OB_FAIL(call.ret_)) {
-    LOG_WARN("ObAtomicAppendPartBlockCall fail", K(ret));
   } else {
-    LOG_DEBUG("debug append part block to interm result info", K(key));
   }
   return ret;
 }
@@ -473,7 +448,6 @@ int ObDTLIntermResultManager::process_interm_result(ObDtlLinkedBuffer *buffer, i
       const int64_t rows = batch_info.rows_;
       const bool is_eof = infos.count() - 1 == i ? buffer->is_eof() : true;
       if (OB_FAIL(process_interm_result_inner(*buffer, key, start_pos, length, rows, is_eof, false))) {
-        LOG_WARN("process interm result inner", K(ret));
       }
     }
     LOG_TRACE("process interm result", K(buffer->size()), K(buffer->get_batch_info().count()),
@@ -484,7 +458,6 @@ int ObDTLIntermResultManager::process_interm_result(ObDtlLinkedBuffer *buffer, i
     key.batch_id_ = buffer->get_batch_id();
     key.channel_id_ = channel_id;
     if (OB_FAIL(process_interm_result_inner(*buffer, key, 0, buffer->size(), 0, buffer->is_eof(), true))) {
-      LOG_WARN("process interm result inner", K(ret));
     }
     LOG_TRACE("process interm result", K(buffer->size()), K(buffer->get_batch_info().count()),
               K(buffer->get_batch_info()));
@@ -520,23 +493,17 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
             result_info_guard,
             ObDTLIntermResultMonitorInfo(buffer.get_dfo_key().qc_id_,
                 buffer.get_dfo_id(), buffer.get_sqc_id())))) {
-        LOG_WARN("fail to create chunk row store", K(ret));
       } else if (OB_FAIL(ObDTLIntermResultManager::init_result_info_store(result_info_guard, buffer))) {
-        LOG_WARN("fail to init result info store", K(ret));
       } else if (OB_FAIL(access_mem_profile(mem_profile_key,
                                            mem_profile_info,
                                            *result_info_guard.result_info_,
                                            buffer))) {
-        LOG_WARN("fail to insert access mem_profile", K(ret));
       } else if (OB_FAIL(insert_interm_result_info(interm_res_key, result_info_guard.result_info_))) {
-        LOG_WARN("fail to insert row store", K(ret));
       }
     } else {
       LOG_WARN("fail to get interm_result_info", K(ret), K(interm_res_key));
     }
   } else if (OB_FAIL(mem_profile_map_.get_refactored(mem_profile_key, mem_profile_info))) {
-    LOG_WARN("The interm result already exists, and fail to get mem_profile_info.",
-              K(ret), K(interm_res_key), K(mem_profile_key));
   }
   // append block
   if (OB_SUCC(ret)) {
@@ -554,7 +521,6 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
       } else {
         ret = call.ret_;
         if (OB_SUCCESS != ret) {
-          LOG_WARN("fail to append block", K(ret), K(interm_res_key));
         }
       }
     } else {
@@ -569,7 +535,6 @@ int ObDTLIntermResultManager::process_interm_result_inner(ObDtlLinkedBuffer &buf
       } else {
         ret = call.ret_;
         if (OB_SUCCESS != ret) {
-          LOG_WARN("fail to append part block", K(ret), K(interm_res_key));
         }
       }
     }
@@ -601,7 +566,6 @@ int ObDTLIntermResultManager::dec_interm_result_ref_count(ObDTLIntermResultInfo 
         LOG_ERROR_RET(OB_ERR_UNEXPECTED, "ref count of interm result < 0", K(ref_count), KPC(result_info));
       }
       if (OB_FAIL(free_interm_result_info(result_info))) {
-        LOG_WARN("fail to free interm_result_info", K(ret));
       } else {
         result_info = NULL;
       }
@@ -618,7 +582,6 @@ void ObDTLIntermResultManager::runTimerTask()
   gc_.clean_cnt_ = 0;
   // Cleaning up expired row_store
   if (OB_FAIL(clear_timeout_result_info())) {
-    LOG_WARN("fail to for each row store", K(ret));
   } else {
     int64_t clear_cost = oceanbase::common::ObTimeUtility::current_time() - gc_.cur_time_;
     LOG_INFO("clear dtl interm result cost(us)", K(clear_cost), K(ret),
@@ -653,7 +616,6 @@ int ObDTLIntermResultManager::server_module_start(ObDTLIntermResultManager *&dtl
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->schedule(
         dtl_interm_result_manager->get_gc_task(),
         ObDTLIntermResultGCTask::REFRESH_INTERVAL, true))) {
-      LOG_WARN("failed to scheduler flush all task", K(ret));
     } else {
       dtl_interm_result_manager->get_gc_task().disable_timeout_check();
       dtl_interm_result_manager->get_gc_task().dtl_interm_result_manager_ = dtl_interm_result_manager;
@@ -702,7 +664,6 @@ int ObDTLIntermResultManager::process_dump(ObDTLIntermResultInfo &result_info,
                   &mem_profile_info->allocator_,
                   check_update_mem,
                   updated))) {
-        LOG_WARN("failed to update max available memory size periodically", K(ret));
       } else if (need_dump(mem_profile_info) && GCONF.is_sql_operator_dump_enabled()
                 && OB_FAIL(mem_profile_info->sql_mem_processor_.extend_max_memory_size(
                 &mem_profile_info->allocator_,
@@ -723,7 +684,6 @@ int ObDTLIntermResultManager::process_dump(ObDTLIntermResultInfo &result_info,
       // The finish_add_row will be guaranteed to be called before reading the interme results,
       // so there is no need to call it here.
       if (OB_FAIL(DTL_IR_STORE_DO_DUMP(result_info, false, false))) {
-        LOG_WARN("fail to dump interm row store", K(ret));
       } else {
         mem_profile_info->set_number_pass(1);
         int64_t dump_cost = oceanbase::common::ObTimeUtility::current_time() - dump_begin_time;
@@ -757,7 +717,6 @@ int ObDTLIntermResultManager::access_mem_profile(const ObDTLMemProfileKey &mem_p
   } else if (ret == OB_HASH_NOT_EXIST) {
     ret = OB_SUCCESS;
     if (OB_FAIL(init_mem_profile(mem_profile_key, mem_profile_info, buffer))) {
-      LOG_WARN("fail to init mem_profile", K(ret), K(mem_profile_key));
     }
   } else {
     LOG_WARN("fail to get mem_profile", K(ret), K(mem_profile_key));
@@ -767,8 +726,6 @@ int ObDTLIntermResultManager::access_mem_profile(const ObDTLMemProfileKey &mem_p
     DTL_IR_STORE_DO(interm_res_info, set_callback, mem_profile_info);
     DTL_IR_STORE_DO(interm_res_info, set_dir_id, mem_profile_info->sql_mem_processor_.get_dir_id());
     interm_res_info.mem_profile_key_ = mem_profile_key;
-    LOG_DEBUG("Current situation of accessing intermediate results in the profile.",
-              K(mem_profile_info->ref_count_), K(mem_profile_key), K(buffer));
   }
   return ret; 
 }
@@ -825,9 +782,7 @@ int ObDTLIntermResultManager::init_mem_profile(const ObDTLMemProfileKey &key,
                           PHY_PX_FIFO_RECEIVE,
                           buffer.get_op_id(),
                           &buffer))) {
-          LOG_WARN("failed to init sql memory manager processor", K(ret));
         } else if (OB_FAIL(mem_profile_map_.set_refactored(key, info))) {
-          LOG_WARN("fail to set row store in result manager", K(ret));
         } else {
           inc_mem_profile_ref_count(info);
         }
@@ -890,7 +845,6 @@ int ObDTLIntermResultManager::dec_mem_profile_ref_count(const ObDTLMemProfileKey
       }
       lib::ObMutexGuard guard(mem_profile_mutex_);
       if (OB_FAIL(destroy_mem_profile(key))) {
-        LOG_WARN("destroy mem_profile failed!", K(ret), K(key));
       }
     }
   }
@@ -913,7 +867,6 @@ int ObDTLIntermResultManager::init_result_info_store(ObDTLIntermResultInfoGuard 
   int ret = OB_SUCCESS;
   if (OB_FAIL(result_info_guard.result_info_->datum_store_->init(
               0, common::ObCtxIds::EXECUTE_CTX_ID, "DtlIntermRes"))) {
-    LOG_WARN("fail to init datum_store", K(ret));
   }
   return ret;
 }

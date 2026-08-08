@@ -56,7 +56,6 @@ int ObInternalTableRefreshAdapter::activate()
   } else {
     srs_service_->mark_stale();
     if (OB_FAIL(timezone_mgr_->schedule_retry())) {
-      LOG_WARN("failed to schedule timezone refresh", KR(ret));
     }
   }
   return ret;

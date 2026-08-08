@@ -1261,12 +1261,10 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
-      SQL_LOG(WARN, "left eval failed", K(ret));
     } else if (left->is_null()) {
       result.set_null();
       is_finish = true;
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, right))) {
-      SQL_LOG(WARN, "right eval failed", K(ret));
     } else if (right->is_null()) {
       result.set_null();
       is_finish = true;
@@ -1638,14 +1636,11 @@ protected:
     int ret = common::OB_SUCCESS;
     is_finish = false;
     if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
-      SQL_LOG(WARN, "left eval failed", K(ret));
     } else if (OB_FAIL(expr.args_[1]->eval(ctx, right))) {
-      SQL_LOG(WARN, "right eval failed", K(ret));
     } else if (left->is_null() || right->is_null()) {
       result.set_null();
       is_finish = true;
     }
-    SQL_LOG(DEBUG, "finish get_arith_operand", KPC(expr.args_[0]), KPC(expr.args_[1]), K(is_finish));
     return ret;
   }
 
@@ -1657,7 +1652,6 @@ protected:
     ObDatum *r = NULL;
     bool finish = false;
     if (OB_FAIL(get_arith_operand(expr, ctx, l, r, expr_datum, finish))) {
-      SQL_ENG_LOG(WARN, "evaluate operand failed", K(ret), K(expr));
     } else if (!finish) {
       ret = Functor()(expr_datum, *l, *r, args...);
     }

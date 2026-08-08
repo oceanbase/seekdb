@@ -127,7 +127,6 @@ int ObEncodingHashTableBuilder::add_to_table(const ObDatum &datum, const int64_t
   while (OB_SUCC(ret) && nullptr != list) {
     bool is_equal = false;
     if (OB_FAIL(equal(*list->header_->datum_, datum, is_equal))) {
-      LOG_WARN("check datum equality failed", K(ret), K(datum), KPC(list->header_->datum_));
     } else if (is_equal) {
       add_to_list(*list, nodes_[row_idx], datum, node_cnt_);
       break;
@@ -203,11 +202,9 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
           } else if (!need_batch_hash) {
             uint64_t pos = 0;
             if (OB_FAIL(hash(datum, hash_func, need_binary_hash, pos))) {
-              STORAGE_LOG(WARN, "hash failed", K(ret));
             } else {
               pos = pos & mask;
               if (OB_FAIL(add_to_table(datum, pos, row_id))) {
-                STORAGE_LOG(WARN, "fail to add to table", K(ret), K(row_id));
               }
             }
           }
@@ -231,7 +228,6 @@ int ObEncodingHashTableBuilder::build(const ObColDatums &col_datums, const ObCol
             int64_t row_id = i * dimension_size + idx;
             uint64_t pos = hash_val_[idx] & mask;
             if (OB_FAIL(add_to_table(col_datums.at(row_id), pos, row_id))) {
-              STORAGE_LOG(WARN, "fail to add to table", K(ret), K(row_id), K(pos));
             }
           }
         }

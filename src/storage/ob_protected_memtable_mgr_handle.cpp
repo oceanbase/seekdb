@@ -81,7 +81,6 @@ int ObProtectedMemtableMgrHandle::reset()
   if (memtable_mgr_handle_.is_valid()) {
     ObIMemtableMgr *mgr = memtable_mgr_handle_.get_memtable_mgr();
     if (OB_FAIL(mgr->has_memtable() && mgr->release_memtables())) {
-      STORAGE_LOG(ERROR, "failed to release memtables", KR(ret), KPC(this));
     }
     memtable_mgr_handle_.reset();
     STORAGE_LOG(INFO, "protected_memtable_mgr_handle reset", KR(ret), KPC(this));
@@ -102,7 +101,6 @@ int ObProtectedMemtableMgrHandle::release_memtables_and_try_reset_memtable_mgr_h
     // do nothing
   } else if (!need_reset_()) {
   } else if (OB_FAIL(try_reset_memtable_mgr_handle_())) {
-    STORAGE_LOG(WARN, "failed to try_reset_memtable_mgr_handle", KR(ret), K(tablet_id), K(scn), KPC(this));
   }
   return ret;
 }

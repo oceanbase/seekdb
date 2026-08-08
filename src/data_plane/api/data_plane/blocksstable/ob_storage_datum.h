@@ -201,9 +201,7 @@ OB_INLINE int ObStorageDatum::from_obj_enhance(const common::ObObj &obj)
   if (obj.is_ext()) {
     set_ext_value(obj.get_ext());
   } else if (OB_FAIL(from_obj(obj))) {
-    STORAGE_LOG(WARN, "Failed to transfer obj to datum", K(ret), K(obj));
   }
-  STORAGE_LOG(DEBUG, "chaser debug from obj", K(obj), K(*this));
 
   return ret;
 }
@@ -219,7 +217,6 @@ OB_INLINE int ObStorageDatum::to_obj_enhance(common::ObObj &obj, const common::O
   } else if (is_ext()) {
     obj.set_ext(get_ext());
   } else if (OB_FAIL(to_obj(obj, meta))) {
-    STORAGE_LOG(WARN, "Failed to transfer datum to obj", K(ret), K(*this), K(obj), K(meta));
   }
 
   return ret;
@@ -254,7 +251,6 @@ OB_INLINE bool ObStorageDatum::operator==(const ObStorageDatum &other) const
     bret = common::ObDatum::binary_equal(*this, other);
   }
   if (!bret) {
-    STORAGE_LOG(DEBUG, "datum and datum no equal", K(other), K(*this));
   }
   return bret;
 }
@@ -265,12 +261,10 @@ OB_INLINE bool ObStorageDatum::operator==(const common::ObObj &other) const
   bool bret = true;
   ObStorageDatum datum;
   if (OB_FAIL(datum.from_obj_enhance(other))) {
-    STORAGE_LOG(WARN, "Failed to transfer obj to datum", K(ret), K(other), K(datum));
   } else {
     bret = *this == datum;
   }
   if (!bret) {
-    STORAGE_LOG(DEBUG, "obj and datum no equal", K(other), K(datum), KPC(this));
   }
   return bret;
 }

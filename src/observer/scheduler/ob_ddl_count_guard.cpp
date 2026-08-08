@@ -37,7 +37,6 @@ int ObDDLCountGuard::try_inc_ddl_count(const int64_t cpu_quota_concurrency)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("runtime controller is null", KR(ret));
   } else if (OB_FAIL(runtime_controller->inc_ddl_count(cpu_quota_concurrency))) {
-    LOG_WARN("fail to increment runtime DDL count", KR(ret));
   } else {
     had_inc_ddl_ = true;
   }
@@ -53,7 +52,6 @@ ObDDLCountGuard::~ObDDLCountGuard()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("runtime controller is null", KR(ret));
     } else if (OB_FAIL(runtime_controller->dec_ddl_count())) {
-      LOG_WARN("fail to decrement runtime DDL count", KR(ret));
     }
   }
 }

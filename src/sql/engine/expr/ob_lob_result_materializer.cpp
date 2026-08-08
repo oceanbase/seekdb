@@ -55,9 +55,7 @@ int materialize_lob_result(common::ObObj &value,
 
     common::ObString data;
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to initialize LOB result iterator", K(ret), K(value));
     } else if (OB_FAIL(text_iter.get_full_data(data))) {
-      LOG_WARN("failed to materialize LOB result", K(ret), K(value));
     } else {
       common::ObObjType dst_type = common::ObLongTextType;
       if (value.is_json()) {

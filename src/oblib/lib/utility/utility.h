@@ -437,7 +437,6 @@ inline int split_on(ObString &src, const char sep, ObIArray<ObString> &result)
   ObString str = src.split_on(sep);
   while (OB_SUCC(ret) && !str.empty()) {
     if (OB_FAIL(result.push_back(str))) {
-      LIB_LOG(WARN, "push back error", K(ret));
     } else {
       str = src.split_on(sep);
     }
@@ -829,7 +828,6 @@ int add_var_to_array_no_dup(ObIArray<T> &array, const T &var, int64_t *idx = NUL
   if (has_exist_in_array(array, var, idx)) {
     //do nothing
   } else if (OB_FAIL(array.push_back(var))) {
-    LIB_LOG(WARN, "Add var to array error", K(ret));
   } else if (idx != NULL) {
     *idx = array.count() - 1;
   }
@@ -845,7 +843,6 @@ int append_array_no_dup(ObIArray<T> &dst, const ObIArray<T> &src)
     if (has_exist_in_array(dst, var)) {
       //do nothing
     } else if (OB_FAIL(dst.push_back(var))) {
-      LIB_LOG(WARN, "Add var to array error", K(ret));
     } else { } //do nothing
   }
   return ret;

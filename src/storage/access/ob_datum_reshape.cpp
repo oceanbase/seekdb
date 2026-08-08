@@ -280,7 +280,6 @@ int ObDatumReshape::reshape_vector_value(const ObObjMeta &col_type,
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
         if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
-          LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();
@@ -414,7 +413,6 @@ int ObDatumReshape::reshape_vector_value(const ObObjMeta &col_type,
                                                       col_type.get_scale(),
                                                       col_type.get_stored_precision());
         if (OB_FAIL(new_discrete_vector(value_tc, selector.get_max(), allocator, discrete_vec))) {
-          LOG_WARN("fail to new discrete vector", KR(ret));
         } else {
           ptrs = discrete_vec->get_ptrs();
           lens = discrete_vec->get_lens();

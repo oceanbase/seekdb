@@ -70,7 +70,6 @@ private:
                 data_begin_ + index_data_[row_idx],
                 index_data_[row_idx + 1] - index_data_[row_idx],
                 compare_result))) {
-      LOG_WARN("fail to compare rowkey", K(ret), K(rowkey), KPC_(datum_utils));
     } else {
       bret = lower_bound ? compare_result < 0 : compare_result > 0;
       // binary search will keep searching after find the first equal item,
@@ -147,7 +146,6 @@ int ObIMicroBlockFlatReader::find_bound_(
       found_iter = std::upper_bound(begin_iter, end_iter, key, flat_compare);
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to lower bound rowkey", K(ret), K(key), K(lower_bound), K(datum_utils));
     } else {
       row_idx = *found_iter;
     }
@@ -181,7 +179,6 @@ int ObMicroBlockGetReader::inner_init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
-    LOG_WARN("failed to init reader", K(ret), K(block_data), K(read_info));
   } else {
     row_count_ = header_->row_count_;
     original_data_length_ = header_->original_length_;
@@ -213,7 +210,6 @@ int ObMicroBlockGetReader::get_row(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid columns info ", K(ret), K(read_info));
   } else if (OB_FAIL(inner_init(block_data, read_info, rowkey))) {
-    LOG_WARN("fail to inner init ", K(ret), K(block_data));
   } else if (OB_FAIL(locate_rowkey(rowkey, row_idx))){
     if (OB_BEYOND_THE_RANGE != ret) {
       LOG_WARN("failed to locate row, ", K(ret), K(rowkey));
@@ -223,7 +219,6 @@ int ObMicroBlockGetReader::get_row(
               index_data_[row_idx + 1] - index_data_[row_idx],
               &read_info,
               row))) {
-    LOG_WARN("Fail to read row, ", K(ret), K(rowkey));
   } else {
     row.fast_filter_skipped_ = false;
   }
@@ -239,7 +234,6 @@ int ObMicroBlockGetReader::exist_row(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_init(block_data, read_info, rowkey))) {
-    LOG_WARN("failed to inner init", K(ret), K(block_data));
   } else {
     int64_t row_idx;
     exist = false;
@@ -269,12 +263,10 @@ int ObMicroBlockGetReader::locate_rowkey(const ObDatumRowkey &rowkey, int64_t &r
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(locate_rowkey_fast_path(rowkey, row_idx, need_binary_search, found))) {
-    LOG_WARN("faile to locate rowkey by hash index", K(ret));
   } else if (need_binary_search) {
     bool is_equal = false;
     if (OB_FAIL(ObIMicroBlockFlatReader::find_bound_(rowkey, true/*lower_bound*/, 0, row_count_,
         read_info_->get_datum_utils(), row_idx, is_equal))) {
-      LOG_WARN("fail to lower_bound rowkey", K(ret));
     } else if (row_count_ == row_idx || !is_equal) {
       row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
       ret = OB_BEYOND_THE_RANGE;
@@ -303,7 +295,6 @@ int ObMicroBlockGetReader::locate_rowkey_fast_path(const ObDatumRowkey &rowkey,
     uint64_t hash_value = 0;
     const blocksstable::ObStorageDatumUtils &datum_utils = read_info_->get_datum_utils();
     if (OB_FAIL(rowkey.murmurhash(0, datum_utils, hash_value))) {
-      LOG_WARN("Failed to calc rowkey hash", K(ret), K(rowkey), K(datum_utils));
     } else  {
       const uint8_t tmp_row_idx = hash_index_.find(hash_value);
       if (tmp_row_idx == ObMicroBlockHashIndex::NO_ENTRY) {
@@ -322,7 +313,6 @@ int ObMicroBlockGetReader::locate_rowkey_fast_path(const ObDatumRowkey &rowkey,
                       data_begin_ + index_data_[tmp_row_idx],
                       index_data_[tmp_row_idx + 1] - index_data_[tmp_row_idx],
                       compare_result))) {
-          LOG_WARN("fail to compare rowkey", K(ret), K(rowkey), KPC_(read_info));
         } else if (0 != compare_result) {
           row_idx = ObIMicroBlockReaderInfo::INVALID_ROW_INDEX;
           found = false;
@@ -349,7 +339,6 @@ int ObMicroBlockGetReader::get_row(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid columns info ", K(ret), K(read_info));
   } else if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
-    LOG_WARN("Failed to init reader", K(ret), K(block_data), K(read_info));
   } else {
     row_count_ = header_->row_count_;
     read_info_ = &read_info;
@@ -363,7 +352,6 @@ int ObMicroBlockGetReader::get_row(
                 index_data_[row_idx + 1] - index_data_[row_idx],
                 &read_info,
                 row))) {
-      LOG_WARN("Fail to read row", K(ret), K(row_idx), KPC_(header));
     } else {
       row.fast_filter_skipped_ = false;
     }
@@ -382,7 +370,6 @@ int ObMicroBlockGetReader::get_row_id(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid columns info ", K(ret), K(read_info));
   } else if (OB_FAIL(inner_init(block_data, read_info, rowkey))) {
-    LOG_WARN("fail to inner init ", K(ret), K(block_data));
   } else if (OB_FAIL(locate_rowkey(rowkey, row_id))){
     if (OB_BEYOND_THE_RANGE != ret) {
       LOG_WARN("failed to locate row, ", K(ret), K(rowkey));
@@ -416,7 +403,6 @@ int ObMicroBlockReader::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("columns info is invalid", K(ret), K(read_info));
   } else if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
-    LOG_WARN("fail to init, ", K(ret));
   } else {
     row_count_ = header_->row_count_;
     original_data_length_ = header_->original_length_;
@@ -440,7 +426,6 @@ int ObMicroBlockReader::init(
     reset();
   }
   if (OB_FAIL(ObIMicroBlockFlatReader::init(block_data))) {
-    LOG_WARN("fail to init, ", K(ret));
   } else {
     row_count_ = header_->row_count_;
     original_data_length_ = header_->original_length_;
@@ -472,7 +457,6 @@ int ObMicroBlockReader::compare_rowkey(
                                                           data_begin_ + index_data_[idx],
                                                           index_data_[idx + 1] - index_data_[idx],
                                                           compare_result))) {
-    LOG_WARN("Failed to compare rowkey", K(ret), K(rowkey), K_(row_count), K(idx));
   }
   return ret;
 }
@@ -501,7 +485,6 @@ int ObMicroBlockReader::find_bound(
           *datum_utils_,
           row_idx,
           equal))) {
-    LOG_WARN("failed to find bound", K(ret), K(lower_bound), K(begin_idx), K_(row_count), KPC_(read_info));
   }
   return ret;
 }
@@ -529,7 +512,6 @@ int ObMicroBlockReader::find_bound(
           *datum_utils_,
           row_idx,
           equal))) {
-    LOG_WARN("failed to find bound", K(ret), K(lower_bound), K(begin_idx), K_(row_count), KPC_(datum_utils));
   }
   return ret;
 }
@@ -555,7 +537,6 @@ int ObMicroBlockReader::find_bound_through_linear_search(
                                                        data_begin_ + index_data_[idx],
                                                        index_data_[idx + 1] - index_data_[idx],
                                                        cmp_result))) {
-        LOG_WARN("Failed to compare meta rowkey", K(ret), K(rowkey), K(idx));
       } else if (cmp_result != 0) {
         break;
       }
@@ -593,12 +574,8 @@ int ObMicroBlockReader::get_row(const int64_t index, ObDatumRow &row)
               index_data_[index + 1] - index_data_[index],
               read_info_,
               row))) {
-    LOG_WARN("row reader read row failed", K(ret), K(index), K(index_data_[index + 1]),
-             K(index_data_[index]), KPC_(header), KPC_(read_info));
   } else {
     row.fast_filter_skipped_ = false;
-    LOG_DEBUG("row reader read row success", K(ret), KPC_(read_info), K(index), K(index_data_[index + 1]),
-            K(index_data_[index]), K(row));
   }
   return ret;
 }
@@ -618,7 +595,6 @@ int ObMicroBlockReader::get_row_header(
               data_begin_ + index_data_[row_idx],
               index_data_[row_idx + 1] - index_data_[row_idx],
               row_header))) {
-    LOG_WARN("failed to setup row", K(ret), K(row_idx));
   }
   return ret;
 }
@@ -686,8 +662,6 @@ int ObMicroBlockReader::get_multi_version_info(
               data_begin_ + index_data_[row_idx],
               index_data_[row_idx + 1] - index_data_[row_idx],
               row_header))) {
-    LOG_WARN("fail to setup row", K(ret), K(row_idx), K(index_data_[row_idx + 1]),
-             K(index_data_[row_idx]), KP(data_begin_));
   } else {
     ObStorageDatum datum;
     const int64_t read_col_idx =
@@ -698,7 +672,6 @@ int ObMicroBlockReader::get_multi_version_info(
                 index_data_[row_idx + 1] - index_data_[row_idx],
                 read_col_idx,
                 datum))) {
-      LOG_WARN("fail to read column", K(ret), K(read_col_idx));
     } else {
       if (!row_header->get_row_multi_version_flag().is_uncommitted_row()) {
         // get trans_version for committed row
@@ -737,7 +710,6 @@ int ObMicroBlockReader::filter_pushdown_filter(
              K(ret), K(row_count_), K(pd_filter_info.start_), K(pd_filter_info.count_),
              K(has_lob_out_row), KP(context->lob_locator_helper_));
   } else if (OB_FAIL(validate_filter_info(pd_filter_info, filter, datum_buf, col_capacity, header_))) {
-    LOG_WARN("Failed to validate filter info", K(ret));
   } else {
     const int64_t col_count = filter.get_col_count();
     const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
@@ -766,7 +738,6 @@ int ObMicroBlockReader::filter_pushdown_filter(
               index_data_[row_idx + 1] - index_data_[row_idx],
               col_idx,
               *tmp_datum))) {
-            LOG_WARN("fail to read column", K(ret), K(i), K(col_idx), K(row_idx), KPC_(header));
           } else if (OB_UNLIKELY(trans_col_idx == col_idx)) {
             datum.set_int(-tmp_datum->get_int());
           } else if (tmp_datum->is_nop_value()) {
@@ -775,7 +746,6 @@ int ObMicroBlockReader::filter_pushdown_filter(
               LOG_WARN("Unexpected nop value", K(ret), K(col_idx), K(row_idx),
                       KPC(reinterpret_cast<const ObRowHeader *>(data_begin_ + index_data_[row_idx])));
             } else if (OB_FAIL(datum.from_storage_datum(default_datums.at(i), map_type))) {
-              LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(default_datums.at(i)), K(obj_type), K(map_type));
             }
           } else if (ob_is_decimal_int(obj_type) && OB_FAIL(datum.from_storage_datum(*tmp_datum, map_type))) {
             LOG_WARN("Failed to convert storage datum", K(ret), K(i), KPC(tmp_datum), K(obj_type), K(map_type));
@@ -787,11 +757,9 @@ int ObMicroBlockReader::filter_pushdown_filter(
                         col_params.at(i)->get_accuracy(),
                         allocator_.get_inner_allocator(),
                         datum))) {
-              LOG_WARN("Failed to pad column", K(ret), K(i), K(col_idx), K(row_idx), K(datum));
             }
           } else if (has_lob_out_row && col_params.at(i)->get_meta_type().is_lob_storage() && !datum.get_lob_data().in_row_) {
             if (OB_FAIL(context->lob_locator_helper_->fill_lob_locator_v2(datum, *col_params.at(i), *param, *context))) {
-              LOG_WARN("Failed to fill lob loactor", K(ret), K(has_lob_out_row), K(datum), KPC(context), KPC(param));
             } else {
               need_reuse_lob_locator = true;
             }
@@ -804,7 +772,6 @@ int ObMicroBlockReader::filter_pushdown_filter(
         if (filter.is_filter_black_node() || has_lob_out_row || filter.is_semistruct_filter_node()) {
           sql::ObPhysicalFilterExecutor &physical_filter = static_cast<sql::ObPhysicalFilterExecutor &>(filter);
           if (OB_FAIL(physical_filter.filter(datum_buf, col_count, *pd_filter_info.skip_bit_, filtered))) {
-            LOG_WARN("Failed to filter row with black filter", K(ret), K(row_idx));
           }
           if (need_reuse_lob_locator) {
             context->lob_locator_helper_->reuse();
@@ -816,13 +783,11 @@ int ObMicroBlockReader::filter_pushdown_filter(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("Unexpected col_ids count: not 1", K(ret), K(filter));
           } else if (OB_FAIL(white_filter.filter_datum(datum_buf[0], filtered))) {
-            LOG_WARN("Failed to filter row with white filter", K(ret), K(row_idx));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (!filtered) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("Failed to set result bitmap", K(ret), K(offset));
           }
         }
       }
@@ -882,14 +847,12 @@ int ObMicroBlockReader::filter_truncate_evaluator(
                          index_data_[row_idx + 1] - index_data_[row_idx],
                          column_index,
                          tmp_datum))) {
-            LOG_WARN("failed to read truncate column", K(ret), K(i), K(column_index), K(row_idx), KPC_(header));
           } else if (OB_UNLIKELY(header_->is_trans_version_column_idx(column_index))) {
             datum.set_int(-tmp_datum.get_int());
           } else {
             const ObObjType obj_type = cols_desc.at(column_index).col_type_.get_type();
             const ObObjDatumMapType map_type = ObDatum::get_obj_datum_map_type(obj_type);
             if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
-              LOG_WARN("failed to convert truncate datum", K(ret), K(i), K(tmp_datum), K(obj_type), K(map_type));
             }
           }
         }
@@ -897,10 +860,8 @@ int ObMicroBlockReader::filter_truncate_evaluator(
       if (OB_SUCC(ret)) {
         bool filtered = false;
         if (OB_FAIL(evaluator.filter_projected(datum_buf, column_count, filtered))) {
-          LOG_WARN("failed to evaluate projected truncate row", K(ret), K(row_idx));
         } else if (!filtered) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("failed to set truncate result", K(ret), K(offset));
           }
         }
       }
@@ -934,7 +895,6 @@ int ObMicroBlockReader::get_rows(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KPC(header_), KPC(read_info_), K(row_cap), K(row_buf));
   } else if (OB_FAIL(row_buf.reserve(read_info_->get_request_count()))) {
-    LOG_WARN("Failed to reserve row buf", K(ret), K(row_buf), KPC(read_info_));
   } else {
     const int64_t trans_col_idx = header_->rowkey_column_count_ > 0 ? read_info_->get_schema_rowkey_count() : INT32_MIN;
     const ObColumnIndexArray &cols_index = read_info_->get_columns_index();
@@ -948,7 +908,6 @@ int ObMicroBlockReader::get_rows(
           index_data_[row_idx + 1] - index_data_[row_idx],
           read_info_,
           row_buf))) {
-        LOG_WARN("Fail to read row", K(ret), K(idx), K(row_idx), K(row_cap), KPC_(header));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
           common::ObDatum &datum = datum_infos.at(i).datum_ptr_[idx + datum_offset];
@@ -967,10 +926,7 @@ int ObMicroBlockReader::get_rows(
             } else if (default_datums->at(i).is_nop()) {
               // virtual columns will be calculated in sql
             } else if (OB_FAIL(datum.from_storage_datum(default_datums->at(i), datum_infos.at(i).get_obj_datum_map()))) {
-              // fill columns added
-              LOG_WARN("Fail to transfer datum", K(ret), K(i), K(idx), K(row_idx), KPC(default_datums));
             }
-            LOG_TRACE("Transfer nop value", K(ret), K(idx), K(row_idx), K(col_idx), KPC(default_datums));
           } else {
             bool need_copy = false;
             if (row_buf.storage_datums_[col_idx].need_copy_for_encoding_column_with_flat_format(datum_infos.at(i).get_obj_datum_map())) {
@@ -978,8 +934,6 @@ int ObMicroBlockReader::get_rows(
               datum.ptr_ = exprs.at(i)->get_str_res_mem(eval_ctx, row_buf.storage_datums_[col_idx].len_, idx);
             }
             if (OB_FAIL(datum.from_storage_datum(row_buf.storage_datums_[col_idx], datum_infos.at(i).get_obj_datum_map(), need_copy))) {
-              LOG_WARN("Failed to from storage datum", K(ret), K(idx), K(row_idx), K(col_idx), K(need_copy),
-                  K(row_buf.storage_datums_[col_idx]), KPC_(header));
             }
           }
         }
@@ -996,7 +950,6 @@ int ObMicroBlockReader::get_rows(
                       allocator_.get_inner_allocator(),
                       row_cap,
                       col_datums))) {
-            LOG_WARN("fail to pad on datums", K(ret), K(i), K(row_cap), KPC_(header));
           }
         }
       }
@@ -1037,7 +990,6 @@ int ObMicroBlockReader::get_row_count(
           index_data_[row_idx + 1] - index_data_[row_idx],
           col_idx,
           datum))) {
-        LOG_WARN("fail to read column", K(ret), K(i), K(col_idx), K(row_idx));
       } else if (datum.is_nop()) {
         if (OB_UNLIKELY(nullptr == col_param || col_param->get_orig_default_value().is_nop_value())) {
           ret = OB_ERR_UNEXPECTED;
@@ -1094,19 +1046,16 @@ int ObMicroBlockReader::get_aggregate_result(
           index_data_[row_idx + 1] - index_data_[row_idx],
           col_idx,
           tmp_datum))) {
-        LOG_WARN("fail to read column", K(ret), K(i), K(col_idx), K(row_idx));
       } else if (!tmp_datum.is_nop() && OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
         LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(col_offset), K(tmp_datum), K(obj_type), K(map_type));
       } else if (has_lob_out_row && !datum.is_nop() && !datum.is_null() && !datum.get_lob_data().in_row_) {
         if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-          LOG_WARN("Failed to fill lob loactor", K(ret), K(datum), K(context), K(iter_param));
         } else {
           need_reuse_lob_locator = true;
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(agg_cell.eval(datum))) {
-          LOG_WARN("Failed to eval datum", K(ret));
         }
         if (need_reuse_lob_locator) {
           context.lob_locator_helper_->reuse();
@@ -1135,7 +1084,6 @@ int ObMicroBlockReader::get_aggregate_result(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KPC(header_), KPC(read_info_), K(row_cap), K(row_buf));
   } else if (OB_FAIL(row_buf.reserve(read_info_->get_request_count()))) {
-    LOG_WARN("Failed to reserve row buf", K(ret), K(row_buf), KPC(read_info_));
   } else {
     const ObColDescIArray &cols_desc = read_info_->get_columns_desc();
     ObStorageDatum tmp_datum; // used for deep copy decimalint
@@ -1157,7 +1105,6 @@ int ObMicroBlockReader::get_aggregate_result(
           index_data_[row_idx + 1] - index_data_[row_idx],
           read_info_,
           row_buf))) {
-        LOG_WARN("Fail to read row", K(ret), K(idx), K(row_idx), K(row_cap), KPC_(header));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells.count(); ++i) {
           const int32_t col_offset = agg_cells.at(i)->get_col_offset();
@@ -1173,11 +1120,8 @@ int ObMicroBlockReader::get_aggregate_result(
                                           allocator_.get_inner_allocator(), row_buf.storage_datums_[col_offset]))) {
               LOG_WARN("Failed to pad column", K(ret), K(col_offset), K(row_buf.storage_datums_));
             } else if (OB_FAIL(tmp_datum.from_storage_datum(row_buf.storage_datums_[col_offset], map_type))) {
-              LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(col_offset),
-                       K(row_buf.storage_datums_[col_offset]), K(obj_meta.get_type()), K(map_type));
             } else if (has_lob_out_row && obj_meta.is_lob_storage()) {
               if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(tmp_datum, *col_params->at(col_offset), iter_param, context))) {
-                LOG_WARN("Failed to fill lob loactor", K(ret), K(tmp_datum), K(context), K(iter_param));
               } else {
                 need_reuse_lob_locator = true;
               }
@@ -1185,7 +1129,6 @@ int ObMicroBlockReader::get_aggregate_result(
 
             if (OB_SUCC(ret)) {
               if (OB_FAIL(agg_cells.at(i)->eval(tmp_datum))) {
-                LOG_WARN("Failed to process agg cell", K(ret), K(col_offset), K(row_buf));
               }
               if (need_reuse_lob_locator) {
                 context.lob_locator_helper_->reuse();
@@ -1193,7 +1136,6 @@ int ObMicroBlockReader::get_aggregate_result(
               }
             }
           } else if (OB_FAIL(agg_cells.at(i)->eval(tmp_datum))) {
-            LOG_WARN("Failed to process agg cell", K(ret), K(i), K(col_offset), K(row_buf));
           }
         }
       }
@@ -1235,16 +1177,13 @@ int ObMicroBlockReader::get_column_datum(
               index_data_[row_index + 1] - index_data_[row_index],
               col_idx,
               tmp_datum))) {
-      LOG_WARN("fail to read column", K(ret), K(col_idx), K(row_index));
     } else if (tmp_datum.is_nop()) {
       datum.set_nop();
     } else if (tmp_datum.is_null()) {
       datum.set_null();
     } else if (OB_FAIL(datum.from_storage_datum(tmp_datum, map_type))) {
-      LOG_WARN("Failed to convert storage datum", K(ret), K(tmp_datum), K(obj_type), K(map_type));
     } else if (col_param.get_meta_type().is_lob_storage() && !datum.get_lob_data().in_row_) {
       if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-        LOG_WARN("Failed to fill lob loactor", K(ret), K(datum), K(context), K(iter_param));
       }
     }
   }

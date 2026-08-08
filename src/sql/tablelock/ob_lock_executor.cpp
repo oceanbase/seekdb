@@ -166,12 +166,10 @@ int ObLockContext::implicit_end_trans_(ObSQLSessionInfo &session_info,
     is_async = !is_rollback && ctx.is_end_trans_async() && can_async;
     if (!is_async) {
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback))) {
-        LOG_WARN("failed to implicit end trans with sync callback", K(ret));
       }
     } else {
       ObEndTransAsyncCallback &callback = session_info.get_end_trans_cb();
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback, &callback))) {
-        LOG_WARN("failed implicit end trans with async callback", K(ret));
       }
       ctx.get_trans_state().set_end_trans_executed(OB_SUCCESS == ret);
     }
@@ -179,8 +177,6 @@ int ObLockContext::implicit_end_trans_(ObSQLSessionInfo &session_info,
     ObSqlTransControl::reset_session_tx_state(&session_info, true);
     ctx.set_need_disconnect(false);
   }
-  LOG_TRACE("lock function implicit_end_trans", K(is_async), K(session_info),
-            K(can_async), K(is_rollback));
   return ret;
 }
 
@@ -204,12 +200,9 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
       parent_tx_id.is_valid() &&
       child_tx_id.is_valid()) {
     if (OB_FAIL(session_info.get_query_timeout(query_timeout))) {
-      LOG_WARN("get query timeout failed", K(parent_tx_id), K(child_tx_id), KR(ret));
     } else {
       if (OB_FAIL(data_plane::register_autonomous_transaction_dependency(
               parent_tx_id, child_tx_id, query_timeout))) {
-        LOG_WARN("autonomous register to deadlock failed", K(parent_tx_id),
-                 K(child_tx_id), KR(ret));
       }
     }
   } else {
@@ -239,7 +232,6 @@ int ObLockContext::open_inner_conn_()
                  query::ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
                          session, inner_conn_guard_))) {
-    LOG_WARN("create inner connection failed", K(ret), KPC(session));
   } else if (OB_ISNULL(inner_conn = inner_conn_guard_.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner connection is still null", KPC(session));
@@ -250,9 +242,6 @@ int ObLockContext::open_inner_conn_()
      */
     inner_conn_ = inner_conn;
     session->set_inner_conn(inner_conn);
-    LOG_DEBUG("ObLockFuncContext::open_inner_conn_ successfully",
-              KP(inner_conn_),
-              KP(store_inner_conn_));
   }
   return ret;
 }
@@ -298,7 +287,6 @@ int ObLockContext::execute_write(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_write(sql.ptr(), affected_rows))) {
-    LOG_WARN("execute write sql failed", K(ret));
   }
   return ret;
 }
@@ -312,7 +300,6 @@ int ObLockContext::execute_read(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(inner_conn_->execute_read(sql.ptr(), res))) {
-    LOG_WARN("execute read sql failed", K(ret));
   }
   return ret;
 }
@@ -484,8 +471,6 @@ int ObUnLockExecutor::execute(uint8_t owner_type, int64_t owner_id)
       OX (exec_ctx.set_physical_plan_ctx(nullptr));  // avoid core during release exec_ctx
     }
   }
-  LOG_DEBUG("lock_executor debug: release by owner identity", K(ret),
-            K(owner_type), K(owner_id), K(release_cnt));
   return ret;
 }
 

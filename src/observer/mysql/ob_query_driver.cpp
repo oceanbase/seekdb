@@ -47,7 +47,6 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
                                            has_more_result,
                                            need_set_ps_out_flag,
                                            &result))) {
-    LOG_WARN("response query head fail. ", K(ret));
   }
   if (OB_FAIL(ret)) {
     result.set_errcode(ret);
@@ -72,10 +71,7 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     LOG_WARN("column cnt is null ", K(fields.count()));
     ret = OB_ERR_BAD_FIELD_ERROR;
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
-    LOG_WARN("fail to get autocommit", K(ret));
   } else if (OB_FAIL(mysql_fields.reserve(fields.count()))) {
-    LOG_WARN("failed to reserve MySQL result-set fields", K(ret), "field_count",
-             fields.count());
   }
 
   // Complete wildcard filtering and every ObField conversion before entering
@@ -95,9 +91,7 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
         /*do nothing*/
       } else {
         if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field))) {
-          LOG_WARN("fail to convert result field", K(ret), K(ob_field), K(field));
         } else {
-          LOG_DEBUG("success to convert result field", K(ob_field), K(field));
         }
         if (OB_SUCC(ret)) {
           ObMySQLResultSet::replace_lob_type(field);
@@ -106,8 +100,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
                 static_cast<EMySQLFieldType>(ob_field.default_value_.get_ext());
           }
           if (OB_FAIL(mysql_fields.push_back(field))) {
-            LOG_WARN("failed to retain converted MySQL result field", K(ret),
-                     K(i));
           }
         }
       }
@@ -130,8 +122,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     if (OB_FAIL(sender_.response_resultset_metadata(
             mysql_fields, !is_field_list, eofp.get_field_count(),
             eofp.get_warning_count(), eofp.get_server_status().flags_))) {
-      LOG_WARN("response result-set metadata fail", K(ret), "field_count",
-               mysql_fields.count(), K(is_field_list));
     }
   }
   return ret;
@@ -178,7 +168,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   if (OB_SUCC(ret)) {
     const ObSQLSessionInfo &my_session = result.get_session();
     if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-      LOG_WARN("fail to get result charset", K(ret));
     }
   }
 
@@ -191,7 +180,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       is_first_row = false;
       can_retry = false; // Already obtained the first row of data, no longer retrying
       if (OB_FAIL(response_query_header(result, has_more_result, false))) {
-        LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
@@ -204,8 +192,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
                                            cast_ctx,
                                            value,
                                            value))) {
-            LOG_WARN("failed to cast object", K(ret), K(value),
-                     K(value.get_type()), K(fields->at(i).type_.get_type()));
           }
         }
       }
@@ -242,11 +228,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       sm.set_packed(is_packed);
       OMPKRow rp(sm);
       if (OB_FAIL(sender_.response_packet(rp))) {
-        LOG_WARN("response packet fail", K(ret), KP(row), K(row_num),
-            K(can_retry));
-        // break;
       } else {
-        LOG_DEBUG("response row succ", K(*row));
       }
       if (OB_SUCC(ret)) {
         ++row_num;
@@ -270,7 +252,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     // If there is no data at all, we still need to reply to the client with field information, and no more retries will be attempted
     can_retry = false;
     if (OB_FAIL(response_query_header(result, has_more_result, false))) {
-      LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
     }
   }
   if (OB_FAIL(ret) && !can_retry) {
@@ -303,7 +284,6 @@ int ObQueryDriver::convert_field_charset(ObIAllocator& allocator,
           buf,
           buf_len,
           result_len))) {
-    LOG_WARN("charset convert failed", K(ret), K(from_collation), K(dest_collation));
   } else {
     dest_string.assign(buf, static_cast<int32_t>(result_len));
   }
@@ -328,7 +308,6 @@ int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &resul
       LOG_WARN("invalid collation", K(ret), K(from_collation_type), K(to_collation_type), K(value));
     }
   } else if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob fake allocator is null.", K(ret), K(value));
@@ -347,14 +326,12 @@ int ObQueryDriver::convert_text_value_charset(common::ObObj& value, sql::ObResul
 
   ObArenaAllocator *allocator = NULL;
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("text fake allocator is null.", K(ret), K(value));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(convert_text_value_charset(value, charset_type, *allocator, &my_session, &result.get_exec_context()))) {
-    LOG_WARN("convert lob value fail.", K(ret), K(value));
   }
   return ret;
 }
@@ -371,7 +348,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     LOG_WARN("get unexpected error", K(ret), K(str), K(length_str), K(i),
                                      K(pattern), K(length_pat), K(j));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -384,14 +360,12 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     } else if (!is_match && i < length_str) {
       ++i;
       --j;
       if (OB_FAIL(like_match(str, length_str, i,
                              pattern, length_pat, j,
                              is_match))) {
-        LOG_WARN("failed to match", K(ret));
       }
     }
   } else if (i < length_str && j < length_pat && pattern[j] == '_') {
@@ -400,7 +374,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     }
   } else if (i < length_str && j < length_pat && tolower(str[i]) == tolower(pattern[j])) {
     ++i;
@@ -408,7 +381,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     }
   } else {
     is_match = false;
@@ -422,7 +394,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
   int ret = OB_SUCCESS;
   ObArenaAllocator *allocator = NULL;
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob fake allocator is null.", K(ret), K(value));
@@ -430,7 +401,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
                                                  allocator,
                                                  &result.get_session(),
                                                  &result.get_exec_context()))) {
-    LOG_WARN("convert lob to longtext fail.", K(ret), K(value));
   }
   return ret;
 }
@@ -461,9 +431,7 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
       ObTextStringIter instr_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(
               instr_iter, *exec_ctx, allocator, &tmp_alloc))) {
-        LOG_WARN("init lob str inter failed", K(ret), K(value));
       } else if (OB_FAIL(instr_iter.get_full_data(data))) {
-        LOG_WARN("Lob: init lob str iter failed ", K(value));
       } else {
         ObObjType dst_type = ObLongTextType;
         if (value.is_json()) {
@@ -527,7 +495,6 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
   if (value.is_null() || value.is_nop_value()) {
   } else if (OB_ISNULL(raw_str.ptr()) || raw_str.length() == 0) {
     if (!value.has_lob_header() || !value.is_lob_storage()) {
-      LOG_DEBUG("Lob: get empty or null obj without header or not lob", K(value));
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Lob: get  empty or null lob obj with header", K(ret), K(value));
@@ -567,11 +534,8 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
                          *exec_ctx,
                          &tmp_alloc/*res_allocator*/,
                          &tmp_alloc/*tmp_allocator*/))) {
-            LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
           } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
-            LOG_WARN("Lob: get full data failed ", K(ret), K(value));
           } else if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
-            LOG_WARN("Lob: get lob data byte len failed", K(ret), K(loc));
           }
         } 
         if (OB_SUCC(ret)) {
@@ -583,20 +547,13 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
           uint32_t result_len = 0;
           int64_t converted_len = lob_data_byte_len * ObCharset::CharConvertFactorNum;
           if (OB_FAIL(new_tmp_lob.init(converted_len))) {
-            LOG_WARN("Lob: init tmp lob failed", K(ret), K(converted_len));
           } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_len))) {
-            LOG_WARN("Lob: get empty buffer failed", K(ret), K(converted_len));
           } else if (OB_FAIL(convert_string_charset(data_str, from_collation_type, to_collation_type,
                                                     buf, buf_len, result_len))) {
-            LOG_WARN("Lob: convert string charset failed", K(ret));
           } else if (OB_FAIL(new_tmp_lob.lseek(result_len, 0))) {
-            LOG_WARN("Lob: temp lob lseek failed", K(ret));
           } else {
             ObString lob_loc_str;
             new_tmp_lob.get_result_buffer(lob_loc_str);
-            LOG_DEBUG("Lob: new temp convert_text_value_charset in convert_text_value",
-                K(ret), K(raw_str), K(type), K(to_collation_type), K(from_collation_type),
-                K(from_charset_info->csname), K(to_charset_info->csname));
             value.set_lob_value(type, lob_loc_str.ptr(), lob_loc_str.length());
             value.set_collation_type(to_collation_type);
             if (new_tmp_lob.has_lob_header()) {
@@ -634,7 +591,6 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
                                         from_collation,
                                         result.get_wildcard_string(),
                                         wildcard_str))) {
-        LOG_WARN("failed to convert field charset", K(ret));
       }
     } else {
       wildcard_str = result.get_wildcard_string();
@@ -648,7 +604,6 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
                              wildcard_str.length(),
                              0,
                              is_match))) {
-        LOG_WARN("failed to like match", K(ret));
       } else if (!is_match) {
         is_not_match = true;
       }

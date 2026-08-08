@@ -133,9 +133,7 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2, is_geo1_cached, is_geo2_cached))) {
-      LOG_WARN("zoom in geos failed", K(ret));
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -153,7 +151,6 @@ int ObExprSTIntersects::eval_st_intersects(const ObExpr &expr, ObEvalCtx &ctx, O
       } else if (OB_FAIL(ObGeoExprUtils::get_intersects_res(*geo1, *geo2, gis_arg1, gis_arg2, 
                                                             const_param_cache, srs, 
                                                             mem_ctx, inter_result))) {
-        LOG_WARN("fail to get intersects res", K(ret));
       } else {
         res.set_bool(inter_result);
       }

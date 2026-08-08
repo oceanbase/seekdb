@@ -83,7 +83,6 @@ OB_INLINE static int ip_distance_simd4_avx128_extra(const float *a, const float 
   int64_t dim = len >> 2 << 2;
   double extra_distance = 0;
   if (OB_FAIL(ip_distance_simd4_avx128(a, b, dim, distance))) {
-    LIB_LOG(WARN, "failed to cal ip distance", K(ret), K(len), K(dim), K(distance));
   } else if (0 < len - dim && OB_FAIL(ip_distance_normal(a + dim, b + dim, len - dim, distance))) {
     LIB_LOG(WARN, "failed to cal ip distance", K(ret), K(len), K(dim), K(distance));
   }
@@ -96,10 +95,8 @@ OB_INLINE static int ip_distance_avx128(const float *a, const float *b, const in
   distance = 0;
   if (4 < len) {
     if (OB_FAIL(ip_distance_simd4_avx128_extra(a, b, len, distance))) {
-      LIB_LOG(WARN, "failed to cal ip distance", K(ret), K(distance));
     }
   } else if (OB_FAIL(ip_distance_normal(a, b, len, distance))) {
-    LIB_LOG(WARN, "failed to cal ip distance", K(ret));
   }
   return ret;
 }

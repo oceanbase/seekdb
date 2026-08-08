@@ -322,9 +322,7 @@ int ObRecordHeaderV3::deserialize_and_check_record(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(ptr), K(size), K(magic));
   } else if (OB_FAIL(header.deserialize(ptr, size, pos))) {
-    LOG_WARN("fail to deserialize header", K(ret));
   } else if (OB_FAIL(header.check_and_get_record(ptr, size, magic, payload_ptr, payload_size))) {
-    LOG_WARN("fail to check and get record", K(ret));
   }
 
   return ret;
@@ -341,7 +339,6 @@ int ObRecordHeaderV3::check_and_get_record(const char *ptr, const int64_t size, 
     ret = OB_INVALID_DATA;
     LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
-    LOG_WARN("fail to check header checksum", K(ret));
   } else {
     const int64_t header_size = get_serialize_size();
     if (size < header_size) {
@@ -351,7 +348,6 @@ int ObRecordHeaderV3::check_and_get_record(const char *ptr, const int64_t size, 
       payload_ptr = ptr + header_size;
       payload_size = size - header_size;
       if (OB_FAIL(check_payload_checksum(payload_ptr, payload_size))) {
-        LOG_WARN("fail to check payload checksum", K(ret));
       }
     }
   }
@@ -368,7 +364,6 @@ int ObRecordHeaderV3::deserialize_and_check_record(const char *ptr, const int64_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(ptr), K(magic));
   } else if (OB_FAIL(deserialize_and_check_record(ptr, size, magic, payload_buf, payload_size))) {
-    LOG_WARN("fail to check record", K(ret));
   }
   return ret;
 }

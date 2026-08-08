@@ -396,7 +396,6 @@ struct LogDestroyIteratorStorageFunctor {
   void operator()()
   {
     if (NULL != palf_env_) {
-      CLOG_LOG(TRACE, "close palf handle success", KP(palf_env_), K(handle_));
       palf_env_->close(handle_);
       palf_env_ = NULL;
     }
@@ -418,10 +417,7 @@ int seek_log_iterator_no_shared_storage(palf::PalfEnv *palf_env,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(palf_env), K(start_point));
   } else if (OB_FAIL(palf_env->open(palf_handle))) {
-    CLOG_LOG(WARN, "failed to open palf_handle", K(ret));
   } else if (OB_FAIL(palf_handle.seek(start_point, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from palf_handle failed", KR(ret), K(start_point));
-    // only set destroy functor when iterator is initialized for the first time.
   } else if (first_inited) {
     // NB: the ownership of palf_handle has transfered to iterator after set_destroy_iterator_storage_functor successfully,
     //     set_destroy_iterator_storage_functor is atomic(i.e. return OB_SUCCESS means transfer ownership successfully,
@@ -465,7 +461,6 @@ int init_log_iterator(
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", KP(log_handler), K(start_point));
   } else if (OB_FAIL(log_handler->seek_log_iterator_dispatch_(start_point, suggested_read_buf_size, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from log_handler failed", K(start_point));
   } else {}
   return ret;
 }
@@ -483,9 +478,7 @@ int init_log_iterator_(ObILogStorage &log_storage,
   int ret = OB_SUCCESS;
   ObLogHandler *log_handler = NULL;
   if (OB_FAIL(__get_log_handler(log_storage, log_handler))) {
-    CLOG_LOG(WARN, "__get_log_handler failed");
   } else if (OB_FAIL(init_log_iterator(log_handler, start_point, suggested_read_buf_size, iterator))) {
-    CLOG_LOG(WARN, "seek iterator from log_handler failed", K(start_point));
   } else {}
   return ret;
 }

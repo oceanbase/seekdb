@@ -190,13 +190,11 @@ int ObAnonymousBlockResolver::add_param()
     CK (params_.param_list_->count() == params_.query_ctx_->question_marks_count_);
     for (int64_t i = 0; OB_SUCC(ret) && i < params_.param_list_->count(); ++i) {
       if (OB_FAIL(anonymous_stmt->add_param(params_.param_list_->at(i)))) {
-        LOG_WARN("fail to push back param", K(i), K(ret));
       }
     }
   } else if (params_.query_ctx_->question_marks_count_ > 0) {
     for (int64_t i =0; OB_SUCC(ret) && i < params_.query_ctx_->question_marks_count_; ++i) {
       if (OB_FAIL(anonymous_stmt->add_param(ObObjParam(ObObj(ObNullType))))) {
-        LOG_WARN("failed to push back param", K(ret), K(i));
       }
     }
   }

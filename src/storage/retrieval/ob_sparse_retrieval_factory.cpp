@@ -130,9 +130,7 @@ int ObSparseRetrievalDaaTCursor::init(const ObSparseRetrievalDaaTRequest &reques
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("null DAAT source", K(ret), K(i));
     } else if (OB_FAIL(sources_.push_back(request.sources_->at(i)))) {
-      LOG_WARN("failed to retain DAAT source", K(ret), K(i));
     } else if (OB_FAIL(source_states_.push_back(SourceState()))) {
-      LOG_WARN("failed to initialize DAAT source state", K(ret), K(i));
     }
   }
   for (int64_t i = 0;
@@ -140,7 +138,6 @@ int ObSparseRetrievalDaaTCursor::init(const ObSparseRetrievalDaaTRequest &reques
            && i < request.dimension_weights_->count();
        ++i) {
     if (OB_FAIL(dimension_weights_.push_back(request.dimension_weights_->at(i)))) {
-      LOG_WARN("failed to copy DAAT dimension weight", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -209,7 +206,6 @@ int ObSparseRetrievalDaaTCursor::find_min_source(int64_t &min_source_idx)
           source_state.entry_.id_,
           source_states_.at(min_source_idx).entry_.id_,
           cmp_result))) {
-        LOG_WARN("failed to compare DAAT ids", K(ret), K(i), K(min_source_idx));
       } else if (cmp_result < 0) {
         min_source_idx = i;
       }
@@ -229,7 +225,6 @@ int ObSparseRetrievalDaaTCursor::collect_current_id(
   const ObSparseRetrievalIdView min_id = source_states_.at(min_source_idx).entry_.id_;
   match.score_ = 0.0;
   if (OB_FAIL(match.id_.assign(min_id))) {
-    LOG_WARN("failed to retain DAAT id", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < source_states_.count(); ++i) {
     SourceState &source_state = source_states_.at(i);
@@ -237,7 +232,6 @@ int ObSparseRetrievalDaaTCursor::collect_current_id(
     } else {
       int cmp_result = 0;
       if (OB_FAIL(id_ops_->compare(source_state.entry_.id_, min_id, cmp_result))) {
-        LOG_WARN("failed to compare collected DAAT id", K(ret), K(i));
       } else if (0 == cmp_result) {
         const double weight = dimension_weights_.empty()
             ? 1.0 : dimension_weights_.at(i);
@@ -258,9 +252,7 @@ int ObSparseRetrievalDaaTCursor::retain_candidate(const ObSparseRetrievalMatch &
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
-      LOG_WARN("failed to retain DAAT candidate", K(ret));
     } else if (OB_FAIL(sift_up(results_.count() - 1))) {
-      LOG_WARN("failed to restore DAAT top-k heap", K(ret));
     }
   } else {
     // The root is the worst retained match.  Keeping that invariant makes
@@ -268,13 +260,11 @@ int ObSparseRetrievalDaaTCursor::retain_candidate(const ObSparseRetrievalMatch &
     // failures to propagate through the integer-returning heap operations.
     int cmp_result = 0;
     if (OB_FAIL(compare_matches(match, results_.at(0), cmp_result))) {
-      LOG_WARN("failed to compare DAAT candidate with threshold", K(ret));
     } else if (cmp_result < 0) {
       // match is worse than the retained threshold
     } else if (cmp_result > 0) {
       results_.at(0) = match;
       if (OB_FAIL(sift_down(results_.count(), 0))) {
-        LOG_WARN("failed to restore DAAT top-k heap", K(ret));
       }
     }
   }
@@ -290,7 +280,6 @@ int ObSparseRetrievalDaaTCursor::sift_up(const int64_t start_idx)
     int cmp_result = 0;
     if (OB_FAIL(compare_matches(
         results_.at(child_idx), results_.at(parent_idx), cmp_result))) {
-      LOG_WARN("failed to compare DAAT heap entries", K(ret), K(child_idx), K(parent_idx));
     } else if (cmp_result >= 0) {
       break;
     } else {
@@ -320,7 +309,6 @@ int ObSparseRetrievalDaaTCursor::sift_down(
       int cmp_result = 0;
       if (OB_FAIL(compare_matches(
           results_.at(right_idx), results_.at(left_idx), cmp_result))) {
-        LOG_WARN("failed to compare DAAT heap children", K(ret), K(left_idx), K(right_idx));
       } else if (cmp_result < 0) {
         worst_child_idx = right_idx;
       }
@@ -329,8 +317,6 @@ int ObSparseRetrievalDaaTCursor::sift_down(
       int cmp_result = 0;
       if (OB_FAIL(compare_matches(
           results_.at(worst_child_idx), results_.at(parent_idx), cmp_result))) {
-        LOG_WARN("failed to compare DAAT heap entries",
-            K(ret), K(worst_child_idx), K(parent_idx));
       } else if (cmp_result >= 0) {
         break;
       } else {
@@ -357,7 +343,6 @@ int ObSparseRetrievalDaaTCursor::compare_matches(
   } else {
     int id_cmp = 0;
     if (OB_FAIL(id_ops_->compare(left.id_.view(), right.id_.view(), id_cmp))) {
-      LOG_WARN("failed to compare tied DAAT ids", K(ret));
     } else {
       // A smaller id wins a score tie.
       cmp_result = -id_cmp;
@@ -377,7 +362,6 @@ int ObSparseRetrievalDaaTCursor::sort_results()
     results_.at(0) = results_.at(heap_size - 1);
     results_.at(heap_size - 1) = tmp;
     if (OB_FAIL(sift_down(heap_size - 1, 0))) {
-      LOG_WARN("failed to order DAAT result heap", K(ret), K(heap_size));
     }
   }
   return ret;
@@ -391,7 +375,6 @@ int ObSparseRetrievalDaaTCursor::materialize()
     int64_t min_source_idx = -1;
     ObSparseRetrievalMatch match;
     if (OB_FAIL(load_missing_entries(all_exhausted))) {
-      LOG_WARN("failed to load DAAT sources", K(ret));
     } else if (all_exhausted) {
     } else if (OB_FAIL(find_min_source(min_source_idx))) {
       if (OB_ITER_END == ret) {
@@ -401,9 +384,7 @@ int ObSparseRetrievalDaaTCursor::materialize()
         LOG_WARN("failed to find next DAAT id", K(ret));
       }
     } else if (OB_FAIL(collect_current_id(min_source_idx, match))) {
-      LOG_WARN("failed to collect DAAT dimensions", K(ret));
     } else if (OB_FAIL(retain_candidate(match))) {
-      LOG_WARN("failed to retain DAAT match", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(sort_results())) {
@@ -480,7 +461,6 @@ int ObSparseRetrievalDaaTCursor::reuse(const bool switch_source)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sources_.count(); ++i) {
     if (OB_FAIL(sources_.at(i)->reuse(switch_source))) {
-      LOG_WARN("failed to reuse DAAT source", K(ret), K(i));
     }
   }
   clear_algorithm_state();
@@ -639,13 +619,9 @@ int ObSparseRetrievalBMWCursor::init(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid BMW dimension", K(ret), K(i), K(weight));
     } else if (OB_FAIL(sources_.push_back(request.sources_->at(i)))) {
-      LOG_WARN("failed to retain BMW exact source", K(ret), K(i));
     } else if (OB_FAIL(block_sources_.push_back(request.block_sources_->at(i)))) {
-      LOG_WARN("failed to retain BMW block source", K(ret), K(i));
     } else if (OB_FAIL(source_states_.push_back(SourceState()))) {
-      LOG_WARN("failed to initialize BMW exact state", K(ret), K(i));
     } else if (OB_FAIL(global_max_scores_.push_back(0.0))) {
-      LOG_WARN("failed to initialize BMW global bound", K(ret), K(i));
     } else if (OB_NOT_NULL(request.dimension_weights_)
         && OB_FAIL(dimension_weights_.push_back(weight))) {
       LOG_WARN("failed to copy BMW dimension weight", K(ret), K(i));
@@ -718,7 +694,6 @@ int ObSparseRetrievalBMWCursor::find_min_source(int64_t &min_source_idx)
           source_state.entry_.id_,
           source_states_.at(min_source_idx).entry_.id_,
           cmp_result))) {
-        LOG_WARN("failed to compare BMW exact ids", K(ret), K(i), K(min_source_idx));
       } else if (cmp_result < 0) {
         min_source_idx = i;
       }
@@ -738,7 +713,6 @@ int ObSparseRetrievalBMWCursor::collect_current_id(
   const ObSparseRetrievalIdView min_id = source_states_.at(min_source_idx).entry_.id_;
   match.score_ = 0.0;
   if (OB_FAIL(match.id_.assign(min_id))) {
-    LOG_WARN("failed to retain BMW id", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < source_states_.count(); ++i) {
     SourceState &source_state = source_states_.at(i);
@@ -746,7 +720,6 @@ int ObSparseRetrievalBMWCursor::collect_current_id(
     } else {
       int cmp_result = 0;
       if (OB_FAIL(id_ops_->compare(source_state.entry_.id_, min_id, cmp_result))) {
-        LOG_WARN("failed to compare collected BMW id", K(ret), K(i));
       } else if (0 == cmp_result) {
         match.score_ += source_state.entry_.score_ * weight_at(i);
         source_state.has_entry_ = false;
@@ -764,7 +737,6 @@ int ObSparseRetrievalBMWCursor::prepare_blocks()
     for (int64_t i = 0; OB_SUCC(ret) && i < block_sources_.count(); ++i) {
       double max_score = 0.0;
       if (OB_FAIL(block_sources_.at(i)->max_score(max_score))) {
-        LOG_WARN("failed to read BMW global bound", K(ret), K(i));
       } else if (!std::isfinite(max_score)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("BMW global bound is not finite", K(ret), K(i), K(max_score));
@@ -792,7 +764,6 @@ int ObSparseRetrievalBMWCursor::advance_one_source(
   } else {
     int cmp_result = 0;
     if (OB_FAIL(id_ops_->compare(source_state.entry_.id_, boundary, cmp_result))) {
-      LOG_WARN("failed to compare BMW skip boundary", K(ret), K(source_idx));
     } else if (cmp_result > 0 || (0 == cmp_result && !inclusive)) {
       // This source already starts after the pruned interval.
     } else {
@@ -806,13 +777,11 @@ int ObSparseRetrievalBMWCursor::advance_one_source(
         source_state.has_entry_ = false;
         source_state.exhausted_ = true;
       } else if (OB_FAIL(ret)) {
-        LOG_WARN("failed to advance BMW exact source", K(ret), K(source_idx));
       } else if (!entry.id_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("BMW exact advance returned an invalid id", K(ret), K(source_idx));
       } else {
         if (OB_FAIL(id_ops_->compare(entry.id_, boundary, cmp_result))) {
-          LOG_WARN("failed to validate BMW exact advance", K(ret), K(source_idx));
         } else if (cmp_result < 0) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("BMW exact source did not reach its boundary", K(ret), K(source_idx));
@@ -849,11 +818,9 @@ int ObSparseRetrievalBMWCursor::advance_sources_to_boundary(
   int ret = OB_SUCCESS;
   ObSparseRetrievalId owned_boundary;
   if (OB_FAIL(owned_boundary.assign(boundary))) {
-    LOG_WARN("failed to retain BMW skip boundary", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sources_.count(); ++i) {
     if (OB_FAIL(advance_one_source(i, owned_boundary.view(), inclusive))) {
-      LOG_WARN("failed to skip BMW exact source", K(ret), K(i));
     }
   }
   return ret;
@@ -902,14 +869,11 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
       int min_cmp = 0;
       int max_cmp = 0;
       if (OB_FAIL(id_ops_->compare(block.min_id_, block.max_id_, range_cmp))) {
-        LOG_WARN("failed to validate BMW block interval", K(ret), K(i));
       } else if (range_cmp > 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("BMW block source returned a reversed interval", K(ret), K(i));
       } else if (OB_FAIL(id_ops_->compare(block.min_id_, start, min_cmp))) {
-        LOG_WARN("failed to compare BMW block start", K(ret), K(i));
       } else if (OB_FAIL(id_ops_->compare(block.max_id_, start, max_cmp))) {
-        LOG_WARN("failed to compare BMW block end", K(ret), K(i));
       } else if (max_cmp < 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("BMW block source did not reach the requested id", K(ret), K(i));
@@ -919,7 +883,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
           int exact_to_block_cmp = 0;
           if (OB_FAIL(id_ops_->compare(
               source_states_.at(i).entry_.id_, block.min_id_, exact_to_block_cmp))) {
-            LOG_WARN("failed to validate BMW block coverage", K(ret), K(i));
           } else if (exact_to_block_cmp < 0) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("BMW exact posting is not covered by a block", K(ret), K(i));
@@ -937,7 +900,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
           int boundary_cmp = 0;
           if (OB_FAIL(id_ops_->compare(
               candidate_boundary, boundary.view(), boundary_cmp))) {
-            LOG_WARN("failed to compare BMW interval boundaries", K(ret), K(i));
           } else {
             select_boundary = boundary_cmp < 0
                 || (0 == boundary_cmp && boundary_inclusive && !candidate_inclusive);
@@ -945,7 +907,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
         }
         if (OB_SUCC(ret) && select_boundary) {
           if (OB_FAIL(boundary.assign(candidate_boundary))) {
-            LOG_WARN("failed to retain BMW interval boundary", K(ret), K(i));
           } else {
             boundary_inclusive = candidate_inclusive;
             has_boundary = true;
@@ -960,7 +921,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
     LOG_WARN("BMW exact sources outlived every block source", K(ret));
   } else if (OB_SUCC(ret) && !finished && block_upper_bound <= threshold()) {
     if (OB_FAIL(advance_sources_to_boundary(boundary.view(), boundary_inclusive))) {
-      LOG_WARN("failed to skip prunable BMW interval", K(ret));
     } else {
       pruned = true;
     }
@@ -981,7 +941,6 @@ int ObSparseRetrievalBMWCursor::compare_matches(
   } else {
     int id_cmp = 0;
     if (OB_FAIL(id_ops_->compare(left.id_.view(), right.id_.view(), id_cmp))) {
-      LOG_WARN("failed to compare tied BMW ids", K(ret));
     } else {
       cmp_result = -id_cmp;
     }
@@ -998,7 +957,6 @@ int ObSparseRetrievalBMWCursor::sift_up(const int64_t start_idx)
     int cmp_result = 0;
     if (OB_FAIL(compare_matches(
         results_.at(child_idx), results_.at(parent_idx), cmp_result))) {
-      LOG_WARN("failed to compare BMW heap entries", K(ret));
     } else if (cmp_result >= 0) {
       break;
     } else {
@@ -1028,7 +986,6 @@ int ObSparseRetrievalBMWCursor::sift_down(
       int cmp_result = 0;
       if (OB_FAIL(compare_matches(
           results_.at(right_idx), results_.at(left_idx), cmp_result))) {
-        LOG_WARN("failed to compare BMW heap children", K(ret));
       } else if (cmp_result < 0) {
         worst_child_idx = right_idx;
       }
@@ -1037,7 +994,6 @@ int ObSparseRetrievalBMWCursor::sift_down(
       int cmp_result = 0;
       if (OB_FAIL(compare_matches(
           results_.at(worst_child_idx), results_.at(parent_idx), cmp_result))) {
-        LOG_WARN("failed to compare BMW heap entries", K(ret));
       } else if (cmp_result >= 0) {
         break;
       } else {
@@ -1061,18 +1017,14 @@ int ObSparseRetrievalBMWCursor::retain_candidate(
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
-      LOG_WARN("failed to retain BMW candidate", K(ret));
     } else if (OB_FAIL(sift_up(results_.count() - 1))) {
-      LOG_WARN("failed to restore BMW top-k heap", K(ret));
     }
   } else {
     int cmp_result = 0;
     if (OB_FAIL(compare_matches(match, results_.at(0), cmp_result))) {
-      LOG_WARN("failed to compare BMW candidate with threshold", K(ret));
     } else if (cmp_result > 0) {
       results_.at(0) = match;
       if (OB_FAIL(sift_down(results_.count(), 0))) {
-        LOG_WARN("failed to restore BMW top-k heap", K(ret));
       }
     }
   }
@@ -1087,7 +1039,6 @@ int ObSparseRetrievalBMWCursor::sort_results()
     results_.at(0) = results_.at(heap_size - 1);
     results_.at(heap_size - 1) = tmp;
     if (OB_FAIL(sift_down(heap_size - 1, 0))) {
-      LOG_WARN("failed to order BMW result heap", K(ret), K(heap_size));
     }
   }
   return ret;
@@ -1101,7 +1052,6 @@ int ObSparseRetrievalBMWCursor::materialize()
   while (OB_SUCC(ret) && !all_exhausted && !finished) {
     int64_t min_source_idx = -1;
     if (OB_FAIL(load_missing_entries(all_exhausted))) {
-      LOG_WARN("failed to load BMW exact sources", K(ret));
     } else if (all_exhausted) {
     } else if (OB_FAIL(find_min_source(min_source_idx))) {
       if (OB_ITER_END == ret) {
@@ -1114,18 +1064,14 @@ int ObSparseRetrievalBMWCursor::materialize()
       bool pruned = false;
       if (results_.count() == candidate_limit_) {
         if (OB_FAIL(prepare_blocks())) {
-          LOG_WARN("failed to prepare BMW block sources", K(ret));
         } else if (OB_FAIL(try_prune_range(
             source_states_.at(min_source_idx).entry_.id_, pruned, finished))) {
-          LOG_WARN("failed to evaluate BMW block interval", K(ret));
         }
       }
       if (OB_SUCC(ret) && !pruned && !finished) {
         ObSparseRetrievalMatch match;
         if (OB_FAIL(collect_current_id(min_source_idx, match))) {
-          LOG_WARN("failed to collect BMW dimensions", K(ret));
         } else if (OB_FAIL(retain_candidate(match))) {
-          LOG_WARN("failed to retain BMW match", K(ret));
         }
       }
     }
@@ -1206,12 +1152,10 @@ int ObSparseRetrievalBMWCursor::reuse(const bool switch_source)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sources_.count(); ++i) {
     if (OB_FAIL(sources_.at(i)->reuse(switch_source))) {
-      LOG_WARN("failed to reuse BMW exact source", K(ret), K(i));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < block_sources_.count(); ++i) {
     if (OB_FAIL(block_sources_.at(i)->reuse(switch_source))) {
-      LOG_WARN("failed to reuse BMW block source", K(ret), K(i));
     }
   }
   clear_algorithm_state();

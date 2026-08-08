@@ -97,7 +97,6 @@ int ObWriteMacroBaseOperator::init(const ObWriteMacroParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (OB_FAIL(slice_writer_.init(param))) {
-    LOG_WARN("init slice writer failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -124,10 +123,8 @@ int ObDDLWriteMacroBlockOperator::execute(
     LOG_WARN("there are invalid arguments", K(ret), K(input_chunk));
   } else if (input_chunk.is_end_chunk()) {
     if (OB_FAIL(slice_writer_.close())) {
-      LOG_WARN("fail to close slice writer", K(ret));
     }
   } else if (OB_FAIL(slice_writer_.append_batch(input_chunk.ddl_batch_rows_->datum_rows_))) {
-    LOG_WARN("fail to append batch into slice writer", K(ret), K(input_chunk));
   }
   return ret;
 }
@@ -149,7 +146,6 @@ int ObDDLRowFileWriteMacroBlockOperator::execute(const ObChunk &input_chunk,
     LOG_WARN("there are invalid arguments", K(ret), K(input_chunk));
   } else if (input_chunk.is_end_chunk()) {
     if (OB_FAIL(slice_writer_.close())) {
-      LOG_WARN("fail to close slice writer", K(ret));
     }
   } else {
     ObArray<ObDDLRowFile *> *row_files = input_chunk.row_file_arr_;
@@ -169,7 +165,6 @@ int ObDDLRowFileWriteMacroBlockOperator::execute(const ObChunk &input_chunk,
             LOG_WARN("fail to get next row batch", K(ret), KPC(row_file));
           }
         } else if (OB_FAIL(slice_writer_.append_batch(*batch_rows))) {
-          LOG_WARN("fail to append row batch", K(ret), KPC(batch_rows));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(row_file->close())) {
@@ -240,7 +235,6 @@ int ObDDLWriteMacroBlockBasePipeline::fill_writer_param(ObWriteMacroParam &param
                                                   dag,
                                                   0/*max_batch_size*/,
                                                   param))) {
-    LOG_WARN("fill writer param common failed", K(ret));
   }
   return ret;
 }
@@ -259,7 +253,6 @@ void ObDDLWriteMacroBlockBasePipeline::postprocess(int &ret_code)
       ret = OB_ERR_SYS;
       LOG_WARN("get dag failed", K(ret), KPC(get_dag()), KPC(ddl_slice_));
     } else if (OB_FAIL(dag->get_tablet_context(ddl_slice_->get_tablet_id(), tablet_context))) {
-      LOG_WARN("get tablet context failed", K(ret), KPC(ddl_slice_));
     } else {
       LOG_INFO("not data any more, change ret to be success", K(ret), K(dag->get_ddl_task_param()));
       ret_code = OB_SUCCESS;
@@ -285,11 +278,8 @@ int ObDDLMemoryFriendWriteMacroBlockPipeline::init(ObDDLSlice *ddl_slice)
   } else {
     ddl_slice_ = ddl_slice;
     if (OB_FAIL(fill_writer_param(write_param_))) {
-      LOG_WARN("fill writer param failed", K(ret));
     } else if (OB_FAIL(write_op_.init(write_param_))) {
-      LOG_WARN("fail to initialize row file write operator", K(ret));
     } else if (OB_FAIL(add_op(&write_op_))) {
-      LOG_WARN("fail to add row file write operator", K(ret));
     }
   }
   return ret;
@@ -319,12 +309,10 @@ int ObBatchDatumRowsWriteOp::init(const ObTabletID &tablet_id, const int64_t sli
     } else if (OB_FAIL(buffer_.init(ddl_dag->get_ddl_table_schema().column_items_,
                                     MAX_BATCH_SIZE,
                                     row_flag))) {
-      LOG_WARN("fail to initialize buffer", K(ret));
     } else {
       const ObIArray<ObDDLVector *> &vectors = buffer_.get_vectors();
       for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
         if (OB_FAIL(bdrs_.vectors_.push_back(vectors.at(i)->get_vector()))) {
-          LOG_WARN("fail to push back vector", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -357,11 +345,9 @@ int ObBatchDatumRowsWriteOp::execute(
     }
     if (input_chunk.is_end_chunk()) {
       if (OB_FAIL(generate_data_chunk(output_chunk))) {
-        LOG_WARN("fail to generate output chunk when receive end chunk", K(ret));
       }
     } else {
       if (OB_FAIL(buffer_.append_row(*input_chunk.datum_row_))) {
-        LOG_WARN("fail to append row", K(ret));
       } else if (buffer_.full() && OB_FAIL(generate_data_chunk(output_chunk))) {
         LOG_WARN("fail to generate output chunk", K(ret));
       }

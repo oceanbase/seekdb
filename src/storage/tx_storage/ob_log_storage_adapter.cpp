@@ -80,7 +80,6 @@ int ObLogStorageAdapter::replay(logservice::ObLogReplayTask *replay_task)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("replay task is null", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
-    LOG_ERROR("get log stream failed", K(ret), KPC(replay_task));
   } else if (logservice::ObLogBaseType::PADDING_LOG_BASE_TYPE ==
              replay_task->log_type_) {
     ret = OB_ERR_UNEXPECTED;
@@ -91,7 +90,6 @@ int ObLogStorageAdapter::replay(logservice::ObLogReplayTask *replay_task)
                                 replay_task->get_replay_payload_size(),
                                 replay_task->lsn_,
                                 replay_task->scn_))) {
-    LOG_WARN("log stream replay failed", K(ret), KPC(replay_task));
   }
 
   if (OB_EAGAIN == ret) {
@@ -139,7 +137,6 @@ int ObLogStorageAdapter::wait_append_sync()
     ret = OB_NOT_INIT;
     LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
-    LOG_WARN("get log stream failed", K(ret));
   } else if (OB_ISNULL(ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log handler is null", K(ret));
@@ -166,7 +163,6 @@ int ObLogStorageAdapter::get_log_handler(
     ret = OB_NOT_INIT;
     LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
-    LOG_WARN("get log stream failed", K(ret));
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log handler is null", K(ret));
@@ -184,7 +180,6 @@ int ObLogStorageAdapter::get_unrecyclable_log_disk_size(
     ret = OB_NOT_INIT;
     LOG_WARN("log storage adapter not initialized", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(ls))) {
-    LOG_WARN("get log stream failed", K(ret));
   } else {
     logservice::ObLogHandler *log_handler = ls->get_log_handler();
     palf::LSN end_lsn;
@@ -193,7 +188,6 @@ int ObLogStorageAdapter::get_unrecyclable_log_disk_size(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("log handler is null", K(ret));
     } else if (OB_FAIL(log_handler->get_end_lsn(end_lsn))) {
-      LOG_WARN("get end lsn failed", K(ret), K(base_lsn));
     } else if (end_lsn < base_lsn) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("end lsn is smaller than base lsn",

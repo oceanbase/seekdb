@@ -237,7 +237,6 @@ int ob_write_row_by_projector(AllocatorT &allocator, const ObNewRow &src, ObNewR
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < src.get_count(); ++i) {
     if (OB_FAIL(ob_write_obj(allocator, src.get_cell(i), dst.cells_[i]))) {
-      OB_LOG(WARN, "write obj failed", K(ret), K(src.get_cell(i)));
     }
   }
   return ret;

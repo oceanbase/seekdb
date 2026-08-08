@@ -121,7 +121,6 @@ int ObDASDMLIterator::get_next_domain_index_row(ObDatumRow *&row)
       param.ft_doc_word_info_ = ft_doc_word_info_;
     }
     if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
-      LOG_WARN("fail to create domain index dml iterator", K(ret));
     }
   }
   if (FAILEDx(domain_iter_->get_next_domain_row(row))) {
@@ -144,7 +143,6 @@ int ObDASDMLIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
       param.ft_doc_word_info_ = ft_doc_word_info_;
     }
     if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
-      LOG_WARN("fail to create domain index dml iterator", K(ret));
     }
   }
   if (FAILEDx(domain_iter_->get_next_domain_rows(rows, row_count))) {
@@ -160,9 +158,7 @@ int ObDASDMLIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_datum_row_)) {
     if (OB_FAIL(data_plane::create_datum_row(allocator_, row_projector_->count(), cur_datum_row_))) {
-      LOG_WARN("create current datum row failed", K(ret), K(row_projector_));
     } else if (OB_FAIL(write_buffer_.begin(write_iter_))) {
-      LOG_WARN("begin write iterator failed", K(ret));
     }
   }
 
@@ -185,10 +181,8 @@ int ObDASDMLIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
                                                         *row_projector_,
                                                         allocator_,
                                                         *cur_datum_row_))) {
-        LOG_WARN("project storage row failed", K(ret));
       } else {
         datum_row = cur_datum_row_;
-        LOG_TRACE("get next row from dml das iterator", KPC(sr), KPC(datum_row), K(das_ctdef_));
       }
     }
   }
@@ -211,14 +205,11 @@ int ObDASDMLIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
   } else {
     if (OB_ISNULL(cur_datum_rows_)) {
       if (OB_FAIL(data_plane::create_datum_rows(allocator_, batch_size_, row_projector_->count(), cur_datum_rows_))) {
-        LOG_WARN("Failed to create rows", K(ret), K_(row_projector));
       } else if (OB_FAIL(write_buffer_.begin(write_iter_))) {
-        LOG_WARN("Failed to begin write iterator", K(ret));
       }
     }
     if (OB_SUCC(ret) && is_domain_index && !das_ctdef_->is_access_vidx_as_master_table_) {
       if (OB_FAIL(get_next_domain_index_rows(rows, row_count))) {
-        LOG_WARN("fail to get next domain index rows", K(ret));
       }
     } else {
       while (OB_SUCC(ret) && row_count < batch_size_) {
@@ -232,10 +223,8 @@ int ObDASDMLIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
                                                            *row_projector_,
                                                            allocator_,
                                                            cur_datum_rows_[row_count]))) {
-          LOG_WARN("Failed to project storage row", K(ret));
         } else {
           ++row_count;
-          LOG_TRACE("Get next rows from dml das iterator", KPC(sr), K(cur_datum_rows_[row_count - 1]), K_(das_ctdef));
         }
       }
       if (OB_SUCC(ret) || OB_LIKELY(OB_ITER_END == ret)) {
@@ -263,7 +252,6 @@ int ObDASDMLIterator::rewind(const ObDASDMLBaseCtDef *das_ctdef, const ObFTDocWo
   set_ctdef(das_ctdef);
   if (OB_NOT_NULL(domain_iter_)) {
     if (OB_FAIL(domain_iter_->rewind())) {
-      LOG_WARN("fail to rewind for domain iterator", K(ret));
     }
   }
   return ret;
@@ -311,7 +299,6 @@ int ObDASWriteBuffer::DmlShadowRow::init(ObIAllocator &allocator,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(allocator, col_types.count(), strip_lob_locator))) {
-    LOG_WARN("init datum buffer failed", K(ret), K(col_types));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_types.count(); ++i) {
     ObObjDatumMapType obj_datum_map = ObDatum::get_obj_datum_map_type(
@@ -345,7 +332,6 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const ObIArray<ObExpr*> &exprs, 
     ObDatum *cells = store_row_->cells();
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       if (OB_FAIL(exprs.at(i)->eval(ctx, datum))) {
-        LOG_WARN("failed to evaluate expr datum", K(ret), K(i));
       } else {
         cells[i] = *datum;
       }
@@ -370,7 +356,6 @@ int ObDASWriteBuffer::DmlShadowRow::shadow_copy(const blocksstable::ObDatumRow &
     for (int64_t i = 0; OB_SUCC(ret) && i < row.get_column_count(); ++i) {
       if (FALSE_IT(map_type = ObDatum::get_obj_datum_map_type(column_types_->at(i).get_type()))) {
       } else if (OB_FAIL(cells[i].from_storage_datum(row.storage_datums_[i], map_type))) {
-        LOG_WARN("shadow copy storage datum failed", K(ret), K(i), K(row));
       }
       if (OB_SUCC(ret)) {
         //add the data length of datum
@@ -420,7 +405,6 @@ int ObDASWriteBuffer::init_dml_shadow_row(int64_t column_cnt, bool strip_lob_loc
     } else {
       dml_shadow_row_ = new(buff) DmlShadowRow();
       if (OB_FAIL(dml_shadow_row_->init(*das_alloc_, column_cnt, strip_lob_locator))) {
-        LOG_WARN("init dml shadow row failed", K(ret));
       }
     }
   }
@@ -435,7 +419,6 @@ int ObDASWriteBuffer::add_row(const common::ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(dml_shadow_row_)) {
     if (OB_FAIL(init_dml_shadow_row(exprs.count(), strip_lob_locator))) {
-      LOG_WARN("init dml shadow row failed", K(ret));
     }
   } else {
     dml_shadow_row_->reuse();
@@ -443,14 +426,11 @@ int ObDASWriteBuffer::add_row(const common::ObIArray<ObExpr*> &exprs,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(dml_shadow_row_->shadow_copy(exprs, *ctx))) {
-      LOG_WARN("shadow copy dml row failed", K(ret));
     } else if (OB_FAIL(add_row(*dml_shadow_row_, &stored_row))) {
-      LOG_WARN("try add row with shadow row failed", KK(ret));
     } else if (OB_ISNULL(stored_row)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stored row is null", K(ret));
     } else {
-      LOG_DEBUG("succ add dml_row", KPC(stored_row));
     }
   }
   return ret;
@@ -481,12 +461,10 @@ int ObDASWriteBuffer::add_row_to_store(const ObChunkDatumStore::ShadowStoredRow 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_store_)) {
     if (OB_FAIL(create_datum_store())) {
-      LOG_WARN("create datum store failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(datum_store_->add_row(sr, stored_sr))) {
-      LOG_WARN("try add row to store failed", K(ret), K_(buffer_list_.mem_used));
     }
   }
   return ret;
@@ -506,7 +484,6 @@ int ObDASWriteBuffer::try_add_row(const DmlShadowRow &sr,
   int64_t final_mem_limit = memory_limit;
   int64_t simulate_mem_limit = - EVENT_CALL(EventTable::EN_DAS_SIMULATE_DAS_TASK_SIZE);
   if (simulate_mem_limit != 0 && final_mem_limit > simulate_mem_limit) {
-    LOG_TRACE("simulate_mem_limit", K(simulate_mem_limit));
     final_mem_limit = simulate_mem_limit;
   }
   if (OB_UNLIKELY(row_size + get_mem_used() > final_mem_limit && get_mem_used() > 0)) {
@@ -566,9 +543,7 @@ OB_INLINE int ObDASWriteBuffer::add_row_to_dlist(const ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   DmlRow *dml_row = nullptr;
   if (OB_FAIL(create_link_buffer(row_size + row_extend_size_, dml_row))) {
-    LOG_WARN("create link buffer failed", K(ret));
   } else if (OB_FAIL(DmlRow::build(dml_row, exprs, *ctx, (char *)dml_row, row_size))) {
-    LOG_WARN("build stored row failed", K(ret));
   } else {
     row_added = true;
   }
@@ -583,13 +558,11 @@ OB_INLINE int ObDASWriteBuffer::add_row_to_dlist(const ObChunkDatumStore::Shadow
   DmlRow *dml_row = nullptr;
   const DmlRow *lsr = sr.get_store_row();
   if (OB_FAIL(create_link_buffer(lsr->row_size_ + row_extend_size_, dml_row))) {
-    LOG_WARN("create link buffer failed", K(ret));
   } else {
     char *buf = dml_row->payload_;
     int64_t buf_size = lsr->row_size_ + row_extend_size_ - ROW_HEAD_SIZE;
     if (OB_FAIL(dml_row->copy_shadow_datums(lsr->cells(), lsr->cnt_, buf, buf_size,
                                             lsr->row_size_ + row_extend_size_, row_extend_size_/*extra_size*/))) {
-      LOG_WARN("failed to deep copy row", K(ret), K(lsr->row_size_), K(buf_size));
     } else {
       row_added = true;
       if (stored_row != nullptr) {
@@ -614,7 +587,6 @@ OB_NOINLINE int ObDASWriteBuffer::create_datum_store()
                                    mem_attr_.label_,
                                    false/*enable_dump*/,
                                    row_extend_size_))) {
-      LOG_WARN("init datum store failed", K(ret), K(mem_attr_));
     }
   }
   return ret;
@@ -628,12 +600,10 @@ OB_NOINLINE int ObDASWriteBuffer::add_row_to_store(const ObIArray<ObExpr*> &expr
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_store_)) {
     if (OB_FAIL(create_datum_store())) {
-      LOG_WARN("create datum store failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(datum_store_->try_add_row(exprs, ctx, memory_limit - buffer_list_.mem_used_, row_added))) {
-      LOG_WARN("try add row to store failed", K(ret), K(memory_limit), K_(buffer_list_.mem_used));
     }
   }
   return ret;
@@ -647,12 +617,10 @@ OB_NOINLINE int ObDASWriteBuffer::add_row_to_store(const ObChunkDatumStore::Shad
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_store_)) {
     if (OB_FAIL(create_datum_store())) {
-      LOG_WARN("create datum store failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(datum_store_->try_add_row(sr, memory_limit - buffer_list_.mem_used_, row_added, stored_sr))) {
-      LOG_WARN("try add row to store failed", K(ret), K(memory_limit), K_(buffer_list_.mem_used));
     }
   }
   return ret;
@@ -691,7 +659,6 @@ int ObDASWriteBuffer::begin(NewRowIterator &it, const ObIArray<ObObjMeta> &col_t
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(data_plane::create_datum_row(*das_alloc_, col_types.count(), it.cur_new_row_))) {
-      LOG_WARN("create new row failed", K(ret));
     } else {
       it.col_types_ = &col_types;
     }
@@ -712,7 +679,6 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
   ObString trans_info_str;
 
   if (OB_FAIL(const_cast<ObDASWriteBuffer*>(this)->begin(write_iter_tmp))) {
-    LOG_WARN("get write iter failed", K(ret));
   }
   while (OB_SUCC(ret) && OB_SUCC(write_iter_tmp.get_next_row(store_row))) {
     trans_info_str.reset();
@@ -731,7 +697,6 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
                                                             das_base_ctdef.old_row_projector_,
                                                             tmp_alloc,
                                                             *old_row))) {
-          LOG_WARN("project storage row failed", K(ret), K(das_base_ctdef.old_row_projector_));
         }
       }
     }
@@ -746,7 +711,6 @@ int ObDASWriteBuffer::dump_data(const ObDASDMLBaseCtDef &das_base_ctdef) const
                                                            das_base_ctdef.new_row_projector_,
                                                            tmp_alloc,
                                                            *new_row))) {
-          LOG_WARN("project storage row failed", K(ret), K(das_base_ctdef.new_row_projector_));
         }
 
       }
@@ -838,7 +802,6 @@ int ObDASWriteBuffer::serialize_buffer_list(char *buf, const int64_t buf_len, in
     DmlRow *dml_row = buffer_list_.header_.next_;
     while (OB_SUCC(ret) && dml_row != nullptr) {
       if (OB_FAIL(serialization::encode(buf, buf_len, pos, dml_row->row_size_))) {
-        LOG_WARN("serialize row size failed", K(ret), K(dml_row->row_size_));
       } else if (dml_row->row_size_ > buf_len - pos) {
         ret = OB_SIZE_OVERFLOW;
         LOG_WARN("serialize write buffer overflow", K(ret), K(buf_len), K(pos), K(dml_row->row_size_));

@@ -55,17 +55,14 @@ int ObExprHash::calc_hash_value_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   uint64_t hash_value = HASH_SEED;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObDatum *datum = NULL;
     if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
-      LOG_WARN("failed to eval datum", K(ret));
     } else {
       ObExprHashFuncType hash_func = expr.args_[i]->basic_funcs_->murmur_hash_v2_;
       if (OB_FAIL(hash_func(
               *datum, hash_value, hash_value, datum_access_ctx))) {
-        LOG_WARN("failed to do hash", K(ret));
       }
     }
   }
@@ -82,11 +79,9 @@ int ObExprHash::calc_hash_value_expr_batch(
                               ctx.frames_[expr.frame_idx_] + expr.res_buf_off_);
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     if (OB_FAIL(expr.args_[i]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch datum", K(ret));
     } else {
       ObDatum *datums = expr.args_[i]->locate_batch_datums(ctx);
       if (OB_ISNULL(datums)) {

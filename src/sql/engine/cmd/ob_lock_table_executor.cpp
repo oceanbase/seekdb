@@ -33,7 +33,6 @@ int ObLockTableExecutor::execute(ObExecContext &ctx,
                                  ObLockTableStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("execute mysql lock table");
   ret = execute_mysql_(ctx, stmt);
   return ret;
 }
@@ -58,7 +57,6 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
         } else if (OB_FAIL(lock_targets.push_back(data_plane::ObTableLockTarget(
                        node.table_item_->ref_id_,
                        static_cast<ObTableLockMode>(node.lock_mode_))))) {
-          LOG_WARN("failed to append table lock target", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(executor.execute(ctx, lock_targets))) {
@@ -69,7 +67,6 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
     case ObLockTableStmt::MYSQL_UNLOCK_TABLE_STMT: {
       ObMySQLUnlockTableExecutor executor;
       if (OB_FAIL(executor.execute(ctx))) {
-        LOG_WARN("unlock table failed", K(ret));
       }
       break;
     }
@@ -79,7 +76,6 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
     }
     }
   }
-  LOG_DEBUG("execute mysql lock table", K(ctx), K(stmt));
   return ret;
 }
 

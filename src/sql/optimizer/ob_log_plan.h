@@ -1976,7 +1976,6 @@ int ObLogPlan::plan_traverse_loop(TS ...args)
   TraverseOp ops[] = { args... };
   for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(ops); i++) {
     if (OB_FAIL(plan_tree_traverse(ops[i], NULL))) {
-      SQL_OPT_LOG(WARN, "failed to do plan traverse", K(ret), "op", ops[i]);
     }
   }
   return ret;

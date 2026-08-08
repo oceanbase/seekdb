@@ -18,12 +18,23 @@
 
 #include "ob_opt_est_cost.h"
 #include "sql/optimizer/ob_join_order.h"
+#include "ob_opt_est_parameter_normal.h"
 #include "ob_opt_est_parameter_vector.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "ob_opt_est_cost_model_vector.h"
+#include "ob_opt_est_parameter_normal.h"
+#include "ob_opt_est_parameter_vector.h"
+
 #define GET_COST_MODEL()                                                \
+      ObOptEstCostModel normal_model(cost_params_normal,                \
+                                     opt_ctx.get_system_stat());        \
       ObOptEstVectorCostModel vector_model(cost_params_vector,          \
-                                           opt_ctx.get_system_stat());
+                                           opt_ctx.get_system_stat());  \
+      ObOptEstCostModel *model = &normal_model;                 \
+      if (VECTOR_MODEL == opt_ctx.get_cost_model_type()) {      \
+        model = &vector_model;                                  \
+      }                                                         \
+      
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -40,7 +51,7 @@ int ObOptEstCost::cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_nestloop(est_cost_info,
+  if (OB_FAIL(model->cost_nestloop(est_cost_info,
                                    cost))) {
   }
   return ret;
@@ -52,7 +63,7 @@ int ObOptEstCost::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_mergejoin(est_cost_info,
+  if (OB_FAIL(model->cost_mergejoin(est_cost_info, 
                                    cost))) {
   }
   return ret;
@@ -64,7 +75,7 @@ int ObOptEstCost::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_hashjoin(est_cost_info,
+  if (OB_FAIL(model->cost_hashjoin(est_cost_info, 
                                    cost))) {
   }
   return ret;
@@ -88,7 +99,7 @@ int ObOptEstCost::cost_sort_and_exchange(OptTableMetas *table_metas,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_sort_and_exchange(table_metas,
+  if (OB_FAIL(model->cost_sort_and_exchange(table_metas,
                                           sel_ctx,
                                           dist_method,
                                           is_distributed,
@@ -112,7 +123,7 @@ int ObOptEstCost::cost_sort(const ObSortCostInfo &cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_sort(cost_info,
+  if (OB_FAIL(model->cost_sort(cost_info, 
                               cost))) {
   }
   return ret;
@@ -124,7 +135,7 @@ int ObOptEstCost::cost_exchange(const ObExchCostInfo &cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_exchange(cost_info,
+  if (OB_FAIL(model->cost_exchange(cost_info, 
                                   cost))) {
   }
   return ret;
@@ -136,7 +147,7 @@ int ObOptEstCost::cost_exchange_in(const ObExchInCostInfo &cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_exchange_in(cost_info,
+  if (OB_FAIL(model->cost_exchange_in(cost_info, 
                                      cost))) {
   }
   return ret;
@@ -148,7 +159,7 @@ int ObOptEstCost::cost_exchange_out(const ObExchOutCostInfo &cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_exchange_out(cost_info,
+  if (OB_FAIL(model->cost_exchange_out(cost_info, 
                                       cost))) {
   }
   return ret;
@@ -162,7 +173,7 @@ double ObOptEstCost::cost_merge_group(double rows,
                                       const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_merge_group(rows,
+  return model->cost_merge_group(rows,
                                   res_rows,
                                   row_width,
                                   group_columns,
@@ -177,7 +188,7 @@ double ObOptEstCost::cost_hash_group(double rows,
                                      const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_hash_group(rows,
+  return model->cost_hash_group(rows,
                                 res_rows,
                                 row_width,
                                 group_columns,
@@ -189,7 +200,7 @@ double ObOptEstCost::cost_scalar_group(double rows,
                                        const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_scalar_group(rows,
+  return model->cost_scalar_group(rows, 
                                   agg_col_count);
 }
 
@@ -200,7 +211,7 @@ double ObOptEstCost::cost_merge_distinct(double rows,
                                          const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_merge_distinct(rows,
+  return model->cost_merge_distinct(rows,
                                     res_rows,
                                     row_width,
                                     distinct_columns);
@@ -213,7 +224,7 @@ double ObOptEstCost::cost_hash_distinct(double rows,
                                         const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_hash_distinct(rows,
+  return model->cost_hash_distinct(rows,
                                   res_rows,
                                   row_width,
                                   distinct_columns);
@@ -222,13 +233,13 @@ double ObOptEstCost::cost_hash_distinct(double rows,
 double ObOptEstCost::cost_get_rows(double rows, const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_get_rows(rows);
+  return model->cost_get_rows(rows);
 }
 
 double ObOptEstCost::cost_read_materialized(double rows, const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_read_materialized(rows);
+  return model->cost_read_materialized(rows);
 }
 
 double ObOptEstCost::cost_material(const double rows,
@@ -236,7 +247,7 @@ double ObOptEstCost::cost_material(const double rows,
                                    const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_material(rows,
+  return model->cost_material(rows, 
                               average_row_size);
 }
 
@@ -245,7 +256,7 @@ double ObOptEstCost::cost_filter_rows(double rows,
                                       const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_filter_rows(rows,
+  return model->cost_filter_rows(rows, 
                                  filters);
 }
 
@@ -255,7 +266,7 @@ int ObOptEstCost::cost_subplan_filter(const ObSubplanFilterCostInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_subplan_filter(info, cost))) {
+  if (OB_FAIL(model->cost_subplan_filter(info, cost))) {
   }
   return ret;
 }
@@ -266,7 +277,7 @@ int ObOptEstCost::cost_union_all(const ObCostMergeSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_union_all(info,
+  if (OB_FAIL(model->cost_union_all(info, 
                                    cost))) {
   }
   return ret;
@@ -278,7 +289,7 @@ int ObOptEstCost::cost_merge_set(const ObCostMergeSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_merge_set(info,
+  if (OB_FAIL(model->cost_merge_set(info, 
                                    cost))) {
   }
   return ret;
@@ -290,7 +301,7 @@ int ObOptEstCost::cost_hash_set(const ObCostHashSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_hash_set(info,
+  if (OB_FAIL(model->cost_hash_set(info, 
                                   cost))) {
   }
   return ret;
@@ -302,7 +313,7 @@ double ObOptEstCost::cost_quals(double rows,
                                 bool need_scale)
 {
   GET_COST_MODEL();
-  return vector_model.cost_quals(rows, quals, need_scale);
+  return model->cost_quals(rows, quals, need_scale);
 }
 
 int ObOptEstCost::cost_table(const ObCostTableScanInfo &est_cost_info,
@@ -312,7 +323,7 @@ int ObOptEstCost::cost_table(const ObCostTableScanInfo &est_cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_table(est_cost_info,
+  if (OB_FAIL(model->cost_table(est_cost_info,
                                 parallel,
                                 cost))) {
   }
@@ -328,7 +339,7 @@ int ObOptEstCost::cost_table_for_parallel(const ObCostTableScanInfo &est_cost_in
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_table_for_parallel(est_cost_info,
+  if (OB_FAIL(model->cost_table_for_parallel(est_cost_info,
                                                             parallel,
                                                             part_cnt_per_dop,
                                                             px_cost,
@@ -345,7 +356,7 @@ int ObOptEstCost::cost_index_back(const ObCostTableScanInfo &est_cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_index_back(est_cost_info,
+  if (OB_FAIL(model->cost_index_back(est_cost_info,
                                      row_count,
                                      limit_count,
                                      index_back_cost))) {
@@ -359,7 +370,7 @@ int ObOptEstCost::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprResType
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.get_sort_cmp_cost(types, cmp_cost))) {
+  if (OB_FAIL(model->get_sort_cmp_cost(types, cmp_cost))) {
   }
   return ret;
 }
@@ -367,7 +378,7 @@ int ObOptEstCost::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprResType
 double ObOptEstCost::cost_late_materialization_table_get(int64_t column_cnt, const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.cost_late_materialization_table_get(column_cnt);
+  return model->cost_late_materialization_table_get(column_cnt);
 }
 
 void ObOptEstCost::cost_late_materialization_table_join(double left_card,
@@ -379,7 +390,7 @@ void ObOptEstCost::cost_late_materialization_table_join(double left_card,
                                                         const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  vector_model.cost_late_materialization_table_join(left_card,
+  model->cost_late_materialization_table_join(left_card,
                                               left_cost,
                                               right_card,
                                               right_cost,
@@ -394,7 +405,7 @@ void ObOptEstCost::cost_late_materialization(double left_card,
                                              const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  vector_model.cost_late_materialization(left_card,
+  model->cost_late_materialization(left_card,
                                   left_cost,
                                   column_count,
                                   cost);
@@ -408,7 +419,7 @@ int ObOptEstCost::cost_window_function(double rows,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_window_function(rows,
+  if (OB_FAIL(model->cost_window_function(rows,
                                         width,
                                         win_func_cnt,
                                         cost))) {
@@ -422,7 +433,7 @@ int ObOptEstCost::cost_insert(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_insert(cost_info,
+  if (OB_FAIL(model->cost_insert(cost_info,
                                 cost))) {
   }
   return ret;
@@ -434,7 +445,7 @@ int ObOptEstCost::cost_update(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_update(cost_info,
+  if (OB_FAIL(model->cost_update(cost_info,
                                 cost))) {
   }
   return ret;
@@ -446,23 +457,23 @@ int ObOptEstCost::cost_delete(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.cost_delete(cost_info,
+  if (OB_FAIL(model->cost_delete(cost_info,
                                 cost))) {
   }
   return ret;
 }
 
-int ObOptEstCost::calc_range_cost(const ObTableMetaInfo& table_meta_info,
+int ObOptEstCost::calc_range_cost(const ObTableMetaInfo& table_meta_info, 
                                   const ObIArray<ObRawExpr *> &filters,
-                                  int64_t index_column_count,
-                                  int64_t range_count,
+                                  int64_t index_column_count, 
+                                  int64_t range_count, 
                                   double range_sel,
                                   double &cost,
                                   const ObOptimizerContext &opt_ctx)
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  if (OB_FAIL(vector_model.calc_range_cost(table_meta_info,
+  if (OB_FAIL(model->calc_range_cost(table_meta_info,
                                     filters,
                                     index_column_count,
                                     range_count,
@@ -667,7 +678,7 @@ double ObOptEstCost::calc_pred_cost_per_row(const ObRawExpr *expr,
                                             const ObOptimizerContext &opt_ctx)
 {
   GET_COST_MODEL();
-  return vector_model.calc_pred_cost_per_row(expr, card, cost);
+  return model->calc_pred_cost_per_row(expr, card, cost);
 }
 
 double ObOptEstCost::cost_values_table(double rows,

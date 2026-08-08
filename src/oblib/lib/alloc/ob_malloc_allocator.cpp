@@ -128,7 +128,6 @@ int ObMallocAllocator::create_allocator(void *buf,
     new (&ctx_allocator[ctx_id])
         ObCtxAllocatorState(ctx_id, &tmp_allocator[ctx_id]);
     if (OB_FAIL(ctx_allocator[ctx_id].set_memory_mgr())) {
-        LOG_ERROR("set_memory_mgr failed", K(ret));
     }
     new (ctx_allocator[ctx_id].get_allocator())
           ObCtxAllocator(ctx_allocator[ctx_id], ctx_id);
@@ -161,7 +160,6 @@ int ObMallocAllocator::with_resource_handle_invoke(InvokeFunc func)
   ObResourceMgrHandle resource_handle;
   if (OB_FAIL(ObResourceMgr::get_instance().get_handle(
       resource_handle))) {
-    LIB_LOG(ERROR, "get_resource_mgr failed", K(ret));
   } else if (!resource_handle.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(ERROR, "resource_handle is invalid");

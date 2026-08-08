@@ -224,7 +224,6 @@ int ObRawExprDeduceType::try_add_cast_expr(RawExprType &parent,
 #endif
       if (OB_FAIL(ret) && my_session_->is_varparams_sql_prepare()) {
         ret = OB_SUCCESS;
-        SQL_RESV_LOG(DEBUG, "ps prepare phase ignores type deduce error");
       }
       //add local vars to cast expr
       if (OB_SUCC(ret)) {

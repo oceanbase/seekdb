@@ -56,11 +56,8 @@ int ObIKFTParser::init(const ObFTParserParam &param)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Invalid collation type.", K(ret));
     } else if (OB_FAIL(init_dict(param))) {
-      LOG_WARN("Failed to init dict", K(ret));
     } else if (OB_FAIL(init_ctx(param))) {
-      LOG_WARN("Failed to init ctx", K(ret));
     } else if (OB_FAIL(init_segmenter(param))) {
-      LOG_WARN("Failed to init segmenters", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -91,7 +88,6 @@ int ObIKFTParser::get_next_token(const char *&word,
     bool accept_token = false;
     while (OB_SUCC(ret) && !accept_token) {
       if (OB_FAIL(produce())) {
-        LOG_WARN("Failed to produce new token", K(ret));
       } else if (OB_FAIL(ctx_->get_next_token(output_word, len, offset, cnt))) {
         if (OB_ITER_END == ret) {
           // ok, end this iter
@@ -149,7 +145,6 @@ int ObIKFTParser::process_one_char(TokenizeContext &ctx,
        OB_SUCC(ret) && iter != segmenters_.end();
        iter++) {
     if (OB_FAIL((*iter)->process(ctx))) {
-      LOG_WARN("Failed to process segmenter", K(ret));
     }
   }
   return ret;
@@ -171,11 +166,8 @@ int ObIKFTParser::process_next_batch()
       uint8_t char_len = 0;
       ObFTCharUtil::CharType type = ObFTCharUtil::CharType::USELESS;
       if (OB_FAIL(ctx_->current_char(ch, char_len))) {
-        LOG_WARN("Failed to get current char", K(ret));
       } else if (OB_FAIL(ctx_->current_char_type(type))) {
-        LOG_WARN("Failed to get current char type", K(ret));
       } else if (OB_FAIL(process_one_char(*ctx_, ch, char_len, type))) {
-        LOG_WARN("Failed to process one char", K(ret));
       } else {
         // 1. check segmention
         if (ctx_->handle_size() > SEGMENT_LIMIT && type == ObFTCharUtil::CharType::USELESS) {
@@ -195,9 +187,7 @@ int ObIKFTParser::process_next_batch()
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
       ObIKArbitrator arb;
       if (OB_FAIL(arb.process(*ctx_))) {
-        LOG_WARN("Failed to process arbitrator", K(ret));
       } else if (OB_FAIL(arb.output_result(*ctx_))) {
-        LOG_WARN("Failed to make result list");
       }
     } else {
       // Already logged.
@@ -216,12 +206,10 @@ int ObIKFTParserDesc::segment(ObFTParserParam *param, ObITokenIterator *&iter) c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_FAIL(ObFTParseData::instance().get_dict_hub(hub))) {
-    LOG_WARN("Failed to get dict hub.", K(ret));
   } else if (OB_ISNULL(parser = OB_NEWx(ObIKFTParser, param->allocator_, *(param->allocator_), hub))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate ik ft parser", K(ret));
   } else if (OB_FAIL(parser->init(*param))) {
-    LOG_WARN("fail to init ik parser", K(ret), KPC(param));
   } else {
     iter = parser;
   }
@@ -279,22 +267,16 @@ int ObIKFTParser::init_dict(const ObFTParserParam &param)
     // clear dict cache, always false now
   } else {
     if (OB_FAIL(init_single_dict(main_dict_desc, cache_main_))) {
-      LOG_WARN("Failed to init main dict", K(ret));
     } else if (OB_FAIL(init_single_dict(quan_dict_desc, cache_quan_))) {
-      LOG_WARN("Failed to init quantifier dict", K(ret));
     } else if (OB_FAIL(init_single_dict(stopword_dict_desc, cache_stop_))) {
-      LOG_WARN("Failed to init stopword dict", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
     // already logged.
   } else if (OB_FAIL(build_dict_from_cache(main_dict_desc, cache_main_, dict_main_))) {
-    LOG_WARN("Failed to build dict main", K(ret));
   } else if (OB_FAIL(build_dict_from_cache(quan_dict_desc, cache_quan_, dict_quan_))) {
-    LOG_WARN("Failed to build dict quantifier", K(ret));
   } else if (OB_FAIL(build_dict_from_cache(stopword_dict_desc, cache_stop_, dict_stop_))) {
-    LOG_WARN("Failed to build dict stopword", K(ret));
   }
 
   return ret;
@@ -306,7 +288,6 @@ int ObIKFTParser::init_single_dict(ObFTDictDesc desc, ObFTCacheRangeContainer &c
   if (OB_FAIL(hub_->load_cache(desc, container))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       if (OB_FAIL(hub_->build_cache(desc, container))) {
-        LOG_WARN("Failed to read newest main table", K(ret));
       }
     } else {
       LOG_WARN("Failed to load cache", K(ret));
@@ -332,7 +313,6 @@ int ObIKFTParser::init_ctx(const ObFTParserParam &param)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc ctx", K(ret));
   } else if (OB_FAIL(ctx_->init())) {
-    LOG_WARN("Failed to init ctx", K(ret));
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(TokenizeContext, &allocator_, ctx_);
@@ -367,16 +347,12 @@ int ObIKFTParser::init_segmenter(const ObFTParserParam &param)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc surrogate segmenter", K(ret));
   } else if (OB_FAIL(segmenters_.push_back(letter_seg))) {
-    LOG_WARN("Failed to push back letter segmenter", K(ret));
   } else if (FALSE_IT(letter_seg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cnqsg))) {
-    LOG_WARN("Failed to push back cn quantifier segmenter", K(ret));
   } else if (FALSE_IT(cnqsg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(cjksg))) {
-    LOG_WARN("Failed to push back cjk segmenter", K(ret));
   } else if (FALSE_IT(cjksg = nullptr)) {
   } else if (OB_FAIL(segmenters_.push_back(surrogate_seg))) {
-    LOG_WARN("Failed to push back surrogate segmenter");
   } else if (OB_FALSE_IT(surrogate_seg = nullptr)) {
   }
   // push back by order, quantifier is before cjk
@@ -438,7 +414,6 @@ int ObIKFTParser::build_dict_from_cache(const ObFTDictDesc &desc,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc dict", K(ret));
   } else if (OB_FAIL(dict->init())) {
-    LOG_WARN("Failed to init dict", K(ret));
   }
   if (OB_FAIL(ret)) {
     OB_DELETEx(ObIFTDict, &allocator_, dict);

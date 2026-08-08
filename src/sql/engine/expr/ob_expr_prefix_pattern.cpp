@@ -57,7 +57,6 @@ int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx,
   ObString escape_str, result_str;
   bool is_valid = true;
   if (OB_FAIL(expr.eval_param_value(ctx, pattern, len_param, escape))) {
-    LOG_WARN("eval args failed", K(ret));
   } else if (OB_ISNULL(pattern) || OB_ISNULL(len_param) || OB_ISNULL(escape)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params are unexpected null", K(ret), K(pattern), K(len_param), K(escape));
@@ -90,7 +89,6 @@ int ObExprPrefixPattern::eval_prefix_pattern(const ObExpr &expr, ObEvalCtx &ctx,
                expr.args_[0]->datum_meta_.cs_type_,
                storage::can_do_ascii_optimize(expr.args_[0]->datum_meta_.cs_type_), false,
                is_result_batch_ascii))) {
-    LOG_WARN("get substr failed", K(ret));
   } else {
     expr_datum.set_string(result_str);
   }
@@ -120,7 +118,6 @@ int ObExprPrefixPattern::calc_prefix_pattern(const ObString &pattern,
       LOG_WARN("failed to convert escape to wc", K(ret), K(escape_coll), K(escape));
     }
   } else if (OB_FAIL(ObCharset::mb_wc(CS_TYPE_UTF8MB4_BIN, ObString::make_string("%"), wildcard_wc))) {
-    LOG_WARN("failed to convert '%' to wc", K(ret));
   } else if (OB_UNLIKELY(OB_ISNULL(cs = ObCharset::get_charset(pattern_coll)) || OB_ISNULL(cs->cset))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected charset", K(ret), K(pattern_coll));

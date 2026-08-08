@@ -233,7 +233,6 @@ public:
 
     if (total_ <= pos_) {
       if (OB_FAIL(extend())) {
-        OB_LOG(WARN, "failed to extend", K(ret));
       }
     }
 
@@ -252,7 +251,6 @@ public:
     int64_t length = buffer_.length();
     int64_t extend_size = extend_step_ * sizeof(T);
     if (OB_FAIL(buffer_.reserve(extend_size))) {
-      OB_LOG(WARN, "failed to reserve.", K(ret), K(extend_size));
     } else {
       total_ += extend_step_;
       length += extend_size;

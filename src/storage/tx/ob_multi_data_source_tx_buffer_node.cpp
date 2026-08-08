@@ -143,11 +143,8 @@ OB_DEF_SERIALIZE(ObTxBufferNodeWrapper)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, tx_id_))) {
-    TRANS_LOG(WARN, "serialize node wrapper fail", KR(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(node_.serialize(buf, buf_len, pos))) {
-    TRANS_LOG(WARN, "serialize node wrapper fail", KR(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(node_.get_buffer_ctx_node().serialize(buf, buf_len, pos))) {
-    TRANS_LOG(WARN, "serialize node wrapper fail", KR(ret), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -158,16 +155,13 @@ OB_DEF_DESERIALIZE(ObTxBufferNodeWrapper)
   ObIAllocator &allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator();
   char *node_buf = NULL;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &tx_id_))) {
-    TRANS_LOG(WARN, "deserialize node wrapper fail", KR(ret), K(data_len), K(pos));
   } else if (OB_FAIL(node_.deserialize(buf, data_len, pos))) {
-    TRANS_LOG(WARN, "deserialize node wrapper fail", KR(ret), K(data_len), K(pos));
   } else if (OB_ISNULL(node_buf = (char*)allocator.alloc(node_.get_data_size()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "deserialize node wrapper fail", KR(ret), K(data_len), K(pos));
   } else if (FALSE_IT(MEMCPY(node_buf, node_.get_ptr(), node_.get_data_size()))) {
   } else if (FALSE_IT((node_.get_data().assign_ptr(node_buf, node_.get_data_size())))) {
   } else if (OB_FAIL(node_.get_buffer_ctx_node().deserialize(buf, data_len, pos, allocator))) {
-    TRANS_LOG(WARN, "deserialize node wrapper fail", KR(ret), K(data_len), K(pos));
   }
   return ret;
 }
@@ -196,7 +190,6 @@ int ObTxBufferNodeWrapper::pre_alloc(int64_t tx_id, const ObTxBufferNode &node, 
                                                           ObTransID(tx_id),
                                                           new_ctx,
                                                           allocator))) {
-      TRANS_LOG(WARN, "create buffer_ctx failed", KR(ret));
     } else {
       node_.get_buffer_ctx_node().set_ctx(new_ctx);
     }
@@ -241,7 +234,6 @@ int ObTxBufferNodeWrapper::assign(int64_t tx_id,
                                                              *(node.get_buffer_ctx_node().get_ctx()),
                                                               new_ctx,
                                                               allocator))) {
-      TRANS_LOG(WARN, "copy buffer_ctx failed", KR(ret));
     } else if (!has_pre_alloc) {
       node_.get_buffer_ctx_node().set_ctx(new_ctx);
     }

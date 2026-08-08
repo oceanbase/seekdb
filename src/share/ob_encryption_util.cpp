@@ -350,12 +350,10 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const ObString data,
   int64_t buf_len = 0;
   int64_t out_len = 0;
   if (OB_FAIL(get_hash_output_len(algo, buf_len))) {
-    LOG_WARN("fail to get hash output len", K(algo), K(ret));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", K(ret));
   } else if (OB_FAIL(hash(algo, data_ptr, data.length(), buf, buf_len, out_len))) {
-    LOG_WARN("fail to calc hash output", K(ret));
   } else {
     output.assign_ptr(buf, static_cast<int32_t>(out_len));
   }
@@ -372,7 +370,6 @@ int ObHashUtil::hash(const enum ObHashAlgorithm algo, const char *data, const in
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(algo), K(data_len), K(buf_len), K(ret));
   } else if (OB_FAIL(get_hash_output_len(algo, expect_out_len))) {
-    LOG_WARN("fail to get hash output len", K(algo), K(ret));
   } else if (OB_UNLIKELY(buf_len < expect_out_len)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(algo), K(buf_len), K(expect_out_len), K(ret));

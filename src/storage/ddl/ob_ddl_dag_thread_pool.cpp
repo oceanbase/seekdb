@@ -38,7 +38,6 @@ int ObDDLDagThreadPool::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(thread_count), KP(ddl_dag));
   } else if (OB_FAIL(set_thread_count(thread_count))) {
-    LOG_WARN("set thread count failed", K(ret));
   } else {
     set_run_wrapper(share::server_runtime());
     ddl_dag_ = ddl_dag;

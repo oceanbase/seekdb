@@ -55,14 +55,12 @@ public:
     column_count_ = columns.count();
     if (OB_FAIL(ObTempColumnStore::init_vectors(
             columns, vector_allocator_, output_vectors_))) {
-      LOG_WARN("failed to initialize spill output vectors", K(ret), K(column_count_));
     } else if (OB_FAIL(store_.init(output_vectors_,
                                    options_.max_batch_size_,
                                    ObMemAttr("TempColumnSpool"),
                                    options_.resident_memory_limit_,
                                    true /* enable_dump */,
                                    options_.compressor_type_))) {
-      LOG_WARN("failed to initialize temp column spill store", K(ret));
     } else {
       store_.set_dir_id(options_.dir_id_);
     }
@@ -221,7 +219,6 @@ public:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate spill spool", K(ret));
       } else if (OB_FAIL(new_spool->init(columns, options))) {
-        LOG_WARN("failed to initialize spill spool", K(ret));
       } else {
         spool = new_spool;
       }

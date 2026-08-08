@@ -64,7 +64,6 @@ int ObSqlString::append(const char *str, const int64_t len)
     if (NULL != str && len >= 0) {
       const int64_t need_len = len_ + len;
       if (OB_FAIL(reserve(need_len))) {
-        LOG_WARN("reserve data failed", K(ret), K(need_len));
       } else {
         MEMCPY(data_ + len_, str, len);
         len_ += len;
@@ -90,7 +89,6 @@ int ObSqlString::append_fmt(const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     if (OB_FAIL(vappend(fmt, ap))) {
-      LOG_WARN("append failed", K(ret), KCSTRING(fmt));
     }
     va_end(ap);
   }
@@ -113,7 +111,6 @@ int ObSqlString::assign(const char *str, const int64_t len)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(len));
   } else if (OB_FAIL(append(str, len))) {
-    LOG_WARN("append string failed", K(ret), KCSTRING(str), K(len));
   }
   return ret;
 }
@@ -131,7 +128,6 @@ int ObSqlString::assign(const ObSqlString &sql)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("assign get invalid argument", K(ret), K(sql));
   } else if (OB_FAIL(assign(sql.ptr()))) {
-    LOG_WARN("fail to append sql", K(ret), K(sql));
   }
   return ret;
 }
@@ -146,7 +142,6 @@ int ObSqlString::assign_fmt(const char *fmt, ...)
     va_list ap;
     va_start(ap, fmt);
     if (OB_FAIL(vappend(fmt, ap))) {
-      LOG_WARN("append failed", K(ret), KCSTRING(fmt));
     }
     va_end(ap);
   }
@@ -253,7 +248,6 @@ int ObSqlString::vappend(const char *fmt, va_list ap)
       LOG_WARN("vsnprintf failed", K(ret), K(n), K(errno));
     } else if (n >= data_size_ - len_) {
       if (OB_FAIL(reserve(n + len_))) {
-        LOG_WARN("reserve data failed", K(ret), "size", n + len_);
       } else {
 #ifdef _WIN32
         n = vsnprintf(data_ + len_, data_size_ - len_, actual_fmt, ap2);
@@ -310,7 +304,6 @@ int ObSqlString::reserve(const int64_t size)
         ret = OB_SIZE_OVERFLOW;
         LOG_ERROR("size overflow", K(ret), K(extend_to), K(need_size));
       } else if (OB_FAIL(extend(extend_to))) {
-        LOG_WARN("extend failed", K(ret), K(extend_to));
       }
     }
   }

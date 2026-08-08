@@ -191,12 +191,9 @@ int ObRowHeap<COMPARE, ROW>::init(int64_t capacity,
     ret = common::OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid capacity", K(capacity), K(ret));
   } else if (OB_FAIL(row_idx_.reserve(capacity))) {
-    SQL_ENG_LOG(WARN, "fail alloc mem", K(capacity), K(ret));
   } else if (OB_FAIL(row_arr_.prepare_allocate(capacity))) {
-    SQL_ENG_LOG(WARN, "fail alloc mem", K(capacity), K(ret));
   } else if (OB_FAIL(indexed_row_comparer_.init(
                  sort_collations, sort_cmp_funs, row_arr_, datum_access_ctx))) {
-    SQL_ENG_LOG(WARN, "fail init comparer", K(ret));
   } else {
     writable_ch_idx_ = 0;
     capacity_ = capacity;
@@ -243,7 +240,6 @@ int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
              "row_idx_cnt", row_idx_.count(),
              K(ret));
   } else if (OB_FAIL(row_idx_.push_back(writable_ch_idx_))) {
-    SQL_ENG_LOG(WARN, "fail push row", K_(writable_ch_idx), K(ret));
   } else if (OB_UNLIKELY(NULL != row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "expect NULL in row_arr", K_(writable_ch_idx), K(ret));
@@ -253,7 +249,6 @@ int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
                    (&row_idx_.at(0)) + row_idx_.count(),
                    indexed_row_comparer_);
     if (OB_FAIL(indexed_row_comparer_.get_ret())) {
-      SQL_ENG_LOG(WARN, "fail do heap sort", K(ret));
     }
   }
   return ret;
@@ -273,9 +268,7 @@ int ObRowHeap<COMPARE, ROW>::pop(const ROW *&row)
                                     (&row_idx_.at(0)) + row_idx_.count(),
                                     indexed_row_comparer_))) {
   } else if (OB_FAIL(indexed_row_comparer_.get_ret())) {
-    SQL_ENG_LOG(WARN, "fail do heap pop", K(ret));
   } else if (OB_FAIL(row_idx_.pop_back(writable_ch_idx_))) {
-    SQL_ENG_LOG(WARN, "fail get a row", K(ret));
   } else if (OB_UNLIKELY(NULL == row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "NULL row unexpected", K_(writable_ch_idx), K(ret));
@@ -294,7 +287,6 @@ int ObRowHeap<COMPARE, ROW>::raw_pop(const ROW *&row)
     ret = common::OB_NOT_INIT;
     SQL_ENG_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(row_idx_.pop_back(writable_ch_idx_))) {
-    SQL_ENG_LOG(WARN, "fail get a row", K(ret));
   } else if (OB_UNLIKELY(NULL == row_arr_.at(writable_ch_idx_))) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "NULL row unexpected", K_(writable_ch_idx), K(ret));

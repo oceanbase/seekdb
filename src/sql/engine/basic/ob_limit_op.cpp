@@ -67,7 +67,6 @@ int ObLimitOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("limit operator has no child", K(ret));
   } else if (OB_FAIL(get_int_val(MY_SPEC.limit_expr_, eval_ctx_, limit_, is_null_value))) {
-    LOG_WARN("get limit values failed", K(ret));
   } else if (!is_null_value && OB_FAIL(get_int_val(MY_SPEC.offset_expr_, eval_ctx_,
                                                    offset_, is_null_value))) {
     LOG_WARN("get offset values failed", K(ret));
@@ -102,7 +101,6 @@ int ObLimitOp::get_int_val(ObExpr *expr, ObEvalCtx &eval_ctx, int64_t &val, bool
     OB_ASSERT(ob_is_int_tc(expr->datum_meta_.type_));
     ObDatum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
-      LOG_WARN("expr evaluate failed", K(ret), K(expr));
     } else if (datum->null_) {
       is_null_value = true;
       val = 0;
@@ -120,7 +118,6 @@ int ObLimitOp::get_double_val(ObExpr *expr, ObEvalCtx &eval_ctx, double &val)
     OB_ASSERT(ob_is_double_tc(expr->datum_meta_.type_));
     ObDatum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx, datum))) {
-      LOG_WARN("expr evaluate failed", K(ret), K(expr));
     } else if (datum->null_) {
       val = 0.0;
     } else {
@@ -135,7 +132,6 @@ int ObLimitOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
-  LOG_DEBUG("limitop get_next_row start", K(limit_), K(offset_));
   while (OB_SUCC(ret) && input_cnt_ < offset_) {
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_ITER_END != ret) {
@@ -195,7 +191,6 @@ int ObLimitOp::inner_get_next_row()
                    K(ret), K_(limit), K_(offset), K_(input_cnt), K_(output_cnt));
         }
       } else if (OB_FAIL(is_row_order_by_item_value_equal(is_equal))) {
-        LOG_WARN("failed to is row order by item value equal", K(ret));
       } else if (is_equal) {
         ++output_cnt_;
       } else {
@@ -237,8 +232,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
   int64_t batch_cnt = min(max_row_cnt, MY_SPEC.max_batch_size_);
-  LOG_DEBUG("limitop get_next_batch start", K(limit_), K(offset_), K(batch_cnt),
-             K(is_percent_first_), K(output_cnt_), K(MY_SPEC.calc_found_rows_));
   const ObBatchRows *child_brs = nullptr;
   clear_evaluated_flag();
   while (OB_SUCC(ret) && input_cnt_ < offset_) {
@@ -247,7 +240,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
       batch_cnt = offset_ - input_cnt_;
     }
     if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-      LOG_WARN("child_op failed to get next row", K(input_cnt_), K(offset_), K(ret));
     } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
       LOG_WARN("failed to convert limit percent", K(ret));
     } else {
@@ -259,7 +251,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
     }
   } // end while
 
-  LOG_DEBUG("limitop get_next_batch", K(brs_), K(input_cnt_), K(batch_cnt), K(output_cnt_));
   auto skip_fetch_rows = false;
   if (input_cnt_ > offset_ && output_cnt_ == 0) {
     // offset error handling: child operator return more rows than expected
@@ -287,9 +278,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
   batch_cnt = min(max_row_cnt, MY_SPEC.max_batch_size_);
   if (OB_UNLIKELY(brs_.end_) && !skip_fetch_rows) {
     brs_.size_ = 0;
-    LOG_DEBUG("Offset num is bigger than child output num, return empty rows",
-              K(offset_), K(input_cnt_), K(child_brs->size_),
-              K(child_brs->end_));
   } else if (OB_SUCC(ret)) {
     if (is_percent_first_ || output_cnt_ < limit_ || limit_ < 0) {
       // adjust iterating count for last batch
@@ -323,7 +311,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
             batch_info_guard.set_batch_size(brs_.size_);
             batch_info_guard.set_batch_idx(find_last_available_row_cnt(*(brs_.skip_), brs_.size_));
             if (OB_FAIL(pre_sort_columns_.save_store_row(MY_SPEC.sort_columns_, eval_ctx_))) {
-              LOG_WARN("failed to deep copy limit last rows", K(ret));
             }
           }
         } else if (OB_UNLIKELY(
@@ -361,11 +348,8 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
       bool keep_iterating = false;
       uint32_t matched_row_count = 0;
       if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-          LOG_WARN("child_op failed to get next row",
-                   K(ret), K(limit_), K(batch_cnt), K(child_brs->size_));
       } else if (OB_FAIL(compare_value_in_batch(keep_iterating, *(child_brs->skip_),
                                             child_brs->size_, matched_row_count))) {
-        LOG_WARN("failed to is row order by item value equal", K(ret));
       }
       brs_.copy(child_brs);
       if (!keep_iterating) {
@@ -385,7 +369,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
           }
         }
         if (OB_SUCCESS != ret) {
-          LOG_WARN("fail to get next row from child", K(ret));
         }
       }
     }
@@ -404,8 +387,6 @@ int ObLimitOp::inner_get_next_batch(const int64_t max_row_cnt)
       }
     }
   }
-  LOG_DEBUG("limitop get_next_batch finished", K(batch_cnt), K(output_cnt_),
-              K(brs_), K(limit_), K(input_cnt_));
   return ret;
 }
 
@@ -425,11 +406,9 @@ int ObLimitOp::is_row_order_by_item_value_equal(bool &is_equal)
       const ObExpr *expr = MY_SPEC.sort_columns_.at(i);
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-        LOG_WARN("expression evaluate failed", K(ret));
       } else if (OB_FAIL(expr->basic_funcs_->null_first_cmp_(
                  pre_sort_columns_.store_row_->cells()[i], *datum, cmp_ret,
                  datum_access_ctx_))) {
-        LOG_WARN("compare failed", K(ret));
       } else {
         is_equal = 0 == cmp_ret;
       }
@@ -458,7 +437,6 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.sort_columns_.count(); ++i) {
       ObExpr *expr = MY_SPEC.sort_columns_.at(i);
       if (OB_FAIL(expr->eval_batch(eval_ctx_, skip, batch_size))) {
-        LOG_WARN("expression evaluate failed", K(ret));
       } else {
         datum_vectors.push_back(expr->locate_expr_datumvector(eval_ctx_));
       }
@@ -476,7 +454,6 @@ int ObLimitOp::compare_value_in_batch(bool &keep_iterating,
                     pre_sort_columns_.store_row_->cells()[col_idx],
                     *(datum_vectors[col_idx].at(row_idx)), cmp_ret,
                     datum_access_ctx_))) {
-          LOG_WARN("compare failed", K(ret));
         } else {
           keep_iterating = (0 == cmp_ret);
         }
@@ -494,7 +471,6 @@ int ObLimitOp::convert_limit_percent()
   int ret = OB_SUCCESS;
   double percent = 0.0;
   if (OB_FAIL(get_double_val(MY_SPEC.percent_expr_, eval_ctx_, percent))) {
-    LOG_WARN("failed to get double value", K(ret));
   } else if (percent > 0) {
     int64_t tot_count = 0;
     if (OB_UNLIKELY(limit_ != -1) || OB_ISNULL(child_) ||

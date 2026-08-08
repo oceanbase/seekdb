@@ -136,12 +136,10 @@ private:
     if (OB_FAIL(ret)) {
     } else if (lower_bound_ || reverse_) {
       if (OB_FAIL(left.compare(right, datum_utils_, cmp_ret))) {
-        STORAGE_LOG(WARN, "Failed to compare datum rowkey or range", K(ret), K(left), K(right));
       } else {
         bret = reverse_ ? cmp_ret > 0 : cmp_ret < 0;
       }
     } else if (OB_FAIL(right.compare(left, datum_utils_, cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare datum rowkey or range", K(ret), K(left), K(right));
     } else {
       bret = cmp_ret > 0;
     }
@@ -157,12 +155,10 @@ private:
     if (OB_FAIL(ret)) {
     } else if (lower_bound_ || reverse_) {
       if (OB_FAIL(left.compare(right, datum_utils_, cmp_ret, compare_datum_cnt_))) {
-        STORAGE_LOG(WARN, "Failed to compare datum rowkey or range", K(ret), K(left), K(right));
       } else {
         bret = reverse_ ? cmp_ret > 0 : cmp_ret < 0;
       }
     } else if (OB_FAIL(right.compare(left, datum_utils_, cmp_ret, compare_datum_cnt_))) {
-      STORAGE_LOG(WARN, "Failed to compare datum rowkey or range", K(ret), K(left), K(right));
     } else {
       bret = cmp_ret > 0;
     }
@@ -212,7 +208,6 @@ OB_INLINE int ObDatumRange::is_single_rowkey(const ObStorageDatumUtils &datum_ut
   if (!border_flag_.inclusive_start() || !border_flag_.inclusive_end()) {
   } else if (start_key_.is_ext_rowkey()) {
   } else if (OB_FAIL(start_key_.equal(end_key_, datum_utils, is_single))) {
-    STORAGE_LOG(WARN, "Failed to check datum rowkey equal", K(ret), K(*this));
   }
 
   return ret;
@@ -258,9 +253,7 @@ OB_INLINE int ObDatumRange::from_range(const common::ObNewRange &range, ObIAlloc
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to ", K(ret), K(range));
   } else if (OB_FAIL(start_key_.from_rowkey(range.get_start_key(), allocator))) {
-    STORAGE_LOG(WARN, "Failed to from start key", K(ret));
   } else if (OB_FAIL(end_key_.from_rowkey(range.get_end_key(), allocator))) {
-    STORAGE_LOG(WARN, "Failed to from end key", K(ret));
   } else {
     table_id_ = range.table_id_;
     border_flag_ = range.border_flag_;
@@ -288,9 +281,7 @@ OB_INLINE int ObDatumRange::to_store_range(const common::ObIArray<share::schema:
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to transfer to store range", K(ret), K(*this));
   } else if (OB_FAIL(start_key_.to_store_rowkey(col_descs, allocator, store_range.get_start_key()))) {
-    STORAGE_LOG(WARN, "Failed to transfer start key", K(ret), K(start_key_));
   } else if (OB_FAIL(end_key_.to_store_rowkey(col_descs, allocator, store_range.get_end_key()))) {
-    STORAGE_LOG(WARN, "Failed to transfer end key", K(ret), K(end_key_));
   } else {
     store_range.set_border_flag(border_flag_);
     store_range.set_group_idx(get_group_idx());
@@ -340,9 +331,7 @@ OB_INLINE int ObDatumRange::to_multi_version_range(common::ObIAllocator &allocat
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to transfer multi version range", K(ret), K(*this));
   } else if (OB_FAIL(start_key_.to_multi_version_rowkey(include_start, allocator, dest.start_key_))) {
-    STORAGE_LOG(WARN, "Failed to transfer multi version rowkey", K(ret), K(include_start), K_(start_key));
   } else if (OB_FAIL(end_key_.to_multi_version_rowkey(!include_end, allocator, dest.end_key_))) {
-    STORAGE_LOG(WARN, "Failed to transfer multi version rowkey", K(ret), K(include_end), K_(end_key));
   } else {
     dest.table_id_ = table_id_;
     dest.border_flag_ = border_flag_;
@@ -356,9 +345,7 @@ OB_INLINE int ObDatumRange::to_new_range(common::ObNewRange& range, const ObObjM
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(start_key_.to_rowkey(range.start_key_, obj_metas, allocator))) {
-    STORAGE_LOG(WARN, "Failed to transfer new rowkey", K(ret), K_(start_key));
   } else if (OB_FAIL(end_key_.to_rowkey(range.end_key_, obj_metas, allocator))) {
-    STORAGE_LOG(WARN, "Failed to transfer new rowkey", K(ret), K_(end_key));
   } else {
     range.table_id_ = table_id_;
     range.border_flag_ = border_flag_;
@@ -372,9 +359,7 @@ OB_INLINE int ObDatumRange::prepare_memtable_readable(const common::ObIArray<sha
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(start_key_.prepare_memtable_readable(col_descs, allocator))) {
-    STORAGE_LOG(WARN, "Failed to prepare start key", K(ret), K(start_key_), K(col_descs));
   } else if (OB_FAIL(end_key_.prepare_memtable_readable(col_descs, allocator))) {
-    STORAGE_LOG(WARN, "Failed to prepare end key", K(ret), K(end_key_), K(col_descs));
   }
   return ret;
 }
@@ -385,9 +370,7 @@ OB_INLINE int ObDatumRange::deep_copy(const ObDatumRange &src, ObIAllocator &all
   if (OB_UNLIKELY(this == &src)) {
     // by pass
   } else if (OB_FAIL(src.start_key_.deep_copy/* to */(this->start_key_, allocator))) {
-    STORAGE_LOG(WARN, "Failed to deep copy start key", K(ret), K(src.start_key_));
   } else if (OB_FAIL(src.end_key_.deep_copy/* to */(this->end_key_, allocator))) {
-    STORAGE_LOG(WARN, "Failed to deep copy end key", K(ret), K(src.end_key_));
   } else {
     this->table_id_ = src.table_id_;
     this->flag_ = src.flag_;

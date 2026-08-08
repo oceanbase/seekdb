@@ -38,10 +38,8 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
   id.reset();
 
   if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("set default timeout ctx fail", KR(ret), K(DEFAULT_TIMEOUT));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObUniqueIDService>()->gen_unique_id(unique_id,
       ctx.get_timeout()))) {
-    LOG_WARN("gen_unique_id failed", KR(ret), K(ctx));
   } else {
     id = ObCommonID(unique_id);
   }

@@ -178,13 +178,11 @@ int ObMemoryDump::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("cond init failed", K(ret));
   } else {
     MemoryContext context;// = nullptr;
     int ret = ROOT_CONTEXT->CREATE_CONTEXT(context, ContextParam().set_label("MemDumpContext"));
     PreAllocMemory *pre_mem = nullptr;
     if (OB_FAIL(ret)) {
-      LOG_WARN("create context failed", K(ret));
     } else if (OB_ISNULL(pre_mem = (PreAllocMemory*)context->allocp(sizeof(PreAllocMemory)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc mem failed", K(ret));
@@ -195,23 +193,18 @@ int ObMemoryDump::init()
       
       print_buf_ = pre_mem->print_buf_;
       if (OB_FAIL(lmap_.create(1000, ObMemAttr("MemDumpMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
-        LOG_WARN("create map failed", K(ret));
       } else {
         r_stat_ = new (pre_mem->stats_buf_) Stat();
         w_stat_ = new (r_stat_ + 1) Stat();
         dump_context_ = context;
         is_inited_ = true;
         if (OB_FAIL(r_stat_->malloc_sample_map_.create(1000, ObMemAttr("MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
-          LOG_WARN("create memory info map for reading failed", K(ret));
         } else if (OB_FAIL(w_stat_->malloc_sample_map_.create(1000, ObMemAttr("MallocInfoMap", ObCtxIds::DEFAULT_CTX_ID, OB_HIGH_ALLOC)))) {
-          LOG_WARN("create memory info map for writing failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(lib::ThreadPool::init())) {
-          LOG_WARN("memory dump thread pool init fail", K(ret));
         } else if (OB_FAIL(lib::ThreadPool::start())) {
-          LOG_WARN("start memory dump thread pool fail", K(ret));
         }
       }
     }
@@ -652,7 +645,6 @@ void ObMemoryDump::handle(void *task)
                     return ret;
                   });
               if (OB_FAIL(ret)) {
-                LOG_WARN("parse_chunk_meta failed", K(ret), KP(chunk));
               }
               return ret;
           };
@@ -793,7 +785,6 @@ void ObMemoryDump::handle(void *task)
                   return print_object_meta(chunk, block, object, print_buf, PRINT_BUF_LEN, print_pos);
                 });
             if (OB_FAIL(ret)) {
-              LOG_WARN("parse_chunk_meta failed", K(ret), KP(chunk));
             }
             return OB_SUCCESS;
         };

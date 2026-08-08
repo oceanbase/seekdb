@@ -75,7 +75,6 @@ int ObBasicMergeScheduleIterator::init(
     ls_ = ls;
     schedule_tablet_cnt_ = 0;
     max_batch_tablet_cnt_ = schedule_batch_size;
-    LOG_TRACE("build iter", K(ret), KPC(this));
   } else { // iter is valid, no need to build, just set var to start cur batch
     (void) start_cur_batch();
   }
@@ -108,10 +107,8 @@ int ObBasicMergeScheduleIterator::get_next_tablet(ObTabletHandle &tablet_handle)
     ret = OB_ITER_END;
   } else if (!tablet_ids_.is_inited_) {
     if (OB_FAIL(get_tablet_ids())) {
-      LOG_WARN("failed to get tablet ids", K(ret));
     } else {
       tablet_ids_.mark_inited();
-      LOG_TRACE("build iter in get_next_tablet", K(ret), K(tablet_ids_));
 #ifdef ERRSIM
       (void) errsim_set_batch_cnt(tablet_ids_, max_batch_tablet_cnt_);
 #endif
@@ -121,7 +118,6 @@ int ObBasicMergeScheduleIterator::get_next_tablet(ObTabletHandle &tablet_handle)
   } else if (tablet_ids_.is_tablet_iter_end()) {
     scan_finish_ = true;
     ret = OB_ITER_END;
-    LOG_DEBUG("schedule tablet scan finish", K(ret));
   } else if (schedule_tablet_cnt_ >= max_batch_tablet_cnt_) {
     LOG_INFO("reach max batch tablet cnt, schedule next round", K(ret),
       K_(schedule_tablet_cnt), K_(max_batch_tablet_cnt), "tablet_cnt", tablet_ids_.count(),
@@ -204,7 +200,6 @@ int ObCompactionScheduleIterator::build_iter(
   } else if (!need_reset_report_scn) {
     ls = ls_;
   } else if (OB_FAIL(ls_service.get_ls(ls))) {
-    LOG_WARN("failed to get ls", K(ret));
   }
 
   if (OB_SUCC(ret) && OB_NOT_NULL(ls) && OB_FAIL(init(schedule_batch_size, ls))) {

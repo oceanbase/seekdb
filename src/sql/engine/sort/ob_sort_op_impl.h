@@ -104,7 +104,6 @@ public:
     } else {
       iter_.reset();
       if (OB_FAIL(iter_.init(&datum_store_))) {
-        SQL_ENG_LOG(WARN, "fail to init iter", K(ret));
       }
     }
     return ret;
@@ -289,7 +288,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(add_row(expr, store_row))) {
-      SQL_ENG_LOG(WARN, "failed to add row", K(ret));
     } else if (use_heap_sort_ || use_partition_topn_sort_) {
       sort_need_dump = false;
     } else {
@@ -323,7 +321,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(add_batch(exprs, skip, batch_size, start_pos, append_row_count))) {
-      SQL_ENG_LOG(WARN, "failed to add batch", K(ret));
     } else if (use_heap_sort_ || use_partition_topn_sort_) {
       sort_need_dump = false;
     } else {
@@ -671,7 +668,6 @@ protected:
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexpected status: store row is null", K(ret));
     } else if (OB_FAIL(sr->to_expr(exprs, *eval_ctx_))) {
-      SQL_ENG_LOG(WARN, "convert store row to expr value failed", K(ret), KPC(sr));
     }
     return ret;
   }

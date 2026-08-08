@@ -49,7 +49,6 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("params not valid", KR(ret), K(params));
   } else if (OB_FAIL(params.at(0).get_varchar(str_arg))) {
-    LOG_WARN("get parameter failed", K(ret));
   } else if (str_arg.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(str_arg));
@@ -57,16 +56,12 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(MAX_RES_LEN));
   } else if (OB_FAIL(helper.convert(str_arg, str))) {
-    LOG_WARN("convert cstring failed", K(ret));
   } else if (OB_FAIL(parse_dict_like_args_(str, arg))) {
-    LOG_WARN("parse argument failed", K(ret));
   } else if (OB_ISNULL(resource_calculator)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resource limit calculator is not initialized", K(ret));
   } else if (OB_FAIL(resource_calculator->get_min_phy_resource_value(arg, res))) {
-    LOG_WARN("get minimum physical resource requirement failed", K(ret));
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
-    LOG_WARN("get json result failed", K(ret), K(res), K(pos));
   } else {
     params.at(1).set_varchar(ptr, pos);
     LOG_INFO("phy_res_calculate_by_logic_res success", K(arg), K(res),
@@ -89,7 +84,6 @@ int ObDBMSLimitCalculator::parse_dict_like_args_(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(type), K(key));
     } else if (OB_FAIL(arg.set_type_value(type, value))) {
-      LOG_WARN("set type value failed", K(ret), K(type), K(value));
     }
     while (*ptr != '\0' && *ptr != ',') ptr++;
     while (*ptr != '\0' && (*ptr == ' ' || *ptr == ',')) ptr++;
@@ -107,27 +101,23 @@ int ObDBMSLimitCalculator::get_json_result_(
   int64_t i = PHY_RESOURCE_MEMSTORE;
   int64_t value = 0;
   if (OB_FAIL(res.get_type_value(i, value))) {
-    LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
                                      "[{\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                      get_phy_res_type_name(i),
                                      value))) {
-    LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
   } else {
     // get next type
     i++;
     for (; OB_SUCC(ret) && i < MAX_PHY_RESOURCE; i++) {
       if (OB_FAIL(res.get_type_value(i, value))) {
-        LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
       } else if (OB_FAIL(databuff_printf(buf,
                                          buf_len,
                                          pos,
                                          ", {\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                          get_phy_res_type_name(i),
                                          value))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
     if (OB_SUCC(ret)) {
@@ -135,7 +125,6 @@ int ObDBMSLimitCalculator::get_json_result_(
                                   buf_len,
                                   pos,
                                   "]"))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
   }

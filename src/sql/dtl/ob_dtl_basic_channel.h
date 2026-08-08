@@ -206,12 +206,10 @@ OB_INLINE int ObDtlRowMsgWriter::write(
   const ObNewRow *row = px_row.get_row();
   if (nullptr != row) {
     if (OB_FAIL(row_store_.add_row(*row))) {
-      SQL_DTL_LOG(WARN, "failed to add row", K(ret));
     }
     write_buffer_->pos() = used();
   } else {
     if (OB_FAIL(serialize())) {
-      SQL_DTL_LOG(WARN, "failed to serialize", K(ret));
     }
     write_buffer_->is_eof() = is_eof;
     // Here special processing, if there is no data row, only header bytes, it must be sent, but for the data part if there is no row, then do not send

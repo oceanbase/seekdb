@@ -57,7 +57,6 @@ int ObDataVersionMgr::validate_or_init_current_version()
     COMMON_LOG(WARN, "ObDataVersionMgr doesn't init", K(ret));
   } else if (OB_ISNULL(version_)) {
     if (OB_FAIL(init_current_version_())) {
-      COMMON_LOG(WARN, "failed to initialize current data version", K(ret));
     }
   } else if (DATA_CURRENT_VERSION != version_->get_version()) {
     ret = OB_NOT_SUPPORTED;
@@ -115,7 +114,6 @@ int ObDataVersionMgr::load_from_file()
         ObRecordHeader header;
         int64_t pos = 0;
          if (OB_FAIL(header.deserialize(load_buf, read_len, pos))) {
-          COMMON_LOG(ERROR, "deserialize header failed", K(ret), K(read_len), K(pos));
         } else {
           const int64_t header_length = header.header_length_;
           const int64_t data_length = read_len - header_length;
@@ -125,7 +123,6 @@ int ObDataVersionMgr::load_from_file()
             COMMON_LOG(ERROR, "invalid data length", K(ret), K(header_length),
                        K(data_length), K(buf_size), K(read_len), K(header));
           } else if (OB_FAIL(header.check_header_checksum())) {
-            COMMON_LOG(ERROR, "check header checksum failed", K(ret), K(header));
           } else if (OB_CONFIG_MAGIC != header.magic_) {
             ret = OB_INVALID_DATA;
             COMMON_LOG(ERROR, "check magic number failed", K(ret),
@@ -139,7 +136,6 @@ int ObDataVersionMgr::load_from_file()
             ret = OB_INVALID_DATA;
             COMMON_LOG(ERROR, "data-version payload is incomplete", K(ret), K(data_length));
           } else if (OB_FAIL(header.check_payload_checksum(p_data, data_length))) {
-            COMMON_LOG(ERROR, "check data checksum failed", K(ret));
           } else {
             while (OB_SUCC(ret) && pos < read_len) {
               ret = load_data_version_(load_buf, pos);
@@ -172,7 +168,6 @@ int ObDataVersionMgr::init_current_version_()
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "data version has already been initialized", K(ret), KPC(version_));
   } else if (OB_FAIL(dump_current_version_to_file_())) {
-    COMMON_LOG(WARN, "failed to persist current data version", K(ret));
   } else if (OB_ISNULL(version_buf = allocator_.alloc(sizeof(ObDataVersion)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(ERROR, "failed to allocate data version", K(ret), K(sizeof(ObDataVersion)));
@@ -203,12 +198,10 @@ int ObDataVersionMgr::dump_current_version_to_file_()
     pos += header_length;
     if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos,
                                    DATA_CURRENT_VERSION))) {
-      COMMON_LOG(WARN, "fail to dump data_version", K(ret), KDV(DATA_CURRENT_VERSION));
     }
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(write_to_file_(dump_buf, buf_length, pos - data_pos))) {
-      COMMON_LOG(WARN, "fail to write data_version file", K(ret));
     }
   }
 
@@ -226,7 +219,6 @@ int ObDataVersionMgr::dump_data_version_(char *buf, int64_t buf_length, int64_t 
   } else if (OB_FAIL(databuff_printf(
                  buf, buf_length, pos, ObDataVersion::DUMP_BUF_FORMAT,
                  version_str, data_version))) {
-    COMMON_LOG(WARN, "fail to printf", K(ret), K(buf_length), K(pos));
   } else if (pos >= buf_length) {
     ret = OB_SIZE_OVERFLOW;
     COMMON_LOG(WARN, "buffer size overflow", K(ret), K(buf_length), K(pos));
@@ -314,13 +306,11 @@ int ObDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_t data
     header.data_checksum_ = ob_crc64(buf + header_length, data_length);
     header.set_header_checksum();
     if (OB_FAIL(header.serialize(buf, buf_length, header_pos))) {
-      COMMON_LOG(WARN, "fail to serialize header", K(ret), K(header), K(buf_length), K(header_pos));
     } else {
       const char *file_path = DATA_VERSION_FILE_PATH;
       char tmp_path[MAX_PATH_SIZE]{0};
       char hist_path[MAX_PATH_SIZE]{0};
       if (OB_FAIL(databuff_printf(tmp_path, MAX_PATH_SIZE, "%s.tmp", file_path))) {
-        COMMON_LOG(WARN, "fail to printf", K(ret));
       } else if (OB_FAIL(databuff_printf(hist_path, MAX_PATH_SIZE, "%s.history", file_path))) {
         COMMON_LOG(WARN, "fail to printf", K(ret));
 #ifdef _WIN32

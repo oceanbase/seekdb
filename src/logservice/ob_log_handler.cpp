@@ -64,12 +64,10 @@ int ObLogHandler::init(const common::ObAddr &self,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid arguments", KP(palf_env));
   } else if (OB_FAIL(apply_service->get_apply_status(guard))) {
-    CLOG_LOG(WARN, "guard get apply status failed", K(ret));
   } else if (NULL == (apply_status_ = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret));
   } else if (OB_FAIL(palf_env->open(palf_handle_))) {
-    CLOG_LOG(WARN, "open palf failed", K(ret));
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
     apply_service_ = apply_service;
@@ -114,7 +112,6 @@ int ObLogHandler::stop()
     apply_status_->unregister_file_size_cb();
     tg.click("unreg cb end");
     if (OB_FAIL(apply_status_->stop())) {
-      CLOG_LOG(INFO, "apply_status stop failed", KPC(this), KPC(apply_status_), KR(ret));
     } else if (false == palf_handle_.is_valid()) {
     } else {
       tg.click("apply stop end");
@@ -158,7 +155,6 @@ int ObLogHandler::append(const void *buffer,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
-    CLOG_LOG(WARN, "appending log fails", K(buffer), K(nbytes), K(ref_scn), K(need_nonblock), K(lsn), K(scn));
   }
   return ret;
 }
@@ -176,8 +172,6 @@ int ObLogHandler::append_big_log(const void *buffer,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
-    CLOG_LOG(WARN, "append big log to palf failed", K(buffer), K(nbytes), K(ref_scn),
-             K(need_nonblock), K(lsn), K(scn));
   }
   return ret;
 }
@@ -194,7 +188,6 @@ int ObLogHandler::get_append_mode_initial_scn(share::SCN &ref_scn) const
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.get_access_mode_ref_scn(access_mode, curr_ref_scn))) {
-    CLOG_LOG(WARN, "get_access_mode_ref_scn failed", K(ret));
   } else if (AccessMode::APPEND == access_mode) {
     ref_scn = curr_ref_scn;
   } else {
@@ -210,9 +203,7 @@ int ObLogHandler::seek(const LSN &lsn, PalfBufferIterator &iter)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
-    CLOG_LOG(WARN, "seek_log_iterator_dispatch failed", KP(palf_env_), K(lsn));
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(lsn));
   }
   return ret;
 }
@@ -224,9 +215,7 @@ int ObLogHandler::seek(const LSN &lsn, PalfGroupBufferIterator &iter)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
-    CLOG_LOG(WARN, "seek_log_iterator_dispatch failed", KP(palf_env_), K(lsn));
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(lsn));
   }
   return ret;
 }
@@ -236,7 +225,6 @@ int ObLogHandler::bootstrap()
   RLockGuard guard(lock_);
   int ret = palf_handle_.bootstrap();
   if (OB_FAIL(ret)) {
-    CLOG_LOG(WARN, "failed to bootstrap local palf", K(ret), K_(self));
   }
   return ret;
 }
@@ -246,7 +234,6 @@ int ObLogHandler::locate_by_scn_coarsely(const SCN &scn, LSN &result_lsn)
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (OB_FAIL(palf_handle_.locate_by_scn_coarsely(scn, result_lsn))) {
-    CLOG_LOG(WARN, "locate_by_scn_coarsely from palf failed", K(scn));
   }
 
   return ret;
@@ -261,7 +248,6 @@ int ObLogHandler::locate_by_lsn_coarsely(const LSN &lsn, SCN &result_scn)
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.locate_by_lsn_coarsely(lsn, result_scn))) {
-    CLOG_LOG(WARN, "locate_by_scn_coarsely from palf failed", KR(ret), K(lsn));
   }
   return ret;
 }
@@ -354,7 +340,6 @@ int ObLogHandler::append_(const void *buffer,
         cb->__set_lsn(lsn);
         cb->__set_scn(scn);
         ret = apply_status_->push_append_cb(cb);
-        CLOG_LOG(TRACE, "palf_handle_ push_append_cb success", K(lsn), K(scn), K(nbytes));
       }
     } while (0);
     // check if need wait and retry append
@@ -395,7 +380,6 @@ int ObLogHandler::enable_replay(const palf::LSN &lsn,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(lsn), K(scn));
   } else if (OB_FAIL(replay_service_->enable(lsn, scn))) {
-    CLOG_LOG(WARN, "failed to enable replay", K(ret), K(lsn), K(scn));
   } else {
     CLOG_LOG(INFO, "enable replay success", K(ret), K(lsn), K(scn));
   }
@@ -409,7 +393,6 @@ int ObLogHandler::disable_replay()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(replay_service_->disable())) {
-    CLOG_LOG(WARN, "failed to disable replay", K(ret));
   } else {
     CLOG_LOG(INFO, "disable replay success", K(ret));
   }
@@ -423,7 +406,6 @@ int ObLogHandler::pend_submit_replay_log()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(replay_service_->block_submit_log())) {
-    CLOG_LOG(WARN, "failed to block_submit_log", K(ret));
   } else {
     CLOG_LOG(INFO, "block_submit_log success", K(ret));
   }
@@ -437,7 +419,6 @@ int ObLogHandler::restore_submit_replay_log()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(replay_service_->unblock_submit_log())) {
-    CLOG_LOG(WARN, "failed to unblock_submit_log", K(ret));
   } else {
     CLOG_LOG(INFO, "unblock_submit_log success", K(ret));
   }
@@ -473,7 +454,6 @@ int ObLogHandler::get_max_decided_scn(SCN &scn)
     ret = OB_STATE_NOT_MATCH;
     CLOG_LOG(WARN, "log handle is offline");
   } else if (OB_FAIL(apply_service_->get_max_applied_scn(max_applied_scn))) {
-    CLOG_LOG(WARN, "failed to get_max_applied_scn", K(ret));
   } else if (OB_FAIL(replay_service_->get_max_replayed_scn(max_replayed_scn))) {
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "failed to get_max_replayed_scn", K(ret));
@@ -503,7 +483,6 @@ int ObLogHandler::offline()
   if (IS_NOT_INIT) {
     PALF_LOG(INFO, "ObLogHandler has already been destroyed", K(ret), KPC(this));
   } else if (OB_FAIL(disable_replay())) {
-    CLOG_LOG(WARN, "disable_replay failed", K(ret), KPC(this));
   } else {
     WLockGuard guard(lock_);
     is_offline_ = true;
@@ -519,7 +498,6 @@ int ObLogHandler::diagnose_palf(palf::PalfDiagnoseInfo &diagnose_info) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(palf_handle_.diagnose(diagnose_info))) {
-    CLOG_LOG(WARN, "palf handle diagnose failed", K(ret), KPC(this));
   } else {
     // do nothing
   }
@@ -534,7 +512,6 @@ int ObLogHandler::online(const LSN &lsn, const SCN &scn)
   } else if (true == is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(enable_replay(lsn, scn))) {
-    CLOG_LOG(WARN, "enable_replay failed", K(ret), KPC(this), K(lsn), K(scn));
   } else {
     WLockGuard guard(lock_);
     //reset_meta to avoid contributing excessively large max_decided_scn
@@ -562,7 +539,6 @@ int ObLogHandler::is_replay_fatal_error(bool &has_fatal_error)
   } else {
     RLockGuard guard(lock_);
     if (OB_FAIL(replay_service_->has_fatal_error(has_fatal_error))) {
-      CLOG_LOG(WARN, "has_fatal_error failed", KR(ret));
     }
   }
   return ret;
@@ -576,7 +552,6 @@ int ObLogHandler::advance_base_lsn_impl_(const LSN &lsn)
     ret = OB_NOT_RUNNING;
     CLOG_LOG(WARN, "ObLogHandler is not running", KR(ret));
   } else if (OB_FAIL(palf_handle_.advance_base_lsn(lsn))) {
-    CLOG_LOG(WARN, "advance_base_lsn failed", KR(ret), K(lsn));
   } else {}
   return ret;
 }

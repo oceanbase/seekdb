@@ -180,7 +180,6 @@ int ObTxLogCb::on_success()
       TRANS_LOG(ERROR, "ctx is null", K(ret), KPC(part_ctx));
     } else {
       if (OB_FAIL(part_ctx->on_success(this))) {
-        TRANS_LOG(WARN, "sync log success callback error", K(ret), K(tx_id), K(log_ts));
       }
     }
   }
@@ -207,7 +206,6 @@ int ObTxLogCb::on_failure()
       TRANS_LOG(ERROR, "ctx is null", KR(ret), K(*this));
     } else {
       if (OB_FAIL(part_ctx->on_failure(this))) {
-        TRANS_LOG(WARN, "sync log success callback error", KR(ret), K(tx_id), K(log_ts));
       }
     }
     TRANS_LOG(INFO, "ObTxLogCb::on_failure end", KR(ret), K(tx_id), K(log_ts));
@@ -222,13 +220,10 @@ int ObTxLogCb::copy(const ObTxLogCb &other)
   lsn_ = other.lsn_;
   submit_ts_ = other.submit_ts_;
   if (OB_FAIL(callbacks_.assign(other.callbacks_))) {
-    TRANS_LOG(WARN, "assign callbacks failed", K(ret), KPC(this));
   } else if (FALSE_IT(is_callbacked_ = other.is_callbacked_)) {
   // without txdata
   } else if (OB_FAIL(mds_range_.assign(other.mds_range_))) {
-    TRANS_LOG(WARN, "assign mds range failed", K(ret), KPC(this));
   } else if (OB_FAIL(cb_arg_array_.assign(other.cb_arg_array_))) {
-    TRANS_LOG(WARN, "assign cb_arg_array_ failed", K(ret), KPC(this));
   }
   first_part_scn_ = other.first_part_scn_;
 

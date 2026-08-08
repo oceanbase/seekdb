@@ -97,12 +97,10 @@ int ObTabletMemberWrapper<T, U>::set_cache_handle(ObStorageMetaHandle &handle)
   if (OB_UNLIKELY(!handle.is_valid())) {
     STORAGE_LOG(WARN, "secondary meta handle is not valid", K(ret), K(handle));
   } else if (OB_FAIL(handle.get_value(value))) {
-    STORAGE_LOG(WARN, "secondary meta handle get value failed", K(ret), K(handle));
   } else if (OB_ISNULL(value)) {
     ret = common::OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null secondary meta value", K(ret), K(handle));
   } else if (OB_FAIL(set_cache_handle(*value))) {
-    STORAGE_LOG(WARN, "failed to set cache handle", K(ret));
   } else {
     secondary_meta_handle_ = handle;
   }
@@ -115,7 +113,6 @@ inline int ObTabletMemberWrapper<ObTabletTableStore>::set_cache_handle(const ObS
   int ret = OB_SUCCESS;
   const ObTabletTableStore *table_store = nullptr;
   if (OB_FAIL(value.get_table_store(table_store))) {
-    STORAGE_LOG(WARN, "get table store failed", K(ret));
   } else {
     ptr_ = table_store;
   }

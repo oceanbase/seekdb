@@ -113,7 +113,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(clone_empty(alloc, output, false))) {
-      OB_LOG(WARN, "clone empty failed", K(ret));
     } else if (OB_UNLIKELY(OB_ISNULL(elem_except))) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "elem except is null", K(ret));
@@ -198,7 +197,6 @@ int ObVectorData<T>::push_back(T value)
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array element size exceed max", K(ret), K(this->length_), K(MAX_ARRAY_ELEMENT_SIZE));
   } else if (OB_FAIL(this->data_container_->raw_data_.push_back(value))) {
-    OB_LOG(WARN, "failed to push value to array data", K(ret));
   } else if (get_raw_binary_len() > MAX_ARRAY_SIZE) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "vector data length exceed max", K(ret), K(get_raw_binary_len()), K(MAX_ARRAY_SIZE));
@@ -283,7 +281,6 @@ int ObVectorData<T>::init(uint32_t length, ObString &data_binary)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorData<T>::init(data_binary))) {
-    OB_LOG(WARN, "init failed", K(ret), K(data_binary));
   } else if (this->length_ != length) {
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "length is invalid", K(ret), K(length), K(this->length_));
@@ -349,7 +346,6 @@ int ret = OB_SUCCESS;
     int64_t curr_pos = this->data_container_->raw_data_.size();
     int64_t capacity = curr_pos + len;
     if (OB_FAIL(this->data_container_->raw_data_.prepare_allocate(capacity))) {
-      OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
     } else {
       char *cur_data = reinterpret_cast<char *>(this->data_container_->raw_data_.get_data() + curr_pos);
       MEMCPY(cur_data, src.get_data() + src_data_offset, len * sizeof(T));
@@ -448,7 +444,6 @@ int ObVectorData<T>::contains_all(const ObIArrayType &other, bool &bret) const
     for (uint32_t i = 0; i < other.size() && bret && OB_SUCC(ret); ++i) {
       int pos = -1;
       if (OB_FAIL(this->contains((*right_data)[i], pos))) {
-        OB_LOG(WARN, "check element contains failed", K(ret), K(i), K((*right_data)[i]));
       } else if (pos < 0) {
         bret = false;
       }
@@ -470,7 +465,6 @@ int ObVectorData<T>::overlaps(const ObIArrayType &other, bool &bret) const
     for (uint32_t i = 0; i < other.size() && !bret && OB_SUCC(ret); ++i) {
       int pos = -1;
       if (OB_FAIL(this->contains((*right_data)[i], pos))) {
-        OB_LOG(WARN, "check element contains failed", K(ret), K(i), K((*right_data)[i]));
       } else if (pos >= 0) {
         bret = true;
       }
@@ -485,7 +479,6 @@ int ObVectorData<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
   int ret = OB_SUCCESS;
   ObIArrayType *arr_ptr = NULL;
   if (OB_FAIL(clone_empty(alloc, arr_ptr, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (this->length_ == 0) {
     output = arr_ptr;
   } else {
@@ -495,16 +488,13 @@ int ObVectorData<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       OB_LOG(WARN, "invalid array type", K(ret), K(arr_ptr->get_format()));
     } else if (OB_FAIL(elem_set.create(this->length_, ObMemAttr("ArrayDistSet")))) {
-      OB_LOG(WARN, "failed to create cellid set", K(ret), K(this->length_));
     } else {
       for (uint32_t i = 0; i < this->length_ && OB_SUCC(ret); ++i) {
         ObString val(sizeof(data_[i]), reinterpret_cast<char *>(&data_[i]));
         if (OB_FAIL(elem_set.exist_refactored(val))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(vec_ptr->push_back(data_[i]))) {
-              OB_LOG(WARN, "failed to add elemen", K(ret));
             } else if (OB_FAIL(elem_set.set_refactored(val))) {
-              OB_LOG(WARN, "failed to add elemen into set", K(ret));
             } 
           } else if (ret == OB_HASH_EXIST) {
             // duplicate element, do nothing
@@ -537,15 +527,12 @@ int ObVectorData<T>::push_not_in_set(const ObVectorData *arr_bin_ptr,
       if (!contain_null && !arr_contain_null) {
         arr_contain_null = true;
         if (OB_FAIL(this->push_null())) {
-          OB_LOG(WARN, "push null failed", K(ret));
         }
       }
     } else if (OB_FAIL(elem_set.exist_refactored(val))) {
       if (ret == OB_HASH_NOT_EXIST) {
         if (OB_FAIL(this->push_back((*arr_bin_ptr)[i]))) {
-          OB_LOG(WARN, "failed to add elemen", K(ret));
         } else if (OB_FAIL(elem_set.set_refactored(val))) {
-          OB_LOG(WARN, "failed to add elemen into set", K(ret));
         }
       } else if (ret == OB_HASH_EXIST) {
         // duplicate element, do nothing
@@ -570,7 +557,6 @@ int ObVectorData<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayTyp
   ObVectorData *arr2_bin_ptr = dynamic_cast<ObVectorData *>(arr2);
 
   if (OB_FAIL(clone_empty(alloc, arr_ptr, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (this->size() == 0) {
     output = arr_ptr;
   } else if (OB_ISNULL(arr_bin_ptr = dynamic_cast<ObVectorData *>(arr_ptr)) 
@@ -579,7 +565,6 @@ int ObVectorData<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayTyp
     OB_LOG(WARN, "invalid array type", K(ret), K(arr_ptr->get_format()), K(arr2->get_format()));
   } else if (OB_FAIL(elem_set.create(arr2_bin_ptr->length_ + this->length_, 
                                   ObMemAttr("ArrayDistSet")))) {
-    OB_LOG(WARN, "failed to create cellid set", K(ret), K(arr2_bin_ptr->length_ + this->length_));
   } else {
     for (uint32_t i = 0; i < arr2_bin_ptr->length_ && OB_SUCC(ret); ++i) {
       ObString val(sizeof(float), arr2_bin_ptr->get_data() + i * sizeof(float));
@@ -588,7 +573,6 @@ int ObVectorData<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayTyp
       } else if (OB_FAIL(elem_set.exist_refactored(val))) {
         if (ret == OB_HASH_NOT_EXIST) {
           if (OB_FAIL(elem_set.set_refactored(val))) {
-            OB_LOG(WARN, "failed to add elemen into set", K(ret));
           }
         } else if (ret == OB_HASH_EXIST) {
           // duplicate element, do nothing
@@ -600,7 +584,6 @@ int ObVectorData<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayTyp
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(arr_bin_ptr->push_not_in_set(this, elem_set, arr1_contain_null, arr2_contain_null))) {
-      OB_LOG(WARN, "failed to push not in set", K(ret));
     } else {
       output = arr_ptr;
     }
@@ -626,7 +609,6 @@ int ObVectorData<T>::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint32_t 
                                             ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else if (OB_FAIL(this->push_not_in_set(arr_bin_ptr, elem_set, arr_contain_null, false))) {
-      OB_LOG(WARN, "failed to push not in set", K(ret));
     }
   }
   return ret;
@@ -678,14 +660,11 @@ int ObVectorData<T>::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint32_t
             if (i == arr_cnt - 1 && OB_FAIL(this->push_back((*arr_bin_ptr)[j]))) {
               OB_LOG(WARN, "failed to add elemen", K(ret));
             } else if (OB_FAIL(elem_map.erase_refactored(val))) {
-              OB_LOG(WARN, "failed to erase elemen from set", K(ret));
             } else if (OB_FAIL(elem_map.set_refactored(val, cnt + 1))) {
-              OB_LOG(WARN, "failed to add elemen into set", K(ret));
             }
           } else if (i + 1 == cnt) {
             // do nothing
           } else if (OB_FAIL(elem_map.erase_refactored(val))) {
-            OB_LOG(WARN, "failed to erase elemen from set", K(ret));
           }
         }        
       } // end for

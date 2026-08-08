@@ -55,7 +55,6 @@ int ObPxPools::init()
   int ret = OB_SUCCESS;
   ObMemAttr attr("PxPoolBkt");
   if (OB_FAIL(pool_map_.create(PX_POOL_COUNT, attr, attr))) {
-    LOG_WARN("fail init pool map", K(ret));
   }
   return ret;
 }
@@ -68,7 +67,6 @@ int ObPxPools::get_or_create(int64_t group_id, ObPxPool *&pool)
   } else if (OB_FAIL(pool_map_.get_refactored(group_id, pool))) {
     if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(create_pool(group_id, pool))) {
-        LOG_WARN("fail create pool", K(ret), K(group_id));
       }
     } else {
       LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
@@ -92,9 +90,7 @@ int ObPxPools::create_pool(int64_t group_id, ObPxPool *&pool)
         pool->set_group_id(group_id);
         pool->set_run_wrapper(share::server_runtime());
         if (OB_FAIL(pool->start())) {
-          LOG_WARN("fail startup px pool", K(group_id), K(ret));
         } else if (OB_FAIL(pool_map_.set_refactored(group_id, pool))) {
-          LOG_WARN("fail set pool to hashmap", K(group_id), K(ret));
         }
       }
     } else {
@@ -110,7 +106,6 @@ int ObPxPools::thread_recycle()
   common::SpinWLockGuard g(lock_);
   ThreadRecyclePoolFunc recycle_pool_func;
   if (OB_FAIL(pool_map_.foreach_refactored(recycle_pool_func))) {
-    LOG_WARN("failed to do foreach", K(ret));
   }
   return ret;
 }
@@ -170,7 +165,6 @@ void ObPxPools::server_module_stop(ObPxPools *&pools)
     common::SpinWLockGuard g(pools->lock_);
     StopPoolFunc stop_pool_func;
     if (OB_FAIL(pools->pool_map_.foreach_refactored(stop_pool_func))) {
-      LOG_WARN("failed to do foreach", K(ret));
     }
   }
 }
@@ -181,7 +175,6 @@ void ObPxPools::destroy()
   common::SpinWLockGuard g(lock_);
   DeletePoolFunc free_pool_func;
   if (OB_FAIL(pool_map_.foreach_refactored(free_pool_func))) {
-    LOG_WARN("failed to do foreach", K(ret));
   } else {
     pool_map_.destroy();
   }
@@ -203,7 +196,6 @@ int ObPxPool::submit(const RunFuncT &func)
     if (OB_ISNULL(t)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(queue_.push(static_cast<ObLink*>(t), 0))) {
-      LOG_ERROR("px push queue failed", K(ret));
     }
   }
   if (ret != OB_SUCCESS) {
@@ -341,11 +333,9 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObServerRuntimeState::init())) {
-    LOG_WARN("fail to init runtime base", K(ret));
   } else {
     req_queue_.set_limit(GCONF.server_task_queue_size);
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
-      LOG_WARN("construct_module_init_ctx failed", KR(ret), K(*this));
     } else {
       runtime_meta_ = meta;
       set_role(GCTX.server_role_);
@@ -365,7 +355,6 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
   }
 
   if (OB_FAIL(ret)) {
-    LOG_ERROR("fail to create runtime module", K(ret));
   } else {
     start();
   }
@@ -380,7 +369,6 @@ int ObServerRuntime::construct_module_init_ctx(const ObServerRuntimeMeta &meta, 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc ObServerModuleInitCtx failed", K(ret));
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_server_clog_dir(ctx->clog_dir_))) {
-    LOG_ERROR("get_server_clog_dir failed", K(ret));
   } else {
     ctx->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.runtime_config_.resource_config_.log_disk_size();
     ctx->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
@@ -451,16 +439,13 @@ int ObServerRuntime::create_modules()
 
   bool modules_constructed = false;
   if (OB_FAIL(OBSERVER.obs_construct_modules())) {
-    LOG_ERROR("construct modules failed", K(ret));
   } else if (CREATE_MODULES_FAIL) {
     ret = CREATE_MODULES_FAIL;
     LOG_ERROR("create_modules failed because of tracepoint CREATE_MODULES_FAIL",
               K(ret));
   } else if (FALSE_IT(modules_constructed = true)) {
   } else if (OB_FAIL(OBSERVER.obs_init_modules())) {
-    LOG_ERROR("init modules failed", K(ret));
   } else if (OB_FAIL(OBSERVER.obs_start_modules())) {
-    LOG_ERROR("start modules failed", K(ret));
   }
 
   FLOG_INFO("finish create modules", K(ret));
@@ -546,7 +531,6 @@ int ObServerRuntime::try_wait()
     }
   } else {
     if (OB_FAIL(ob_pthread_tryjoin_np(gc_thread_))) {
-      LOG_WARN("runtime pthread_tryjoin_np failed", K(errno), K(id()));
     } else {
       ATOMIC_STORE(&gc_thread_, nullptr); // avoid try_wait again after wait success
       LOG_INFO("runtime pthread_tryjoin_np successfully", K(id()));
@@ -638,12 +622,10 @@ int ObServerRuntime::recv_request(ObRequest &req)
       case ObRequest::OB_MYSQL: {
         if (req.is_retry_on_lock()) {
           if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-            LOG_WARN("push request to RQ_HIGH queue fail", K(ret), K(this));
           }
         } else {
           ATOMIC_INC(&recv_mysql_cnt_);
           if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-            LOG_WARN("push request to queue fail", K(ret), K(this));
           }
         }
         break;
@@ -652,13 +634,11 @@ int ObServerRuntime::recv_request(ObRequest &req)
       {
         ATOMIC_INC(&recv_task_cnt_);
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-          LOG_WARN("push request to queue fail", K(ret), K(this));
         }
         break;
       }
       case ObRequest::OB_SQL_TASK: {
         if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-          LOG_WARN("push request to queue fail", K(ret), K(this));
         }
         break;
       }
@@ -690,7 +670,6 @@ int ObServerRuntime::push_retry_queue(rpc::ObRequest &req, const uint64_t timest
     ret = OB_IN_STOP_STATE;
     LOG_WARN("receive retry request but runtime has already stopped", K(ret), K(id()));
   } else if (OB_FAIL(retry_queue_.push(req, timestamp))) {
-    LOG_ERROR("push retry queue failed", K(ret), K(id()));
   }
   return ret;
 }
@@ -767,7 +746,6 @@ int ObServerRuntime::acquire_more_worker(int64_t num, int64_t &succ_num, bool fo
   while (OB_SUCC(ret) && num > succ_num) {
     ObThWorker *w = nullptr;
     if (OB_FAIL(create_worker(w, this))) {
-      LOG_WARN("create worker failed", K(ret));
     } else {
       lib::ObMutexGuard g(workers_lock_);
       if (!workers_.add_last(&w->worker_node_)) {
@@ -819,7 +797,6 @@ void ObServerRuntime::check_parallel_servers_target()
               *GCTX.schema_service_,
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
-    LOG_WARN("fail read runtime variable", K(id()), K(ret));
   } else {
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }

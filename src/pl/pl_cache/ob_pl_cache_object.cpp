@@ -96,7 +96,6 @@ int ObPLCacheObject::set_params_info(const ParamStore &params, bool is_anonymous
           param_info.udt_id_ = composite->get_id();
           if (OB_INVALID_ID == param_info.udt_id_) { // anonymous array
             if (OB_FAIL(sql::ObSQLUtils::get_ext_obj_data_type(params.at(i), data_type))) {
-              LOG_WARN("fail to get ext obj data type", K(ret));
             } else {
               param_info.ext_real_type_ = data_type.get_obj_type();
               param_info.scale_ = data_type.get_scale();
@@ -105,7 +104,6 @@ int ObPLCacheObject::set_params_info(const ParamStore &params, bool is_anonymous
         }
       } else {
         if (OB_FAIL(sql::ObSQLUtils::get_ext_obj_data_type(params.at(i), data_type))) {
-          LOG_WARN("fail to get ext obj data type", K(ret));
         } else {
           param_info.ext_real_type_ = data_type.get_obj_type();
           param_info.scale_ = data_type.get_scale();
@@ -124,7 +122,6 @@ int ObPLCacheObject::set_params_info(const ParamStore &params, bool is_anonymous
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(params_info_.push_back(param_info))) {
-        LOG_WARN("failed to push back param info", K(ret));
       }
     }
     param_info.reset();
@@ -154,7 +151,6 @@ int ObPLCacheObject::init_params_info_str()
                                     params_info_.at(i).pl_type_,
                                     params_info_.at(i).udt_id_
                                     ))) {
-          LOG_WARN("fail to buff_print param info", K(ret));
         }
       } else {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "{%d,%d,%d,%d,%d,%d,%ju}",
@@ -166,14 +162,12 @@ int ObPLCacheObject::init_params_info_str()
                                     params_info_.at(i).pl_type_,
                                     params_info_.at(i).udt_id_
                                     ))) {
-          LOG_WARN("fail to buff_print param info", K(ret));
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), stat_.param_infos_))) {
-      LOG_WARN("fail to deep copy param infos", K(ret));
     }
   }
   return ret;
@@ -197,11 +191,9 @@ int ObPLCacheObject::update_cache_obj_stat(sql::ObILibCacheCtx &ctx)
     if (OB_FAIL(ob_write_string(get_allocator(),
                                 trunc_name_sql.string(),
                                 stat.name_))) {
-      LOG_WARN("failed to write sql", K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        pc_ctx.key_.sys_vars_str_,
                                        stat_.sys_vars_str_))) {
-      LOG_WARN("failed to write sql", K(ret));
     } else {
       stat.sql_cs_type_ = pc_ctx.session_info_->get_local_collation_connection();
     }
@@ -213,7 +205,6 @@ int ObPLCacheObject::update_cache_obj_stat(sql::ObILibCacheCtx &ctx)
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_raw_sql.string(),
                                   stat.raw_sql_))) {
-        LOG_WARN("failed to write sql", K(ret));
       }
     }
   }

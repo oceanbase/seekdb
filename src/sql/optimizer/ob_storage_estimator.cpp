@@ -39,7 +39,6 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     ret = OB_NOT_INIT;
     LOG_WARN("read timestamp service is not available", K(ret));
   } else if (OB_FAIL(read_timestamp_service->latest_read_scn(max_readable_scn))) {
-    LOG_WARN("failed to get gts", K(ret));
   } else {
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
     param.schema_version_ = arg.schema_version_;
@@ -53,11 +52,8 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     if (OB_FAIL(storage_estimate_rowcount(param,
                   arg.index_params_.at(i).batch_,
                   est_res))) {
-      LOG_WARN("failed to estimate index row count", K(ret));
     } else if (OB_FAIL(res.index_param_res_.push_back(est_res))) {
-      LOG_WARN("failed to push back result", K(ret));
     } else {
-      LOG_TRACE("[OPT EST]: row count stat", K(est_res), K(i), K(param));
     }
   }
 #if !defined(NDEBUG)
@@ -75,9 +71,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstBlockResElement est_res;
     if (OB_FAIL(storage_estimate_block_count_and_row_count(arg.tablet_params_arg_.at(i), est_res))) {
-      LOG_WARN("failed to estimate tablet block count and row count", K(ret));
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {
-      LOG_WARN("failed to push back result", K(ret));
     } else {
       LOG_TRACE("[OPT EST]: block count and row count stat", K(est_res), K(i), "param", arg.tablet_params_arg_.at(i));
     }
@@ -116,7 +110,6 @@ int ObStorageEstimator::storage_estimate_rowcount(ObTableScanParam &param,
     res.physical_row_count_ = static_cast<int64_t>(rc_physical);
     res.reliable_ = true;
   }
-  LOG_TRACE("[OPT EST]:estimate partition scan batch rowcount", K(res), K(batch), K(ret));
   return ret;
 }
 //@shanyan.g Adjustment layer operates at the partition level
@@ -146,10 +139,7 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimple
                    est_records,
                    rc_logical,
                    rc_physical))) {
-      LOG_TRACE("OPT:[STORAGE EST FAILED, USE STAT EST]", "storage_ret", ret);
     } else {
-      LOG_TRACE("storage estimate row count result", K(rc_logical), K(rc_physical),
-                K(table_scan_param), K(timeout_us), K(ret));
         logical_row_count = rc_logical < 0 ? 1.0 : static_cast<double>(rc_logical);
         physical_row_count = rc_physical < 0 ? 1.0 : static_cast<double>(rc_physical);
     }
@@ -167,7 +157,6 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
   int64_t micro_block_count = 0;
   int64_t sstable_row_count = 0;
   int64_t memtable_row_count = 0;
-  LOG_TRACE("begin to storage estimate blockcount", K(arg));
 
   if (!arg.is_valid()) {
     res.macro_block_count_ = macro_block_count;
@@ -190,10 +179,7 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
                      micro_block_count,
                      sstable_row_count,
                      memtable_row_count))) {
-        LOG_WARN("OPT:[STORAGE EST BLOCK COUNT FAILED]", "storage_ret", ret);
       } else {
-        LOG_TRACE("storage estimate block count and row count result", K(macro_block_count),
-                K(micro_block_count), K(sstable_row_count), K(memtable_row_count), K(ret));
         res.macro_block_count_ = macro_block_count;
         res.micro_block_count_ = micro_block_count;
         res.sstable_row_count_ = sstable_row_count;

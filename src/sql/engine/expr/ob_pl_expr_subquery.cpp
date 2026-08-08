@@ -58,7 +58,6 @@ int ObExprOpSubQueryInPl::deep_copy_type_info(common::ObIArray<common::ObString>
       const ObString &info = type_info.at(i);
       if (OB_UNLIKELY(0 == info.length())) {
         if (OB_FAIL(dst_type_info.push_back(ObString(0, NULL)))) {
-          LOG_WARN("fail to push back info", K(i), K(info), K(ret));
         }
       } else {
         char *buf = NULL;
@@ -67,7 +66,6 @@ int ObExprOpSubQueryInPl::deep_copy_type_info(common::ObIArray<common::ObString>
           LOG_WARN("fail to allocate memory", K(i), K(info), K(ret));
         } else if (FALSE_IT(MEMCPY(buf, info.ptr(), info.length()))) {
         } else if (OB_FAIL(dst_type_info.push_back(ObString(info.length(), buf)))) {
-          LOG_WARN("fail to push back info", K(i), K(info), K(ret));
         }
       }
     }
@@ -84,7 +82,6 @@ int ObExprOpSubQueryInPl::assign(const ObExprOperator &other)
     LOG_WARN("cast failed, type of argument is wrong", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       OZ (deep_copy_ps_sql(tmp_other->ps_sql_));
       OX (this->type_ = tmp_other->type_);
@@ -169,15 +166,12 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("failed eval param value", K(ret));
   } else if (OB_ISNULL(param_buf = alloc.alloc(sizeof(ParamStore)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret));
   } else if (FALSE_IT(params = new(param_buf)ParamStore(ObWrapperAllocator(alloc)))) {
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
-    LOG_WARN("failed to fill objs", K(ret));
   } else if (OB_FAIL(fill_param_store(objs, expr.arg_cnt_, *params))) {
-    LOG_WARN("failed to process in params", K(ret));
   } else {
     pl::ObPLExecCtx pl_exec_ctx(&alloc, &ctx.exec_ctx_, params, nullptr, &ret, nullptr);
 
@@ -199,9 +193,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
           }
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
           if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result.get_scheme_guard()))) {
-            LOG_WARN("get schema guard failed", K(ret));
           } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(database_schema_version))) {
-            LOG_WARN("fail get schema version", K(ret));
           } else {
             retry_ctrl.set_current_local_schema_version(database_schema_version);
             spi_result.get_sql_ctx().schema_guard_ = &spi_result.get_scheme_guard();
@@ -215,7 +207,6 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 
 
             if (OB_FAIL(ret)) {
-              LOG_WARN("inner open error", K(ret));
             } else if (OB_FAIL(get_result(spi_result.get_result_set(), result, alloc))) {
               if (OB_ERR_TOO_MANY_ROWS != ret) {
                 int cli_ret = OB_SUCCESS;
@@ -230,7 +221,6 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
 
             int64_t close_ret = spi_result.get_result_set()->close();
             if (OB_SUCCESS != close_ret) {
-              LOG_WARN("close spi result failed", K(ret), K(close_ret));
             }
             ret = OB_SUCCESS == ret ? close_ret : ret;
           }
@@ -242,7 +232,6 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
       spi_result.end_nested_stmt_if_need(&pl_exec_ctx, ret);
 
       if (OB_FAIL(ret)) {
-        LOG_WARN("get result obj failed", K(ret));
       } else if (!info->result_type_.is_ext()) {
         const ColumnsFieldIArray *fields = nullptr;
         CK (OB_NOT_NULL(spi_result.get_result_set()));
@@ -288,7 +277,6 @@ int ObExprOpSubQueryInPl::get_result(void *result_set,
   int64_t row_count = 0;
 
   if (OB_FAIL(fetch_row(result_set, row_count, current_row))) {
-      LOG_WARN("read result error", K(ret), K(row_count));
   } else {
     OZ (deep_copy_obj(alloc, current_row.get_cell(0), result));
   }
@@ -324,7 +312,6 @@ int ObExprOpSubQueryInPl::fetch_row(void *result_set, int64_t &row_count, ObNewR
     }
   }
 
-  LOG_DEBUG("spi fetch row", K(cur_row), K(row_count), K(ret));
   return ret;
 }
 
@@ -353,7 +340,6 @@ int ObExprOpSubQueryInPl::fill_obj_stack(const ObExpr &expr,
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     ObDatum &param = expr.args_[i]->locate_expr_datum(ctx);
     if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-      LOG_WARN("failed to convert obj", K(ret), K(i));
     }
   }
   return ret;

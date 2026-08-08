@@ -130,9 +130,7 @@ int ObExprSTContains::eval_st_contains(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2, is_geo1_cached, is_geo2_cached))) {
-      LOG_WARN("zoom in geos failed", K(ret));
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -175,14 +173,12 @@ int ObExprSTContains::eval_st_contains(const ObExpr &expr, ObEvalCtx &ctx, ObDat
         if (OB_FAIL(ret)) {
         } else if (OB_NOT_NULL(cache_geo)) {
           if (OB_FAIL(cache_geo->contains(*geo, gis_context, result))) {
-            LOG_WARN("get contains result failed", K(ret));
           } else {
             res.set_bool(result);
           }
         } else if (ObGeoTypeUtil::use_point_polygon_short_circuit(*geo1, *geo2, ObGeoPredicate::CONTAINS)) {
           bool result = false;
           if (OB_FAIL(ObGeoTypeUtil::get_point_polygon_res(geo1, geo2, ObGeoPredicate::CONTAINS, result))) {
-            LOG_WARN("fail to get res.", K(ret));
           } else {
             res.set_bool(result);
           }

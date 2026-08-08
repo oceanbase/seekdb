@@ -576,7 +576,6 @@ private:
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
       tablet_id = common::ObTabletID(value);
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -589,7 +588,6 @@ private:
     if (CLICK_FAIL(row->get_int(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -602,7 +600,6 @@ private:
     if (CLICK_FAIL(row->get_uint(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -629,7 +626,6 @@ private:
     if (CLICK_FAIL(row->get_bool(column, value))) {
       OB_LOG(WARN, "get_column_from_signle_row failed", KR(ret), K(column));
     } else {
-      OB_LOG(TRACE, "get_column_from_signle_row success", KR(ret), K(column), K(value));
     }
     return ret;
   }
@@ -655,7 +651,7 @@ private:
     } else if (CLICK_FAIL(get_values_from_row_<FLOOR + 1>(row, columns, others...))) {
       OB_LOG(WARN, "get others value failed", KR(ret), K(FLOOR), K(columns[FLOOR]));
     } else {
-      OB_LOG(TRACE, "get value success", KR(ret), K(FLOOR), K(columns[FLOOR]), K(value));// DUBUG
+      // DUBUG
     }
     return ret;
   }

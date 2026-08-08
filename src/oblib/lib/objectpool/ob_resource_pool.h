@@ -116,7 +116,6 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       _COMMON_LOG(ERROR, "fail to allocate memory, ret=%d", ret);
     } else if (OB_FAIL(free_list_.init(max_free_list_num_, buf))) {
-      _COMMON_LOG(ERROR, "fail to init free list, ret=%d", ret);
     }
     if (OB_SUCC(ret)) {
       is_ready_for_alloc_ = true;
@@ -311,8 +310,6 @@ ObResourcePool<T, RPLabel>::ObResourcePool()
   if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(),
                               page_size,
                               ObBaseResourcePool<T, RPLabel>::mem_attr_))) {
-    _COMMON_LOG(INFO,
-                "init fifo failed, ret=%d", ret);
   }
   abort_unless(OB_SUCCESS == ret);
   _COMMON_LOG(INFO,

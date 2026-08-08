@@ -162,13 +162,11 @@ int ObSysTaskStatMgr::get_iter(ObSysStatMgrIter &iter)
        OB_SUCC(ret) && node != task_list_.get_header();
        node = node->get_next()) {
     if (OB_FAIL(iter.push(node->task_))) {
-      SERVER_LOG(WARN, "failed to add task status", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(iter.set_ready())) {
-      SERVER_LOG(WARN, "failed to set iter ready", K(ret));
     }
   }
 

@@ -84,7 +84,6 @@ int ObValuesOp::inner_get_next_row()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("type mismatch", K(ret), K(i), K(cell.get_type()), K(*expr));
       } else if (OB_FAIL(datum.from_obj(cell, expr->obj_datum_map_))) {
-        LOG_WARN("convert obj to datum failed", K(ret));
       } else if (is_lob_storage(cell.get_type()) &&
                  OB_FAIL(ob_adjust_lob_datum(get_exec_ctx(), cell, expr->obj_meta_,
                                              expr->obj_datum_map_,

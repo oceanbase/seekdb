@@ -346,7 +346,6 @@ int ObExprLike::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObFuncExprOperator failed", K(ret));
     } else {
       this->is_pattern_literal_ = tmp_other->is_pattern_literal_;
       this->is_text_literal_ = tmp_other->is_text_literal_;
@@ -383,7 +382,6 @@ int ObExprLike::check_pattern_valid(const T &pattern,
     if (check_optimization && NULL == (like_ctx = static_cast<ObExprLikeContext *>
                                                     (exec_ctx->get_expr_op_ctx(like_id)))) {
       if (OB_FAIL(exec_ctx->create_expr_op_ctx(like_id, like_ctx))) {
-        LOG_WARN("failed to create operator ctx", K(ret), K(like_id));
       } else {
         like_ctx->instr_info_.set_allocator(exec_ctx->get_allocator());
       }
@@ -395,7 +393,6 @@ int ObExprLike::check_pattern_valid(const T &pattern,
     if (NULL == (like_ctx = static_cast<ObExprLikeContext *>
                                       (exec_ctx->get_expr_op_ctx(like_id)))) {
       if (OB_SUCCESS != (tmp_ret = exec_ctx->create_expr_op_ctx(like_id, like_ctx))) {
-        LOG_DEBUG("failed to create operator ctx", K(ret), K(like_id));
       } else {
         like_ctx->instr_info_.set_allocator(exec_ctx->get_allocator());
       }
@@ -403,7 +400,6 @@ int ObExprLike::check_pattern_valid(const T &pattern,
   }
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to check pattern", K(ret), K(like_id));
   } else {
     //don't check in mysql mode
   }
@@ -481,9 +477,7 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
   } else {
     int32_t escape_wc = 0;
     if (OB_FAIL(instr_info.record_pattern(pattern_buf, pattern))) {
-      LOG_WARN("record pattern failed", K(ret));
     } else if (OB_FAIL(calc_escape_wc(escape_coll, escape, escape_wc))) {
-      LOG_WARN("calc escape wc failed", K(ret), K(escape_coll), K(escape));
     } else {
       //iterate pattern now
       const char *buf_start = pattern_buf;
@@ -503,7 +497,6 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
           LOG_WARN("well_formed_len failed. invalid char",
                     K(cs_type), K(buf_start), K(pattern), K(char_len));
         } else if (OB_FAIL(is_escape(cs_type, buf_start, char_len, escape_wc, is_char_escape))) {
-          LOG_WARN("check is escape failed", K(ret), K(escape_coll));
         } else if (is_char_escape || (1 == char_len && '_' == *buf_start)) {
           //when there are "_" or escape in pattern
           //the case can not be optimized.
@@ -513,7 +506,6 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
           percent_sign_exist = true;
           if (OB_LIKELY(instr_len > 0)) {
             if (OB_FAIL(instr_info.add_instr_info(instr_start, instr_len))) {
-              LOG_WARN("add instr info failed", K(ret));
             }
             instr_info.instr_total_length_ += instr_len;
             instr_len = 0;
@@ -534,7 +526,6 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
           end_with_percent_sign = false;
           instr_info.instr_total_length_ += instr_len;
           if (OB_FAIL(instr_info.add_instr_info(instr_start, instr_len))) {
-            LOG_WARN("add instr info failed", K(ret));
           }
         }
         if (OB_UNLIKELY(instr_info.empty())) {
@@ -560,13 +551,10 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
           // do nothing
         } else if (OB_FAIL(reinterpret_cast<StringSearcher *>(like_ctx.string_searcher_)->init(
             instr_info.instr_starts_[0], instr_info.instr_lengths_[0]))) {
-          LOG_WARN("failed to init string_searcher_", K(ret));
         }
     }
   }
 #endif
-  LOG_DEBUG("end set instr info", K(cs_type), K(pattern), K(escape),
-            K(escape_coll), K(instr_info));
   return ret;
 }
 
@@ -614,7 +602,6 @@ int ObExprLike::calc_with_instr_mode(T &result,
       }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("match with instr mode failed", K(ret), K(instr_info.instr_mode_), K(text));
     } else {
       result.set_int(res);
     }
@@ -829,7 +816,6 @@ bool ObExprLike::checked_already(const ObExprLikeContext &like_ctx, bool null_pa
   } else {
     res = like_ctx.is_checked();
   }
-  LOG_DEBUG("like check already end", K(null_pattern), K(pattern_val), K(escape_val), K(res));
   return res;
 }
 
@@ -843,7 +829,6 @@ int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum 
   const ObCollationType coll_type = expr.args_[1]->datum_meta_.cs_type_;
   if (OB_FAIL(check_pattern_valid<true>(pattern, escape, escape_coll, coll_type,
                                         &ctx.exec_ctx_, like_id, do_optimization))) {
-    LOG_WARN("fail to check pattern string", K(pattern), K(escape), K(coll_type));
   } else if (text.is_null() || pattern.is_null()) {
     expr_datum.set_null();
   } else {
@@ -876,7 +861,6 @@ int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum 
                                                               false, escape_val)))) {
           if (OB_FAIL(set_instr_info(&ctx.exec_ctx_.get_allocator(), coll_type, pattern_val,
               escape_val, escape_coll, *like_ctx))) {
-            LOG_WARN("failed to set instr info", K(ret), K(pattern_val), K(text_val));
           } else if (like_ctx->is_instr_mode()) {//instr mode
             ret = calc_with_instr_mode(expr_datum, coll_type, text_val, *like_ctx);
           } else {//not instr mode
@@ -906,7 +890,6 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval param value failed", K(ret));
   }
   ObDatum &text = expr.locate_param_datum(ctx, 0);
   ObDatum &pattern = expr.locate_param_datum(ctx, 1);
@@ -928,10 +911,8 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, text,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_val))) {
-      LOG_WARN("failed to read text", K(ret), K(text_val));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, pattern,
                        expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), pattern_val))) {
-      LOG_WARN("failed to read pattern", K(ret), K(pattern_val));
     } else {
       if (!text_inrow.is_null() && !text_inrow.is_nop()) {
         text_inrow.set_string(text_val);
@@ -943,7 +924,6 @@ int ObExprLike::like_varchar(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum &expr_
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to eval like varchar", K(ret));
   }
   return ret;
 }
@@ -1109,7 +1089,6 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
                                                                 expr.args_[0]->datum_meta_,
                                                                 expr.args_[0]->obj_meta_.has_lob_header(),
                                                                 text_val))) {
-            LOG_WARN("failed to read text", K(ret), K(text_val));
           } else if (UseInstrMode) {
             int64_t res = ALL_PERCENT_SIGN == InstrMode ? 1
                   : match_with_instr_mode<PERCENT_SIGN_START(InstrMode), PERCENT_SIGN_END(InstrMode)>
@@ -1151,7 +1130,6 @@ int ObExprLike::match_text_batch(BATCH_EVAL_FUNC_ARG_DECL,
                                                                   expr.args_[0]->datum_meta_,
                                                                   expr.args_[0]->obj_meta_.has_lob_header(),
                                                                   text_val))) {
-              LOG_WARN("failed to read text", K(ret), K(text_val));
             } else {
               if (UseInstrMode) {
                 int64_t res = ALL_PERCENT_SIGN == InstrMode ? 1
@@ -1184,9 +1162,7 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
   if (OB_FAIL(check_pattern_valid<true>(*pattern_datum, *escape_datum,
                                         escape_coll, coll_type,
                                         &ctx.exec_ctx_, like_id, do_optimization))) {
-    LOG_WARN("check pattern valid failed", K(ret));
   } else if (OB_FAIL(text.eval_batch(ctx, skip, size))) {
-    LOG_WARN("eval text batch failed", K(ret));
   } else if (OB_UNLIKELY(pattern_datum->is_null())) {
     ObDatum *res_datums = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -1222,7 +1198,6 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
                                                                         false, escape_val))) {
       if (OB_FAIL(set_instr_info(&ctx.exec_ctx_.get_allocator(), coll_type, pattern_val,
           escape_val, escape_coll, *like_ctx))) {
-        LOG_WARN("failed to set instr info", K(ret), K(pattern_val));
       } else {
         ret = record_last_check<true>(*like_ctx, pattern_val, escape_val,
                           &ctx.exec_ctx_.get_allocator());
@@ -1232,8 +1207,6 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
     const InstrInfo instr_info = like_ctx->instr_info_;
     void *string_searcher = like_ctx->string_searcher_;
     int32_t escape_wc = 0;
-    LOG_DEBUG("set instr info inner end", K(coll_type), K(pattern_val), K(instr_mode),
-              K(like_ctx->same_as_last));
     if (OB_FAIL(ret)) {
     } else if (INVALID_INSTR_MODE == instr_mode
                && OB_FAIL(calc_escape_wc(escape_coll, escape_val, escape_wc))) {
@@ -1279,7 +1252,6 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
         }
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("match text batch failed", K(ret), K(instr_mode), K(null_check));
       } else {
         expr.get_eval_info(ctx).notnull_ = !null_check;
       }
@@ -1299,10 +1271,7 @@ int ObExprLike::eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DE
   ObDatum *pattern_datum = NULL;
   ObDatum *escape_datum = NULL;
   if (OB_FAIL(pattern.eval(ctx, pattern_datum))) {
-    LOG_WARN("eval pattern failed", K(ret));
   } else if (OB_FAIL(escape.eval(ctx, escape_datum))) {
-    LOG_WARN("eval escape failed", K(ret));
-  // the third arg escape must be varchar
   } else if ((!ob_is_text_tc(text.datum_meta_.type_) && !ob_is_text_tc(pattern.datum_meta_.type_))) {
     ret = like_text_vectorized_inner(expr, ctx, skip, size, text, pattern_datum, escape_datum);
   } else {
@@ -1312,7 +1281,6 @@ int ObExprLike::eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DE
     ObString pattern_val = pattern_datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, *pattern_datum,
                 expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), pattern_val))) {
-      LOG_WARN("failed to read pattern", K(ret), K(pattern_val));
     } else {
       pattern_inrow = *pattern_datum;
       if (!pattern_inrow.is_null() && !pattern_inrow.is_nop()) {
@@ -1322,7 +1290,6 @@ int ObExprLike::eval_like_expr_batch_only_text_vectorized(BATCH_EVAL_FUNC_ARG_DE
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to eval_like_expr_batch_only_text_vectorized", K(ret));
   }
 
   return ret;

@@ -138,7 +138,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -345,6 +345,7 @@ function do_clean
   local found=false
 
   for build_dir in \
+      "${TOPDIR}/build_debug" \
       "${TOPDIR}/build_release" \
       "${TOPDIR}/build_android_release" \
       "${TOPDIR}/build_rpm"; do

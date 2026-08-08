@@ -114,9 +114,7 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   if (OB_FAIL(ls_tx_ctx_mgr->create_tx_ctx(arg,
                                            tx_ctx_existed, /*tx_ctx_existed*/
                                            tx_ctx))) {
-    STORAGE_LOG(WARN, "failed to create tx ctx", K(ret));
   } else if (OB_FAIL(tx_ctx->recover_tx_ctx_table_info(ctx_info))) {
-    STORAGE_LOG(WARN, "recover from trans sstable durable ctx info failed", K(ret), K(*tx_ctx));
   } else {
     STORAGE_LOG(INFO, "restore trans state in memory", K(ctx_info));
   }
@@ -124,7 +122,6 @@ int ObTxCtxTableRecoverHelper::recover_one_tx_ctx_(transaction::ObLSTxCtxMgr* ls
   if (NULL != tx_ctx) {
     int tmp_ret = 0;
     if (OB_TMP_FAIL(ls_tx_ctx_mgr->revert_tx_ctx(tx_ctx))) {
-      STORAGE_LOG(WARN, "failed to revert trans ctx", K(ret));
     }
     tx_ctx = NULL;
   }
@@ -157,12 +154,10 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
     bool need_to_append_buf = false;
     int64_t pos = 0;
     if (OB_FAIL(curr_meta.deserialize(meta_str.ptr(), meta_str.length(), pos))) {
-      STORAGE_LOG(WARN, "failed to deserialize ctx meta", K(ret), K(curr_meta));
     } else {
       STORAGE_LOG(INFO, "deserialize ctx meta succ", K(ret), K(curr_meta));
       if (is_in_multi_row_state_()) {
         if (OB_FAIL(validate_extend_meta_(curr_meta))) {
-          STORAGE_LOG(WARN, "validate_extend_meta failed", K(ret), K(*this));
         } else {
           need_to_append_buf = true;
         }
@@ -172,7 +167,6 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
         } else {
           set_in_multi_row_state_();
           if (OB_FAIL(buf_reserve_(curr_meta.get_tx_ctx_serialize_size()))) {
-            STORAGE_LOG(WARN, "Failed to reserve tx local buffer", K(ret));
           } else {
             need_to_append_buf = true;
           }
@@ -182,7 +176,6 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
 
     if (OB_SUCC(ret) && need_to_append_buf) {
       if (OB_FAIL(append_curr_value_buf_(value_str.ptr(), value_str.length()))) {
-        STORAGE_LOG(WARN, "append buf failed", K(ret), K(*this));
       }
     }
 
@@ -210,9 +203,7 @@ int ObTxCtxTableRecoverHelper::recover(const blocksstable::ObDatumRow &row,
     int64_t pos = 0;
     bool tx_ctx_existed = true;
     if (OB_FAIL(ctx_info_.deserialize(deserialize_buf, deserialize_buf_length, pos, tx_data_table))) {
-      STORAGE_LOG(WARN, "failed to deserialize status_info", K(ret), K_(ctx_info));
     } else if (OB_FAIL(ctx_info_.exec_info_.merge_buffer_ctx_array_to_multi_data_source())) {
-      STORAGE_LOG(WARN, "failed to restore MDS buffer contexts", K(ret), K_(ctx_info));
     } else if (OB_FAIL(recover_one_tx_ctx_(ls_tx_ctx_mgr, ctx_info_))) {
       // heap memory needed be freed, but can not do this in destruction, cause tx_buffer_node has no value sematics
       ctx_info_.exec_info_.clear_buffer_ctx_in_multi_data_source();
@@ -318,7 +309,6 @@ int ObTxCtxTable::check_with_tx_data(const transaction::ObTransID tx_id, ObITxDa
       TRANS_LOG(WARN, "check with tx data failed", KR(ret), K(tx_id));
     }
   } else {
-    TRANS_LOG(DEBUG, "check with tx data in tx ctx table successfully", K(tx_id));
   }
 
   return ret;

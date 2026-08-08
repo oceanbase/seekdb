@@ -141,7 +141,6 @@ int ObTimer::schedule(ObTimerTask &task, const int64_t delay, const bool repeate
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->schedule_task(this, task, delay, repeate, immediate))) {
-    OB_LOG(WARN, "timer_service_.schedule_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -161,7 +160,6 @@ int ObTimer::cancel_task(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->cancel_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -177,7 +175,6 @@ int ObTimer::wait_task(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->wait_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.wait_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -192,7 +189,6 @@ int ObTimer::cancel(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->cancel_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -207,7 +203,6 @@ void ObTimer::cancel_all()
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret));
   } else if (OB_FAIL(timer_service_->cancel_task(this, nullptr))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret));
   } else {
     wait();
   }
