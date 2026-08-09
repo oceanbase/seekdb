@@ -830,7 +830,27 @@ int ObKVCacheStore::alloc_mbhandle(
   mb_handle = NULL;
   ObKVStoreMemBlock *mem_block = NULL;
   char *buf = NULL;
-  
+
+  // The jemalloc backend allocates cache blocks outside ObMemoryMgr's normal
+  // allocation-pressure path, so it cannot rely on that path to trigger a
+  // synchronous cache wash.  Apply backpressure here when a new block would
+  // exceed the fixed KV cache quota; otherwise a burst can outrun the periodic
+  // washer and exhaust every preallocated memblock handle.
+  const int64_t current_cache_size = ATOMIC_LOAD(&global_status_.store_size_);
+  const int64_t memory_budget = lib::get_memory_budget();
+  if (need_sync_wash_before_alloc(current_cache_size, block_size, memory_budget)) {
+    int tmp_ret = OB_SUCCESS;
+    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
+      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
+            K(tmp_ret), K(block_size), K(current_cache_size), K(memory_budget));
+      }
+    } else {
+      free_mbs(mb_list_.resource_mgr_, wash_blocks);
+    }
+  }
+
   const int64_t cache_store_size = ATOMIC_AAF(&global_status_.store_size_, block_size);
 
   if (!mb_list_.is_valid()) {
@@ -848,6 +868,10 @@ int ObKVCacheStore::alloc_mbhandle(
         block_size - sizeof(ObKVStoreMemBlock));
     while (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
       if (OB_UNLIKELY(!try_supply_mb(SUPPLY_MB_NUM_ONCE))) {
+        purge_mb_handle_retire_station();
+        if (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        }
         break;
       }
     }

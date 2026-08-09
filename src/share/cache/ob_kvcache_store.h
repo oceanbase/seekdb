@@ -111,6 +111,14 @@ public:
   {
     return MAX(cache_size - compute_fixed_cache_limit(memory_budget, block_size), 0);
   }
+  static bool need_sync_wash_before_alloc(const int64_t cache_size,
+                                          const int64_t block_size,
+                                          const int64_t memory_budget)
+  {
+    const int64_t cache_limit = compute_fixed_cache_limit(memory_budget, block_size);
+    return cache_size >= 0 && block_size > 0 && cache_limit > 0
+        && cache_size > cache_limit - block_size;
+  }
 
 private:
   int try_flush_washable_mb(lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
