@@ -74,6 +74,11 @@ public:
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
 
+  int fence_local_transactions(const int64_t deadline_us);
+  int fence_local_append(const int64_t deadline_us);
+  int prepare_local_append(const int64_t deadline_us);
+  int activate_local_append();
+
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
   // online the log stream

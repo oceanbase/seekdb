@@ -31,6 +31,7 @@ static const char* StandbyService_method_names[] = {
   "/standbyservice.StandbyService/check_restore_precondition",
   "/standbyservice.StandbyService/fetch_standby_palf_base_info",
   "/standbyservice.StandbyService/fetch_log",
+  "/standbyservice.StandbyService/get_promotion_boundary",
 };
 
 std::unique_ptr< StandbyService::Stub> StandbyService::NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options) {
@@ -49,6 +50,7 @@ StandbyService::Stub::Stub(const std::shared_ptr< ::grpc::ChannelInterface>& cha
   , rpcmethod_check_restore_precondition_(StandbyService_method_names[6], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   , rpcmethod_fetch_standby_palf_base_info_(StandbyService_method_names[7], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   , rpcmethod_fetch_log_(StandbyService_method_names[8], options.suffix_for_stats(),::grpc::internal::RpcMethod::SERVER_STREAMING, channel)
+  , rpcmethod_get_promotion_boundary_(StandbyService_method_names[9], options.suffix_for_stats(),::grpc::internal::RpcMethod::NORMAL_RPC, channel)
   {}
 
 ::grpc::ClientReader< ::standbyservice::FetchLSViewRes>* StandbyService::Stub::fetch_ls_viewRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLSViewReq& request) {
@@ -216,6 +218,29 @@ void StandbyService::Stub::async::fetch_log(::grpc::ClientContext* context, cons
   return ::grpc::internal::ClientAsyncReaderFactory< ::standbyservice::FetchLogRes>::Create(channel_.get(), cq, rpcmethod_fetch_log_, context, request, false, nullptr);
 }
 
+::grpc::Status StandbyService::Stub::get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::standbyservice::GetPromotionBoundaryRes* response) {
+  return ::grpc::internal::BlockingUnaryCall< ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), rpcmethod_get_promotion_boundary_, context, request, response);
+}
+
+void StandbyService::Stub::async::get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, std::function<void(::grpc::Status)> f) {
+  ::grpc::internal::CallbackUnaryCall< ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_get_promotion_boundary_, context, request, response, std::move(f));
+}
+
+void StandbyService::Stub::async::get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, ::grpc::ClientUnaryReactor* reactor) {
+  ::grpc::internal::ClientCallbackUnaryFactory::Create< ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(stub_->channel_.get(), stub_->rpcmethod_get_promotion_boundary_, context, request, response, reactor);
+}
+
+::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>* StandbyService::Stub::PrepareAsyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+  return ::grpc::internal::ClientAsyncResponseReaderHelper::Create< ::standbyservice::GetPromotionBoundaryRes, ::standbyservice::GetPromotionBoundaryReq, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(channel_.get(), cq, rpcmethod_get_promotion_boundary_, context, request);
+}
+
+::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>* StandbyService::Stub::Asyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+  auto* result =
+    this->PrepareAsyncget_promotion_boundaryRaw(context, request, cq);
+  result->StartCall();
+  return result;
+}
+
 StandbyService::Service::Service() {
   AddMethod(new ::grpc::internal::RpcServiceMethod(
       StandbyService_method_names[0],
@@ -307,6 +332,16 @@ StandbyService::Service::Service() {
              ::grpc::ServerWriter<::standbyservice::FetchLogRes>* writer) {
                return service->fetch_log(ctx, req, writer);
              }, this)));
+  AddMethod(new ::grpc::internal::RpcServiceMethod(
+      StandbyService_method_names[9],
+      ::grpc::internal::RpcMethod::NORMAL_RPC,
+      new ::grpc::internal::RpcMethodHandler< StandbyService::Service, ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes, ::grpc::protobuf::MessageLite, ::grpc::protobuf::MessageLite>(
+          [](StandbyService::Service* service,
+             ::grpc::ServerContext* ctx,
+             const ::standbyservice::GetPromotionBoundaryReq* req,
+             ::standbyservice::GetPromotionBoundaryRes* resp) {
+               return service->get_promotion_boundary(ctx, req, resp);
+             }, this)));
 }
 
 StandbyService::Service::~Service() {
@@ -372,6 +407,13 @@ StandbyService::Service::~Service() {
   (void) context;
   (void) request;
   (void) writer;
+  return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+}
+
+::grpc::Status StandbyService::Service::get_promotion_boundary(::grpc::ServerContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response) {
+  (void) context;
+  (void) request;
+  (void) response;
   return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
 }
 

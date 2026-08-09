@@ -20,6 +20,8 @@ service StandbyService {
   rpc fetch_standby_palf_base_info(FetchStandbyPalfBaseInfoReq) returns (FetchStandbyPalfBaseInfoRes);
   // Stream serialized PALF group entries starting after the requested SCN.
   rpc fetch_log(FetchLogReq) returns (stream FetchLogRes);
+  // Return the durable cutover boundary of a fenced primary.
+  rpc get_promotion_boundary(GetPromotionBoundaryReq) returns (GetPromotionBoundaryRes);
 }
 
 enum FetchLSViewEntryType {
@@ -120,4 +122,14 @@ message FetchLogRes {
   uint64 size = 2;
   uint64 source_lsn = 3;
   uint64 end_scn = 4;
+}
+
+message GetPromotionBoundaryReq {
+  bytes buf = 1;
+  uint64 size = 2;
+}
+
+message GetPromotionBoundaryRes {
+  bytes buf = 1;
+  uint64 size = 2;
 }

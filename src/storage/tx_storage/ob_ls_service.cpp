@@ -148,9 +148,9 @@ int ObLSService::start()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is already running", K(ret));
   } else {
-    // The append/replay mode is selected once from the boot profile. There is
-    // no runtime role transition path.
-    boot_append_mode_ = share::server_is_write_enabled();
+    // The append/replay mode follows the boot profile even while startup keeps
+    // the write gate closed until all role capabilities are ready.
+    boot_append_mode_ = !share::server_is_recovery_mode();
     LOG_INFO("ls service start successfully");
     is_running_ = true;
   }
@@ -504,6 +504,87 @@ int ObLSService::get_ls(ObLS *&ls)
     ls = ls_;
   }
 
+  return ret;
+}
+
+int ObLSService::fence_local_transactions(const int64_t deadline_us)
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
+  if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("failed to get local log stream while fencing transactions", K(ret));
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ls->block_tx())) {
+    LOG_WARN("failed to block local transactions", K(ret));
+  }
+  while (OB_SUCC(ret)) {
+    if (OB_FAIL(ls->check_all_tx_clean_up())) {
+      if (OB_EAGAIN == ret && ObTimeUtility::current_time() < deadline_us) {
+        ret = OB_SUCCESS;
+        ob_usleep(1000);
+      } else if (OB_EAGAIN == ret) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("timed out draining local transactions", K(ret), K(deadline_us));
+      } else {
+        LOG_WARN("failed to check local transaction drain", K(ret));
+      }
+    } else {
+      break;
+    }
+  }
+  return ret;
+}
+
+int ObLSService::fence_local_append(const int64_t deadline_us)
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
+  if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("failed to get local log stream while fencing append", K(ret));
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
+    if (!lock_ls.locked()) {
+      ret = OB_TIMEOUT;
+    } else if (OB_FAIL(ls->fence_local_append_())) {
+      LOG_WARN("failed to fence local append", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObLSService::prepare_local_append(const int64_t deadline_us)
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
+  if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("failed to get local log stream", K(ret));
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
+    if (!lock_ls.locked()) {
+      ret = OB_TIMEOUT;
+    } else if (OB_FAIL(ls->prepare_local_append_(deadline_us))) {
+      LOG_WARN("failed to prepare local append", K(ret));
+    }
+  }
+  return ret;
+}
+
+int ObLSService::activate_local_append()
+{
+  int ret = OB_SUCCESS;
+  ObLS *ls = nullptr;
+  if (OB_FAIL(get_ls(ls))) {
+    LOG_WARN("failed to get local log stream", K(ret));
+  } else if (OB_ISNULL(ls)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ls->activate_local_append_())) {
+    LOG_WARN("failed to activate local append", K(ret));
+  }
   return ret;
 }
 

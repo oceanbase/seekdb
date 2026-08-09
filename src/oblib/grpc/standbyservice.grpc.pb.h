@@ -119,6 +119,14 @@ class StandbyService final {
     std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::standbyservice::FetchLogRes>> PrepareAsyncfetch_log(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncReaderInterface< ::standbyservice::FetchLogRes>>(PrepareAsyncfetch_logRaw(context, request, cq));
     }
+    // Return the durable cutover boundary of a fenced primary.
+    virtual ::grpc::Status get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::standbyservice::GetPromotionBoundaryRes* response) = 0;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>> Asyncget_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>>(Asyncget_promotion_boundaryRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>> PrepareAsyncget_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>>(PrepareAsyncget_promotion_boundaryRaw(context, request, cq));
+    }
     class async_interface {
      public:
       virtual ~async_interface() {}
@@ -143,6 +151,9 @@ class StandbyService final {
       virtual void fetch_standby_palf_base_info(::grpc::ClientContext* context, const ::standbyservice::FetchStandbyPalfBaseInfoReq* request, ::standbyservice::FetchStandbyPalfBaseInfoRes* response, ::grpc::ClientUnaryReactor* reactor) = 0;
       // Stream serialized PALF group entries starting after the requested SCN.
       virtual void fetch_log(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq* request, ::grpc::ClientReadReactor< ::standbyservice::FetchLogRes>* reactor) = 0;
+      // Return the durable cutover boundary of a fenced primary.
+      virtual void get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, std::function<void(::grpc::Status)>) = 0;
+      virtual void get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, ::grpc::ClientUnaryReactor* reactor) = 0;
     };
     typedef class async_interface experimental_async_interface;
     virtual class async_interface* async() { return nullptr; }
@@ -172,6 +183,8 @@ class StandbyService final {
     virtual ::grpc::ClientReaderInterface< ::standbyservice::FetchLogRes>* fetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request) = 0;
     virtual ::grpc::ClientAsyncReaderInterface< ::standbyservice::FetchLogRes>* Asyncfetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq, void* tag) = 0;
     virtual ::grpc::ClientAsyncReaderInterface< ::standbyservice::FetchLogRes>* PrepareAsyncfetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>* Asyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) = 0;
+    virtual ::grpc::ClientAsyncResponseReaderInterface< ::standbyservice::GetPromotionBoundaryRes>* PrepareAsyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) = 0;
   };
   class Stub final : public StubInterface {
    public:
@@ -251,6 +264,13 @@ class StandbyService final {
     std::unique_ptr< ::grpc::ClientAsyncReader< ::standbyservice::FetchLogRes>> PrepareAsyncfetch_log(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq) {
       return std::unique_ptr< ::grpc::ClientAsyncReader< ::standbyservice::FetchLogRes>>(PrepareAsyncfetch_logRaw(context, request, cq));
     }
+    ::grpc::Status get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::standbyservice::GetPromotionBoundaryRes* response) override;
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>> Asyncget_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>>(Asyncget_promotion_boundaryRaw(context, request, cq));
+    }
+    std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>> PrepareAsyncget_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) {
+      return std::unique_ptr< ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>>(PrepareAsyncget_promotion_boundaryRaw(context, request, cq));
+    }
     class async final :
       public StubInterface::async_interface {
      public:
@@ -266,6 +286,8 @@ class StandbyService final {
       void fetch_standby_palf_base_info(::grpc::ClientContext* context, const ::standbyservice::FetchStandbyPalfBaseInfoReq* request, ::standbyservice::FetchStandbyPalfBaseInfoRes* response, std::function<void(::grpc::Status)>) override;
       void fetch_standby_palf_base_info(::grpc::ClientContext* context, const ::standbyservice::FetchStandbyPalfBaseInfoReq* request, ::standbyservice::FetchStandbyPalfBaseInfoRes* response, ::grpc::ClientUnaryReactor* reactor) override;
       void fetch_log(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq* request, ::grpc::ClientReadReactor< ::standbyservice::FetchLogRes>* reactor) override;
+      void get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, std::function<void(::grpc::Status)>) override;
+      void get_promotion_boundary(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response, ::grpc::ClientUnaryReactor* reactor) override;
      private:
       friend class Stub;
       explicit async(Stub* stub): stub_(stub) { }
@@ -301,6 +323,8 @@ class StandbyService final {
     ::grpc::ClientReader< ::standbyservice::FetchLogRes>* fetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request) override;
     ::grpc::ClientAsyncReader< ::standbyservice::FetchLogRes>* Asyncfetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq, void* tag) override;
     ::grpc::ClientAsyncReader< ::standbyservice::FetchLogRes>* PrepareAsyncfetch_logRaw(::grpc::ClientContext* context, const ::standbyservice::FetchLogReq& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>* Asyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) override;
+    ::grpc::ClientAsyncResponseReader< ::standbyservice::GetPromotionBoundaryRes>* PrepareAsyncget_promotion_boundaryRaw(::grpc::ClientContext* context, const ::standbyservice::GetPromotionBoundaryReq& request, ::grpc::CompletionQueue* cq) override;
     const ::grpc::internal::RpcMethod rpcmethod_fetch_ls_view_;
     const ::grpc::internal::RpcMethod rpcmethod_fetch_tablet_info_;
     const ::grpc::internal::RpcMethod rpcmethod_fetch_tablet_sstable_info_;
@@ -310,6 +334,7 @@ class StandbyService final {
     const ::grpc::internal::RpcMethod rpcmethod_check_restore_precondition_;
     const ::grpc::internal::RpcMethod rpcmethod_fetch_standby_palf_base_info_;
     const ::grpc::internal::RpcMethod rpcmethod_fetch_log_;
+    const ::grpc::internal::RpcMethod rpcmethod_get_promotion_boundary_;
   };
   static std::unique_ptr<Stub> NewStub(const std::shared_ptr< ::grpc::ChannelInterface>& channel, const ::grpc::StubOptions& options = ::grpc::StubOptions());
 
@@ -335,6 +360,8 @@ class StandbyService final {
     virtual ::grpc::Status fetch_standby_palf_base_info(::grpc::ServerContext* context, const ::standbyservice::FetchStandbyPalfBaseInfoReq* request, ::standbyservice::FetchStandbyPalfBaseInfoRes* response);
     // Stream serialized PALF group entries starting after the requested SCN.
     virtual ::grpc::Status fetch_log(::grpc::ServerContext* context, const ::standbyservice::FetchLogReq* request, ::grpc::ServerWriter< ::standbyservice::FetchLogRes>* writer);
+    // Return the durable cutover boundary of a fenced primary.
+    virtual ::grpc::Status get_promotion_boundary(::grpc::ServerContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response);
   };
   template <class BaseClass>
   class WithAsyncMethod_fetch_ls_view : public BaseClass {
@@ -516,7 +543,27 @@ class StandbyService final {
       ::grpc::Service::RequestAsyncServerStreaming(8, context, request, writer, new_call_cq, notification_cq, tag);
     }
   };
-  typedef WithAsyncMethod_fetch_ls_view<WithAsyncMethod_fetch_tablet_info<WithAsyncMethod_fetch_tablet_sstable_info<WithAsyncMethod_fetch_sstable_macro_info<WithAsyncMethod_fetch_macro_block<WithAsyncMethod_get_ls_view_tablet_count<WithAsyncMethod_check_restore_precondition<WithAsyncMethod_fetch_standby_palf_base_info<WithAsyncMethod_fetch_log<Service > > > > > > > > > AsyncService;
+  template <class BaseClass>
+  class WithAsyncMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithAsyncMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodAsync(9);
+    }
+    ~WithAsyncMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void Requestget_promotion_boundary(::grpc::ServerContext* context, ::standbyservice::GetPromotionBoundaryReq* request, ::grpc::ServerAsyncResponseWriter< ::standbyservice::GetPromotionBoundaryRes>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(9, context, request, response, new_call_cq, notification_cq, tag);
+    }
+  };
+  typedef WithAsyncMethod_fetch_ls_view<WithAsyncMethod_fetch_tablet_info<WithAsyncMethod_fetch_tablet_sstable_info<WithAsyncMethod_fetch_sstable_macro_info<WithAsyncMethod_fetch_macro_block<WithAsyncMethod_get_ls_view_tablet_count<WithAsyncMethod_check_restore_precondition<WithAsyncMethod_fetch_standby_palf_base_info<WithAsyncMethod_fetch_log<WithAsyncMethod_get_promotion_boundary<Service > > > > > > > > > > AsyncService;
   template <class BaseClass>
   class WithCallbackMethod_fetch_ls_view : public BaseClass {
    private:
@@ -730,7 +777,34 @@ class StandbyService final {
     virtual ::grpc::ServerWriteReactor< ::standbyservice::FetchLogRes>* fetch_log(
       ::grpc::CallbackServerContext* /*context*/, const ::standbyservice::FetchLogReq* /*request*/)  { return nullptr; }
   };
-  typedef WithCallbackMethod_fetch_ls_view<WithCallbackMethod_fetch_tablet_info<WithCallbackMethod_fetch_tablet_sstable_info<WithCallbackMethod_fetch_sstable_macro_info<WithCallbackMethod_fetch_macro_block<WithCallbackMethod_get_ls_view_tablet_count<WithCallbackMethod_check_restore_precondition<WithCallbackMethod_fetch_standby_palf_base_info<WithCallbackMethod_fetch_log<Service > > > > > > > > > CallbackService;
+  template <class BaseClass>
+  class WithCallbackMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithCallbackMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodCallback(9,
+          new ::grpc::internal::CallbackUnaryHandler< ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::standbyservice::GetPromotionBoundaryReq* request, ::standbyservice::GetPromotionBoundaryRes* response) { return this->get_promotion_boundary(context, request, response); }));}
+    void SetMessageAllocatorFor_get_promotion_boundary(
+        ::grpc::MessageAllocator< ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes>* allocator) {
+      ::grpc::internal::MethodHandler* const handler = ::grpc::Service::GetHandler(9);
+      static_cast<::grpc::internal::CallbackUnaryHandler< ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes>*>(handler)
+              ->SetMessageAllocator(allocator);
+    }
+    ~WithCallbackMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* get_promotion_boundary(
+      ::grpc::CallbackServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/)  { return nullptr; }
+  };
+  typedef WithCallbackMethod_fetch_ls_view<WithCallbackMethod_fetch_tablet_info<WithCallbackMethod_fetch_tablet_sstable_info<WithCallbackMethod_fetch_sstable_macro_info<WithCallbackMethod_fetch_macro_block<WithCallbackMethod_get_ls_view_tablet_count<WithCallbackMethod_check_restore_precondition<WithCallbackMethod_fetch_standby_palf_base_info<WithCallbackMethod_fetch_log<WithCallbackMethod_get_promotion_boundary<Service > > > > > > > > > > CallbackService;
   typedef CallbackService ExperimentalCallbackService;
   template <class BaseClass>
   class WithGenericMethod_fetch_ls_view : public BaseClass {
@@ -881,6 +955,23 @@ class StandbyService final {
     }
     // disable synchronous version of this method
     ::grpc::Status fetch_log(::grpc::ServerContext* /*context*/, const ::standbyservice::FetchLogReq* /*request*/, ::grpc::ServerWriter< ::standbyservice::FetchLogRes>* /*writer*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+  };
+  template <class BaseClass>
+  class WithGenericMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithGenericMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodGeneric(9);
+    }
+    ~WithGenericMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
       abort();
       return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
     }
@@ -1063,6 +1154,26 @@ class StandbyService final {
     }
     void Requestfetch_log(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncWriter< ::grpc::ByteBuffer>* writer, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
       ::grpc::Service::RequestAsyncServerStreaming(8, context, request, writer, new_call_cq, notification_cq, tag);
+    }
+  };
+  template <class BaseClass>
+  class WithRawMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodRaw(9);
+    }
+    ~WithRawMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    void Requestget_promotion_boundary(::grpc::ServerContext* context, ::grpc::ByteBuffer* request, ::grpc::ServerAsyncResponseWriter< ::grpc::ByteBuffer>* response, ::grpc::CompletionQueue* new_call_cq, ::grpc::ServerCompletionQueue* notification_cq, void *tag) {
+      ::grpc::Service::RequestAsyncUnary(9, context, request, response, new_call_cq, notification_cq, tag);
     }
   };
   template <class BaseClass>
@@ -1264,6 +1375,28 @@ class StandbyService final {
       ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/)  { return nullptr; }
   };
   template <class BaseClass>
+  class WithRawCallbackMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithRawCallbackMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodRawCallback(9,
+          new ::grpc::internal::CallbackUnaryHandler< ::grpc::ByteBuffer, ::grpc::ByteBuffer>(
+            [this](
+                   ::grpc::CallbackServerContext* context, const ::grpc::ByteBuffer* request, ::grpc::ByteBuffer* response) { return this->get_promotion_boundary(context, request, response); }));
+    }
+    ~WithRawCallbackMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable synchronous version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    virtual ::grpc::ServerUnaryReactor* get_promotion_boundary(
+      ::grpc::CallbackServerContext* /*context*/, const ::grpc::ByteBuffer* /*request*/, ::grpc::ByteBuffer* /*response*/)  { return nullptr; }
+  };
+  template <class BaseClass>
   class WithStreamedUnaryMethod_get_ls_view_tablet_count : public BaseClass {
    private:
     void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
@@ -1344,7 +1477,34 @@ class StandbyService final {
     // replace default version of method with streamed unary
     virtual ::grpc::Status Streamedfetch_standby_palf_base_info(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::standbyservice::FetchStandbyPalfBaseInfoReq,::standbyservice::FetchStandbyPalfBaseInfoRes>* server_unary_streamer) = 0;
   };
-  typedef WithStreamedUnaryMethod_get_ls_view_tablet_count<WithStreamedUnaryMethod_check_restore_precondition<WithStreamedUnaryMethod_fetch_standby_palf_base_info<Service > > > StreamedUnaryService;
+  template <class BaseClass>
+  class WithStreamedUnaryMethod_get_promotion_boundary : public BaseClass {
+   private:
+    void BaseClassMustBeDerivedFromService(const Service* /*service*/) {}
+   public:
+    WithStreamedUnaryMethod_get_promotion_boundary() {
+      ::grpc::Service::MarkMethodStreamed(9,
+        new ::grpc::internal::StreamedUnaryHandler<
+          ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes>(
+            [this](::grpc::ServerContext* context,
+                   ::grpc::ServerUnaryStreamer<
+                     ::standbyservice::GetPromotionBoundaryReq, ::standbyservice::GetPromotionBoundaryRes>* streamer) {
+                       return this->Streamedget_promotion_boundary(context,
+                         streamer);
+                  }));
+    }
+    ~WithStreamedUnaryMethod_get_promotion_boundary() override {
+      BaseClassMustBeDerivedFromService(this);
+    }
+    // disable regular version of this method
+    ::grpc::Status get_promotion_boundary(::grpc::ServerContext* /*context*/, const ::standbyservice::GetPromotionBoundaryReq* /*request*/, ::standbyservice::GetPromotionBoundaryRes* /*response*/) override {
+      abort();
+      return ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, "");
+    }
+    // replace default version of method with streamed unary
+    virtual ::grpc::Status Streamedget_promotion_boundary(::grpc::ServerContext* context, ::grpc::ServerUnaryStreamer< ::standbyservice::GetPromotionBoundaryReq,::standbyservice::GetPromotionBoundaryRes>* server_unary_streamer) = 0;
+  };
+  typedef WithStreamedUnaryMethod_get_ls_view_tablet_count<WithStreamedUnaryMethod_check_restore_precondition<WithStreamedUnaryMethod_fetch_standby_palf_base_info<WithStreamedUnaryMethod_get_promotion_boundary<Service > > > > StreamedUnaryService;
   template <class BaseClass>
   class WithSplitStreamingMethod_fetch_ls_view : public BaseClass {
    private:
@@ -1508,7 +1668,7 @@ class StandbyService final {
     virtual ::grpc::Status Streamedfetch_log(::grpc::ServerContext* context, ::grpc::ServerSplitStreamer< ::standbyservice::FetchLogReq,::standbyservice::FetchLogRes>* server_split_streamer) = 0;
   };
   typedef WithSplitStreamingMethod_fetch_ls_view<WithSplitStreamingMethod_fetch_tablet_info<WithSplitStreamingMethod_fetch_tablet_sstable_info<WithSplitStreamingMethod_fetch_sstable_macro_info<WithSplitStreamingMethod_fetch_macro_block<WithSplitStreamingMethod_fetch_log<Service > > > > > > SplitStreamedService;
-  typedef WithSplitStreamingMethod_fetch_ls_view<WithSplitStreamingMethod_fetch_tablet_info<WithSplitStreamingMethod_fetch_tablet_sstable_info<WithSplitStreamingMethod_fetch_sstable_macro_info<WithSplitStreamingMethod_fetch_macro_block<WithStreamedUnaryMethod_get_ls_view_tablet_count<WithStreamedUnaryMethod_check_restore_precondition<WithStreamedUnaryMethod_fetch_standby_palf_base_info<WithSplitStreamingMethod_fetch_log<Service > > > > > > > > > StreamedService;
+  typedef WithSplitStreamingMethod_fetch_ls_view<WithSplitStreamingMethod_fetch_tablet_info<WithSplitStreamingMethod_fetch_tablet_sstable_info<WithSplitStreamingMethod_fetch_sstable_macro_info<WithSplitStreamingMethod_fetch_macro_block<WithStreamedUnaryMethod_get_ls_view_tablet_count<WithStreamedUnaryMethod_check_restore_precondition<WithStreamedUnaryMethod_fetch_standby_palf_base_info<WithSplitStreamingMethod_fetch_log<WithStreamedUnaryMethod_get_promotion_boundary<Service > > > > > > > > > > StreamedService;
 };
 
 }  // namespace standbyservice

@@ -18,9 +18,16 @@
 
 #include "standby/control/ob_standby_role_transition_service.h"
 #include "lib/oblog/ob_log.h"
+#include "lib/time/ob_time_utility.h"
+#include "lib/worker.h"
+#include "share/ob_debug_sync.h"
 #include "share/ob_server_info.h"
 #include "standby/ob_standby_log_sync_service.h"
+#include "standby/ob_standby_schema_refresh_trigger.h"
+#include "standby/control/ob_standby_timestamp_provider.h"
 #include "standby/standby_host.h"
+#include "storage/tx/ob_id_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
 {
@@ -57,9 +64,178 @@ int persist_pending_role(
   return ret;
 }
 
+int commit_primary_role(IStandbyHost &host, share::ObServerInfo &server_info)
+{
+  int ret = OB_SUCCESS;
+  server_info.server_role_ = share::ObServerRole::PRIMARY_ROLE;
+  server_info.pending_role_.reset();
+  server_info.switchover_status_ = share::NORMAL_SWITCHOVER_STATUS;
+  server_info.cutover_scn_.reset();
+  if (OB_FAIL(host.update_server_info(server_info))) {
+    LOG_WARN("failed to commit durable primary role", KR(ret), K(server_info));
+  }
+  return ret;
+}
+
+int64_t operation_deadline(const IStandbyHost &host)
+{
+  return THIS_WORKER.is_timeout_ts_valid()
+      ? THIS_WORKER.get_timeout_ts()
+      : common::ObTimeUtility::current_time() + host.operation_timeout_us();
+}
+
+int get_ls_service(storage::ObLSService *&ls_service)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(ls_service = share::server_service<storage::ObLSService>())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("local log stream service is not initialized", KR(ret));
+  }
+  return ret;
+}
+
+int prepare_primary_id_services(const int64_t deadline_us)
+{
+  int ret = OB_SUCCESS;
+  static const int64_t RETRY_INTERVAL_US = 1000;
+  transaction::ObIDService *trans_id_service = nullptr;
+  transaction::ObIDService *timestamp_service = nullptr;
+  bool trans_id_ready = false;
+  bool timestamp_ready = false;
+  if (OB_FAIL(transaction::ObIDService::get_id_service(
+      transaction::ObIDService::TransIDService, trans_id_service))) {
+    LOG_WARN("failed to get transaction id service", KR(ret));
+  } else if (OB_FAIL(transaction::ObIDService::get_id_service(
+      transaction::ObIDService::TimestampService, timestamp_service))) {
+    LOG_WARN("failed to get timestamp service", KR(ret));
+  } else if (OB_ISNULL(trans_id_service) || OB_ISNULL(timestamp_service)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("primary id service is null", KR(ret), KP(trans_id_service), KP(timestamp_service));
+  }
+
+  while (OB_SUCC(ret) && (!trans_id_ready || !timestamp_ready)) {
+    if (!trans_id_ready) {
+      const int tmp_ret = trans_id_service->prepare_next_number(0);
+      if (OB_SUCCESS == tmp_ret) {
+        trans_id_ready = true;
+      } else if (OB_EAGAIN != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("failed to prepare primary transaction id service", KR(ret));
+      }
+    }
+    if (OB_SUCC(ret) && !timestamp_ready) {
+      const int tmp_ret = timestamp_service->prepare_next_number(
+          common::ObTimeUtility::current_time_ns());
+      if (OB_SUCCESS == tmp_ret) {
+        timestamp_ready = true;
+      } else if (OB_EAGAIN != tmp_ret) {
+        ret = tmp_ret;
+        LOG_WARN("failed to prepare primary timestamp service", KR(ret));
+      }
+    }
+    if (OB_SUCC(ret) && (!trans_id_ready || !timestamp_ready)) {
+      if (common::ObTimeUtility::current_time() >= deadline_us) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("timed out preparing primary id services", KR(ret),
+            K(trans_id_ready), K(timestamp_ready), K(deadline_us));
+      } else {
+        ob_usleep(RETRY_INTERVAL_US);
+      }
+    }
+  }
+  return ret;
+}
+
+int stop_recovery_tasks(
+    ObStandbyLogSyncService &log_sync_service,
+    ObStandbySchemaRefreshTrigger &schema_refresh_trigger)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = log_sync_service.stop();
+  if (OB_SUCCESS != tmp_ret) {
+    ret = tmp_ret;
+    LOG_WARN("failed to stop standby log importer", KR(tmp_ret));
+  }
+  if (OB_SUCCESS != (tmp_ret = schema_refresh_trigger.stop())) {
+    if (OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    LOG_WARN("failed to stop standby schema refresh trigger", KR(tmp_ret));
+  }
+  if (OB_SUCCESS != (tmp_ret = log_sync_service.wait())) {
+    if (OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    LOG_WARN("failed to wait standby log importer", KR(tmp_ret));
+  }
+  if (OB_SUCCESS != (tmp_ret = schema_refresh_trigger.wait())) {
+    if (OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    LOG_WARN("failed to wait standby schema refresh trigger", KR(tmp_ret));
+  }
+  return ret;
+}
+
+int finish_committed_promotion(IStandbyHost &host)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLSService *ls_service = nullptr;
+  if (OB_FAIL(get_ls_service(ls_service))) {
+  } else if (OB_FAIL(ls_service->activate_local_append())) {
+    LOG_WARN("failed to activate primary local append runtime", KR(ret));
+  } else {
+    host.set_recovery_mode(false);
+    host.advance_switchover_epoch();
+    host.publish_server_role(share::ObServerRole::PRIMARY_ROLE);
+    // This is the only operation that makes newly started transactions
+    // writable. Every durable and fallible promotion step precedes it.
+    host.set_write_enabled(true);
+    LOG_INFO("online standby promotion completed");
+  }
+  return ret;
+}
+
+int complete_promotion(
+    ObStandbyLogSyncService &log_sync_service,
+    ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
+    IStandbyHost &host,
+    share::ObServerInfo &server_info)
+{
+  int ret = OB_SUCCESS;
+  storage::ObLSService *ls_service = nullptr;
+  const int64_t deadline_us = operation_deadline(host);
+
+  if (!server_info.cutover_scn_.is_valid()) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("pending promotion has no durable replay boundary", KR(ret), K(server_info));
+  } else if (OB_FAIL(log_sync_service.prepare_persisted_promotion(
+      server_info.cutover_scn_))) {
+    LOG_WARN("failed to validate persisted promotion boundary", KR(ret), K(server_info));
+  } else if (OB_FAIL(stop_recovery_tasks(log_sync_service, schema_refresh_trigger))) {
+    LOG_WARN("failed to retire recovery-only tasks", KR(ret));
+  } else if (OB_FAIL(get_ls_service(ls_service))) {
+  } else if (OB_FAIL(ls_service->prepare_local_append(deadline_us))) {
+    LOG_WARN("failed to prepare local append infrastructure", KR(ret));
+  } else if (OB_FAIL(prepare_primary_id_services(deadline_us))) {
+    LOG_WARN("failed to prepare primary id services", KR(ret));
+  } else if (OB_FAIL(ObStandbyTimestampProvider::disable())) {
+    LOG_WARN("failed to bind primary timestamp provider", KR(ret));
+  } else {
+    host.reset_max_id_cache();
+    if (OB_FAIL(commit_primary_role(host, server_info))) {
+      LOG_WARN("failed to commit primary role after runtime preparation", KR(ret));
+    } else if (OB_FAIL(DEBUG_SYNC(common::AFTER_STANDBY_PRIMARY_ROLE_COMMITTED))) {
+      LOG_WARN("debug sync failed after primary role commit", KR(ret));
+    } else if (OB_FAIL(finish_committed_promotion(host))) {
+      LOG_WARN("failed to publish committed primary runtime", KR(ret));
+    }
+  }
+  return ret;
+}
+
 int prepare_to_standby(
     const bool is_verify,
-    ObStandbyLogSyncService &log_sync_service,
     IStandbyHost &host)
 {
   int ret = OB_SUCCESS;
@@ -82,11 +258,14 @@ int prepare_to_standby(
   } else {
     share::SCN cutover_scn;
     share::SCN replay_scn;
+    storage::ObLSService *ls_service = nullptr;
+    const int64_t deadline_us = operation_deadline(host);
     host.set_write_enabled(false);
-    if (OB_FAIL(log_sync_service.pause())) {
-      LOG_WARN("failed to pause standby importer while fencing primary", KR(ret));
-    } else if (OB_FAIL(ObStandbyLogSyncService::wait_local_append())) {
-      LOG_WARN("failed to wait for primary log append quiescence", KR(ret));
+    if (OB_FAIL(get_ls_service(ls_service))) {
+    } else if (OB_FAIL(ls_service->fence_local_transactions(deadline_us))) {
+      LOG_WARN("failed to drain primary write transactions", KR(ret));
+    } else if (OB_FAIL(ls_service->fence_local_append(deadline_us))) {
+      LOG_WARN("failed to fence primary log append", KR(ret));
     } else if (OB_FAIL(ObStandbyLogSyncService::get_local_progress(cutover_scn, replay_scn))) {
       LOG_WARN("failed to capture primary cutover scn", KR(ret));
     } else if (!cutover_scn.is_valid()) {
@@ -107,14 +286,19 @@ int prepare_to_primary(
     const bool is_verify,
     const bool is_failover,
     ObStandbyLogSyncService &log_sync_service,
+    ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
     IStandbyHost &host)
 {
   int ret = OB_SUCCESS;
   share::ObServerInfo server_info;
   if (OB_FAIL(load_server_info(host, server_info))) {
   } else if (server_info.is_primary() && !server_info.has_pending_role()) {
-    // A repeated command after the restart is an idempotent no-op.
-    LOG_INFO("server is already running with primary profile", K(server_info), K(is_verify));
+    if (!is_verify && !host.is_write_enabled()
+        && OB_FAIL(finish_committed_promotion(host))) {
+      LOG_WARN("failed to resume committed primary publication", KR(ret), K(server_info));
+    } else {
+      LOG_INFO("server is already running with primary profile", K(server_info), K(is_verify));
+    }
   } else if (!server_info.is_standby()) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("only a standby profile can prepare primary", KR(ret), K(server_info));
@@ -122,8 +306,18 @@ int prepare_to_primary(
              && server_info.get_pending_role().value() != share::ObServerRole::PRIMARY_ROLE) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("another pending role is already recorded", KR(ret), K(server_info));
-  } else if (server_info.has_pending_role()) {
-    LOG_INFO("primary preparation is already persisted", K(server_info), K(is_verify));
+  } else if (is_verify && server_info.has_pending_role()) {
+    share::SCN end_scn;
+    share::SCN sync_scn;
+    if (!server_info.cutover_scn_.is_valid()
+        || OB_FAIL(ObStandbyLogSyncService::get_local_progress(end_scn, sync_scn))) {
+      LOG_WARN("failed to inspect pending promotion", KR(ret), K(server_info));
+    } else if (end_scn < server_info.cutover_scn_
+               || sync_scn < server_info.cutover_scn_) {
+      ret = OB_STATE_NOT_MATCH;
+      LOG_WARN("pending promotion boundary is not locally replayed", KR(ret),
+          K(server_info), K(end_scn), K(sync_scn));
+    }
   } else if (is_verify) {
     if (OB_FAIL(log_sync_service.validate_switch_to_primary(is_failover))) {
       LOG_WARN("standby is not ready for primary preparation", KR(ret), K(is_failover));
@@ -131,23 +325,25 @@ int prepare_to_primary(
       LOG_INFO("verified preparation for primary", K(is_failover), K(server_info));
     }
   } else {
-    share::SCN cutover_scn;
-    share::SCN replay_scn;
-    if (OB_FAIL(log_sync_service.prepare_switch_to_primary(is_failover))) {
-      LOG_WARN("failed to pause standby importer at a safe boundary", KR(ret), K(is_failover));
-    } else if (OB_FAIL(ObStandbyLogSyncService::get_local_progress(cutover_scn, replay_scn))) {
-      LOG_WARN("failed to capture standby promotion boundary", KR(ret));
-    } else if (!cutover_scn.is_valid() || !replay_scn.is_valid()
-               || replay_scn < cutover_scn) {
-      ret = OB_STATE_NOT_MATCH;
-      LOG_WARN("standby replay is not at the promotion boundary", KR(ret),
-          K(cutover_scn), K(replay_scn), K(is_failover));
-    } else if (OB_FAIL(persist_pending_role(
-        host, server_info, share::ObServerRole::PRIMARY_ROLE, cutover_scn))) {
-      LOG_WARN("failed to persist prepare-to-primary state", KR(ret), K(server_info));
-    } else {
-      host.set_write_enabled(false);
-      LOG_INFO("standby is ready for restart as primary", K(server_info), K(cutover_scn));
+    if (!server_info.has_pending_role()) {
+      share::SCN target_scn;
+      if (OB_FAIL(log_sync_service.prepare_promotion(is_failover, target_scn))) {
+        LOG_WARN("failed to reach a safe promotion boundary", KR(ret), K(is_failover));
+      } else if (OB_FAIL(persist_pending_role(
+          host, server_info, share::ObServerRole::PRIMARY_ROLE, target_scn))) {
+        LOG_WARN("failed to persist promotion intent", KR(ret), K(is_failover), K(target_scn));
+        log_sync_service.cancel_promotion_preparation();
+      } else {
+        // Tests use this point to prove restart resumes a durable intent.
+        DEBUG_SYNC(common::AFTER_STANDBY_PROMOTION_INTENT_PERSISTED);
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(complete_promotion(
+        log_sync_service,
+        schema_refresh_trigger,
+        host,
+        server_info))) {
+      LOG_WARN("failed to complete online standby promotion", KR(ret), K(server_info));
     }
   }
   return ret;
@@ -157,15 +353,19 @@ int prepare_to_primary(
 
 int ObStandbyRoleTransitionService::init(
     ObStandbyLogSyncService &log_sync_service,
+    ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
     IStandbyHost &host)
 {
   int ret = OB_SUCCESS;
   if ((OB_NOT_NULL(log_sync_service_) && log_sync_service_ != &log_sync_service)
+      || (OB_NOT_NULL(schema_refresh_trigger_)
+          && schema_refresh_trigger_ != &schema_refresh_trigger)
       || (OB_NOT_NULL(host_) && host_ != &host)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("standby role transition service is already initialized", KR(ret));
   } else {
     log_sync_service_ = &log_sync_service;
+    schema_refresh_trigger_ = &schema_refresh_trigger;
     host_ = &host;
   }
   return ret;
@@ -174,6 +374,7 @@ int ObStandbyRoleTransitionService::init(
 void ObStandbyRoleTransitionService::destroy()
 {
   log_sync_service_ = nullptr;
+  schema_refresh_trigger_ = nullptr;
   host_ = nullptr;
 }
 
@@ -185,25 +386,70 @@ int ObStandbyRoleTransitionService::execute(
   lib::ObMutexGuard guard(lock_);
   if (OB_FAIL(guard.get_ret())) {
     LOG_WARN("failed to lock server role preparation", KR(ret), K(op), K(is_verify));
-  } else if (OB_ISNULL(log_sync_service_) || OB_ISNULL(host_)) {
+  } else if (OB_ISNULL(log_sync_service_)
+             || OB_ISNULL(schema_refresh_trigger_)
+             || OB_ISNULL(host_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby role preparation service is not initialized", KR(ret));
   } else {
     switch (op) {
       case share::ObTenantRoleTransitionOp::SWITCHOVER_TO_STANDBY:
-        ret = prepare_to_standby(is_verify, *log_sync_service_, *host_);
+        ret = prepare_to_standby(is_verify, *host_);
         break;
       case share::ObTenantRoleTransitionOp::SWITCHOVER_TO_PRIMARY:
-        ret = prepare_to_primary(is_verify, false /*is_failover*/, *log_sync_service_, *host_);
+        ret = prepare_to_primary(
+            is_verify,
+            false /*is_failover*/,
+            *log_sync_service_,
+            *schema_refresh_trigger_,
+            *host_);
         break;
       case share::ObTenantRoleTransitionOp::FAILOVER_TO_PRIMARY:
-        ret = prepare_to_primary(is_verify, true /*is_failover*/, *log_sync_service_, *host_);
+        ret = prepare_to_primary(
+            is_verify,
+            true /*is_failover*/,
+            *log_sync_service_,
+            *schema_refresh_trigger_,
+            *host_);
         break;
       default:
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid server role preparation operation", KR(ret), K(op));
         break;
     }
+  }
+  return ret;
+}
+
+int ObStandbyRoleTransitionService::resume_pending_promotion()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(lock_);
+  share::ObServerInfo server_info;
+  if (OB_FAIL(guard.get_ret())) {
+    LOG_WARN("failed to lock pending standby promotion", KR(ret));
+  } else if (OB_ISNULL(log_sync_service_)
+             || OB_ISNULL(schema_refresh_trigger_)
+             || OB_ISNULL(host_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(load_server_info(*host_, server_info))) {
+    LOG_WARN("failed to load pending standby promotion", KR(ret));
+  } else if (server_info.is_primary() && !server_info.has_pending_role()) {
+    if (!host_->is_write_enabled()
+        && OB_FAIL(finish_committed_promotion(*host_))) {
+      LOG_WARN("failed to resume committed primary publication", KR(ret));
+    }
+  } else if (!server_info.is_standby()
+             || !server_info.has_pending_role()
+             || !server_info.get_pending_role().is_primary()) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("no resumable standby promotion is persisted", KR(ret), K(server_info));
+  } else if (OB_FAIL(complete_promotion(
+      *log_sync_service_,
+      *schema_refresh_trigger_,
+      *host_,
+      server_info))) {
+    LOG_WARN("failed to resume pending standby promotion", KR(ret), K(server_info));
   }
   return ret;
 }

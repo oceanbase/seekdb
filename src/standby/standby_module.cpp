@@ -58,6 +58,7 @@ private:
 
   bool is_inited_;
   bool standby_profile_;
+  bool resume_pending_promotion_;
   StandbyConfig config_;
   IStandbyHost *host_;
   StandbyGrpcServer *grpc_server_;
@@ -70,6 +71,7 @@ private:
 StandbyModule::Impl::Impl()
   : is_inited_(false),
     standby_profile_(false),
+    resume_pending_promotion_(false),
     config_(),
     host_(nullptr),
     grpc_server_(nullptr),
@@ -164,25 +166,26 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (!config.is_valid()
-             || share::ObServerRole::INVALID_ROLE == host.server_role()) {
+             || share::ObServerRole::INVALID_ROLE == host.boot_role()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby module configuration", KR(ret), K(config.self_addr_),
         K(config.rpc_port_), K(config.embedded_mode_), K(config.io_timeout_ms_),
-        K(host.server_role()));
+        K(host.boot_role()));
   } else if (FALSE_IT(config_ = config)) {
   } else if (FALSE_IT(host_ = &host)) {
   } else if (OB_ISNULL(grpc_server_ = OB_NEW(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC server", KR(ret));
   } else if (OB_FAIL(create_and_register_standby_grpc_service(
-      *grpc_server_, config_, grpc_service_))) {
+      *grpc_server_, config_, *host_, grpc_service_))) {
     LOG_WARN("failed to register standby gRPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(config_, *host_))) {
     LOG_WARN("failed to init standby schema refresh trigger", KR(ret));
   } else if (OB_FAIL(log_sync_service_.init(config_, *host_))) {
     LOG_WARN("failed to init standby log sync service", KR(ret));
     schema_refresh_trigger_.destroy();
-  } else if (OB_FAIL(role_transition_service_.init(log_sync_service_, *host_))) {
+  } else if (OB_FAIL(role_transition_service_.init(
+      log_sync_service_, schema_refresh_trigger_, *host_))) {
     LOG_WARN("failed to init standby role transition service", KR(ret));
     log_sync_service_.destroy();
     schema_refresh_trigger_.destroy();
@@ -259,6 +262,8 @@ void StandbyModule::Impl::destroy()
   config_ = StandbyConfig();
   host_ = nullptr;
   is_inited_ = false;
+  standby_profile_ = false;
+  resume_pending_promotion_ = false;
 }
 
 int StandbyModule::Impl::prepare_storage_replay()
@@ -273,21 +278,34 @@ int StandbyModule::Impl::prepare_storage_replay()
     ret = OB_INVALID_DATA;
     LOG_WARN("persisted server profile is invalid", KR(ret), K(server_info));
   } else {
-    if (server_info.has_pending_role()) {
+    resume_pending_promotion_ = false;
+    if (server_info.has_pending_role()
+        && server_info.get_pending_role().is_standby()) {
       if (OB_FAIL(server_info.activate_pending_role())) {
         LOG_WARN("failed to activate persisted pending role", KR(ret), K(server_info));
       } else if (OB_FAIL(host_->update_server_info(server_info))) {
         LOG_WARN("failed to commit activated server profile", KR(ret), K(server_info));
       }
+    } else if (server_info.has_pending_role()
+               && server_info.is_standby()
+               && server_info.get_pending_role().is_primary()) {
+      // A pending promotion is resumed only after storage replay and runtime
+      // startup. Until then this process deliberately keeps the recovery
+      // profile and the write gate closed.
+      resume_pending_promotion_ = true;
+    } else if (server_info.has_pending_role()) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("persisted role transition cannot be recovered", KR(ret), K(server_info));
     }
     if (OB_SUCC(ret)) {
       standby_profile_ = server_info.is_standby();
       host_->publish_server_role(server_info.server_role_.value());
-      host_->set_write_enabled(server_info.is_primary());
+      host_->set_recovery_mode(standby_profile_);
+      // Startup publishes write capability only after the selected profile is
+      // fully activated. This also covers a crash after durable role commit.
+      host_->set_write_enabled(false);
       LOG_INFO("selected server boot profile", K(server_info), K_(standby_profile));
     }
-    // No online transition is recovered here. A pending role is committed
-    // before any storage/runtime module is allowed to observe this profile.
   }
   return ret;
 }
@@ -299,7 +317,11 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
     ret = OB_NOT_INIT;
   } else if (need_bootstrap && OB_FAIL(host_->initialize_server_info())) {
     LOG_WARN("failed to initialize server role state before bootstrap", KR(ret),
-        K(host_->server_role()));
+        K(host_->boot_role()));
+  } else if (need_bootstrap
+             && !standby_profile_
+             && OB_FAIL(activate_current_role_())) {
+    LOG_WARN("failed to activate primary capabilities before bootstrap", KR(ret));
   } else if (need_bootstrap
              && standby_profile_
              && OB_FAIL(bootstrap_standby_())) {
@@ -314,8 +336,10 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
       FLOG_WARN("failed to report bootstrap telemetry synchronously", KR(tmp_ret));
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(activate_current_role_())) {
-    LOG_WARN("failed to activate current server role", KR(ret), K(host_->server_role()));
+  if (OB_SUCC(ret)
+      && (!need_bootstrap || standby_profile_)
+      && OB_FAIL(activate_current_role_())) {
+    LOG_WARN("failed to activate current server role", KR(ret), K(host_->boot_role()));
   }
   return ret;
 }
@@ -328,13 +352,19 @@ int StandbyModule::Impl::bootstrap_standby_()
   FLOG_INFO("[OBSERVICE_NOTICE] bootstrap standby begin");
 
   param.is_standby_cluster_ = true;
-  param.source_ = host_->log_restore_source();
+  common::ObArenaAllocator source_allocator("StandbySource");
+  int64_t source_version = 0;
+  if (OB_FAIL(host_->load_log_restore_source(
+      source_allocator, param.source_, source_version))) {
+    LOG_WARN("failed to load standby bootstrap source", KR(ret));
+  }
   param.bandwidth_throttle_ = host_->bandwidth_throttle();
   param.restore_config_ = &config_;
 
   // The restored LS must never allocate a local timestamp before source-log
   // replay starts, otherwise its local end SCN can skip source history.
-  if (OB_FAIL(ObStandbyTimestampProvider::enable())) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(ObStandbyTimestampProvider::enable())) {
     LOG_WARN("failed to prepare standby timestamp provider for bootstrap", KR(ret));
   } else if (OB_FAIL(ObStandbyBootstrapService::bootstrap(param, source_end_scn))) {
     LOG_WARN("failed to bootstrap standby", KR(ret));
@@ -349,7 +379,6 @@ int StandbyModule::Impl::bootstrap_standby_()
 int StandbyModule::Impl::activate_current_role_()
 {
   int ret = OB_SUCCESS;
-  host_->set_write_enabled(!standby_profile_);
   if (standby_profile_
       && OB_FAIL(ObStandbyTimestampProvider::enable())) {
     LOG_WARN("failed to activate standby timestamp provider", KR(ret));
@@ -359,6 +388,8 @@ int StandbyModule::Impl::activate_current_role_()
   } else if (!standby_profile_
              && OB_FAIL(ObStandbyTimestampProvider::disable())) {
     LOG_WARN("failed to activate primary timestamp provider", KR(ret));
+  } else {
+    host_->set_write_enabled(!standby_profile_);
   }
   return ret;
 }
@@ -370,9 +401,9 @@ int StandbyModule::Impl::start()
     ret = OB_NOT_INIT;
   } else if (standby_profile_ && OB_FAIL(schema_refresh_trigger_.start())) {
     LOG_WARN("failed to start standby schema refresh trigger", KR(ret));
-  } else if (standby_profile_ && !config_.embedded_mode_
+  } else if (standby_profile_ && !resume_pending_promotion_ && !config_.embedded_mode_
              && OB_FAIL(log_sync_service_.start())) {
-    LOG_WARN("failed to start standby log sync service", KR(ret), K(host_->server_role()));
+    LOG_WARN("failed to start standby log sync service", KR(ret), K(host_->boot_role()));
   }
   return ret;
 }
@@ -382,9 +413,17 @@ int StandbyModule::Impl::wait_replay_ready(const std::function<bool()> &is_stopp
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (!config_.embedded_mode_ && standby_profile_
-      && OB_FAIL(log_sync_service_.wait_startup_replay(is_stopping))) {
-    LOG_WARN("failed to wait standby startup replay", KR(ret));
+  } else if (!config_.embedded_mode_ && standby_profile_) {
+    if (!resume_pending_promotion_
+        && OB_FAIL(log_sync_service_.wait_startup_replay(is_stopping))) {
+      LOG_WARN("failed to wait standby startup replay", KR(ret));
+    } else if (resume_pending_promotion_
+               && OB_FAIL(role_transition_service_.resume_pending_promotion())) {
+      LOG_WARN("failed to resume persisted standby promotion", KR(ret));
+    } else if (resume_pending_promotion_) {
+      standby_profile_ = false;
+      resume_pending_promotion_ = false;
+    }
   }
   return ret;
 }

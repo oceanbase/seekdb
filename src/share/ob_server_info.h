@@ -43,11 +43,16 @@ struct ObServerInfo
   ~ObServerInfo() {}
 
   bool is_valid() const {
-    return server_role_.is_valid()
-           && switchover_status_.is_valid()
-           && (!pending_role_.is_valid()
-               || pending_role_.is_primary()
-               || pending_role_.is_standby());
+    const bool normal = switchover_status_.is_normal_status()
+        && !pending_role_.is_valid()
+        && !cutover_scn_.is_valid();
+    const bool preparing = switchover_status_.is_preparing_status()
+        && (server_role_.is_primary() || server_role_.is_standby())
+        && pending_role_.is_valid()
+        && (pending_role_.is_primary() || pending_role_.is_standby())
+        && pending_role_ != server_role_
+        && cutover_scn_.is_valid();
+    return server_role_.is_valid() && (normal || preparing);
   }
 
   void reset() {
@@ -77,12 +82,6 @@ struct ObServerInfo
   bool has_pending_role() const { return pending_role_.is_valid(); }
   bool is_preparing_status() const { return switchover_status_.is_preparing_status(); }
   bool is_normal_status() const { return switchover_status_.is_normal_status(); }
-  bool is_switching_to_primary_status() const { return switchover_status_.is_switching_to_primary_status(); }
-  bool is_switching_to_standby_status() const { return switchover_status_.is_switching_to_standby_status(); }
-  bool is_prepare_switching_to_standby_status() const { return switchover_status_.is_prepare_switching_to_standby_status(); }
-  bool is_prepare_switching_to_primary_status() const { return switchover_status_.is_prepare_switching_to_primary_status(); }
-  bool is_prepare_flashback_for_failover_to_primary_status() const { return switchover_status_.is_prepare_flashback_for_failover_to_primary_status(); }
-  bool is_flashback_status() const { return switchover_status_.is_flashback_status(); }
 
   int activate_pending_role()
   {

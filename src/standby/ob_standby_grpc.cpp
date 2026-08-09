@@ -23,8 +23,10 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_time_utility.h"
+#include "share/ob_server_info.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/ob_standby_grpc_stream_util.h"
+#include "standby/ob_standby_source_util.h"
 #include "standby/restore/ob_standby_restore_reader.h"
 #include "standby/standby_host.h"
 #include "storage/tablet/ob_tablet_iterator.h"
@@ -49,8 +51,8 @@ namespace standby
 class StandbyGrpcService final : public standbyservice::StandbyService::Service
 {
 public:
-  explicit StandbyGrpcService(const StandbyConfig &config)
-    : io_timeout_ms_(config.io_timeout_ms_)
+  StandbyGrpcService(const StandbyConfig &config, IStandbyHost &host)
+    : self_addr_(config.self_addr_), io_timeout_ms_(config.io_timeout_ms_), host_(host)
   {}
   virtual ~StandbyGrpcService() {}
 
@@ -90,13 +92,21 @@ public:
                          const standbyservice::FetchLogReq* request,
                          grpc::ServerWriter<standbyservice::FetchLogRes>* writer) override;
 
+  grpc::Status get_promotion_boundary(
+      grpc::ServerContext* context,
+      const standbyservice::GetPromotionBoundaryReq* request,
+      standbyservice::GetPromotionBoundaryRes* response) override;
+
 private:
+  common::ObAddr self_addr_;
   int64_t io_timeout_ms_;
+  IStandbyHost &host_;
 };
 
 int create_and_register_standby_grpc_service(
     obgrpc::ObGrpcServer &grpc_server,
     const StandbyConfig &config,
+    IStandbyHost &host,
     StandbyGrpcService *&service)
 {
   int ret = OB_SUCCESS;
@@ -105,7 +115,8 @@ int create_and_register_standby_grpc_service(
   if (!config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby gRPC service config", KR(ret));
-  } else if (OB_ISNULL(new_service = OB_NEW(StandbyGrpcService, "StandbyGrpc", config))) {
+  } else if (OB_ISNULL(new_service = OB_NEW(
+      StandbyGrpcService, "StandbyGrpc", config, host))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC service", KR(ret));
   } else if (OB_FAIL(grpc_server.register_service(new_service))) {
@@ -138,6 +149,105 @@ ObStandbyLSViewMeta::ObStandbyLSViewMeta()
 }
 
 OB_SERIALIZE_MEMBER(ObStandbyLSViewMeta, ls_meta_, physical_checkpoint_scn_);
+
+StandbyPromotionBoundary::StandbyPromotionBoundary()
+  : origin_(), cutover_scn_(), source_chain_()
+{
+}
+
+bool StandbyPromotionBoundary::is_valid() const
+{
+  bool valid = origin_.is_valid()
+      && cutover_scn_.is_valid()
+      && source_chain_.count() <= MAX_PROMOTION_BOUNDARY_HOPS;
+  for (int64_t i = 0; valid && i < source_chain_.count(); ++i) {
+    const SourceHop &hop = source_chain_.at(i);
+    // A configured source is a routing endpoint. It may be an alias of the
+    // callee's advertised address, so it cannot be used as node identity.
+    valid = hop.is_valid();
+    for (int64_t j = 0; valid && j < i; ++j) {
+      valid = hop.relay_ != source_chain_.at(j).relay_;
+    }
+  }
+  return valid;
+}
+
+bool StandbyPromotionBoundary::is_same_as(
+    const StandbyPromotionBoundary &other) const
+{
+  bool same = origin_ == other.origin_
+      && cutover_scn_ == other.cutover_scn_
+      && source_chain_.count() == other.source_chain_.count();
+  for (int64_t i = 0; same && i < source_chain_.count(); ++i) {
+    same = source_chain_.at(i).is_same_as(other.source_chain_.at(i));
+  }
+  return same;
+}
+
+int StandbyPromotionBoundary::add_source_hop(
+    const common::ObAddr &relay,
+    const common::ObAddr &source,
+    const int64_t source_version)
+{
+  int ret = OB_SUCCESS;
+  const SourceHop hop(relay, source, source_version);
+  if (!is_valid() || !hop.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (source_chain_.count() >= MAX_PROMOTION_BOUNDARY_HOPS) {
+    ret = OB_SIZE_OVERFLOW;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < source_chain_.count(); ++i) {
+      if (relay == source_chain_.at(i).relay_) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(source_chain_.push_back(hop))) {
+      LOG_WARN("failed to append promotion source hop", K(ret), K(hop));
+    }
+  }
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(StandbyPromotionBoundary::SourceHop,
+    relay_, source_, source_version_);
+OB_SERIALIZE_MEMBER(StandbyPromotionBoundary,
+    origin_, cutover_scn_, source_chain_);
+
+bool StandbyPromotionBoundaryRequest::is_valid() const
+{
+  bool valid = visited_.count() <= MAX_PROMOTION_BOUNDARY_HOPS;
+  for (int64_t i = 0; valid && i < visited_.count(); ++i) {
+    valid = visited_.at(i).is_valid();
+    for (int64_t j = 0; valid && j < i; ++j) {
+      valid = visited_.at(i) != visited_.at(j);
+    }
+  }
+  return valid;
+}
+
+bool StandbyPromotionBoundaryRequest::contains(const common::ObAddr &addr) const
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < visited_.count(); ++i) {
+    found = visited_.at(i) == addr;
+  }
+  return found;
+}
+
+int StandbyPromotionBoundaryRequest::add_visited(const common::ObAddr &addr)
+{
+  int ret = OB_SUCCESS;
+  if (!addr.is_valid() || contains(addr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (visited_.count() >= MAX_PROMOTION_BOUNDARY_HOPS) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (OB_FAIL(visited_.push_back(addr))) {
+    LOG_WARN("failed to extend promotion boundary path", K(ret), K(addr), K_(visited));
+  }
+  return ret;
+}
+
+OB_SERIALIZE_MEMBER(StandbyPromotionBoundaryRequest, visited_);
 
 grpc::Status StandbyGrpcService::fetch_ls_view(
     grpc::ServerContext* context,
@@ -771,6 +881,130 @@ grpc::Status StandbyGrpcService::fetch_log(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
+grpc::Status StandbyGrpcService::get_promotion_boundary(
+    grpc::ServerContext *context,
+    const standbyservice::GetPromotionBoundaryReq *request,
+    standbyservice::GetPromotionBoundaryRes *response)
+{
+  int ret = OB_SUCCESS;
+  StandbyPromotionBoundaryRequest boundary_request;
+  StandbyPromotionBoundary boundary;
+  UNUSED(context);
+  if (OB_ISNULL(request) || OB_ISNULL(response)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(deserialize_proto_to_ob(*request, boundary_request))) {
+    LOG_WARN("failed to deserialize promotion boundary request", K(ret));
+  } else if (!boundary_request.is_valid()
+             || boundary_request.contains(self_addr_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid or cyclic promotion boundary request",
+        K(ret), K(boundary_request), K_(self_addr));
+  } else if (OB_FAIL(boundary_request.add_visited(self_addr_))) {
+    LOG_WARN("promotion boundary path is too deep", K(ret), K(boundary_request));
+  } else {
+    SERVER_MODULE_SCOPE {
+      share::ObServerInfo server_info;
+      if (OB_FAIL(host_.load_server_info(server_info))) {
+        LOG_WARN("failed to load source role transition state", K(ret));
+      } else if (server_info.is_primary()) {
+        ObLSService *ls_service = share::server_service<ObLSService>();
+        ObLS *ls = nullptr;
+        share::SCN source_end_scn;
+        if (OB_ISNULL(ls_service)) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(ls_service->get_ls(ls))) {
+          LOG_WARN("failed to get source log stream", K(ret));
+        } else if (OB_ISNULL(ls)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(ls->get_end_scn(source_end_scn))) {
+          LOG_WARN("failed to get source end scn", K(ret));
+        } else if (!server_info.has_pending_role()
+                   || !server_info.get_pending_role().is_standby()
+                   || !server_info.is_preparing_status()
+                   || !server_info.get_cutover_scn().is_valid()
+                   || source_end_scn != server_info.get_cutover_scn()) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("primary is not durably fenced for switchover",
+              K(ret), K(server_info), K(source_end_scn));
+        } else {
+          boundary.origin_ = self_addr_;
+          boundary.cutover_scn_ = server_info.get_cutover_scn();
+        }
+      } else if (!server_info.is_standby()
+                 || server_info.has_pending_role()) {
+        ret = OB_STATE_NOT_MATCH;
+        LOG_WARN("only a stable standby may relay a promotion boundary",
+            K(ret), K(server_info));
+      } else {
+        common::ObArenaAllocator before_allocator("BoundarySrc");
+        common::ObArenaAllocator after_allocator("BoundaryChk");
+        common::ObString source_before;
+        common::ObString source_after;
+        common::ObAddr source_addr;
+        common::ObAddr source_addr_after;
+        int64_t source_version = 0;
+        int64_t source_version_after = 0;
+        ObStandbyGrpcClient client;
+        if (OB_FAIL(host_.load_log_restore_source(
+            before_allocator, source_before, source_version))) {
+          LOG_WARN("failed to load relay source", K(ret));
+        } else if (source_before.empty()) {
+          ret = OB_ENTRY_NOT_EXIST;
+        } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
+            source_before, source_addr))) {
+          LOG_WARN("failed to parse relay source", K(ret), K(source_before));
+        } else if (boundary_request.contains(source_addr)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("promotion boundary source chain contains a cycle",
+              K(ret), K(source_addr), K(boundary_request));
+        } else if (OB_FAIL(client.init(
+            source_addr, io_timeout_ms_ * 1000L, host_.rpc_tls_enabled()))) {
+          LOG_WARN("failed to connect promotion boundary source", K(ret), K(source_addr));
+        } else if (OB_FAIL(client.get_promotion_boundary(boundary_request, boundary))) {
+          LOG_WARN("failed to relay promotion boundary", K(ret), K(source_addr));
+        } else if (OB_FAIL(host_.load_log_restore_source(
+            after_allocator, source_after, source_version_after))) {
+          LOG_WARN("failed to recheck relay source", K(ret));
+        } else if (source_after.empty()) {
+          ret = OB_ENTRY_NOT_EXIST;
+          LOG_WARN("relay source was removed while resolving promotion boundary", K(ret));
+        } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
+            source_after, source_addr_after))) {
+          LOG_WARN("failed to parse reloaded relay source", K(ret), K(source_after));
+        } else if (source_version != source_version_after
+                   || source_before.compare(source_after) != 0
+                   || source_addr != source_addr_after) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("relay source changed while resolving promotion boundary",
+              K(ret), K(source_version), K(source_version_after),
+              K(source_before), K(source_after));
+        } else {
+          share::ObServerInfo rechecked_server_info;
+          if (OB_FAIL(host_.load_server_info(rechecked_server_info))) {
+            LOG_WARN("failed to recheck relay role", K(ret));
+          } else if (!rechecked_server_info.is_standby()
+                     || rechecked_server_info.has_pending_role()) {
+            ret = OB_STATE_NOT_MATCH;
+            LOG_WARN("relay role changed while resolving promotion boundary",
+                K(ret), K(rechecked_server_info));
+          } else if (OB_FAIL(boundary.add_source_hop(
+              self_addr_, source_addr, source_version))) {
+            LOG_WARN("failed to record stable promotion relay",
+                K(ret), K_(self_addr), K(source_addr), K(source_version));
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !boundary.is_valid()) {
+        ret = OB_INVALID_DATA;
+        LOG_WARN("resolved invalid promotion boundary", K(ret), K(boundary));
+      } else if (OB_SUCC(ret) && OB_FAIL(serialize_ob_to_proto(boundary, response))) {
+        LOG_WARN("failed to serialize promotion boundary", K(ret), K(boundary));
+      }
+    }
+  }
+  return obgrpc::ob_error_to_grpc_status(ret);
+}
+
 int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
@@ -1146,32 +1380,35 @@ int ObStandbyGrpcClient::fetch_log(
   return ret;
 }
 
-int ObStandbyGrpcClient::get_log_end_scn(share::SCN &end_scn)
+int ObStandbyGrpcClient::get_promotion_boundary(
+    const StandbyPromotionBoundaryRequest &boundary_request,
+    StandbyPromotionBoundary &boundary)
 {
   int ret = OB_SUCCESS;
-  end_scn.reset();
+  boundary = StandbyPromotionBoundary();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
+  } else if (!boundary_request.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    standbyservice::FetchLogReq request;
-    standbyservice::FetchLogRes response;
+    standbyservice::GetPromotionBoundaryReq request;
+    standbyservice::GetPromotionBoundaryRes response;
     grpc::ClientContext context;
-    request.set_start_lsn(0);
-    request.set_max_bytes(0);
-    grpc_client_.ctx_.set_grpc_context(context);
-    std::unique_ptr<grpc::ClientReader<standbyservice::FetchLogRes>> reader(
-        grpc_client_.stub_->fetch_log(&context, request));
-    if (OB_ISNULL(reader)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (!reader->Read(&response) || response.size() != 0) {
-      ret = OB_INVALID_DATA;
-      LOG_WARN("missing source log boundary frame", K(ret));
-    } else if (OB_FAIL(end_scn.convert_for_logservice(response.end_scn()))) {
-      LOG_WARN("invalid source log end scn", K(ret), "end_scn", response.end_scn());
-    }
-    const grpc::Status status = reader->Finish();
-    if (OB_SUCC(ret) && OB_FAIL(grpc_client_.translate_error(status))) {
-      LOG_WARN("get source log end scn failed", K(ret));
+    if (OB_FAIL(serialize_ob_to_proto(boundary_request, &request))) {
+      LOG_WARN("failed to serialize promotion boundary request",
+          K(ret), K(boundary_request));
+    } else {
+      grpc_client_.ctx_.set_grpc_context(context);
+      const grpc::Status status = grpc_client_.stub_->get_promotion_boundary(
+          &context, request, &response);
+      if (OB_FAIL(grpc_client_.translate_error(status))) {
+        LOG_WARN("get source promotion boundary failed", K(ret));
+      } else if (OB_FAIL(deserialize_proto_to_ob(response, boundary))) {
+        LOG_WARN("failed to deserialize source promotion boundary", K(ret));
+      } else if (!boundary.is_valid()) {
+        ret = OB_INVALID_DATA;
+        LOG_WARN("source returned invalid promotion boundary", K(ret), K(boundary));
+      }
     }
   }
   return ret;

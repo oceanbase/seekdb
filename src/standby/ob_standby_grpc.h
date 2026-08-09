@@ -45,6 +45,7 @@
 #endif
 #include "grpc/standbyservice.grpc.pb.h"
 #include "grpc/ob_grpc_context.h"
+#include "lib/container/ob_se_array.h"
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/restore/ob_standby_restore_rpc.h"
 #include "share/log/palf/lsn.h"
@@ -116,6 +117,8 @@ struct ObRestoreHelperTabletInfoCtx;
 namespace standby
 {
 
+static constexpr int64_t MAX_PROMOTION_BOUNDARY_HOPS = 16;
+
 struct ObStandbyLSViewTabletCountResult final
 {
   OB_UNIS_VERSION(1);
@@ -141,6 +144,70 @@ public:
   share::SCN physical_checkpoint_scn_;
 };
 
+struct StandbyPromotionBoundary final
+{
+  OB_UNIS_VERSION(1);
+public:
+  StandbyPromotionBoundary();
+  ~StandbyPromotionBoundary() = default;
+  bool is_valid() const;
+  bool is_same_as(const StandbyPromotionBoundary &other) const;
+  int add_source_hop(
+      const common::ObAddr &relay,
+      const common::ObAddr &source,
+      int64_t source_version);
+
+  struct SourceHop final
+  {
+    OB_UNIS_VERSION(1);
+  public:
+    SourceHop() : relay_(), source_(), source_version_(0) {}
+    SourceHop(
+        const common::ObAddr &relay,
+        const common::ObAddr &source,
+        const int64_t source_version)
+      : relay_(relay), source_(source), source_version_(source_version) {}
+    bool is_valid() const
+    {
+      return relay_.is_valid()
+          && source_.is_valid()
+          && relay_ != source_
+          && source_version_ >= 0;
+    }
+    bool is_same_as(const SourceHop &other) const
+    {
+      return relay_ == other.relay_
+          && source_ == other.source_
+          && source_version_ == other.source_version_;
+    }
+
+    TO_STRING_KV(K_(relay), K_(source), K_(source_version));
+    common::ObAddr relay_;
+    common::ObAddr source_;
+    int64_t source_version_;
+  };
+
+  TO_STRING_KV(K_(origin), K_(cutover_scn), K_(source_chain));
+  common::ObAddr origin_;
+  share::SCN cutover_scn_;
+  common::ObSEArray<SourceHop, 4> source_chain_;
+};
+
+struct StandbyPromotionBoundaryRequest final
+{
+  OB_UNIS_VERSION(1);
+public:
+  StandbyPromotionBoundaryRequest() : visited_() {}
+  ~StandbyPromotionBoundaryRequest() = default;
+
+  bool is_valid() const;
+  bool contains(const common::ObAddr &addr) const;
+  int add_visited(const common::ObAddr &addr);
+
+  TO_STRING_KV(K_(visited));
+  common::ObSEArray<common::ObAddr, 4> visited_;
+};
+
 class ObStandbyGrpcClient;
 
 class ObStandbyGrpcClient
@@ -159,7 +226,9 @@ public:
       const int64_t max_bytes,
       const std::function<int(const char *, int64_t, const palf::LSN &,
                               const share::SCN &)> &consume_log);
-  int get_log_end_scn(share::SCN &end_scn);
+  int get_promotion_boundary(
+      const StandbyPromotionBoundaryRequest &request,
+      StandbyPromotionBoundary &boundary);
   int fetch_tablet_info(const obcall::ObCopyTabletInfoArg& arg,
                         std::function<int(const obcall::ObCopyTabletInfo&)> callback);
   int create_tablet_info_stream(

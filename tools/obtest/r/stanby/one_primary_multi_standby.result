@@ -43,11 +43,8 @@ db_s2.check_until_timeout select count(*) from test_multi_standby where id = 5, 
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
 db_p.force_stop;
-db_s1.force_stop;
-db_s1.nstart;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 insert into test_multi_standby values(6, 'after_switchover', 600);
@@ -72,11 +69,8 @@ db_s2.check_until_timeout select count(*) from test_multi_standby where id = 7, 
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
 db_s1.force_stop;
-db_p.force_stop;
-db_p.nstart;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_s1.nstart;
 db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 insert into test_multi_standby values(8, 'after_roundtrip', 800);
@@ -97,9 +91,6 @@ db_s1.check_until_timeout select count(*) from test_multi_standby where id = 9, 
 db_s2.check_until_timeout select count(*) from test_multi_standby where id = 9, 1, 120;
 db_p.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
-db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
-db_s2.force_stop;
-db_s2.nstart;
 db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 insert into test_multi_standby values(10, 'after_failover', 1000);
 db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;

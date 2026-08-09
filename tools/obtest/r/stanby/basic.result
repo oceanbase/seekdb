@@ -16,12 +16,20 @@ create table test_table_standby(a int);
 ERROR HY000: standby tenant is read only
 insert into test_table_primary values(2, 2);
 ERROR HY000: standby tenant is read only
+db_s.check_until_timeout select count(*) from test_table_primary where a = 1 and b = 1, 1, 120;
+start transaction;
+select count(*) from test_table_primary;
+count(*)
+1
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+insert into test_table_primary values(2, 2);
+ERROR 25006: Cannot execute statement in a READ ONLY transaction.
+rollback;
+start transaction;
+insert into test_table_primary values(2, 2);
+commit;
 db_p.force_stop;
-db_s.force_stop;
-db_s.nstart;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 Case 1 completed: Primary cluster successfully switched to standby
@@ -54,9 +62,6 @@ role
 STANDBY
 db_s.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
-db_p.force_stop;
-db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 create table if not exists test_table_failover_primary(a int primary key, b int);
 insert into test_table_failover_primary values(1, 1);

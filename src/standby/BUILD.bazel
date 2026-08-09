@@ -35,6 +35,7 @@ STANDBY_DEPS = [
     "//src/share:cluster_metadata_persistence",
     "//src/share:config",
     "//src/share:core_types",
+    "//src/share:debug_sync_interface",
     "//src/share:diagnostics",
     "//src/share:execution_contracts",
     "//src/share:freeze_coordination",

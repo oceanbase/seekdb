@@ -189,16 +189,13 @@ db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 --enable_query_log
 --enable_result_log
 
-# 目标备库准备成为主库，旧主仍在线但已 fencing
+# 目标备库在线成为主库，旧主仍在线但已 fencing
 connection conn_sys_s;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
 
-# 外部编排者停止旧主，重启目标；旧主随后按 pending role 重启为备库
+# 外部编排者停止旧主；旧主随后按 pending role 重启为备库
 db_p.force_stop;
-db_s.force_stop;
-db_s.nstart;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
@@ -218,8 +215,7 @@ create table test_switchover_readonly_check(a int);
 --disable_query_log
 --disable_result_log
 
-# 角色已在上一阶段的重启中生效，重复命令只验证幂等性
-ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# 角色已在上一阶段在线生效，同一连接上的重复命令验证幂等性
 connection conn_sys_s;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
@@ -338,21 +334,17 @@ ALTER SYSTEM SWITCHOVER TO STANDBY;
 # 验证 active role 未改变，pending role 已持久化
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 
-# 目标备库 prepare 成为主库，仍在运行的源端已经 fencing
+# 目标备库在线成为主库，仍在运行的源端已经 fencing
 connection conn_sys_p;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
-# 验证 active role 未改变，pending role 已持久化
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+# 验证 active role 已在线切换
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
 
-# 外部编排者按顺序重启目标和旧主
+# 外部编排者只重启旧主为备库
 db_s.force_stop;
-db_p.force_stop;
-db_p.nstart;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_s.nstart;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
 --enable_query_log
