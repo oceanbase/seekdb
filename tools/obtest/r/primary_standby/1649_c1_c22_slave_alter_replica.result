@@ -1,0 +1,71 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.z1.obs0.set extra_config=resource_soft_limit=100;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob2.mysql alter system set resource_soft_limit=100;
+ob2.mysql update oceanbase.__all_server set status = 'DELETING' where id = $id;
+ob2.mysql alter system set enable_rebalance = false;
+ob2.mysql alter system reload server;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int);
+insert into t1 values(1,1);
+truncate table t1;
+drop table t1;
+drop database db;
+use test;
+create table t1(c1 int primary key,c2 int);
+use oceanbase;
+select tenant_id, table_id, operation_type, ddl_stmt_str from oceanbase.__all_ddl_operation;
+tenant_id	table_id	operation_type	ddl_stmt_str
+0	0	1402	
+0	0	1509	
+0	0	302	
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `oceanbase`.* TO `root`
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `__recyclebin`.* TO `root`
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `__public`.* TO `root`
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `mysql`.* TO `root`
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `information_schema`.* TO `root`
+0	0	202	
+0	0	502	GRANT ALL PRIVILEGES ON `test`.* TO `root`
+0	0	402	CREATE USER if not exists `root` IDENTIFIED BY PASSWORD ''
+0	100	1651	
+0	0	1503	
+0	0	202	create database db
+0	0	1503	
+0	50001	4	create table t1(c1 int primary key,c2 int)
+0	0	1503	
+0	50001	48	truncate table t1
+0	50002	23	truncate table t1
+0	0	1503	
+0	50002	48	DROP TABLE db.t1
+0	0	1503	
+0	0	1402	
+0	0	208	drop database db
+0	0	1503	
+0	50003	4	create table t1(c1 int primary key,c2 int)
+0	0	1503	
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.mysql update oceanbase.__all_server set status = 'ACTIVE' where id = $id;
+ob2.mysql alter system reload server;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id, $partition_cnt, 120;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+select zone_list from __all_tenant where tenant_id = 1001;
+zone_list
+z1
+'add replica suss'

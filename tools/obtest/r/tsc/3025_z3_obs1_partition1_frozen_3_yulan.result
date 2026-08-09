@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+follower_2=deploy_get_value(ob1.get_follower obtest:obtest:t1,2);
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+ob1.mysql alter system major freeze;
+ob1.z1.obs0.restart;
+ob1.z2.obs0.restart;
+ob1.z3.obs0.restart;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 4,3600;

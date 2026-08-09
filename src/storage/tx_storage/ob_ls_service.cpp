@@ -45,7 +45,6 @@ ObLSService::ObLSService()
   : is_inited_(false),
     is_running_(false),
     is_stopped_(false),
-    boot_append_mode_(true),
     ls_(nullptr),
     ls_allocator_(),
     change_lock_(common::ObLatchIds::LS_CHANGE_LOCK)
@@ -148,9 +147,6 @@ int ObLSService::start()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service is already running", K(ret));
   } else {
-    // The append/replay mode follows the boot profile even while startup keeps
-    // the write gate closed until all role capabilities are ready.
-    boot_append_mode_ = !share::server_is_recovery_mode();
     LOG_INFO("ls service start successfully");
     is_running_ = true;
   }
@@ -159,7 +155,6 @@ int ObLSService::start()
 
 int ObLSService::inner_create_ls_(const ObRestoreStatus &restore_status,
                                   const SCN &create_scn,
-                                  const palf::LSN &clog_base_lsn,
                                   ObLS *&ls)
 {
   int ret = OB_SUCCESS;
@@ -171,7 +166,7 @@ int ObLSService::inner_create_ls_(const ObRestoreStatus &restore_status,
     LOG_WARN("failed to alloc ls", K(ret));
   } else if (FALSE_IT(ls = new (buf) ObLS())) {
 
-  } else if (OB_FAIL(ls->init(restore_status, create_scn, clog_base_lsn))) {
+  } else if (OB_FAIL(ls->init(restore_status, create_scn))) {
   }
   if (OB_FAIL(ret) && NULL != ls) {
     ls->~ObLS();
@@ -217,8 +212,6 @@ int ObLSService::create_ls(const share::ObServerRole &server_role)
   arg.server_role_ = server_role;
   arg.restore_status_ = ObRestoreStatus(ObRestoreStatus::Status::NONE);
   arg.create_scn_ = SCN::base_scn();
-  arg.palf_base_info_.generate_by_default();
-  arg.palf_base_info_.prev_log_info_.scn_ = arg.create_scn_;
   arg.need_create_inner_tablet_ = true;
   if (OB_FAIL(create_ls_(arg))) {
   }
@@ -226,45 +219,15 @@ int ObLSService::create_ls(const share::ObServerRole &server_role)
   return ret;
 }
 
-int ObLSService::create_ls_for_restore(
-    const palf::PalfBaseInfo &palf_base_info,
-    const SCN &restore_checkpoint_scn)
+int ObLSService::create_ls_for_restore()
 {
   int ret = OB_SUCCESS;
   ObCreateLSCommonArg arg;
-  if (!palf_base_info.is_valid() || !restore_checkpoint_scn.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid physical restore replay base",
-        K(ret), K(palf_base_info), K(restore_checkpoint_scn));
-  } else {
-    arg.server_role_ = share::RESTORE_SERVER_ROLE;
-    arg.restore_status_ = ObRestoreStatus(ObRestoreStatus::Status::RESTORE_DOING);
-    arg.create_scn_ = restore_checkpoint_scn;
-    arg.palf_base_info_ = palf_base_info;
-    arg.need_create_inner_tablet_ = false;
-  }
-  if (OB_SUCC(ret) && OB_FAIL(create_ls_(arg))) {
-  }
-  return ret;
-}
-
-int ObLSService::update_ls_meta_for_physical_restore(const ObLSMeta &source_meta)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("ls service is not inited", K(ret));
-  } else if (!source_meta.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid source ls meta", K(ret), K(source_meta));
-  } else if (OB_FAIL(get_ls(ls))) {
-    LOG_WARN("failed to get ls for physical restore meta update", K(ret));
-  } else {
-    ObLSLockGuard lock_ls(ls);
-    if (OB_FAIL(ls->update_meta_for_physical_restore(source_meta))) {
-      LOG_WARN("failed to update ls meta for physical restore", K(ret), K(source_meta));
-    }
+  arg.server_role_ = share::RESTORE_SERVER_ROLE;
+  arg.restore_status_ = ObRestoreStatus(ObRestoreStatus::Status::RESTORE_DOING);
+  arg.create_scn_ = SCN::min_scn();
+  arg.need_create_inner_tablet_ = false;
+  if (OB_FAIL(create_ls_(arg))) {
   }
   return ret;
 }
@@ -274,20 +237,13 @@ int ObLSService::post_create_ls_(const bool is_restore, ObLS *ls)
   int ret = OB_SUCCESS;
   bool need_online = false;
   if (OB_FAIL(ls->check_ls_need_online(need_online))) {
-  } else if (need_online) {
-    if ((is_restore || !boot_append_mode_)
-        && OB_FAIL(ls->online_in_replay_mode_without_lock())) {
-      LOG_ERROR("failed to start ls in replay mode", K(ret), K(is_restore), K_(boot_append_mode));
-    } else if (!is_restore && boot_append_mode_
-               && OB_FAIL(ls->online_without_lock())) {
-      LOG_ERROR("failed to start ls in append mode", K(ret));
-    }
-  }
-  if (OB_SUCC(ret) && is_restore) {
+  } else if (need_online &&
+             OB_FAIL(ls->online_without_lock())) {
+    LOG_ERROR("ls start failed", K(ret));
+  } else if (is_restore) {
     if (OB_FAIL(ls->set_start_restore_state())) {
     }
-  } else if (OB_SUCC(ret) && OB_FAIL(ls->set_start_work_state())) {
-    LOG_ERROR("ls set start work state failed", KR(ret), KPC(ls));
+  } else if (OB_FAIL(ls->set_start_work_state())) {
   }
 
   return ret;
@@ -471,7 +427,6 @@ int ObLSService::replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_me
   } else if (FALSE_IT(ret = OB_SUCCESS)) {
   } else if (OB_FAIL(inner_create_ls_(ObRestoreStatus(ObRestoreStatus::Status::NONE),
                                       ls_meta.get_clog_checkpoint_scn(),
-                                      ls_meta.get_clog_base_lsn(),
                                       ls))) {
   } else {
     state = ObLSCreateState::CREATE_STATE_LS_ALLOCATED;
@@ -504,87 +459,6 @@ int ObLSService::get_ls(ObLS *&ls)
     ls = ls_;
   }
 
-  return ret;
-}
-
-int ObLSService::fence_local_transactions(const int64_t deadline_us)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(get_ls(ls))) {
-    LOG_WARN("failed to get local log stream while fencing transactions", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ls->block_tx())) {
-    LOG_WARN("failed to block local transactions", K(ret));
-  }
-  while (OB_SUCC(ret)) {
-    if (OB_FAIL(ls->check_all_tx_clean_up())) {
-      if (OB_EAGAIN == ret && ObTimeUtility::current_time() < deadline_us) {
-        ret = OB_SUCCESS;
-        ob_usleep(1000);
-      } else if (OB_EAGAIN == ret) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("timed out draining local transactions", K(ret), K(deadline_us));
-      } else {
-        LOG_WARN("failed to check local transaction drain", K(ret));
-      }
-    } else {
-      break;
-    }
-  }
-  return ret;
-}
-
-int ObLSService::fence_local_append(const int64_t deadline_us)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(get_ls(ls))) {
-    LOG_WARN("failed to get local log stream while fencing append", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
-    if (!lock_ls.locked()) {
-      ret = OB_TIMEOUT;
-    } else if (OB_FAIL(ls->fence_local_append_())) {
-      LOG_WARN("failed to fence local append", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLSService::prepare_local_append(const int64_t deadline_us)
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(get_ls(ls))) {
-    LOG_WARN("failed to get local log stream", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObLSLockGuard lock_ls(ls, ls->lock_, 0, LSLOCKALL, deadline_us);
-    if (!lock_ls.locked()) {
-      ret = OB_TIMEOUT;
-    } else if (OB_FAIL(ls->prepare_local_append_(deadline_us))) {
-      LOG_WARN("failed to prepare local append", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLSService::activate_local_append()
-{
-  int ret = OB_SUCCESS;
-  ObLS *ls = nullptr;
-  if (OB_FAIL(get_ls(ls))) {
-    LOG_WARN("failed to get local log stream", K(ret));
-  } else if (OB_ISNULL(ls)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ls->activate_local_append_())) {
-    LOG_WARN("failed to activate local append", K(ret));
-  }
   return ret;
 }
 
@@ -666,6 +540,10 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
   ObLSCreateState state = ObLSCreateState::CREATE_STATE_INIT;
   ObLS *ls = NULL;
   int64_t process_point = 0;
+  palf::PalfBaseInfo palf_base_info;
+  palf_base_info.generate_by_default();
+  palf_base_info.prev_log_info_.scn_ = arg.create_scn_;
+
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("the ls service has not been inited", K(ret));
@@ -688,7 +566,6 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
       LOG_WARN("the local log stream already exists", K(ret));
     } else if (OB_BREAK_FAIL(inner_create_ls_(arg.restore_status_,
                                               arg.create_scn_,
-                                              arg.palf_base_info_.curr_lsn_,
                                               ls))) {
       LOG_WARN("create ls failed", K(ret));
     } else {
@@ -703,7 +580,7 @@ int ObLSService::create_ls_(const ObCreateLSCommonArg &arg)
         LOG_ERROR("fail to write create log stream slog", K(ls_meta));
       } else if (OB_FAIL(ls->set_ls_epoch(ls_epoch))) {
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_WRITE_PREPARE_SLOG)) {
-      } else if (OB_BREAK_FAIL(ls->create_ls(arg.palf_base_info_))) {
+      } else if (OB_BREAK_FAIL(ls->create_ls(palf_base_info))) {
         LOG_WARN("enable ls palf failed", K(ret), K(ls_meta));
       } else if (FALSE_IT(state = ObLSCreateState::CREATE_STATE_PALF_ENABLED)) {
       } else if (arg.need_create_inner_tablet_ && OB_FAIL(ls->create_ls_inner_tablet(arg.create_scn_))) {

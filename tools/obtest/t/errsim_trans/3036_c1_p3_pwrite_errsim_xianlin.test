@@ -1,0 +1,53 @@
+##
+# owner: xianlin.lh
+# owner group: transaction
+# description:
+# 对日志盘写入操作注入错误，测试在异常宕机场景下可以正确恢复
+# 1. 第一次启动，模拟pwrite故障（block一个byte被修改），执行major
+# freeze是为了触发一次写日志操作（写freeze日志）；
+# 2. 第二次启动，验证可以正常启动，跳过最后一个出错的block；插入50条数据；
+# 3. 第三次启动，验证第二次启动后的数据可以正确查出来；
+##
+ob1=OBI(cluster=1);
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port= deploy_get_value(ob1.z1.obs0.mysql_port);
+
+ob1.reboot;
+sleep 10;
+
+ob1.mysql alter system set pwrite_errsim=true;
+
+connect(conn1, $ip, admin, admin, oceanbase, $port);
+connection conn1;
+--error 2013,255
+alter system major freeze;
+
+ob1.z1.obs0.stop;
+ob1.z1.obs0.set extra_config=pwrite_errsim=false;
+ob1.z1.obs0.start;
+
+sleep 30;
+connect(conn2, $ip, admin, admin, oceanbase, $port);
+connection conn2;
+
+select count(*) from __all_server;
+
+create table t1(pk int primary key, c1 int);
+
+let $cnt=50;
+while($cnt>0)
+{
+  eval insert into t1 values($cnt, $cnt);
+  dec $cnt;
+}
+
+ob1.z1.obs0.stop;
+ob1.z1.obs0.set extra_config=pwrite_errsim=false;
+ob1.z1.obs0.start;
+
+sleep 30;
+connect(conn3, $ip, admin, admin, oceanbase, $port);
+connection conn3;
+
+select count(*) from t1;

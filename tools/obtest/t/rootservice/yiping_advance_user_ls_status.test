@@ -1,0 +1,180 @@
+ob1=OBI(cluster=3:3:3,proxy_num=0);
+ob1.reboot;
+
+let $z1s0ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1s0port= deploy_get_value(ob1.z1.obs0.port);
+let $z1s0mysqlport= deploy_get_value(ob1.z1.obs0.mysql_port);
+let $z2s0ip = deploy_get_value(ob1.z2.obs0.ip);
+let $z2s0port= deploy_get_value(ob1.z2.obs0.port);
+let $z2s0mysqlport= deploy_get_value(ob1.z2.obs0.mysql_port);
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.port);
+
+ob1.mysql alter tenant sys set primary_zone='z1';
+ob1.check_until_timeout select role from oceanbase.__all_ls_meta_table where tenant_id=1 and ls_id=1 and zone='z1', 1, 600;
+ob1.check_until_timeout select count(*)>0 from oceanbase.__all_virtual_server_event_history where event='full_rootservice' and value1=0 and value2 like '%$ip:$port%' order by 1 desc, 1, 10;
+
+ob1.mysql alter system set syslog_io_bandwidth_limit='300M';
+
+ob1.mysql create resource unit box max_cpu 2, memory_size='6G';
+ob1.mysql create resource pool pool1 unit = 'box', unit_num = 1;
+ob1.mysql create resource pool pool2 unit = 'box', unit_num = 2;
+ob1.mysql create resource pool pool3 unit = 'box', unit_num = 3;
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+ob_connect(conn_sys1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+--echo ============================================================
+--echo 检测advance_user_ls_status_for_creating_tenant可重入
+--echo ============================================================
+let $max_used_tenant_id = deploy_get_value(ob1.select select value from __all_sys_stat where name='ob_max_used_tenant_id', value, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+1 a, a, 1);
+let $user_tenant_id = deploy_get_value(ob1.select select $max_used_tenant_id+2 a, a, 1);
+
+# 预期会调用三次，直到所有日志流都被创建了
+ob1.mysql drop tenant mysql force;
+
+
+let $primary_zone=z1;
+let $locality=F@z1;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=1 locality=1
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=1 locality=1
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=1 locality=1
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+
+let $primary_zone=z2;
+let $locality=F@z2;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=1 locality=1 not include rs
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=1 locality=1 not include rs
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=1 locality=1 not include rs
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=1;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+
+let $primary_zone=z1,z2;
+let $locality=F@z1,F@z2;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=2 locality=2
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=2 locality=2
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=2 locality=2
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+let $primary_zone=z3,z2;
+let $locality=F@z3,F@z2;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=2 locality=2 not include rs
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=2 locality=2 not include rs
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=2 locality=2 not include rs
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+
+let $primary_zone=z1,z2;
+let $locality=F@z1,F@z2,F@z3;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=2 locality=3
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=2 locality=3
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=2 locality=3
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=2;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+
+let $primary_zone=z1,z2,z3;
+let $locality=F@z1,F@z2,F@z3;
+--echo ============================================================
+--echo unit_num=1 primary_zone_count=3 locality=3
+--echo ============================================================
+let $pool_name=pool1;
+let $created_ls_count=3;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=2 primary_zone_count=3 locality=3
+--echo ============================================================
+let $pool_name=pool2;
+let $created_ls_count=3;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;
+
+--echo ============================================================
+--echo unit_num=3 primary_zone_count=3 locality=3
+--echo ============================================================
+let $pool_name=pool3;
+let $created_ls_count=3;
+source t/rootservice/yiping_advance_user_ls_status_test_create_tenant.inc;

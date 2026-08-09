@@ -1,46 +1,73 @@
-# Build and run seekdb on Android
+# Building and Running seekdb on Android
 
-Cross-compile seekdb for Android arm64-v8a on macOS, then deploy it to an emulator or physical device.
+Cross-compile seekdb for Android arm64-v8a on macOS using the NDK toolchain, then deploy and run on an emulator or device.
 
 ## Prerequisites
 
-- macOS host
-- Android NDK 27.x, with `ANDROID_NDK_HOME` set when it is not installed at the default SDK path
-- An arm64-v8a device or emulator running API 28 or later
-- `adb` and a MySQL-compatible client on `PATH`
+- macOS host (this guide is written for macOS)
+- Android NDK 27.x installed (default: `~/Library/Android/sdk/ndk/27.3.13750724`)
+- Android emulator running arm64-v8a (API 28+), or a physical device
+- Dependencies built via [ob-deps](https://github.com/oceanbase/ob-deps/tree/android_arm64-v8a) `ndk/build_all.sh`
+- `adb` available on PATH
+- `mysql` client (for connecting after launch)
+
+Set `ANDROID_NDK_HOME` if your NDK is in a non-default location:
+
+```bash
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.3.13750724
+```
+
+> **Note**: You may see a `CMake Deprecation Warning` during configuration (from NDK's `flags.cmake` using `cmake_minimum_required(VERSION 3.6.0)`). This warning can be ignored and does not affect the build.
 
 ## Build
 
-Use the supported Android entry point. It initializes Android dependencies, configures the build, and builds seekdb:
+### 1. Initialize dependencies
 
 ```bash
-./build.sh release --android --init --make -j16
+./build.sh release --android --init
 ```
 
-The binary is generated at:
+This runs `deps/init/dep_create.sh` in Android mode, which downloads and extracts
+pre-built NDK dependency tarballs into `deps/3rd/`.
 
-```text
-build_android_release/src/observer/seekdb
-```
-
-The Android CMake build does not provide an `all_tests` target. Validate affected unit tests on a supported Linux host by following [Write and run unit tests](unittest.md).
-
-## Strip and deploy
-
-Use the NDK strip tool because the macOS `strip` command cannot process Android ELF binaries:
+### 2. Configure and build
+To build only the observer binary:
 
 ```bash
-NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"
-"$NDK_STRIP" -o /tmp/seekdb build_android_release/src/observer/seekdb
+cd build_android_release
+make seekdb -j$(nproc)
+```
+
+### 3. Build unit tests (optional)
+
+A combined `all_tests` binary includes all unit tests in a single executable:
+
+```bash
+cd build_android_release
+make all_tests
+```
+
+## Deploy to Emulator
+
+### Strip debug symbols
+```bash
+NDK_STRIP=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
+
+$NDK_STRIP -o /tmp/seekdb build_android_release/src/observer/seekdb
+```
+
+macOS `strip` cannot process ELF binaries -- you must use the NDK strip.
+
+### Push to emulator
+
+```bash
 adb push /tmp/seekdb /data/local/tmp/seekdb
 adb shell chmod +x /data/local/tmp/seekdb
 ```
 
-For an Apple Silicon NDK installation, use the actual prebuilt host directory present under `$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/`.
+## Launch seekdb
 
-## Start and connect
-
-Choose resource values that fit the device:
+### Start the server
 
 ```bash
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
@@ -53,16 +80,36 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-Forward the SQL port and connect:
+Explicit resource values are recommended on Android. `memory_budget` defaults
+to 1 GiB when omitted; size it together with the data and log files for the
+available device resources.
+
+### Forward ports
+
+In a separate terminal:
 
 ```bash
-adb forward tcp:2881 tcp:2881
-mysql -h127.0.0.1 -P2881 -uroot
+adb forward tcp:2881 tcp:2881   # MySQL protocol
 ```
 
-Inspect logs and stop the process with:
+### Connect
+
+```bash
+mysql -h 127.0.0.1 -P 2881 -u root
+```
+
+```sql
+SELECT 1;
+```
+
+### Check logs
 
 ```bash
 adb shell "tail -100 /data/local/tmp/seekdb_data/log/seekdb.log"
+```
+
+### Stop the server
+
+```bash
 adb shell "kill \$(pidof seekdb)"
 ```

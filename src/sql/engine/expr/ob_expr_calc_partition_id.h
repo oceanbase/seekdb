@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_CALC_PARTITION_ID_
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_CALC_PARTITION_ID_
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "sql/ob_sql_define.h"
 #include "share/schema/ob_schema_struct.h"
@@ -59,20 +59,34 @@ public:
 
 struct RangePartCmp {
 public:
-  RangePartCmp() : cmp_func_(nullptr), ret_(OB_SUCCESS) {}
+  RangePartCmp()
+      : cmp_func_(nullptr),
+        datum_access_ctx_(nullptr),
+        ret_(OB_SUCCESS)
+  {}
   ~RangePartCmp() = default;
   bool operator()(const ObDatum &l, const RangePartition &r);
 
   ObExprCmpFuncType cmp_func_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   int ret_;
 };
 
 struct PartValKey
 {
 public:
-  PartValKey() : datum_(), hash_func_(nullptr), cmp_func_(nullptr)  {}
-  PartValKey(const ObDatum &datum, ObExprHashFuncType hash_func, ObExprCmpFuncType cmp_func) : 
-        datum_(datum), hash_func_(hash_func), cmp_func_(cmp_func)  {}
+  PartValKey()
+      : datum_(), hash_func_(nullptr), cmp_func_(nullptr), datum_access_ctx_(nullptr)
+  {}
+  PartValKey(const ObDatum &datum,
+             ObExprHashFuncType hash_func,
+             ObExprCmpFuncType cmp_func,
+             const common::ObDatumAccessContext *datum_access_ctx)
+      : datum_(datum),
+        hash_func_(hash_func),
+        cmp_func_(cmp_func),
+        datum_access_ctx_(datum_access_ctx)
+  {}
   ~PartValKey() {}
   bool operator==(const PartValKey &other) const;
   int hash(uint64_t &hash_val, uint64_t seed = 0) const;
@@ -81,6 +95,7 @@ public:
   ObDatum datum_;
   ObExprHashFuncType hash_func_;
   ObExprCmpFuncType cmp_func_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
 };
 
 struct CalcPartitionBaseInfo : public ObIExprExtraInfo
@@ -139,6 +154,7 @@ public:
           part_cmp_(),
           default_list_part_idx_(OB_INVALID_INDEX),
           list_part_map_(),
+          datum_access_ctx_(nullptr),
           inited_(false),
           first_part_id_(OB_INVALID_ID)
     {}
@@ -161,6 +177,7 @@ public:
     int64_t default_list_part_idx_; // Used to calc list part
     common::hash::ObHashMap<PartValKey, int64_t,
                             common::hash::NoPthreadDefendMode> list_part_map_; // Used to calc list part
+    const common::ObDatumAccessContext *datum_access_ctx_;
     // whether above info for calculating range/list partition has been inited.
     bool inited_;
     int64_t first_part_id_;

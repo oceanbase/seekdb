@@ -32,18 +32,28 @@ namespace lib
 struct ObLabel;
 struct ObMemAttr;
 constexpr int64_t DEFAULT_MEMORY_BUDGET = 1L << 30;
+constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = 4LL << 30;
+constexpr int64_t SMALL_MEMSTORE_MEMORY_PERCENT = 80;
+constexpr int64_t LARGE_MEMSTORE_MEMORY_PERCENT = 100;
+constexpr int64_t TX_DATA_MEMORY_PERCENT = 40;
+constexpr int64_t MDS_MEMORY_PERCENT = 20;
+constexpr int64_t SMALL_TX_SHARE_MEMORY_PERCENT = 110;
+constexpr int64_t LARGE_TX_SHARE_MEMORY_PERCENT = 130;
+constexpr int64_t TX_DATA_FREEZE_MEMORY_PERCENT = 10;
+constexpr int64_t MDS_FREEZE_MEMORY_PERCENT = 4;
+constexpr int64_t COMPACTION_MEMORY_PERCENT = 40;
 void set_memory_budget(int64_t bytes);
 int64_t get_memory_budget();
-inline int64_t get_memory_by_percentage(const int64_t memory,
-                                        const int64_t percentage)
+inline int64_t get_memory_budget_by_percentage(const int64_t percentage)
 {
+  const int64_t memory_budget = get_memory_budget();
   int64_t result = 0;
-  if (memory > 0 && percentage > 0) {
-    const int64_t quotient = memory / 100;
+  if (memory_budget > 0 && percentage > 0) {
+    const int64_t quotient = memory_budget / 100;
     if (percentage > INT64_MAX / 99) {
       result = INT64_MAX;
     } else {
-      const int64_t remainder_charge = memory % 100 * percentage / 100;
+      const int64_t remainder_charge = memory_budget % 100 * percentage / 100;
       result = quotient > (INT64_MAX - remainder_charge) / percentage
           ? INT64_MAX
           : quotient * percentage + remainder_charge;
@@ -51,6 +61,35 @@ inline int64_t get_memory_by_percentage(const int64_t memory,
   }
   return result;
 }
+// memory_budget is half of the legacy memory_limit. Keep Memstore aligned with
+// master's 40%/50% policy by expanding the percentages and halving the cutoff.
+inline int64_t get_memstore_memory_limit_percentage()
+{
+  return get_memory_budget() <= LOW_RESOURCE_MEMORY_BUDGET
+      ? SMALL_MEMSTORE_MEMORY_PERCENT
+      : LARGE_MEMSTORE_MEMORY_PERCENT;
+}
+inline int64_t get_memstore_memory_limit()
+{ return get_memory_budget_by_percentage(get_memstore_memory_limit_percentage()); }
+inline int64_t get_tx_data_memory_limit()
+{ return get_memory_budget_by_percentage(TX_DATA_MEMORY_PERCENT); }
+inline int64_t get_mds_memory_limit()
+{ return get_memory_budget_by_percentage(MDS_MEMORY_PERCENT); }
+inline int64_t get_tx_data_freeze_trigger_memory()
+{ return get_memory_budget_by_percentage(TX_DATA_FREEZE_MEMORY_PERCENT); }
+inline int64_t get_mds_freeze_trigger_memory()
+{ return get_memory_budget_by_percentage(MDS_FREEZE_MEMORY_PERCENT); }
+// TX Share remains an independent shared throttle. Its 55%/65% master limits
+// become 110%/130% because memory_budget is half of legacy memory_limit.
+inline int64_t get_tx_share_memory_limit()
+{
+  const int64_t percentage = get_memory_budget() <= LOW_RESOURCE_MEMORY_BUDGET
+      ? SMALL_TX_SHARE_MEMORY_PERCENT
+      : LARGE_TX_SHARE_MEMORY_PERCENT;
+  return get_memory_budget_by_percentage(percentage);
+}
+inline int64_t get_compaction_memory_limit()
+{ return get_memory_budget_by_percentage(COMPACTION_MEMORY_PERCENT); }
 int64_t get_allocator_memory_hold();
 int64_t get_allocator_memory_hold(const uint64_t ctx_id);
 int64_t get_allocator_cache_hold();
@@ -60,6 +99,9 @@ void ob_set_reserved_memory(const int64_t bytes);
 int64_t ob_get_reserved_memory();
 
 int set_ctx_limit(uint64_t ctx_id, const int64_t limit);
+
+// Set the metadata-object memory limit.
+int set_meta_obj_limit(int64_t meta_obj_pct_lmt);
 
 bool errsim_alloc(const ObMemAttr &attr);
 

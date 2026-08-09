@@ -1,0 +1,278 @@
+# owner: 修铭
+# description:
+# 验证备库读
+
+ob1=OBI(cluster=1,proxy_num=1);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+
+# 配置备库
+sleep 3;
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+
+################################################################
+# 租户环境准备
+# 建租户
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE UNIT unit_2 MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=1073741824, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+# sleep一下，保证租户在主库上创建成功
+sleep 3;
+
+# 创建主库普通租户连接
+# 创建表
+ob_connect(primary_tt1_conn, ob1.z1.obs0, root@tt1, , test, , USE_MYSQL_CONNECTOR);
+connection primary_tt1_conn;
+# PG
+create table tg_table_1 (c1 int primary key auto_increment, c2 int);
+insert into tg_table_1 values (1,1), (2,2), (3,3);
+select * from tg_table_1;
+
+create table t1 (c1 int primary key auto_increment, c2 int);
+insert into t1 values (1,1), (2,2), (3,3);
+select * from t1;
+
+create table subpt2 (c1 int, c2 int, c3 int, primary key(c1, c2)) partition by key(c1) subpartition by range columns (c2) subpartition template (subpartition p0 values less than (10), subpartition p1 values less than (100) ) partitions 16;
+
+let $tt1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt1', tenant_id, 1);
+let $t1_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1' and tenant_id = $tt1_id, table_id, 1);
+let $subpt2_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 'subpt2' and tenant_id = $tt1_id, table_id, 1);
+
+################################################################
+# CASE 1: 可以登录备库普通租户
+--echo CASE 1: login standby
+# 保证备库同步租户成功
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tt1_id, c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tt1_id, $partition_cnt, 120;
+# 保证t1表数据同步成功
+let $now = deploy_get_value(ob1.select select time_to_usec(now()) c, c, 1);
+ob2.check_until_timeout select min_log_service_ts > $now from oceanbase.__all_virtual_partition_info where table_id=$t1_id, 1, 120;
+
+ob_connect(standby_tt1_conn, ob2.z1.obs0, root@tt1, , test, , USE_MYSQL_CONNECTOR);
+connection standby_tt1_conn;
+
+# 弱一致性读成功，读到最新数据
+select /*+ read_consistency(weak) */ * from t1;
+# 普通表同样支持弱一致性读
+select /*+ read_consistency(weak) */ * from t2;
+
+--replace_regex /AUTO_INCREMENT = [0-9]*/AUTO_INCREMENT = AUTO_INCREMENT_NUM/g /REPLICA_NUM = [0-9]*/REPLICA_NUM = NUM/g /ROW_FORMAT = (DYNAMIC|COMPRESSED|COMPACT|REDUNDANT)[ ]*//g /(NOCOMPRESS|COMPRESS) (FOR)*[ ]*(BASIC|OLTP|QUERY|ARCHIVE)*[ ]*//g /zstd_1\.0/zstd_1.3.8/g /obfk_[0-9]*/obfk_1234/g /OBPK_[0-9]*/OBPK_1234/g /zone1;zone2/zone1/g /BLOCK_SIZE = [0-9]*/BLOCK_SIZE = SIZE/g /TABLET_SIZE = [0-9]*/TABLET_SIZE = SIZE/g /ZONE_LIST = \(.*\)/ZONE_LIST = (test)/g /PRIMARY_ZONE = .*/PRIMARY_ZONE = /g /PCTFREE = [0-9]*/PCTFREE = NUM/g /CHARSET = [a-z0-9]*/CHARSET = charset/g
+show create table t1;
+
+--replace_regex /AUTO_INCREMENT = [0-9]*/AUTO_INCREMENT = AUTO_INCREMENT_NUM/g /REPLICA_NUM = [0-9]*/REPLICA_NUM = NUM/g /ROW_FORMAT = (DYNAMIC|COMPRESSED|COMPACT|REDUNDANT)[ ]*//g /(NOCOMPRESS|COMPRESS) (FOR)*[ ]*(BASIC|OLTP|QUERY|ARCHIVE)*[ ]*//g /zstd_1\.0/zstd_1.3.8/g /obfk_[0-9]*/obfk_1234/g /OBPK_[0-9]*/OBPK_1234/g /zone1;zone2/zone1/g /BLOCK_SIZE = [0-9]*/BLOCK_SIZE = SIZE/g /TABLET_SIZE = [0-9]*/TABLET_SIZE = SIZE/g /ZONE_LIST = \(.*\)/ZONE_LIST = (test)/g /PRIMARY_ZONE = .*/PRIMARY_ZONE = /g /PCTFREE = [0-9]*/PCTFREE = NUM/g /CHARSET = [a-z0-9]*/CHARSET = charset/g
+show create table t2;
+
+################################################################
+# CASE 2: 客户端使用的虚拟表
+# 客户端会采用弱一致性读，但是强一致性读我们也支持
+ob_connect(standby_sys_conn, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection standby_sys_conn;
+
+--echo CASE 2: 7 virtual tables used by proxy should be working (__all_virtual_proxy_route has been deprecated)
+# 交替执行弱一致性读和强一致性读
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_zone_stat;
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_server_stat;
+--replace_column 1 sys_variable
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition where table_id=$subpt2_id;
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition_info where table_id=$subpt2_id;
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sub_partition where table_id=$subpt2_id;
+
+select count(*) from oceanbase.__all_virtual_zone_stat;
+select count(*) from oceanbase.__all_virtual_proxy_server_stat;
+--replace_column 1 sys_variable
+select count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+select count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+eval select count(*) from oceanbase.__all_virtual_proxy_partition where table_id=$subpt2_id;
+eval select count(*) from oceanbase.__all_virtual_proxy_partition_info where table_id=$subpt2_id;
+eval select count(*) from oceanbase.__all_virtual_proxy_sub_partition where table_id=$subpt2_id;
+
+################################################################
+# CASE 3: OB java connector
+# Java Client后续不再维护，不支持备库自动路由，这里强制指定客户端连接备库的server
+--echo CASE 3: OB java connector
+ob2.set_ds_global_config maxRetryCount=15,getConnectionTimeout=900ms;
+ob_connect(standby_tt1_conn_java, ob2.z1.obs0, root@tt1,,test,,USE_OB_CONNECTOR);
+connection standby_tt1_conn_java;
+
+# 强一致性读失败
+--error 4688
+select * from t1;
+# 弱一致性读读到最新数据
+select /*+ read_consistency(weak) */ * from t1;
+select /*+ read_consistency(weak) */ * from t2;
+
+select @@autocommit;
+show variables like 'autocommit';
+# version_comment is a read only variable
+--replace_column 1 areadonlyvariable
+select @@version_comment;
+select @@global.autocommit;
+# show statements
+show collation like 'binary';
+
+ob_connect(standby_sys_conn_java, ob1, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+connection standby_sys_conn_java;;
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_zone_stat;
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_server_stat;
+--replace_column 1 sys_variable
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sys_variable;
+select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_schema where tenant_name='tt1' and database_name='oceanbase' and table_name='__all_table';
+--disable_query_log
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition where table_id=$subpt2_id;
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_partition_info where table_id=$subpt2_id;
+eval select /*+ read_consistency(weak)*/ count(*) from oceanbase.__all_virtual_proxy_sub_partition where table_id=$subpt2_id;
+--enable_query_log
+
+#################################################################
+## CASE 4: proxy
+#--echo CASE 4: obproxy
+#ob_connect(conn_proxy, ob2.proxy0, root@tt1, ,test, , USE_MYSQL_CONNECTOR);
+#connection conn_proxy;
+#
+## 强一致性读失败
+#--error 4012
+#select /*+ query_timeout(500000) */ * from t1;
+## 弱一致性读读到最新数据
+#select /*+ read_consistency(weak) */ * from t1;
+#
+#select @@autocommit;
+#show variables like 'autocommit';
+## version_comment is a read only variable
+#--replace_column 1 areadonlyvariable
+#select @@version_comment;
+#select @@global.autocommit;
+## show statements
+#show collation like 'binary';
+#disconnect conn_proxy;
+
+################################################################
+# CASE 5: 按表类型和语句类型分类测试
+# CASE 5.1: sys租户语句
+# sys租户下，允许执行创建表、DML和强一致性读
+--echo CASE 5.1: sys tenant statements
+connection standby_sys_conn;
+create table standby_sys_t1 (pk int);
+let $standby_sys_t1_id = deploy_get_value(ob2.select select table_id from __all_virtual_table where table_name = 'standby_sys_t1' and tenant_id = 1, table_id, 1);
+replace into standby_sys_t1 values (1),(2),(3);
+select * from standby_sys_t1;
+show tables like 'standby%';
+show databases like 'test';
+show collation like 'binary';
+show variables like 'autocommit';
+
+# CASE 5.2: show语句
+# 普通租户下，执行show语句
+--echo CASE 5.2: show statements
+connection standby_tt1_conn;
+# 默认强一致性读时，要求SHOW语句可以执行
+set ob_read_consistency='strong';
+show tables;
+show databases;
+show databases like 'test';
+show collation like 'binary';
+show variables like 'autocommit';
+# 默认弱一致性读时，要求SHOW语句可以执行
+set ob_read_consistency='weak';
+show tables;
+show databases;
+show databases like 'test';
+show collation like 'binary';
+show variables like 'autocommit';
+set ob_read_consistency='strong';
+
+# CASE 5.3: 普通租户用户表语句
+--echo CASE 5.3: user table statements on standby non-sys tenant
+connection standby_tt1_conn;
+set ob_read_consistency='strong';
+--error 4688
+insert into t1 values (100, 100),(200, 200),(300, 300);
+--error 4688
+insert into t2 values (100, 100),(200, 200),(300, 300);
+--error 4688
+update t1 set c2=c2+1;
+--error 4688
+update t2 set c2=c2+1;
+--error 4688
+delete from t1;
+--error 4688
+delete from t2;
+--error 4688
+select * from t1 where c1 = 1 for update;
+--error 4688
+select * from t2 where c1 = 1 for update;
+--error 4688
+select * from t1;
+--error 4688
+select * from t2;
+
+select /*+ read_consistency(weak) */ * from t1;
+select /*+ read_consistency(weak) */ * from t2;
+
+# CASE 5.4: 来自内部的内部表读语句
+# 我们通过发起虚拟表查询来触发内部的内部表读语句。
+# 原则：
+# 1. 主库或者备库的sys租户，内部的内部表读语句默认强一致性读（除非特殊的实现，强制弱一致性读）
+# 2. 备库的普通租户，内部的内部表读语句默认采用弱一致性读，并且是指定版本号的读
+--echo CASE 5.4:  INNER-TABLE statements from INNER
+connection standby_sys_conn;
+# 触发查询备库sys租户的__all_table表查询语句，要求是强一致性读
+eval select table_name from __all_virtual_table where table_id = $standby_sys_t1_id;
+# 触发查询备库普通租户的__all_table表查询语句，要求是弱一致性读，并且是指定版本的读
+# 此时应该读到最新的schema数据了
+eval select table_name from __all_virtual_table where table_id = $t1_id;
+
+# CASE 5.5: 用户发起的内部表读语句
+--echo CASE 5.5:  INNER-TABLE statements from user
+connection standby_sys_conn;
+# sys租户强读和弱读都支持
+eval select table_name from __all_table_v2 where table_id = $standby_sys_t1_id;
+eval select /*+ read_consistency(weak) */ table_name from __all_table_v2 where table_id = $standby_sys_t1_id;
+
+connection standby_tt1_conn;
+# 强读失败
+--error 4688
+eval select count(*) from oceanbase.__all_table_v2 where table_name = 't1';
+# 弱读成功，内部实现采用指定版本读
+eval select /*+ read_consistency(weak) */ count(*) from oceanbase.__all_table_v2 where table_name = 't1';
+
+# CASE 6: MySQL租户表
+--echo CASE 6:  MySQL Tenant Table
+ob_connect(primary_tt2_conn, ob1.z1.obs0, root@tt2, , test, , USE_MYSQL_CONNECTOR);
+connection primary_tt2_conn;
+
+create table t1_mysql2 (c1 int primary key, c2 int);
+insert into t1_mysql2 values (1,1), (2,2), (3,3);
+select * from t1_mysql2;
+
+let $tt2_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = 'tt2', tenant_id, 1);
+let $t1_mysql2_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name = 't1_mysql2' and tenant_id = $tt2_id, table_id, 1);
+# 保证t1_mysql2表数据同步成功
+let $now = deploy_get_value(ob1.select select time_to_usec(now()) c, c, 1);
+ob2.z1.obs0.check_until_timeout select min_log_service_ts > $now from oceanbase.__all_virtual_partition_info where table_id=$t1_mysql2_id, 1, 240;
+
+# 备库连接mysql租户
+ob_connect(standby_tt2_conn, ob2.z1.obs0, root@tt2, , test, , USE_MYSQL_CONNECTOR);
+connection standby_tt2_conn;
+
+--error 4688
+insert into t1_mysql2 values (100, 100),(200, 200),(300, 300);
+--error 4688
+update t1_mysql2 set c2=c2+1;
+--error 4688
+delete from t1_mysql2;
+--error 4688
+select * from t1_mysql2 where c1 = 1 for update;
+--error 4688
+select * from t1_mysql2;
+
+select /*+ read_consistency(weak) */ * from t1_mysql2;

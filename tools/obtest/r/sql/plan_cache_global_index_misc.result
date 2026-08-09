@@ -1,0 +1,116 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.create_client;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+create table t1 (c1 int, c2 int, c3 varchar(25), c4 int, primary key(c1)) partition by hash (c1) partitions 2;
+create index gkey on t1(c2) partition by hash(c2) partitions 2;
+insert into t1 values (1, 1, '1', 1);
+insert into t1 values (2, 2, '2', 2);
+insert into t1 values (3, 3, '3', 3);
+insert into t1 values (4, 4, '4', 4);
+create table t2 (c1 int, c2 int, c3 varchar(25), c4 int, primary key(c1)) partition by hash (c1) partitions 2;
+create index gkey2 on t2(c2) partition by hash(c2) partitions 2;
+insert into t2 values (1, 1, '1', 1);
+insert into t2 values (2, 2, '2', 2);
+insert into t2 values (3, 3, '3', 3);
+insert into t2 values (4, 4, '4', 4);
+// should be a dist plan, using global index gkey
+explain select /*+index(t1 gkey)*/ * from t1;
+Query Plan
+=================================================
+|ID|OPERATOR            |NAME    |EST. ROWS|COST|
+-------------------------------------------------
+|0 |TABLE LOOKUP        |t1      |4        |115 |
+|1 | EXCHANGE IN DISTR  |        |4        |38  |
+|2 |  EXCHANGE OUT DISTR|:EX10000|4        |37  |
+|3 |   GRANULE ITERATOR |        |4        |37  |
+|4 |    TABLE SCAN      |t1(gkey)|4        |37  |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4]), filter(nil), 
+      partitions(p[0-1])
+  1 - output([t1.c1]), filter(nil)
+  2 - output([t1.c1]), filter(nil), dop=1
+  3 - output([t1.c1]), filter(nil)
+  4 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p[0-1])
+
+
+select /*+index(t1 gkey)*/ * from t1;
+
+// dist plan with global index, single table, 1 record in plan cache
+select hit_count = 0 from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select /*+index(t1 gkey)*/ * from t1';
+hit_count = 0
+1
+
+// switch partition 0 to z2.obs0
+ob1.z2.obs0.switch_partition obtest:test:$index_table_name:0;
+
+select /*+index(t1 gkey)*/ * from t1;
+
+// explain same plan
+explain select /*+index(t1 gkey)*/ * from t1;
+Query Plan
+=================================================
+|ID|OPERATOR            |NAME    |EST. ROWS|COST|
+-------------------------------------------------
+|0 |TABLE LOOKUP        |t1      |4        |115 |
+|1 | EXCHANGE IN DISTR  |        |4        |38  |
+|2 |  EXCHANGE OUT DISTR|:EX10000|4        |37  |
+|3 |   GRANULE ITERATOR |        |4        |37  |
+|4 |    TABLE SCAN      |t1(gkey)|4        |37  |
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c1], [t1.c2], [t1.c3], [t1.c4]), filter(nil), 
+      partitions(p[0-1])
+  1 - output([t1.c1]), filter(nil)
+  2 - output([t1.c1]), filter(nil), dop=1
+  3 - output([t1.c1]), filter(nil)
+  4 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p[0-1])
+
+
+// hit_count = 1
+select hit_count = 1 from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select /*+index(t1 gkey)*/ * from t1';
+hit_count = 1
+1
+
+// should be a dist plan, using global index gkey, gkey1
+explain select t1.c2, t2.c2 from t1 join t2 on t1.c2 = t2.c2;
+Query Plan
+========================================================
+|ID|OPERATOR                  |NAME     |EST. ROWS|COST|
+--------------------------------------------------------
+|0 |EXCHANGE IN DISTR         |         |4        |78  |
+|1 | EXCHANGE OUT DISTR       |         |4        |77  |
+|2 |  PX PART GRANULE ITERATOR|         |4        |77  |
+|3 |   MERGE JOIN             |         |4        |77  |
+|4 |    TABLE SCAN            |t1(gkey) |4        |37  |
+|5 |    TABLE SCAN            |t2(gkey2)|4        |37  |
+========================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t1.c2], [t2.c2]), filter(nil)
+  1 - output([t1.c2], [t2.c2]), filter(nil), dop=1
+  2 - output([t1.c2], [t2.c2]), filter(nil)
+  3 - output([t1.c2], [t2.c2]), filter(nil), 
+      equal_conds([t1.c2 = t2.c2]), other_conds(nil)
+  4 - output([t1.c2]), filter(nil), 
+      access([t1.c2]), partitions(p[0-1])
+  5 - output([t2.c2]), filter(nil), 
+      access([t2.c2]), partitions(p[0-1])
+
+
+select t1.c2, t2.c2 from t1 join t2 on t1.c2 = t2.c2;
+
+// dist plan with global index, multi-table, not supported for now
+select count(*) = 0 from oceanbase.V$OB_PLAN_CACHE_PLAN_STAT where statement = 'select t1.c2, t2.c2 from t1 join t2 on t1.c2 = t2.c2';
+count(*) = 0
+1

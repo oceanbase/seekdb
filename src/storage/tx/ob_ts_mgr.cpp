@@ -54,13 +54,12 @@ int ObTsMgr::get_gts(const MonotonicTs stc,
 int ObTsMgr::get_gts_sync(const int64_t timeout_us, SCN &scn)
 {
   int ret = OB_EAGAIN;
-  const int64_t RETRY_INTERVAL_US = 10 * 1000;
   const int64_t expire_ts = ObClockGenerator::getClock() + timeout_us;
   while (OB_EAGAIN == ret) {
     if (ObClockGenerator::getClock() >= expire_ts) {
       ret = OB_TIMEOUT;
     } else if (OB_EAGAIN == (ret = get_gts(scn))) {
-      ob_usleep(RETRY_INTERVAL_US);
+      ob_usleep(500);
     }
   }
   return ret;

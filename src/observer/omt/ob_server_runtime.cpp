@@ -21,7 +21,6 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
-#include "share/ob_cpu_share_calculator.h"
 
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
@@ -339,11 +338,7 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
     } else {
       runtime_meta_ = meta;
-      // Carry the persisted profile selected before runtime construction. The
-      // command-line role remains only a fresh-directory fallback.
-      set_role(share::server_role());
-      set_write_enabled(share::server_is_write_enabled());
-      set_recovery_mode(share::server_is_recovery_mode());
+      set_role(GCTX.server_role_);
       set_min_cpu(meta.runtime_config_.resource_config_.min_cpu());
       set_max_cpu(meta.runtime_config_.resource_config_.max_cpu());
       const int64_t memory_size = static_cast<double>(runtime_meta_.runtime_config_.resource_config_.memory_size());
@@ -617,11 +612,6 @@ int ObServerRuntime::get_new_request(
 int ObServerRuntime::recv_request(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-  // Single classification point: the same high-priority decision that picks
-  // the queue priority also drives the foreground expansion limit, so the
-  // two can never drift apart (and expansion does not re-derive request
-  // internals).
-  bool is_high_prio = false;
   if (has_stopped()) {
     ret = OB_SERVER_RUNTIME_NOT_READY;
     LOG_WARN("receive request but runtime has already stopped", K(ret), K(id()));
@@ -630,26 +620,24 @@ int ObServerRuntime::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_REQUEST_RUNTIME_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_MYSQL: {
-        if (!req.is_retry_on_lock()) {
+        if (req.is_retry_on_lock()) {
+          if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
+          }
+        } else {
           ATOMIC_INC(&recv_mysql_cnt_);
-        }
-        // Keep authentication ahead of normal SQL regardless of whether the
-        // client uses TCP, a Unix domain socket, or a Windows named pipe.
-        is_high_prio = req.is_retry_on_lock() || req.is_auth_request();
-        if (OB_FAIL(req_queue_.push(&req, is_high_prio ? RQ_HIGH : RQ_NORMAL, true))) {
+          if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
+          }
         }
         break;
       }
       case ObRequest::OB_TASK:
       {
         ATOMIC_INC(&recv_task_cnt_);
-        is_high_prio = true;
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
         }
         break;
       }
       case ObRequest::OB_SQL_TASK: {
-        is_high_prio = false;
         if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
         }
         break;
@@ -666,14 +654,9 @@ int ObServerRuntime::recv_request(ObRequest &req)
     EVENT_INC(REQUEST_ENQUEUE_COUNT);
     // Expand from foreground when no idle worker, in case the only
     // worker is busy and cannot fire the worker-loop expand signal.
-    // Regular requests stay bounded by min_worker_cnt; high-priority
-    // requests jump straight to max_worker_cnt so a fresh worker is
-    // spawned on the spot instead of waiting for the 3s stalled-completion
-    // rescue in timeup(). Spawned workers are reused by subsequent requests
-    // and idle out through the normal 10s keep-alive shrink, so no threads
-    // are permanently reserved.
+    // try_expand_one enforces the min_worker_cnt upper bound via CAS.
     if (idle_count() == 0) {
-      try_expand_one(is_high_prio ? max_worker_cnt() : min_worker_cnt());
+      try_expand_one(min_worker_cnt());
     }
   }
 
@@ -815,10 +798,6 @@ void ObServerRuntime::check_parallel_servers_target()
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
   } else {
-    val = ObCpuShareCalculator::resolve_parallel_servers_target(
-        val,
-        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-        GCONF.px_workers_per_cpu_quota);
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }

@@ -1,0 +1,22 @@
+#owner : msy164651
+#owner group: rs
+#description: 分区管理
+# 测试点：删除一级分区后可以gc掉
+
+ob1=OBI(cluster=1,init_unit_cpu=0,proxy_num = 0);
+ob1.reboot;
+ob1.source include/merge.inc;
+ob1.source include/migrate.inc;
+source include/fast_auto_rebalance_configuration.inc;
+#ob1.mysql alter system set schema_drop_gc_delay_time='0s';
+#ob1.mysql alter system set ilog_flush_trigger_time = '30s';
+ob1.mysql set global recyclebin = off; 
+ob_connect(conn, ob1.z1.obs0, root@sys, , test, , USE_MYSQL_CONNECTOR);
+connection conn;
+create table t1(c1 int, c2 int, c3 int, primary key (c1,c2)) partition by range(c1) subpartition by hash(c2) subpartitions 10 (partition p0 values less than(10), partition p1 values less than(100), partition p2 values less than(1000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+let $part_id = deploy_get_value(ob1.select select part_id from oceanbase.__all_virtual_part where table_id = $table_id and part_name = 'p0', part_id, 1);
+alter table t1 drop partition p0;
+create table t2(c1 int primary key);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_info where table_id = $table_id, 20, 100;
+

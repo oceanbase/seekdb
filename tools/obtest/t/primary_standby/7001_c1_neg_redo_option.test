@@ -1,0 +1,31 @@
+#rs
+#zbf
+ob1=OBI(cluster=1, proxy_num = 0);
+
+ob1.reboot;
+
+let $cluster_name = deploy_get_value(ob1.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='NET_TIMEOUT = 10000000';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='REOPEN = 20';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='MAX_FAILURE = 10';
+
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+
+--disable_query_log
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='NET_TIMEOUT = -1';
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='REOPEN = -1';
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='MAX_FAILURE = -1';
+
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='NET_TIMEOUT = ';
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='REOPEN = ';
+--error 4701
+eval alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='MAX_FAILURE = ';
+--enable_query_log

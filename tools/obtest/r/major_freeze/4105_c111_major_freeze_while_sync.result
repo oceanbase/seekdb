@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set major_freeze_duty_time = 'Disable';
+ob1.check_until_timeout select frozen_scn=last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1, 1, 600;
+alter system major freeze;
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = $max_frozen_scn, 1, 600;
+alter system major freeze;
+Warnings:
+Warning	4744	larger frozen_scn already exist, prev merge may not finish
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = ($max_frozen_scn + 1), 1, 600;
+alter system major freeze;
+Warnings:
+Warning	4744	larger frozen_scn already exist, prev merge may not finish
+ob1.check_until_timeout select frozen_scn = last_scn from CDB_OB_MAJOR_COMPACTION where tenant_id = 1 and frozen_scn = ($max_frozen_scn + 3), 1, 600;

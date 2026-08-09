@@ -1,0 +1,45 @@
+#rs
+#msy164651
+#测试点：测试备库同步完成，切换rs可以继续做ddl操作
+#case 1:把备库的rs放到z1上，主备库同步完成之后，确定备库可以做ddl操作，然后切换备库的rs，备库依然可以做ddl操作
+ob1=OBI(cluster = 1, proxy_num = 0);
+ob2=OBI(cluster = 1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+alter system set enable_auto_leader_switch = 'false';
+#检查备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+
+
+#把备库的rs都切到z1上
+ob2.z1.obs0.switch_rs;
+let $rs_addr = deploy_get_value(ob2.z1.obs0.get_addr);
+ob2.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob2.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+#case 1
+#等待至少一个心跳过来
+sleep 10;
+ob1.mysql_p select switchover_status from oceanbase.__all_virtual_cluster;
+ob2.mysql set @@global.ob_query_timeout = 10000001;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version > $primary_schema_version;
+ob2.z2.obs0.switch_rs;
+let $rs_addr = deploy_get_value(ob2.z2.obs0.get_addr);
+ob2.check_until_timeout select concat(svr_ip,':',svr_port) from __all_virtual_core_meta_table where role=1 and table_id=1099511627777, $rs_addr, 10;
+ob2.z2.obs0.check_leader sys:oceanbase:__all_core_table;
+#等待新rs发心跳
+sleep 10;
+ob2.mysql set @@global.ob_query_timeout = 10000002;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version > $primary_schema_version;
+ob2.mysql set @@global.ob_query_timeout = 10000003;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version > $primary_schema_version;
+ob2.mysql set @@global.ob_query_timeout = 10000004;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version > $primary_schema_version;
+
+
+

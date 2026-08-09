@@ -62,7 +62,6 @@ int ObExprExtraInfoFactory::alloc(common::ObIAllocator &alloc,
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "this expr not register extra info", K(ret), K(type));
   } else if (OB_FAIL(ALLOC_FUNS_[type](alloc, extra_info, type))) {
-    OB_LOG(WARN, "fail to alloc extra info", K(ret), K(type));
   } else if (OB_ISNULL(extra_info)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(ERROR, "fail to alloc extra info", K(ret), K(type));

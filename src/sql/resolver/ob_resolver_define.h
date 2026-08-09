@@ -21,6 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_fast_array.h"
+#include "lib/container/ob_tuple.h"
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/charset/ob_charset.h"
@@ -33,8 +34,14 @@
 
 namespace oceanbase
 {
+namespace query
+{
+class ObIRootCommandService;
+}
 namespace sql
 {
+class ObIPLSqlRuntime;
+class ObMaintainDepInfoTaskQueue;
 enum ObStmtScope
 {
   /*
@@ -176,6 +183,7 @@ namespace common
 {
 class ObMySQLProxy;
 class ObOptStatManager;
+class ObISrsProvider;
 const char *get_stmt_scope_str(const sql::ObStmtScope &scope);
 
 inline const char *get_stmt_scope_str(const sql::ObStmtScope &scope)
@@ -242,6 +250,7 @@ inline int databuff_print_key_obj(char *buf, const int64_t buf_len, int64_t &pos
 
 namespace pl
 {
+class ObPL;
 class ObPLBlockNS;
 class ObPLPackageGuard;
 }
@@ -313,6 +322,13 @@ struct ObResolverParams
        schema_checker_(NULL),
        secondary_namespace_(NULL),
        session_info_(NULL),
+       plan_cache_(NULL),
+       pl_sql_runtime_(NULL),
+       pl_engine_(NULL),
+       dependency_info_queue_(NULL),
+       root_command_service_(NULL),
+       srs_provider_(NULL),
+       lob_read_service_(NULL),
        query_ctx_(NULL),
        param_list_(NULL),
        select_item_param_infos_(NULL),
@@ -372,6 +388,13 @@ public:
   ObSchemaChecker *schema_checker_;
   pl::ObPLBlockNS *secondary_namespace_;
   ObSQLSessionInfo *session_info_;
+  ObPlanCache *plan_cache_;
+  ObIPLSqlRuntime *pl_sql_runtime_;
+  pl::ObPL *pl_engine_;
+  ObMaintainDepInfoTaskQueue *dependency_info_queue_;
+  query::ObIRootCommandService *root_command_service_;
+  common::ObISrsProvider *srs_provider_;
+  common::ObILobReadService *lob_read_service_;
   ObQueryCtx *query_ctx_;
   const ParamStore *param_list_;
   const SelectItemParamInfoArray *select_item_param_infos_;

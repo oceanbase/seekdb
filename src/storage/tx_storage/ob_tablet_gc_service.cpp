@@ -174,14 +174,14 @@ void ObTabletGCService::ObTabletChangeTask::runTimerTask()
           // 4. freeze unpersit_tablet_ids
           else if (OB_FAIL(tablet_gc_handler->freeze_unpersist_tablet_ids(unpersist_tablet_ids, decided_scn))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "fail to freeze unpersist tablet", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
+            STORAGE_LOG(ERROR, "fail to freeze unpersist tablet", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
           }
           // 5. wait unpersit_tablet_ids
           else if (no_need_wait_persist) {
             // Retry in the next timer round instead of blocking the shared timer worker.
           } else if(OB_FAIL(tablet_gc_handler->wait_unpersist_tablet_ids_flushed(unpersist_tablet_ids, decided_scn))) {
             need_retry = true;
-            STORAGE_LOG(WARN, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
+            STORAGE_LOG(ERROR, "fail to wait unpersist tablet ids flushed", KR(ret), KPC(tablet_gc_handler->ls_), K(unpersist_tablet_ids));
           }
           // 6. update tablet_change_checkpoint in log meta
           else if (decided_scn > ls->get_tablet_change_checkpoint_scn()

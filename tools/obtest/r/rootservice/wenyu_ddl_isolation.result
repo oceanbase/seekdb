@@ -1,0 +1,35 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+alter system set debug_sync_timeout = '10000s';
+ob1.check_until_timeout select value from gv\$ob_parameters where name = 'debug_sync_timeout', 10000s, 10;
+alter tenant sys set primary_zone='z2';
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone = 'z2' and with_rootserver=1, 1, 60;
+set ob_global_debug_sync = 'CREATE_INDEX_TAKE_EFFECT wait_for signal execute 1';
+alter system set _enable_ddl_worker_isolation = false;
+ob1.check_until_timeout select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port, 10, 60;
+count(*)
+10
+create table t1 (col1 int);
+create index i1 on t1(col1);
+count(*)
+10
+set ob_global_debug_sync = 'now signal signal';
+ob1.z1.obs0.count_log "_G23\]";
+0
+ob1.check_until_timeout select count(*) from oceanbase.gv\$ob_thread where tenant_id = 1002 and tname like "%1002%L0_G0%" and svr_ip = "$ip" and svr_port = $port, 10, 60;
+alter system set _enable_ddl_worker_isolation = true;
+count(*)
+10
+set ob_global_debug_sync = 'CREATE_INDEX_TAKE_EFFECT wait_for signal execute 1';
+create index i2 on t1(col1);
+count(*)
+11
+set ob_global_debug_sync = 'now signal signal';
+ob1.z1.obs0.check_log_until_success -c "_G23\]";
+set ob_global_debug_sync = 'AFTER_GET_MTL_TENANT_LOCK wait_for signal execute 1';
+create table ddl_1(col1 int);
+drop tenant mysql purge;

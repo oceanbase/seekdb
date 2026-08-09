@@ -1,0 +1,22 @@
+ob1=OBI(cluster=1, proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+use test;
+create table test.t1(c1 int primary key, c2 int, c3 varchar(200), c4 varchar(200));
+create index i1 on t1(c3, c2);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where tenant_id=1001 and table_name like '%i1%', 2, 30;
+select c3, c2, c4 from t1 where c3 >= '96800000' and c3 <= '9909913142';
+select ROW_CACHE_HIT from oceanbase.V$OB_SQL_AUDIT where query_sql like '%select%t1%';
+ROW_CACHE_HIT
+0
+select c3, c2, c4 from t1 where c3 >= '96800000' and c3 <= '9909913142';
+select ROW_CACHE_HIT from oceanbase.V$OB_SQL_AUDIT where query_sql like '%select%t1%' and ROW_CACHE_HIT > 0;
+ROW_CACHE_HIT
+select c3, c2, c4 from t1 where c3 >= '96800000' and c3 <= '9909913142';
+select ROW_CACHE_HIT from oceanbase.V$OB_SQL_AUDIT where query_sql like '%select%t1%' and ROW_CACHE_HIT > 0;
+ROW_CACHE_HIT

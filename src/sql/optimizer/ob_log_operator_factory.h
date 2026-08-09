@@ -59,6 +59,7 @@ LOG_OP_DEF(LOG_OP_END, "OP_DEF_END")
 #define OCEANBASE_SQL_OB_LOG_OPERATOR_FACTORY_H
 #include "lib/allocator/ob_allocator.h"
 #include "lib/list/ob_obj_store.h"
+#include "query/optimizer/ob_optimizer_algo_defs.h"
 #include "sql/ob_sql_define.h"
 namespace oceanbase
 {
@@ -78,63 +79,6 @@ extern const char *get_op_name(ObLogOpType type);
 
 }
 class ObLogicalOperator;
-
-enum JoinAlgo
-{
-  INVALID_JOIN_ALGO = 0,
-  NESTED_LOOP_JOIN = (1UL),
-  MERGE_JOIN = (1UL << 1),
-  HASH_JOIN = (1UL << 2)
-};
-
-enum AggregateAlgo
-{
-  AGGREGATE_UNINITIALIZED = 0,
-  MERGE_AGGREGATE,
-  HASH_AGGREGATE,
-  SCALAR_AGGREGATE
-};
-
-enum SetAlgo
-{
-  INVALID_SET_ALGO = 0,
-  MERGE_SET,
-  HASH_SET
-};
-
-/********
- * When modifying DistAlgo, the function ob_dist_algo_str 
- * needs to be modified synchronously ！！！
- ************/
-enum DistAlgo
-{
-  DIST_INVALID_METHOD = 0,
-  DIST_BASIC_METHOD = (1UL), // basic join method
-  DIST_PULL_TO_LOCAL = (1UL << 1),
-  DIST_HASH_NONE = (1UL << 2),
-  DIST_NONE_HASH = (1UL << 3),
-  DIST_HASH_HASH = (1UL << 4),
-  DIST_BROADCAST_NONE = (1UL << 5),
-  DIST_NONE_BROADCAST = (1UL << 6),
-  DIST_BC2HOST_NONE = (1UL << 7),
-  DIST_PARTITION_NONE = (1UL << 8),
-  DIST_NONE_PARTITION = (1UL << 9),
-  DIST_NONE_ALL = (1UL << 10), // all side is allowed for EXPRESSION/DAS
-  DIST_ALL_NONE = (1UL << 11),
-  DIST_RANDOM_ALL = (1UL << 12), //Only used in NLJ so far
-  DIST_HASH_ALL = (1UL << 13),  //Only used in SPF so far
-  DIST_PARTITION_WISE = (1UL << 14), // pure partition wise
-  DIST_EXT_PARTITION_WISE = (1UL << 15), // extended partition wise
-  DIST_HASH_HASH_LOCAL = (1UL << 16),   //partition wise with slave mapping
-  DIST_PARTITION_HASH_LOCAL = (1UL << 17),
-  DIST_HASH_LOCAL_PARTITION = (1UL << 18),
-  DIST_BROADCAST_HASH_LOCAL = (1UL << 19),
-  DIST_HASH_LOCAL_BROADCAST = (1UL << 20),
-  DIST_MAX_JOIN_METHOD = (1UL << 21), // represents max join method
-  // only for set operator
-  DIST_SET_RANDOM = (1UL << 22),
-  DIST_SET_PARTITION_WISE = (1UL << 23) // non-strict set pw with phy_table_location_info_
-};
 
 inline const ObString &ob_dist_algo_str(DistAlgo algo)
 {
@@ -301,17 +245,6 @@ inline DistAlgo get_opposite_distributed_type(DistAlgo dist_type)
   }
   return oppo_type;
 }
-
-// Window function distribution
-enum WinDistAlgo
-{
-  WIN_DIST_INVALID = 0,
-  WIN_DIST_NONE    = (1UL),
-  WIN_DIST_HASH    = (1UL << 1), // hash distribute
-  WIN_DIST_RANGE   = (1UL << 2), // range distribute
-  WIN_DIST_LIST    = (1UL << 3),  // range + random distribute
-  WIN_DIST_HASH_LOCAL   = (1UL << 4)  // range + random distribute
-};
 
 inline WinDistAlgo get_win_dist_algo(uint64_t method)
 {

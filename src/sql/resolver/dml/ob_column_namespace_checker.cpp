@@ -58,7 +58,6 @@ int ObColumnNamespaceChecker::remove_reference_table(int64_t tid)
   for (int64_t i = 0; OB_SUCC(ret) && i < all_table_refs_.count(); i++) {
     if (tid == all_table_refs_.at(i)->table_id_) {
       if (OB_FAIL(all_table_refs_.remove(i))) {
-        LOG_WARN("failed to remove all_table_refs", K(ret));
       }
       break;
     }
@@ -129,7 +128,6 @@ int ObColumnNamespaceChecker::check_column_existence_in_using_clause(const uint6
                                                        column_name,
                                                        *cur_table,
                                                        exist))) {
-      LOG_WARN("failed to check column existence in using clause", K(ret));
     } else if (exist) {
       ret = OB_ERR_QUALIFIER_EXISTS_FOR_USING_COLUMN;
       LOG_WARN("column part of using clause can not have qualifier", K(ret));
@@ -187,14 +185,12 @@ int ObColumnNamespaceChecker::check_column_existence_in_using_clause(const uint6
                                                                            column_name,
                                                                            *joined_table.left_table_,
                                                                            exist)))) {
-        LOG_WARN("failed to check column existence in using scope", K(ret));
       } else if (exist) {
         /*do nothing*/
       } else if (OB_FAIL(SMART_CALL(check_column_existence_in_using_clause(table_id,
                                                                            column_name,
                                                                            *joined_table.right_table_,
                                                                            exist)))) {
-        LOG_WARN("failed to check column existence in using scope", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -224,7 +220,6 @@ int ObColumnNamespaceChecker::check_ext_table_column_namespace(
               cur_table->get_object_name(),
               OB_TABLE_NAME_CLASS,
               is_match))) {
-        LOG_WARN("table name case compare failed", K(ret));
       } else if (is_match) {
         table_item = cur_table;
         break;
@@ -256,9 +251,7 @@ int ObColumnNamespaceChecker::check_using_column_namespace(const ObString &colum
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("current joined table is null", K(joined_table), K(l_table), K(r_table));
   } else if (OB_FAIL(find_column_in_table(*r_table, q_name, right_table, r_need_check_unique))) {
-    LOG_WARN("find column in right joined table failed", K(ret), K(column_name));
   } else if (OB_FAIL(find_column_in_table(*l_table, q_name, left_table, l_need_check_unique))) {
-    LOG_WARN("find column in left joined table failed", K(ret), K(column_name));
   }
   return ret;
 }
@@ -287,7 +280,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     } else if (OB_FAIL(params_.schema_checker_->check_column_exists(table_id,
                                                                     col_name,
                                                                     is_exist))) {
-      LOG_WARN("check column exists failed", K(ret));
     }
   } else if (table_item.is_generated_table() || table_item.is_temp_table() || table_item.is_lateral_table()) {
     ObSelectStmt *ref_stmt = table_item.ref_query_;
@@ -330,13 +322,11 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     // cte table check columns according to the generate way
     if (OB_FAIL(params_.schema_checker_->check_column_exists(
         table_id, col_name, is_exist))) {
-      LOG_WARN("check column exists failed", K(ret));
     }
   } else if (table_item.is_function_table()) {
     if (OB_FAIL(ObResolverUtils::check_function_table_column_exist(table_item,
                                                                    params_,
                                                                    col_name))) {
-      LOG_WARN("failed to check function table column exist", K(ret), K(col_name));
     } else {
       is_exist = true;
     }
@@ -345,7 +335,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
                                                                 params_,
                                                                 col_name,
                                                                 is_exist))) {
-      LOG_WARN("failed to check json table column exist", K(ret), K(col_name));
     }
   } else if (table_item.is_values_table()) {
     ObSEArray<ObColumnRefRawExpr *, 4> values_desc;
@@ -353,7 +342,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(dml_stmt_));
     } else if (OB_FAIL(dml_stmt_->get_column_exprs(table_item.table_id_, values_desc))) {
-      LOG_WARN("failed to get column exprs");
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && !is_exist && i < values_desc.count(); ++i) {
         if (OB_ISNULL(values_desc.at(i))) {
@@ -389,14 +377,12 @@ int ObColumnNamespaceChecker::find_column_in_single_table(const TableItem &table
   //if databasename or table name is not specified,
   //we must check the uniqueness of column in the table with the same name
   bool is_match = true;
-  LOG_TRACE("column info", K(q_name), K(table_item));
   if (!q_name.database_name_.empty()) {
     if (OB_FAIL(ObResolverUtils::name_case_cmp(params_.session_info_,
                                                q_name.database_name_,
                                                table_item.database_name_,
                                                OB_TABLE_NAME_CLASS,
                                                is_match))) {
-      LOG_WARN("database name case compare failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && is_match && !q_name.tbl_name_.empty()) {
@@ -405,12 +391,10 @@ int ObColumnNamespaceChecker::find_column_in_single_table(const TableItem &table
                                                table_item.get_object_name(),
                                                OB_TABLE_NAME_CLASS,
                                                is_match))) {
-      LOG_WARN("database name case compare failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && is_match) {
     if (OB_FAIL(check_column_exists(table_item, q_name.col_name_, is_match))) {
-      LOG_WARN("check column exists failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && !is_match) {

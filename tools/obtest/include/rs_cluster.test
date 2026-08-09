@@ -1,0 +1,2 @@
+#### 包含RS测试所需所有集群定义
+ob1=OBI(cluster=2:2:2,proxy_num=0,ct_num=0);

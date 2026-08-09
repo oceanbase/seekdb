@@ -1,0 +1,20 @@
+# owner: wenduo.swd
+# owner group: STORAGE
+#
+# frozen_version - global_last_merged_version can't over MAX_UNMERGED_VERSION_NUM
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+
+let $max_unmerged_version_num = 32;
+let $index = 1;
+while ($index <= $max_unmerged_version_num)
+{
+  ob1.mysql alter system major freeze;
+  inc $index;
+}
+
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+--error 4217
+alter system major freeze;

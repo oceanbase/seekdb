@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance='false';
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 4, MIN_CPU 1, MEMORY_SIZE 8589934592, LOG_DISK_SIZE 2147483648, MAX_IOPS 100000, MIN_IOPS 1024;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+create table t1 (c1 int);
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+insert into t1 values (1), (2), (3);
+select * from t1;
+c1
+1
+2
+3
+select count(*) from t1;
+count(*)
+3
+create table t1_no_pk (c1 int, a varchar(260000));
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+select count(1) from t1_no_pk;
+count(1)
+1000
+ob1.z1.obs0.force_stop;
+ob1.z1.obs0.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+ob1.check_until_timeout select count(*) from __all_virtual_log_stat where tenant_id = $mysql_tenant_id and ls_id = 1001 and role = 'LEADER', 1, 120;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone = 'z1' and (start_service_time <= 0 or status='INACTIVE'), 0, 120;
+select count(*) from t1;
+count(*)
+3
+select count(1) from t1_no_pk;
+count(1)
+1000

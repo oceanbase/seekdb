@@ -254,20 +254,10 @@ int ObTransService::start_tx(ObTxDesc &tx, const ObTxParam &tx_param)
   } else {
     ObSpinLockGuard guard(tx.lock_);
     tx.inc_op_sn();
-    const bool write_fenced = !share::server_is_write_enabled();
-    if (!write_fenced) {
-      ret = tx_desc_mgr_.add(tx);
-    } else {
-      // A transaction admitted while the process write gate is fenced never
-      // writes and therefore needs no append-backed transaction ID.
-      tx.flags_.SHADOW_ = false;
-    }
+    ret = tx_desc_mgr_.add(tx);
     if (OB_FAIL(ret)) {
     } else {
-      // Promotion changes admission for later transactions only. A transaction
-      // begun during recovery remains read-only until it ends.
-      tx.access_mode_     = write_fenced ? ObTxAccessMode::RD_ONLY : tx_param.access_mode_;
-      tx.flags_.WRITE_FENCED_ = write_fenced;
+      tx.access_mode_     = tx_param.access_mode_;
       tx.isolation_       = tx_param.isolation_;
       tx.active_ts_       = ObClockGenerator::getClock();
       tx.timeout_us_      = tx_param.timeout_us_;
@@ -587,10 +577,8 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
     if (tx.isolation_ != isolation /*change isolation*/ ||
         !tx.snapshot_version_.is_valid()/*version invalid*/) {
       SCN version;
-      if (OB_FAIL(sync_acquire_local_snapshot_(tx, expire_ts, version))) {
-      } else if (!tx.is_write_fenced()
-                  && !tx.tx_id_.is_valid()
-                 && OB_FAIL(tx_desc_mgr_.add(tx))) {
+      if (OB_FAIL(acquire_local_snapshot_(version))) {
+      } else if (!tx.tx_id_.is_valid() && OB_FAIL(tx_desc_mgr_.add(tx))) {
         TRANS_LOG(WARN, "add tx to mgr fail", K(ret), K(tx));
       }
       if (OB_SUCC(ret)) {
@@ -606,7 +594,7 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
       snapshot.uncertain_bound_ = tx.snapshot_uncertain_bound_;
     }
   } else { // RC isolation level
-    if (OB_FAIL(sync_acquire_local_snapshot_(tx, expire_ts, snapshot.core_.version_))) {
+    if (OB_FAIL(acquire_local_snapshot_(snapshot.core_.version_))) {
     } else {
       snapshot.uncertain_bound_ = 0;
       adjust_tx_snapshot_(tx, snapshot);
@@ -648,7 +636,8 @@ int ObTransService::get_read_snapshot_version(const int64_t expire_ts,
                                               SCN &snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ret = acquire_local_snapshot_with_retry_(expire_ts, snapshot_version);
+  UNUSED(expire_ts);
+  ret = acquire_local_snapshot_(snapshot_version);
   return ret;
 }
 
@@ -814,12 +803,9 @@ int ObTransService::create_global_implicit_savepoint_(ObTxDesc &tx,
                                                       const bool release)
 {
   int ret = OB_SUCCESS;
-  const bool fenced_read_only = tx.is_write_fenced();
   // tx is idle, update tx parameters
   if (tx.state_ == ObTxDesc::State::IDLE) {
-    if (!fenced_read_only) {
-      tx.access_mode_ = tx_param.access_mode_;
-    }
+    tx.access_mode_     = tx_param.access_mode_;
     tx.timeout_us_      = tx_param.timeout_us_;
     if (tx.isolation_ != tx_param.isolation_) {
       tx.isolation_ = tx_param.isolation_;
@@ -831,9 +817,7 @@ int ObTransService::create_global_implicit_savepoint_(ObTxDesc &tx,
     tx.lock_timeout_us_ = tx_param.lock_timeout_us_;
     tx.inc_op_sn();
     savepoint = tx.inc_and_get_tx_seq(0);
-    if (!fenced_read_only
-        && tx.state_ == ObTxDesc::State::IDLE
-        && !tx.tx_id_.is_valid()) {
+    if (tx.state_ == ObTxDesc::State::IDLE && !tx.tx_id_.is_valid()) {
       if (tx.has_implicit_savepoint()) {
         ret = OB_TRANS_INVALID_STATE;
         TRANS_LOG(WARN, "has implicit savepoint, but tx_id is invalid", K(ret), K(tx));
@@ -1122,9 +1106,7 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
   ObTxSavePoint sp;
   if (OB_SUCC(sp.init(scn, savepoint))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
-    } else if (!tx.is_write_fenced()
-                && !tx.tx_id_.is_valid()
-               && OB_FAIL(tx_desc_mgr_.add(tx))) {
+    } else if (!tx.tx_id_.is_valid() && OB_FAIL(tx_desc_mgr_.add(tx))) {
       TRANS_LOG(WARN, "add tx to mgr failed", K(ret), K(tx));
       tx.savepoints_.pop_back();
     } else {

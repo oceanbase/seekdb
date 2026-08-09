@@ -1,0 +1,34 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+===============================================================
+=================  Step 0: prepare env   ======================
+===============================================================
+ob1.mysql alter resource unit sys_unit_config memory_size='2G';
+ob1.mysql alter system set default_compress_func = 'none';
+===============================================================
+=================  Step 1: create tenant   ====================
+===============================================================
+CREATE RESOURCE UNIT user_unit_config MAX_CPU = 1, MEMORY_SIZE = '2G', MAX_IOPS = 1024, LOG_DISK_SIZE = '3G';
+ob1.mysql create resource pool mysql_replica_pool unit = "user_unit_config", unit_num = 1, zone_list = ('z1', 'z2');
+ob1.mysql create TENANT mysql resource_pool_list=('mysql_replica_pool'), replica_num=2, zone_list = ('z1', 'z2'), locality = "F@z1, F@z2" set ob_tcp_invited_nodes='%';
+ob1.mysql alter system set ob_compaction_schedule_interval = '10s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql alter tenant mysql set variables autocommit='on';
+===============================================================
+=================  Step 1: create table   =====================
+===============================================================
+set ob_query_timeout = 1000000000;
+create table t1 (k int primary key, c1 int, c2 varchar(4000)) nocompress;
+SET @test_counter_seq = 0;
+insert into t1 select (@test_counter_seq := @test_counter_seq + 1), (@test_counter_seq := @test_counter_seq + 1), randstr(4000, random()) from table(generator(100000));
+===============================================================
+==== Step 2: major freeze and add column with default value ===
+===============================================================
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id=$tenant_id and LAST_SCN = GLOBAL_BROADCAST_SCN , 1, 600;
+alter table t1 add c5 varchar(16) default ' ';
+alter table t1 add c6    char(16) default ' ';
+create index idx_c5 on t1(c5);
+create index idx_c6 on t1(c6);
+alter system major freeze;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_MAJOR_COMPACTION where tenant_id=$tenant_id and LAST_SCN = GLOBAL_BROADCAST_SCN , 1, 600;

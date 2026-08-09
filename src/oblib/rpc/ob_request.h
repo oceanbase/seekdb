@@ -104,11 +104,6 @@ public:
   int32_t get_retry_times() const;
   void set_connection_phase(ConnectionPhaseEnum connection_phase) { connection_phase_ = connection_phase; }
   bool is_in_connected_phase() const { return ConnectionPhaseEnum:: CPE_CONNECTED == connection_phase_; }
-  bool is_auth_request() const
-  {
-    return ConnectionPhaseEnum::CPE_CONNECTED == connection_phase_
-        || ConnectionPhaseEnum::CPE_AUTH_SWITCH == connection_phase_;
-  }
   void on_process_begin() { reusable_mem_.reuse(); }
 
   TraceId generate_trace_id(const ObAddr &addr);

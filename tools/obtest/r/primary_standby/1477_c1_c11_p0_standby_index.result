@@ -1,0 +1,102 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z2.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table t(c1 int primary key, c2 int);
+insert into t values (1,2),(3,4),(5,6);
+select * from t;
+c1	c2
+1	2
+3	4
+5	6
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob2.mysql set ob_global_debug_sync = 'STANDBY_DATABASE_PARTITION_CREATE wait_for continue_signal';
+create table t_test(c1 int primary key, c2 int);
+create index t_local on t_test(c1) local;
+ob2.check_until_timeout select count(*) from __all_virtual_server_event_history where module like '%standby%' and event = 'record_ddl_operation' and value2 like '%$index_table_id%', 1, 30;
+show index from test.t_test;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t_test	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t_test	1	t_local	1	c1	A	NULL	NULL	NULL		BTREE	unavailable		YES
+create table tt(c1 int primary key, c2 int);
+create table tt(c1 int primary key, c2 int);
+ob2.check_until_timeout select count(*) from __all_virtual_server_schema_info where (tenant_id = "$tenant_1_id" and refreshed_schema_version < "$tenant_1_version") or (tenant_id = "$tenant_3_id" and refreshed_schema_version < "$tenant_3_version"), 0, 30;
+show index from test.t_test;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t_test	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t_test	1	t_local	1	c1	A	NULL	NULL	NULL		BTREE	unavailable		YES
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+ob2.check_until_timeout select count(*) from __all_virtual_server_schema_info where (tenant_id = "$tenant_2_id" and refreshed_schema_version < "$tenant_2_version"), 0, 30;
+show index from t_test;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t_test	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t_test	1	t_local	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+create index t_local on t(c2) local;
+create index t_global on t(c2) global;
+create index t_partition_global on t(c2) global partition by key(c2) partitions 2;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t	1	t_local	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_global	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_partition_global	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+create table tt (c1 int primary key, c2 int, unique key (c2));
+create table ttt (c1 int primary key, c2 int, unique key (c2)) partition by hash(c1) partitions 4;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 30;
+show index from tt;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+tt	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+tt	0	c2	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+show index from ttt;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+ttt	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+ttt	0	c2	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+create index t_local_2 on t(c2) local;
+create index t_global_2 on t(c2) global;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 1, 120;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+show index from t;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t	0	PRIMARY	1	c1	A	NULL	NULL	NULL		BTREE	available		YES
+t	1	t_local	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_global	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_partition_global	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_local_2	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t	1	t_global_2	1	c2	A	NULL	NULL	NULL	YES	BTREE	available		YES
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.check_version 3;
+set ob_query_timeout = 300000000;
+create table test_multi(c1 int primary key , c2 int) partition by hash(c1) partitions 50;
+create table test_multi2(c1 int primary key , c2 int) partition by hash(c1) partitions 150;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 120;
+create index t_index_multi on test_multi(c2) local;
+create index t_index_multi on test_multi2(c2) local;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 1, 120;
+ob2.check_until_timeout select count(*)>0 c from __all_ddl_helper, 0, 120;
+select count(*) from __all_local_index_status where tenant_id= 1002 and index_table_id = false;
+count(*)
+0
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+ob2.check_version 4;

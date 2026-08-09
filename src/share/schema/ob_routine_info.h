@@ -19,7 +19,7 @@
 #include "share/schema/ob_schema_struct.h"
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fixed_array.h"
-#include "pl/ob_pl_integer_type.h"
+#include "share/schema/ob_pl_integer_type.h"
 namespace oceanbase { namespace pl { class ObPLDataType; } }
 #include "ob_trigger_info.h"
 
@@ -96,10 +96,16 @@ enum ObRoutineType
 class ObIRoutineParam
 {
 public:
+  enum class Kind
+  {
+    SCHEMA,
+    PL_VARIABLE,
+    PL_ROUTINE,
+  };
   ObIRoutineParam() {}
   virtual ~ObIRoutineParam() {}
   virtual const common::ObString& get_default_value() const = 0;
-  virtual pl::ObPLDataType get_pl_data_type() const = 0;
+  virtual Kind get_kind() const = 0;
   virtual const ObString& get_name() const = 0;
   virtual int64_t get_mode() const { return -1; }
   virtual bool is_schema_routine_param() const { return false; }
@@ -258,7 +264,7 @@ public:
     return static_cast<pl::ObPLIntegerType>((flag_ & SP_PARAM_INTEGER_MASK) >> 2);
   }
 
-  pl::ObPLDataType get_pl_data_type() const;
+  virtual Kind get_kind() const override { return Kind::SCHEMA; }
   OB_INLINE bool is_schema_routine_param() const { return true; }
 
   virtual bool is_in_param() const { return is_in_sp_param(); }

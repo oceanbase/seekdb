@@ -61,7 +61,6 @@ enable_record_trace_id
 enable_record_trace_log
 enable_rich_error_msg
 enable_rpc_authentication_bypass
-enable_rpc_service
 enable_rpc_tls
 enable_sql_operator_dump
 enable_sys_table_ddl
@@ -70,7 +69,6 @@ freeze_trigger_percentage
 internal_sql_execute_timeout
 job_queue_processes
 json_document_max_depth
-kvcache_memory_limit
 lob_enable_block_cache_threshold
 location_cache_refresh_sql_timeout
 log_disk_percentage
@@ -79,7 +77,6 @@ log_disk_throttling_maximum_duration
 log_disk_throttling_percentage
 log_disk_utilization_limit_threshold
 log_disk_utilization_threshold
-log_restore_source
 log_storage_warning_tolerance_time
 major_compact_trigger
 major_freeze_duty_time
@@ -90,7 +87,6 @@ max_syslog_file_count
 memory_budget
 memory_chunk_cache_size
 memory_limit
-memstore_memory_limit
 merger_check_interval
 micro_block_merge_verify_level
 minor_compact_trigger
@@ -154,7 +150,6 @@ undo_retention
 use_ipv6
 vector_index_memory_saving_mode
 vector_index_optimize_duty_time
-vector_memory_limit
 weak_read_version_refresh_interval
 workarea_size_policy
 workers_per_cpu_quota
@@ -294,6 +289,7 @@ _px_task_rebalance_trigger_time
 _px_worker_share_plan_enabled
 _query_record_size_limit
 _recyclebin_object_purge_frequency
+_rowsets_enabled
 _rowsets_max_rows
 _rowsets_target_maxsize
 _schema_memory_recycle_interval

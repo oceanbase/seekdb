@@ -36,10 +36,6 @@ socket2 = { version = "0.6", features = ["all"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 # PEM certificate/key loaders (ServerConfig inputs) live here.
 rustls-pki-types = { version = "1", features = ["std"] }
-# X.509 metadata parsing stays inside rust-nio. rustls remains the TLS
-# handshake/verifier; this crate only turns the already-verified peer DER into
-# the account-policy fields exposed by the narrow C ABI.
-x509-parser = { version = "0.18", default-features = false }
 
 # libc::shutdown is only used on the Unix path.
 [target.'cfg(unix)'.dependencies]

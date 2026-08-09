@@ -1,0 +1,67 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+ob1.force_stop;
+ob2.mysql alter system failover to '$cluster_name' cluster_id $cluster_id;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql alter system convert to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob1.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 20;
+ob2.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob1.mysql alter system commit to switchover to primary;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality;
+ob1.mysql alter tenant tenant_$case_index set variables ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.check_until_timeout select protection_level from oceanbase.__all_virtual_cluster, MAXIMUM PROTECTION, 100;
+alter system set server_data_copy_out_concurrency = 2;
+alter system set server_data_copy_in_concurrency = 2;
+alter system set data_copy_concurrency = 4;
+use test;
+create table t1(c1 int primary key, c2 int) partition by hash(c1) partitions 60;
+ob2.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_meta_table where is_restore = 0, 1, 20;
+ob1.force_stop;
+ob2.mysql alter system failover to '$cluster_name' cluster_id $cluster_id;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ob2.mysql_p select redo_transport_options, protection_level from oceanbase.__all_cluster;
+redo_transport_options	protection_level
+ASYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+SYNC NET_TIMEOUT = 30000000	MAXIMUM PERFORMANCE
+ob1.z1.obs0.nstart -m disabled_cluster;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql alter system convert to physical standby;
+ob2.mysql_p select count(*) > 0 from oceanbase.__all_virtual_meta_table where is_restore = 100;
+count(*) > 0
+1

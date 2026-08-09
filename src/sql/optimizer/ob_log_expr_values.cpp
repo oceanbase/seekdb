@@ -91,7 +91,6 @@ int ObLogExprValues::add_values_expr(const common::ObIArray<ObRawExpr *> &value_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(value_exprs_, value_exprs))) {
-    LOG_WARN("failed to append expr", K(ret));
   } else if (get_stmt()->is_insert_stmt() && is_ins_values_batch_opt()) {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(get_stmt());
     ObRawExpr *stmt_id_expr = NULL;
@@ -99,9 +98,7 @@ int ObLogExprValues::add_values_expr(const common::ObIArray<ObRawExpr *> &value_
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stmt_id_expr is null", K(ret));
     } else if (OB_FAIL(append(value_exprs_, get_stmt()->get_query_ctx()->ab_param_exprs_))) {
-      LOG_WARN("assign ab param exprs to value exprs failed", K(ret));
     } else if (OB_FAIL(value_exprs_.push_back(stmt_id_expr))) {
-      LOG_WARN("fail to push stmt_id_expr", K(ret));
     } else {
       LOG_TRACE("print after add_values_expr", K(get_stmt()->get_query_ctx()->ab_param_exprs_), K(stmt_id_expr));
     }
@@ -113,7 +110,6 @@ int ObLogExprValues::add_values_desc(const common::ObIArray<ObColumnRefRawExpr *
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(value_desc_, value_desc))) {
-    LOG_WARN("failed to append desc", K(ret));
   }
   return ret;
 }
@@ -130,9 +126,7 @@ int ObLogExprValues::compute_fd_item_set()
     ObFdItemSet *fd_item_set = NULL;
     ObSEArray<ObRawExpr*, 8> select_exprs;
     if (OB_FAIL(static_cast<const ObSelectStmt *>(get_stmt())->get_select_exprs(select_exprs))) {
-      LOG_WARN("failed to get select exprs", K(ret));
     } else if (OB_FAIL(my_plan_->get_fd_item_factory().create_fd_item_set(fd_item_set))) {
-      LOG_WARN("failed to create fd item set", K(ret));
     } else if (!ObTransformUtils::need_compute_fd_item_set(select_exprs)) {
       //do nothing
     } else {
@@ -140,20 +134,16 @@ int ObLogExprValues::compute_fd_item_set()
         ObSEArray<ObRawExpr *, 1> value_exprs;
         ObExprFdItem *fd_item = NULL;
         if (OB_FAIL(value_exprs.push_back(select_exprs.at(i)))) {
-          LOG_WARN("failed to push back expr", K(ret));
         } else if (OB_FAIL(my_plan_->get_fd_item_factory().create_expr_fd_item(fd_item,
                                                                                true,
                                                                                value_exprs,
                                                                                select_exprs))) {
-          LOG_WARN("failed to create fd item", K(ret));
         } else if (OB_FAIL(fd_item_set->push_back(fd_item))) {
-          LOG_WARN("failed to push back fd item", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
         /*do nothing*/
       } else if (OB_FAIL(deduce_const_exprs_and_ft_item_set(*fd_item_set))) {
-        LOG_WARN("failed to deduce fd item set", K(ret));
       } else {
         set_fd_item_set(fd_item_set);
       }
@@ -187,10 +177,8 @@ int ObLogExprValues::compute_op_ordering()
   } else {
     ObSEArray<ObRawExpr*, 4> select_exprs;
     if (OB_FAIL(static_cast<const ObSelectStmt *>(get_stmt())->get_select_exprs(select_exprs))) {
-      LOG_WARN("failed to get select exprs", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::make_sort_keys(select_exprs,
                                                        op_ordering_))) {
-      LOG_WARN("failed to copy sort keys", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -205,7 +193,6 @@ int ObLogExprValues::est_cost()
   EstimateCostInfo param;
   param.need_parallel_ = get_parallel();
   if (OB_FAIL(do_re_est_cost(param, card, op_cost, cost))) {
-    LOG_WARN("failed to get re est cost infos", K(ret));
   } else {
     set_card(card);
     set_op_cost(op_cost);
@@ -285,17 +272,13 @@ int ObLogExprValues::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, value_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (get_stmt()->is_insert_stmt()) {
     const ObInsertStmt *insert_stmt = static_cast<const ObInsertStmt*>(get_stmt());
     if (OB_FAIL(append(all_exprs, insert_stmt->get_values_desc()))) {
-      LOG_WARN("failed to append exprs", K(ret));
     } else { /*do nothing*/ }
   } else if (is_values_table_) {
     if (OB_FAIL(append(all_exprs, value_desc_))) {
-      LOG_WARN("failed to append exprs", K(ret));
     } else { /*do nothing*/ }
   } else { /*do nothing*/ }
   return ret;
@@ -313,7 +296,6 @@ int ObLogExprValues::append_batch_insert_used_exprs(ObAllocExprContext &ctx)
     for (int64_t i = 0; OB_SUCC(ret) && i < group_param_exprs.count(); ++i) {
       ObRawExpr *group_param_expr = group_param_exprs.at(i);
       if (OB_FAIL(mark_expr_produced(group_param_expr, branch_id_, id_, ctx))) {
-        LOG_WARN("makr expr produced failed", K(ret));
       } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(group_param_expr))) {
         LOG_WARN("failed to push back exprs", K(ret));
       } else { /*do nothing*/ }
@@ -324,7 +306,6 @@ int ObLogExprValues::append_batch_insert_used_exprs(ObAllocExprContext &ctx)
     } else if (OB_ISNULL(stmt_id_expr = insert_stmt->get_ab_stmt_id_expr())) {
       // is not batch_optimization, do nothing
     } else if (OB_FAIL(output_exprs_.push_back(stmt_id_expr))) {
-      LOG_WARN("fail to push stmt_id_expr", K(ret));
     }
   }
   return ret;
@@ -344,7 +325,6 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
     for (int64_t i = 0; OB_SUCC(ret) && i < values_desc.count(); ++i) {
       ObColumnRefRawExpr *value_col = values_desc.at(i);
       if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
-        LOG_WARN("makr expr produced failed", K(ret));
       } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(value_col))) {
         LOG_WARN("failed to push back exprs", K(ret));
       } else { /*do nothing*/ }
@@ -353,13 +333,11 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(append_batch_insert_used_exprs(ctx))) {
-      LOG_WARN("failed to append batch insert used exprs", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
     /*do nothing*/
   } else if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
-    LOG_WARN("failed to allocate expr post", K(ret));
   } else if (contain_array_binding_param() && OB_FAIL(construct_array_binding_values())) {
     LOG_WARN("construct array binding values failed", K(ret));
   } else if (value_exprs_.empty() && OB_FAIL(append(value_exprs_, get_output_exprs()))) {
@@ -371,7 +349,6 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
     // make sure var_init_exprs in CG context
     LOG_WARN("failed to append var init exprs", K(ret));
   } else if (OB_FAIL(mark_probably_local_exprs())) {
-    LOG_WARN("failed to mark local exprs", K(ret));
   } else if (is_values_table_) {
     // defence code for 4_2_1 values table
     if (OB_UNLIKELY(output_exprs_.count() != value_desc_.count())) {
@@ -381,7 +358,6 @@ int ObLogExprValues::allocate_expr_post(ObAllocExprContext &ctx)
       for (int64_t i = 0; OB_SUCC(ret) && i < output_exprs_.count(); i++) {
         ObSEArray<ObRawExpr *, 2> column_exprs;
         if (OB_FAIL(ObRawExprUtils::extract_column_exprs(output_exprs_.at(i), column_exprs))) {
-          LOG_WARN("failed to extract column expr", K(ret));
         } else if (OB_UNLIKELY(column_exprs.count() >= 2)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("values table should output is same as value_desc", K(ret));
@@ -409,9 +385,7 @@ int ObLogExprValues::construct_array_binding_values()
   } else {
     const ObSelectStmt *select_stmt = static_cast<const ObSelectStmt*>(get_stmt());
     if (OB_FAIL(value_exprs_.assign(select_stmt->get_query_ctx()->ab_param_exprs_))) {
-      LOG_WARN("assign ab param exprs to value exprs failed", K(ret));
     } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(value_exprs_))) {
-      LOG_WARN("fail to append ab param exprs", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < output_exprs_.count(); ++i) {
       ObRawExpr *raw_expr = NULL;
@@ -420,7 +394,6 @@ int ObLogExprValues::construct_array_binding_values()
         LOG_WARN("get unexpected null", K(ret));
       } else if (raw_expr->get_expr_type() == T_PSEUDO_STMT_ID) {
         if (OB_FAIL(value_exprs_.push_back(raw_expr))) {
-          LOG_WARN("failed to add expr", K(ret));
         }
       }
     }
@@ -433,7 +406,6 @@ int ObLogExprValues::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     const ObIArray<ObRawExpr*> *values = &get_value_exprs();
     BEGIN_BUF_PRINT;
@@ -474,18 +446,13 @@ int ObLogExprValues::allocate_dummy_output()
                                   ObIntType,
                                   1,
                                   dummy_expr))) {
-    LOG_WARN("failed to build const expr", K(ret));
   } else if (OB_ISNULL(dummy_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(dummy_expr->extract_info())) {
-    LOG_WARN("failed to extract info for dummy expr", K(ret));
   } else if (OB_FAIL(value_exprs_.push_back(dummy_expr))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(output_exprs_.push_back(dummy_expr))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(dummy_expr))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -540,7 +507,6 @@ int ObLogExprValues::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, value_exprs_))) {
-    LOG_WARN("failed to replace exprs", K(ret));
   }
   return ret;
 }

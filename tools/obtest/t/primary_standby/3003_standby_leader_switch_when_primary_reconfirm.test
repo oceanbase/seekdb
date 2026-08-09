@@ -1,0 +1,106 @@
+##############################
+# owner: debin.jdb
+# group: CLOG
+#
+# This case is used to verify following modification:
+# 1. leader reports FOLLOWER role during reconfirm.
+# 2. If standby leader switches when primary leader is reconfirming, primary leader will get correct
+#    standby leader by renewing location cache.
+# 3. primary leader will notify sync_standby_leader registering to self through reject msg.
+#
+
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0,locality=HZ:HZ:SH);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0,locality=HZ:HZ:SZ);
+
+ob1.reboot;
+sleep 5;
+ob2.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1;z2;' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(conn_ob1_sys, ob1.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob2_sys, ob2.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob1_tt1, ob1.z1.obs0, root@tt1, ,test, , USE_MYSQL_CONNECTOR);
+
+
+# waiting for the servers to start service
+sleep 10;
+ob1.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+
+# create test table
+connection conn_ob1_tt1;
+create table t1(c1 int primary key);
+insert into t1 values (1), (2);
+select * from t1;
+
+connection conn_ob1_sys;
+--disable_query_log
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC';
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+
+alter system set standby cluster to maximize protection;
+
+ob1.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_idx, protection_level from oceanbase.__all_cluster;
+ob1.mysql_p select column_name, column_value from oceanbase.__all_core_table where table_name like "%all_cluster%" and column_name like "%protection%";
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM PROTECTION, 100;
+
+# verify all followers get valid parent
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where role != 'LEADER' and parent like '%0.0.0.0%', 0, 30;
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+let $z2_ip = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_port = deploy_get_value(ob1.z2.obs0.port);
+let $z1_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_port = deploy_get_value(ob1.z1.obs0.port);
+
+let $ob2_z1_ip = deploy_get_value(ob2.z1.obs0.ip);
+let $ob2_z1_port = deploy_get_value(ob2.z1.obs0.port);
+let $ob2_z2_ip = deploy_get_value(ob2.z2.obs0.ip);
+let $ob2_z2_port = deploy_get_value(ob2.z2.obs0.port);
+
+ob1.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and is_in_sync = 0, 0, 30;
+ob2.check_until_timeout select count(1) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and is_in_sync = 0, 0, 30;
+connection conn_ob1_sys;
+sleep 3;
+# verify leader addr
+ob1.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'LEADER' and svr_ip like '%$z1_ip%' and svr_port = $z1_port, 1, 30;
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where table_id = "$table_id" and role = 'STANDBY_LEADER' and svr_ip like '%$ob2_z1_ip%' and svr_port = $ob2_z1_port, 1, 30;
+connection conn_ob1_sys;
+
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+# block primary leader's reconfirm
+ob1.mysql set ob_global_debug_sync = 'BLOCK_CLOG_PRIMARY_RECONFIRM wait_for clog_reconfirm_signal';
+# switch primary leader
+eval alter system switch replica leader partition_id = '0%1@$table_id' server = '$z2_ip:$z2_port';
+# kill standby_leader, trigger new election
+sleep 1;
+ob2.z1.obs0.force_stop;
+sleep 1;
+
+ob1.mysql set ob_global_debug_sync = 'now signal clog_reconfirm_signal';

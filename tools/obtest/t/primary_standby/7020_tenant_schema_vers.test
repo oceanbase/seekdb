@@ -1,0 +1,50 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+#等待心跳同步状态，验证正常情况下，显示2个备库为同步状态。
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 800;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 400;
+
+#等待心跳同步状态，验证正常情况下，显示2个备库为同步状态。
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 800;
+ob1.mysql_p select cluster_id,cluster_role,switchover_status, switchover_info from oceanbase.__all_virtual_cluster;
+ob1.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+
+ob_connect(conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+source include/standby_ddl.inc;
+alter system set debug_sync_timeout = '1000s';
+
+ob2.mysql set ob_global_debug_sync = 'WAIT_REFRESH_TENANT_SCHEMA_VER wait_for signal';
+
+#wait for hb to update tenant_schema_vers_
+sleep 10;
+
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+
+#wait for check_cluster_is_sync
+sleep 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_standby_status where synchronization_status = 'OK', 1, 200;

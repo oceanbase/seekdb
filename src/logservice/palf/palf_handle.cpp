@@ -78,18 +78,6 @@ int PalfHandle::append(const PalfAppendOptions &opts,
   return ret;
 }
 
-int PalfHandle::append_imported_group(const LSN &source_lsn,
-                                      const share::SCN &source_scn,
-                                      const void *buffer,
-                                      const int64_t nbytes)
-{
-  int ret = OB_SUCCESS;
-  CHECK_VALID;
-  ret = palf_handle_impl_->submit_imported_group(
-      source_lsn, source_scn, static_cast<const char *>(buffer), nbytes);
-  return ret;
-}
-
 int PalfHandle::seek(const LSN &lsn, PalfBufferIterator &iter)
 {
   CHECK_VALID;

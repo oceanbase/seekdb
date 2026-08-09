@@ -46,12 +46,10 @@ int ObDeleteStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   } else if (OB_FAIL(ObDelUpdStmt::deep_copy_stmt_struct(allocator,
                                                          expr_copier,
                                                          other))) {
-    LOG_WARN("failed to deep copy stmt", K(ret));
   } else if (OB_FAIL(deep_copy_stmt_objects<ObDeleteTableInfo>(allocator,
                                                              expr_copier,
                                                              other.table_info_,
                                                              table_info_))) {
-    LOG_WARN("failed do deep copy table info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -61,9 +59,7 @@ int ObDeleteStmt::assign(const ObDeleteStmt &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDelUpdStmt::assign(other))) {
-    LOG_WARN("failed to assign stmt", K(ret));
   } else if (OB_FAIL(table_info_.assign(other.table_info_))) {
-    LOG_WARN("failed to assign table info", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -90,7 +86,6 @@ int ObDeleteStmt::remove_delete_table_info(int64_t table_id)
       LOG_WARN("get unexpected null", K(ret));
     } else if (table_id == table_info_.at(i)->table_id_) {
       if (OB_FAIL(table_info_.remove(i))) {
-        LOG_WARN("failed to remove table info", K(ret));
       } else {
         break;
       }
@@ -134,7 +129,6 @@ int ObDeleteStmt::get_dml_table_infos(ObIArray<ObDmlTableInfo*>& dml_table_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
-    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -143,7 +137,6 @@ int ObDeleteStmt::get_dml_table_infos(ObIArray<const ObDmlTableInfo*>& dml_table
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(dml_table_info, table_info_))) {
-    LOG_WARN("failed to append table info", K(ret));
   }
   return ret;
 }
@@ -157,7 +150,6 @@ int ObDeleteStmt::get_view_check_exprs(ObIArray<ObRawExpr*>& view_check_exprs) c
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null table info", K(ret));
     } else if (OB_FAIL(append(view_check_exprs, table_info->view_check_exprs_))) {
-      LOG_WARN("failed to append view check exprs", K(ret));
     }
   }
   return ret;
@@ -185,7 +177,6 @@ int ObDeleteStmt::remove_table_item_dml_info(const TableItem* table)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("can not remove all dml table", K(ret));
     } else if (OB_FAIL(table_info_.remove(idx))) {
-      LOG_WARN("failed to remove dml table info", K(ret));
     }
   }
   return ret;

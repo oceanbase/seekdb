@@ -88,12 +88,13 @@ struct ObGlobalContext
   bool sys_package_ready_;
   // Process-wide primary/standby mode.
   share::ObServerRole::Role server_role_;
-
+  
   static ObGlobalContext& get_instance();
   void init();
   bool is_inited() const { return inited_; }
   bool is_embedded_mode() const { return embedded_; }
   void set_embedded_mode(const bool embedded) { embedded_ = embedded; }
+  bool is_standby_server() const { return share::ObServerRole::STANDBY_ROLE == server_role_; }
   DECLARE_TO_STRING;
   // instead of self_addr_
   const ObAddr &self_addr() const { return self_addr_seq_.get_addr(); }

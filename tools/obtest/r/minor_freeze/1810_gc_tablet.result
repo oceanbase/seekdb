@@ -1,0 +1,30 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.create_client;
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_tablet_info where tablet_id > 50000, 0, 500;
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= 0, 0 ,180;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 3, 180;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 120;
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.z1.obs0.count_log "print_multi_data";
+792
+ob1.z2.obs0.count_log "print_multi_data";
+792
+ob1.z3.obs0.count_log "print_multi_data";
+792
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_tablet_info where tablet_id > 50000, 0, 500;
+ob1.force_stop;
+ob1.nstart;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= 0, 0 ,180;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 3, 180;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 120;
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.z1.obs0.count_log "print_multi_data";
+1080
+ob1.z2.obs0.count_log "print_multi_data";
+1080
+ob1.z3.obs0.count_log "print_multi_data";
+1080

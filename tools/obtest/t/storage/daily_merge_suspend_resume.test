@@ -1,0 +1,38 @@
+# owner: chenqun
+# owner group: storage
+# description:this case is use for create index test
+#
+--disable_query_log
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=4);
+ob1.reboot;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter resource pool obtestpool unit_num 2;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn2;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+alter system set debug_sync_timeout = '100s';
+sleep 2;
+set ob_global_debug_sync = 'BEFORE_PARTITION_MERGE_COMMIT wait_for begin timeout 100000000';
+sleep 2;
+
+ob1.mysql alter system major freeze;
+sleep 2;
+ob1.mysql alter system suspend merge;
+sleep 2;
+set ob_global_debug_sync = 'NOW signal begin';
+sleep 2;
+ob1.mysql alter system resume merge;
+ob1.check_version 3;
+
+
+
+

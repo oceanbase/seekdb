@@ -1,0 +1,3 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,ct_num=0);
+ob1.reboot;
+ob1.mysql alter system run job 'root_inspection';

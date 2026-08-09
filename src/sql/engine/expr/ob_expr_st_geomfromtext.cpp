@@ -189,7 +189,7 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
   ObString wkt;
   const ObSrsItem *srs_item = NULL;
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   ObGeometry *geo = NULL;
   bool is_lat_long = false;
   bool is_geog = false;
@@ -198,20 +198,17 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
 
   // get wkt
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
-    LOG_WARN("failed to eval first argument", K(ret));
   } else if (datum->is_null()) {
     is_null_result = true;
   } else {
     wkt = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
         expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkt));
     } 
   }
   // get srid
   if (!is_null_result && OB_SUCC(ret) && num_args > 1) {
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
-      LOG_WARN("failed to eval second argument", K(ret));
     } else if (datum->is_null()) {
       is_null_result = true;
     } else if (datum->get_int() < 0 || datum->get_int() > UINT_MAX32) {
@@ -219,10 +216,8 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", func_name);
       LOG_WARN("srid input value out of range", K(ret), K(datum->get_int()));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-        LOG_WARN("failed to get srs guard", K(ret));
-      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-        LOG_WARN("failed to get srs item", K(ret));
+      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+              ctx, srs_guard, srid, srs_item))) {
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null srs item", K(ret));
@@ -237,15 +232,12 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
   if (!is_null_result && OB_SUCC(ret) && num_args > 2 ) {
     ObString axis_str;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[2], ctx, datum))) {
-      LOG_WARN("failed to eval third argument", K(ret));
     } else if (datum->is_null()){
       is_null_result = true;
     } else if (FALSE_IT(axis_str = datum->get_string())) {
-    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator, *datum,
+    } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator, *datum,
               expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), axis_str))) {
-      LOG_WARN("fail to get real string data", K(ret), K(axis_str));
     } else if (OB_FAIL(ObGeoExprUtils::parse_axis_order(axis_str, func_name, axis_order))) {
-      LOG_WARN("failed to parse axis order option string", K(ret));
     } else {
       switch (axis_order) {
         case ObGeoAxisOrder::LONG_LAT: {
@@ -283,7 +275,6 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
       }
       if (is_geog && OB_SUCC(ret)) {
         if (OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs_item, geo, func_name))) {
-          LOG_WARN("check geo coordinate range failed", K(ret));
         }
       }
     }
@@ -298,7 +289,6 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs_item, res_wkb))) {
-      LOG_WARN("failed to write geometry to wkb", K(ret));
     } else {
       res.set_string(res_wkb);
     }

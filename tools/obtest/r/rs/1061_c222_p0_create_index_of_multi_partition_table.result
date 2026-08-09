@@ -1,0 +1,17 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.create_client;
+ob1.mysql alter resource pool sys_pool unit_num = 2;
+create table t1 (k int primary key, v1 int, v2 int) partition by key(k) partitions 10;
+create index i1 on t1 (v1) LOCAL;
+create index i2 on t1 (v2) LOCAL;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+show index from t1;
+Table	Non_unique	Key_name	Seq_in_index	Column_name	Collation	Cardinality	Sub_part	Packed	Null	Index_type	Comment	Index_comment	Visible
+t1	0	PRIMARY	1	k	A	NULL	NULL	NULL		BTREE	available		YES
+t1	1	i1	1	v1	A	NULL	NULL	NULL	YES	BTREE	available		YES
+t1	1	i2	1	v2	A	NULL	NULL	NULL	YES	BTREE	available		YES

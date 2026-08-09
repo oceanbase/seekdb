@@ -1,0 +1,132 @@
+# owner: yuanfeng
+# owner group: storage
+# description: this case is use for minor merge
+#
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+#设置灰度切主的时间为0,关闭自动切主,关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+create table test01 (pk1 int, pk2 int, pk3 int, f1 varchar(1024), f2 varchar(4096), primary key(pk1,pk2,pk3));
+#case 1: 没有前置版本的转储，验证转储功能，以及转储数据的正确性
+echo "case 1:";
+#step 1):插入数据
+let $cnt=1;
+while($cnt < 10)
+{
+  eval insert into test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 2):发起小版本2-0的冻结
+ob1.mysql alter system minor freeze;
+#step 3):验证转储功能
+let $tid = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name='test01', table_id, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+
+#step 4):验证转储数据的正确性
+select * from test.test01;
+
+#case 2: 有前置转储版本的转储，验证转储功能，以及转储数据的正确性
+echo "case:2";
+#step 1):插入数据
+while($cnt < 20)
+{
+  eval insert into test.test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 2):发起小版本2-1的冻结
+ob1.mysql alter system minor freeze;
+#step 3):验证转储功能
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+
+#step 4):验证转储数据的正确性
+select * from test.test01;
+
+#case 3: 有转储版本数据，验证大版本合并功能，以及数据的正确性
+#echo 'case:3';
+#step 1):插入数据
+#while($cnt < 30)
+#{
+#  eval insert into test.test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+#  inc $cnt;
+#}
+
+#step 2):发起大版本2-2冻结
+#ob1.mysql alter system major freeze;
+
+#step 3):验证大版本合并的功能
+#sleep 30;
+#ob1.z1.obs0.check_log_until_success -c "Success to merge partition.*$tid.*merge_version:2";
+#ob1.z2.obs0.check_log_until_success -c "Success to merge partition.*$tid.*merge_version:2";
+#ob1.z3.obs0.check_log_until_success -c "Success to merge partition.*$tid.*merge_version:2";
+
+#step 4):验证转储数据的正确性
+#select * from test.test01;
+
+#case 4: 有前置转储版本数据，接一下一次转储多个冻结小版本
+echo 'case:4';
+
+#step 1)暂停合并
+ob1.mysql alter system suspend merge;
+
+#step 2)插入数据
+while($cnt < 40)
+{
+  eval insert into test.test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 3)发起小版本冻结
+ob1.mysql alter system minor freeze;
+#step 4)插入数据
+while($cnt < 50)
+{
+  eval insert into test.test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 5)发起小版本冻结
+ob1.mysql alter system minor freeze;
+#step 6)插入数据
+while($cnt < 60)
+{
+  eval insert into test.test01 values($cnt, $cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 7)发起小版本冻结
+ob1.mysql alter system minor freeze;
+#step 8)恢复合并
+ob1.mysql alter system resume merge;
+
+#step 9)验证一次性转储多个版本功能
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+#step 10)验证数据的正确性
+select * from test.test01;
+
+#case 5: 有delete操作的时候，转储功能及数据的正确性
+echo 'case 5:';
+#step 1)删除数据
+let $delete_num = 51;
+while($delete_num < 60)
+{
+  eval delete from test.test01 where pk1 = $delete_num;
+  inc $delete_num;
+}
+
+#step 2)发起小版本冻结
+ob1.mysql alter system minor freeze;
+#step 3)验证有delete操作的转储
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+#step 4)验证数据的正确性
+select * from test.test01;

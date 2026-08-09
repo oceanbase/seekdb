@@ -1,0 +1,12 @@
+###############
+#information_schema obtest
+###############
+#
+
+# information_schema test cases list
+
+------
+
+case name | description   |
+---------:| :-------------:
+distribute_query.test | 测试partition leader分布在不同server时information_schema下视图查询是否会报分布式强一致性读问题

@@ -19,6 +19,7 @@
 #include "ob_sql_expression.h"
 #include "sql/parser/ob_item_type_str.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan.h"
 
 namespace oceanbase
 {
@@ -45,7 +46,6 @@ int ObSqlExpression::set_item_count(int64_t count)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(infix_expr_.set_item_count(count))) {
-    LOG_WARN("set expr item count failed", K(ret));
   }
   return ret;
 }
@@ -61,14 +61,11 @@ int ObSqlExpression::assign(const ObSqlExpression &other)
     if (other.fast_expr_ != NULL) {
       ObExprOperatorFactory factory(inner_alloc_);
       if (OB_FAIL(factory.alloc_fast_expr(other.fast_expr_->get_op_type(), fast_expr_))) {
-        LOG_WARN("alloc fast expr failed", K(ret));
       } else if (OB_FAIL(fast_expr_->assign(*other.fast_expr_))) {
-        LOG_WARN("assign fast expr failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(infix_expr_.assign(other.infix_expr_))) {
-        LOG_WARN("infix expr assign failed", K(ret));
       }
     }
   }
@@ -86,7 +83,6 @@ int ObSqlExpression::add_expr_item(const ObPostExprItem &item, const ObRawExpr *
   }
   *static_cast<ObPostExprItem *>(&infix_item) = item;
   if (OB_FAIL(infix_expr_.add_expr_item(infix_item))) {
-    LOG_WARN("add infix expr item failed", K(ret));
   } else if (IS_EXPR_OP(item.get_item_type())) {
     int64_t last_expr_idx = infix_expr_.get_exprs().count() - 1;
     infix_expr_.get_exprs().at(last_expr_idx).set_param_idx(static_cast<const ObInfixExprItem *>
@@ -104,7 +100,6 @@ int ObSqlExpression::calc(ObExprCtx &expr_ctx,
   int ret = OB_SUCCESS;
   if (fast_expr_ != NULL) {
     if (OB_FAIL(fast_expr_->calc(expr_ctx, row, result))) {
-      LOG_WARN("cacl fast expr failed", K(ret));
     }
   } else {
     if (OB_UNLIKELY(infix_expr_.is_empty())) {
@@ -134,7 +129,6 @@ int ObSqlExpression::generate_idx_for_regexp_ops(int16_t &cur_regexp_op_count)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(infix_expr_.generate_idx_for_regexp_ops(cur_regexp_op_count))) {
-    LOG_WARN("generate idx for regexp failed", K(ret));
   }
   return ret;
 }
@@ -203,7 +197,6 @@ int ObColumnExpression::calc_and_project(ObExprCtx &expr_ctx, ObNewRow &row) con
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid result index", K_(result_index), K_(row.count));
   } else if (OB_FAIL(ObSqlExpression::calc(expr_ctx, row, row.cells_[result_index_]))) {
-    LOG_WARN("calc expr result failed", K(ret));
   }
   return ret;
 }
@@ -246,13 +239,9 @@ ObAggregateExpression::ObAggregateExpression(common::ObIAllocator &allocator, in
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(separator_param_expr_.set_item_count(1))) {
-    LOG_WARN("failed to set item count", K(ret));
   } else if (OB_FAIL(window_size_param_expr_.set_item_count(1))) {
-    LOG_WARN("failed to set item count", K(ret));
   } else if (OB_FAIL(item_size_param_expr_.set_item_count(1))) {
-    LOG_WARN("failed to set item count", K(ret));
   } else if (OB_FAIL(bucket_num_expr_.set_item_count(1))) {
-    LOG_WARN("failed to set item count", K(ret));
   }
 }
 
@@ -282,7 +271,6 @@ int ObAggregateExpression::calc(ObExprCtx &expr_ctx,
     result = OBJ_ZERO;
   } else {
     if (OB_FAIL(ObSqlExpression::calc(expr_ctx, row, result))) {
-      LOG_WARN("failed to calc agg expr", K(ret), K(row));
     }
   }
   return ret;
@@ -300,7 +288,6 @@ int ObAggregateExpression::calc(ObExprCtx &expr_ctx,
     result = OBJ_ZERO;
   } else {
     if (OB_FAIL(ObSqlExpression::calc(expr_ctx, row1, row2, result))) {
-      LOG_WARN("failed to calc agg expr", K(ret), K(row1), K(row2));
     }
   }
   return ret;
@@ -317,7 +304,6 @@ int ObAggregateExpression::add_sort_column(const int64_t index,
   sort_column.cs_type_ = cs_type;
   sort_column.set_is_ascending(is_ascending);
   if (OB_FAIL(sort_columns_.push_back(sort_column))) {
-    LOG_WARN("failed to push back to array", K(ret));
   } else {
     // do nothing
   }

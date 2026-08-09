@@ -82,9 +82,8 @@ public:
       query::ObIChangeStreamService &change_stream_service);
   virtual ~ObService();
 
-  int init(common::ObMySQLProxy &sql_proxy);
-  int bootstrap();
-  int report_bootstrap_telemetry();
+  int init(common::ObMySQLProxy &sql_proxy,
+           bool need_bootstrap);
   int start();
   void set_stop();
   void stop();
@@ -158,6 +157,7 @@ public:
       int64_t timeout_us) override;
 
 private:
+  int bootstrap();
   int inner_fill_tablet_info_(
       const ObTabletID &tablet_id,
       storage::ObLS *ls,
@@ -177,6 +177,7 @@ private:
   query::ObIChangeStreamService &change_stream_service_;
   ObSchemaReleaseTimeTask schema_release_task_;
   TelemetryTask telemetry_task_;
+  bool need_bootstrap_;
 };
 
 }//end namespace observer

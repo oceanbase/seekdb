@@ -19,7 +19,7 @@
 
 #include "sql/ob_sql_context.h"
 #include "observer/mysql/obmp_base.h"
-#include "observer/mysql/ob_query_retry_ctrl.h"
+#include "sql/ob_query_retry_ctrl.h"
 namespace oceanbase
 {
 namespace pl
@@ -28,8 +28,6 @@ class ObPLServerCursorInfo;
 }
 namespace observer
 {
-#define FETCH_PACKET_SIZE_WITHOUT_OFFSET 9
-
 class ObMPStmtFetch : public ObMPBase
 {
 public:
@@ -40,10 +38,6 @@ public:
   int64_t get_exec_start_timestamp() const { return exec_start_timestamp_; }
   int64_t get_exec_end_timestamp() const { return exec_end_timestamp_; }
   int64_t get_send_timestamp() const { return get_receive_timestamp(); }
-  virtual int flush_buffer(const bool is_last) override
-  {
-    return ObMPBase::flush_buffer(is_last);
-  }
   int response_row(sql::ObSQLSessionInfo &session,
                    common::ObNewRow &row,
                    const ColumnsFieldArray *fields,
@@ -69,7 +63,6 @@ private:
                       int64_t &row_num);
   int response_query_header(sql::ObSQLSessionInfo &session, const ColumnsFieldArray *fields);
   virtual int before_process();
-  // Overload response, do not call flush_buffer(true) in response; flush_buffer(true) should be explicitly called when a response packet is needed to be sent
 private:
   int64_t cursor_id_;
   int64_t fetch_rows_;
@@ -80,7 +73,7 @@ private:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObMPStmtFetch);
 }; //end of class
-} //end of namespace observer
+} // end of namespace observer
 } //end of namespace oceanbase
 
 

@@ -1,0 +1,40 @@
+#owner: msy164651
+#owner group: rs
+#description:验证备库快照接入阶段对user可以覆盖处理
+
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+#在主库创建用户
+ob_connect(ob1_conn, ob1.z1.obs0, root@sys,,oceanbase,,USE_OB_CONNECTOR);
+ob1.mysql create user 'u101' identified by 'pass1';
+ob1.mysql grant select on *.* to 'u101';
+ob1.mysql rename user 'u101' to 'u99';
+ob1.mysql alter user u99 identified by '99';
+ob1.mysql alter user u99 ACCOUNT LOCK;
+ob1.mysql alter user u99 ACCOUNT UNLOCK;
+ob1.mysql alter user root identified by '99';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.reset;
+ob2.deploy;
+ob2.bootstrap;
+ob_connect(conn1, ob1.z1.obs0, root@sys,99,oceanbase,,USE_OB_CONNECTOR);
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase,,USE_OB_CONNECTOR);
+connection conn2;
+let $cluster_id = query_get_value(select cluster_id from oceanbase.v\$ob_cluster, cluster_id, 1);
+let $cluster_name = query_get_value(select cluster_name from oceanbase.v\$ob_cluster, cluster_name, 1);
+connection conn1;
+--disable_query_log
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob_connect(ob2_conn, ob2.z1.obs0, root@sys, 99,oceanbase,,USE_OB_CONNECTOR);
+ob1.mysql drop user u99;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+connection ob2_conn;
+alter system commit to switchover to primary;
+
+

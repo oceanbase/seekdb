@@ -67,13 +67,12 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   MultimodeAlloctor tmp_allocator(tmp_alloc_g.get_allocator());
   ObDatum *datum = NULL;
   bool is_null_result = false;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   ObGeometry *geo = NULL;
   ObGeometry *res_geo = nullptr;
 
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
-    LOG_WARN("failed to eval first argument", K(ret));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -82,27 +81,22 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     is_null_result = true;
   } else {
     ObString wkb = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(tmp_allocator,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, tmp_allocator,
             *datum,
             expr.args_[0]->datum_meta_,
             expr.args_[0]->obj_meta_.has_lob_header(),
             wkb))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(
                    ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_CENTROID))) {
-      LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(tmp_allocator,
                    wkb,
                    geo,
                    srs,
                    N_ST_CENTROID,
                    GEO_NORMALIZE | GEO_CHECK_RANGE | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("failed to parse wkb", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_null_result))) {
-      LOG_WARN("fail to check is geometry empty", K(ret));
     } else if (is_null_result) {
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -123,9 +117,7 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_FAIL(ObGeoTypeUtil::correct_polygon(tmp_allocator, srs, true, *geo))) {
-        LOG_WARN("correct geo failed", K(ret), K(geo));
       } else if (OB_FAIL(gis_context.append_geo_arg(geo))) {
-        LOG_WARN("build geo gis context failed", K(ret));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Centroid>::geo_func::eval(gis_context, res_geo))) {
         LOG_WARN("eval geo func centroid failed", K(ret), K(geo->type()));
         if (ret == OB_ERR_BOOST_GEOMETRY_CENTROID_EXCEPTION) {
@@ -144,7 +136,6 @@ int ObExprSTCentroid::eval_st_centroid(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     } else {
       ObString res_wkb;
       if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*res_geo, expr, ctx, srs, res_wkb, geo->get_srid()))) {
-        LOG_WARN("fail to get wkb from geometry", K(ret));
       } else {
         res.set_string(res_wkb);
       }

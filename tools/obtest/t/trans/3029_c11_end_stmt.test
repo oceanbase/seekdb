@@ -1,0 +1,100 @@
+#owner: shanyan.g 
+#owner group: transaction
+# 测试点：测试语句回滚场景下，事务的执行情况
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,oceanbase,$l_port);
+connect (conn2,$l_ip,root@obtest,,oceanbase,$l_port);
+
+connection conn1;
+use test;
+## case:检查表结构
+create table test01(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+create table test02(pk int primary key, c1 int) partition by hash(pk % 2) partitions 2;
+insert into test01 values(1,1);
+insert into test01 values(2,2);
+insert into test01 values(3,3);
+insert into test01 values(4,4);
+
+insert into test02 values(1,1);
+insert into test02 values(2,2);
+insert into test02 values(3,3);
+insert into test02 values(4,4);
+
+ob1.z1.obs0.switch_partition obtest:test:test01:0;
+ob1.z2.obs0.switch_partition obtest:test:test01:1;
+ob1.z1.obs0.switch_partition obtest:test:test02:0;
+ob1.z2.obs0.switch_partition obtest:test:test02:1;
+sleep 5;
+
+ob1.mysql alter system set syslog_level="DEBUG";
+#case1 : partition在单机
+--error 1062
+insert into test01 values(2,2);
+
+#case2 : ac=1的remote类型的事务
+--error 1062
+insert into test01 values(1,2);
+sleep 1;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+
+#case3 : 多条语句持续回滚的场景，每次回滚context都会立即释放
+begin;
+select * from test02 where pk=1;
+#远程计划
+--error 1062
+insert into test01 values(1,1);
+#本机计划
+--error 1062
+insert into test02 values(2,2);
+commit;
+sleep 1;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+
+#case4 : 分布式事务，语句出现回滚
+begin;
+select * from test02 where pk=1;
+#访问p1
+select * from test01 where pk=1;
+#访问p0，出现主键冲突，语句回滚
+--error 1062
+insert into test01 values(1,1), (2,2), (3,3),(4,4);
+commit;
+sleep 1;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+
+ob1.z1.obs0.switch_partition obtest:test:test01:1;
+ob1.z2.obs0.switch_partition obtest:test:test01:0;
+ob1.z1.obs0.switch_partition obtest:test:test02:1;
+ob1.z2.obs0.switch_partition obtest:test:test02:0;
+sleep 10;
+
+#case5 : 由于location cache的问题，第一次查询语句会出现重试；
+begin;
+select * from test01 where pk=1;
+select * from test02 where pk=1;
+commit;
+ob1.mysql select count(1) from oceanbase.__all_virtual_trans_stat;
+
+#case6 : 只读事务发生切主
+begin;
+select * from test01 where pk=1 union select * from test02 where pk=1;
+
+#切主操作
+ob1.z1.obs0.switch_partition obtest:test:test01:0;
+ob1.z2.obs0.switch_partition obtest:test:test01:1;
+sleep 10;
+
+select * from test01 where pk=1 union select * from test02 where pk=1;
+commit;
+ob1.mysql alter system set syslog_level="INFO";
+
+drop table test01;
+drop table test02;

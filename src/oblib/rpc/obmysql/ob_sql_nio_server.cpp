@@ -17,17 +17,8 @@
 #define USING_LOG_PREFIX RPC_OBMYSQL
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "lib/ob_running_mode.h"
-#include "lib/string/ob_string.h"
 #include <stdio.h>
-#ifdef _WIN32
-#include <io.h>
-#define access _access
-#ifndef F_OK
-#define F_OK 0
-#endif
-#else
 #include <unistd.h>
-#endif
 
 namespace oceanbase
 {
@@ -75,22 +66,6 @@ void nio_on_close(void* ctx, void* sess, int err) {
 }
 } // anonymous namespace
 
-static uint8_t nio_tls_min_version(const char *value)
-{
-  const ObString version(NULL == value ? "none" : value);
-  uint8_t result = NIO_TLS_MIN_NONE;
-  if (0 == version.case_compare("TLSV1")) {
-    result = NIO_TLS_MIN_TLSV1;
-  } else if (0 == version.case_compare("TLSV1.1")) {
-    result = NIO_TLS_MIN_TLSV1_1;
-  } else if (0 == version.case_compare("TLSV1.2")) {
-    result = NIO_TLS_MIN_TLSV1_2;
-  } else if (0 == version.case_compare("TLSV1.3")) {
-    result = NIO_TLS_MIN_TLSV1_3;
-  }
-  return result;
-}
-
 // Free function declared in rpc/ob_request.h. The accepted descriptor is
 // immutable, so request diagnostics do not need a Rust registry lookup.
 int get_fd_from_sess(void* sess)
@@ -99,8 +74,7 @@ int get_fd_from_sess(void* sess)
 }
 
 int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
-                          int n_thread, bool disable_tcp, bool use_tls,
-                          const char *min_tls_version)
+                          int n_thread, bool disable_tcp, bool use_tls)
 {
   static_assert(alignof(ObSqlSockSession) <= 16,
                 "Rust embedded session storage must satisfy C++ alignment");
@@ -127,11 +101,7 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     // TLS is startup-only, like the thread count (set_thread_count already
     // returns OB_NOT_SUPPORTED): toggling ssl_client_authentication at
     // runtime requires an observer restart to take effect.
-    nio_tls_config tls_cfg = {};
-    tls_cfg.ca_file = OB_SSL_CA_FILE;
-    tls_cfg.cert_file = OB_SSL_CERT_FILE;
-    tls_cfg.key_file = OB_SSL_KEY_FILE;
-    tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
+    nio_tls_config tls_cfg = { OB_SSL_CA_FILE, OB_SSL_CERT_FILE, OB_SSL_KEY_FILE };
     const nio_tls_config *tls = use_tls ? &tls_cfg : NULL;
     int32_t start_err = NIO_START_OK;
     reactor_ = nio_start(addr, NIO_ABI_VERSION, &cb, sizeof(cb),

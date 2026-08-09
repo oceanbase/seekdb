@@ -370,10 +370,7 @@ fn parse(
     long_data: &[u8],
 ) -> Result<(Vec<NioMysqlExecuteParam>, NioMysqlExecuteParseResult), ParseError> {
     if param_count == 0 {
-        // mysqlnd 5.x emits the zero-valued new-params-bound flag even when
-        // COM_STMT_PREPARE reported no parameters. MySQL and OceanBase accept
-        // that compatibility padding, so accept exactly that one extra byte.
-        if (!tail.is_empty() && tail != [0]) || !cached.is_empty() || !long_data.is_empty() {
+        if !tail.is_empty() || !cached.is_empty() || !long_data.is_empty() {
             return Err(ParseError::Malformed);
         }
         return Ok((Vec::new(), NioMysqlExecuteParseResult::default()));

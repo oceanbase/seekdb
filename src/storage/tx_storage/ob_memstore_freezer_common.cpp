@@ -141,10 +141,11 @@ void ObMemstoreInfo::update_mem_limit(const int64_t lower_limit,
   mem_upper_limit_ = upper_limit;
 }
 
-void ObMemstoreInfo::update_memstore_limit(const int64_t memstore_limit)
+void ObMemstoreInfo::update_memstore_limit(const int64_t memstore_limit_percentage)
 {
   SpinWLockGuard guard(lock_);
-  mem_memstore_limit_ = memstore_limit;
+  int64_t tmp_var = mem_upper_limit_ / 100;
+  mem_memstore_limit_ = tmp_var * memstore_limit_percentage;
 }
 
 int64_t ObMemstoreInfo::get_memstore_limit() const
@@ -153,10 +154,12 @@ int64_t ObMemstoreInfo::get_memstore_limit() const
   return mem_memstore_limit_;
 }
 
-bool ObMemstoreInfo::is_memstore_limit_changed(const int64_t curr_memstore_limit) const
+bool ObMemstoreInfo::is_memstore_limit_changed(const int64_t curr_memstore_limit_percentage) const
 {
   SpinRLockGuard guard(lock_);
-  return curr_memstore_limit != mem_memstore_limit_;
+  const int64_t tmp_var = mem_upper_limit_ / 100;
+  const int64_t curr_mem_memstore_limit = tmp_var * curr_memstore_limit_percentage;
+  return (curr_mem_memstore_limit != mem_memstore_limit_);
 }
 
 void ObMemstoreInfo::get_freeze_ctx(ObMemstoreFreezeCtx &ctx) const

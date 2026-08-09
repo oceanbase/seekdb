@@ -1,0 +1,127 @@
+# owner: youchuan.yc
+# owner group: storage
+# description: test dml and fts ddl parallel
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+let $extra_conf = "cpu_count=16,memory_budget='20G',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='20G',diag_syslog_per_error_limit=100000";
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+alter system set _enable_add_fulltext_index_to_existing_table = true;
+alter system set debug_sync_timeout = '1000s';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE RESOURCE UNIT if not exists unit_x MAX_CPU 2, MEMORY_SIZE='4G';
+CREATE RESOURCE POOL if not exists pool_x UNIT = 'unit_x', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+ob_connect(conn_user1, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_user2, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+sleep 1;
+
+connection conn_user1;
+--disable_warnings
+drop table if exists t;
+--enable_warnings
+create table t (c1 int, c2 varchar(255));
+
+let $i = 0;
+--disable_query_log
+while ($i < 10)
+{
+  eval insert into t values($i, 'the oceanbase database is a distributed relational database');
+  inc $i;
+}
+--enable_query_log
+
+send create fulltext index idx on t(c2);
+sleep 3;
+
+connection conn_user2;
+let $i = 10;
+--disable_query_log
+while ($i < 100)
+{
+  eval insert into t values($i, 'the oceanbase database is a distributed relational database');
+  inc $i;
+}
+--enable_query_log
+sleep 5;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+
+connection conn_user1;
+reap;
+
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+sleep 1;
+
+connection conn_user1;
+--disable_warnings
+drop table if exists t1;
+--enable_warnings
+create table t1 (c1 int, c2 varchar(255));
+
+let $i = 0;
+--disable_query_log
+while ($i < 10)
+{
+  eval insert into t1 values($i, 'the oceanbase database is a distributed relational database');
+  inc $i;
+}
+--enable_query_log
+
+send alter table t1 add fulltext index idx(c2);
+sleep 3;
+
+connection conn_user2;
+let $i = 10;
+--disable_query_log
+while ($i < 100)
+{
+  eval insert into t1 values($i, 'the oceanbase database is a distributed relational database');
+  inc $i;
+}
+--enable_query_log
+sleep 5;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+
+connection conn_user1;
+reap;
+
+ALTER SYSTEM MINOR FREEZE;
+ALTER SYSTEM MAJOR FREEZE;
+
+sleep 10;
+
+connection conn_sys;
+select * from __all_zone where name = "is_merge_error" or info = "ERROR";
+
+connection conn_user1;
+set ob_enable_index_direct_select = true;
+let $table_name_in_t = deploy_get_value(ob1.select select table_name from oceanbase.__all_virtual_table where data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't') and table_name like '%fts_rowkey_doc', table_name, 1);
+eval select /*+ opt_param('hidden_column_visible', 'true') */  count(*) from $table_name_in_t;
+
+let $table_name_in_t1 = deploy_get_value(ob1.select select table_name from oceanbase.__all_virtual_table where data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't1') and table_name like '%fts_rowkey_doc', table_name, 1);
+eval select /*+ opt_param('hidden_column_visible', 'true') */  count(*) from $table_name_in_t1;

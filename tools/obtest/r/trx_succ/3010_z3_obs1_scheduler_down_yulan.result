@@ -1,0 +1,33 @@
+ob1=OBI(cluster=1:1:1,init_unit_cpu=11,init_unit_num=1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter tenant obtest set primary_zone='z1';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS where tenant_id=$tenant_id and ls_id!=1, 1, 100;
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip0' and svr_port='$port0' and ROLE='LEADER', 1, 100;
+set global ob_trx_timeout=30000000;
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+ob1.mysql alter tenant obtest set primary_zone='z3';
+ob1.check_until_timeout select count(1) from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id=$tenant_id and ls_id=$ls_id and SVR_IP='$ip2' and svr_port='$port2' and ROLE='LEADER', 1, 100;
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+ob1.z1.obs0.force_stop;
+update t1 set c2='aa' where pk=1;
+Got one of the listed errors
+ob1.z1.obs0.nstart;
+commit;
+ERROR HY000: MySQL server has gone away
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+update t1 set c2='aa' where pk=1;
+commit;
+set autocommit=1;
+select * from t1;
+pk	c1	c2
+1	1	aa
+2	2	b

@@ -345,6 +345,9 @@ class TestDeliver : public frame::ObReqDeliver
   {
   }
 
+  int init() override { return OB_SUCCESS; }
+  void stop() override {}
+
   void fail_on(int delivery) { fail_on_.store(delivery, std::memory_order_relaxed); }
   void hold_on(int delivery) { hold_on_.store(delivery, std::memory_order_relaxed); }
   void bind_sql_session_on_login() { bind_login_.store(true, std::memory_order_relaxed); }

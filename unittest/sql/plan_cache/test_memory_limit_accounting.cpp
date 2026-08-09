@@ -114,7 +114,7 @@ TEST_F(TestMemoryLimitAccounting, plan_object_and_node_release_at_final_lifetime
 
     // Logical eviction does not release either charge. Final destruction does.
     EXPECT_EQ(object_charge + node_charge, plan_cache.get_managed_used());
-    plan_cache.release_cache_node_memory_account(node);
+    plan_cache.release_cache_node(node);
     EXPECT_EQ(object_charge, plan_cache.get_managed_used());
     plan_cache.release_cache_object(object);
     EXPECT_EQ(0, plan_cache.get_managed_used());

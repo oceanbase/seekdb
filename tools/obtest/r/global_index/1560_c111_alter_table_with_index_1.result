@@ -1,0 +1,90 @@
+ob1=OBI(cluster=1:1:1, init_unit_cpu=1, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+use test;
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add index idx(c1, c2) global;
+'partition num: 1'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677778;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677778	__idx_1099511677777_idx	1099511628776	1099511677777	3	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677778;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677778;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677778	16	c1	0	63	NULL
+1	1099511677778	17	c2	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add index idx(c1, c2) local;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677780;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677780	__idx_1099511677779_idx	1099511628776	1099511677779	1	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677780;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677780;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677780	16	c1	0	63	NULL
+1	1099511677780	17	c2	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add index idx(c1, c2) global;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677782;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677782	__idx_1099511677781_idx	1099511628776	1099511677781	7	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677782;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677782;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677782	16	c1	0	63	NULL
+1	1099511677782	17	c2	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add unique index idx(c1, c2) global;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677784;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677784	__idx_1099511677783_idx	1099511628776	1099511677783	8	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677784;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677784;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677784	16	c1	0	63	NULL
+1	1099511677784	17	c2	0	63	NULL
+1	1099511677784	32783	shadow_pk_0	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add index idx(c1, c2) local;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677786;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677786	__idx_1099511677785_idx	1099511628776	1099511677785	1	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677786;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677786;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677786	16	c1	0	63	NULL
+1	1099511677786	17	c2	0	63	NULL
+drop table tt;
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add unique index idx(c1, c2) local;
+'partition num: 0'
+select tenant_id, table_id, table_name, database_id, data_table_id, index_type, index_status, part_level, part_func_type, part_func_expr, part_num, max_used_part_id from oceanbase.__all_virtual_table where table_id = 1099511677788;
+tenant_id	table_id	table_name	database_id	data_table_id	index_type	index_status	part_level	part_func_type	part_func_expr	part_num	max_used_part_id
+1	1099511677788	__idx_1099511677787_idx	1099511628776	1099511677787	2	1	0	0		1	-1
+select tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val from oceanbase.__all_virtual_part where table_id = 1099511677788;
+tenant_id	table_id	part_id	part_name	high_bound_val	b_high_bound_val
+select tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value from oceanbase.__all_virtual_column where table_id = 1099511677788;
+tenant_id	table_id	column_id	column_name	is_hidden	collation_type	orig_default_value
+1	1099511677788	16	c1	0	63	NULL
+1	1099511677788	17	c2	0	63	NULL
+1	1099511677788	32783	shadow_pk_0	0	63	NULL
+drop table tt;

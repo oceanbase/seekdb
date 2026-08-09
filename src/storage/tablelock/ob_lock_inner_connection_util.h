@@ -17,21 +17,19 @@
 #ifndef OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 #define OCEABASE_OB_LOCK_INNER_CONNECTION_UTIL_
 
-#include "common/mysqlclient/ob_isql_client.h"
+#include "data_plane/ob_inner_sql_transmit_arg.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 
 namespace oceanbase
 {
-namespace observer
+namespace common
 {
-class ObInnerSQLConnection;
-}
-namespace observer
+namespace sqlclient
 {
-class ObInnerSQLResult;
+class ObISQLConnection;
 }
-
+}
 namespace transaction
 {
 namespace tablelock
@@ -50,104 +48,135 @@ class ObUnLockPartitionRequest;
 class ObUnLockTabletRequest;
 class ObUnLockAloneTabletRequest;
 
+class ObIInnerConnectionLockRuntime
+{
+public:
+  virtual ~ObIInnerConnectionLockRuntime() = default;
+  virtual int process_lock_rpc(
+      const obcall::ObInnerSQLTransmitArg &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_table(
+      uint64_t table_id,
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn,
+      ObTableLockOwnerID owner_id,
+      ObTableLockPriority lock_priority) = 0;
+  virtual int lock_table(
+      const ObLockTableRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int unlock_table(
+      const ObUnLockTableRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_tablet(
+      uint64_t table_id,
+      ObTabletID tablet_id,
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_tablet(
+      uint64_t table_id,
+      const ObIArray<ObTabletID> &tablet_ids,
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_tablet(
+      const ObLockAloneTabletRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int unlock_tablet(
+      const ObUnLockAloneTabletRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_obj(
+      const ObLockObjRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int unlock_obj(
+      const ObUnLockObjRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int lock_obj(
+      const ObLockObjsRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int unlock_obj(
+      const ObUnLockObjsRequest &arg,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int replace_lock(
+      const ObReplaceLockRequest &req,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int replace_lock(
+      const ObReplaceAllLocksRequest &req,
+      common::sqlclient::ObISQLConnection *conn) = 0;
+  virtual int execute_write_sql(
+      common::sqlclient::ObISQLConnection *conn,
+      const ObSqlString &sql,
+      int64_t &affected_rows) = 0;
+  virtual int execute_read_sql(
+      common::sqlclient::ObISQLConnection *conn,
+      const ObSqlString &sql,
+      ObISQLClient::ReadResult &res) = 0;
+};
+
 class ObInnerConnectionLockUtil
 {
 public:
+  static int process_lock_rpc(
+      const obcall::ObInnerSQLTransmitArg &arg,
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_table(
-      const uint64_t table_id,
-      const ObTableLockMode lock_mode,
-      const int64_t timeout_us,
-      observer::ObInnerSQLConnection *conn,
-      const ObTableLockOwnerID owner_id = ObTableLockOwnerID::default_owner(),
-      const ObTableLockPriority lock_priority = ObTableLockPriority::NORMAL);
+      uint64_t table_id,
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn,
+      ObTableLockOwnerID owner_id = ObTableLockOwnerID::default_owner(),
+      ObTableLockPriority lock_priority = ObTableLockPriority::NORMAL);
   static int lock_table(
       const ObLockTableRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int unlock_table(
       const ObUnLockTableRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_tablet(
-      const uint64_t table_id,
-      const ObTabletID tablet_id,
-      const ObTableLockMode lock_mode,
-      const int64_t timeout_us,
-      observer::ObInnerSQLConnection *conn);
+      uint64_t table_id,
+      ObTabletID tablet_id,
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_tablet(
-      const uint64_t table_id,
+      uint64_t table_id,
       const ObIArray<ObTabletID> &tablet_ids,
-      const ObTableLockMode lock_mode,
-      const int64_t timeout_us,
-      observer::ObInnerSQLConnection *conn);
+      ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_tablet(
       const ObLockAloneTabletRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int unlock_tablet(
       const ObUnLockAloneTabletRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_obj(
       const ObLockObjRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int unlock_obj(
       const ObUnLockObjRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int lock_obj(
       const ObLockObjsRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int unlock_obj(
       const ObUnLockObjsRequest &arg,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int replace_lock(
       const ObReplaceLockRequest &req,
-      observer::ObInnerSQLConnection *conn);
+      common::sqlclient::ObISQLConnection *conn);
   static int replace_lock(
       const ObReplaceAllLocksRequest &req,
-      observer::ObInnerSQLConnection *conn);
-  static int acquire_inner_conn(sql::ObSQLSessionInfo *session_info,
-                                common::sqlclient::ObISQLConnectionGuard &conn_guard);
-  static int execute_write_sql(observer::ObInnerSQLConnection *conn, const ObSqlString &sql, int64_t &affected_rows);
-  static int execute_read_sql(observer::ObInnerSQLConnection *conn,
-                              const ObSqlString &sql,
-                              ObISQLClient::ReadResult &res);
-  static int build_tx_param(sql::ObSQLSessionInfo *session_info, ObTxParam &tx_param, const bool *readonly = nullptr);
-
-private:
-  enum class LockOperationType
-  {
-    LOCK_TABLE,
-    UNLOCK_TABLE,
-    LOCK_TABLET,
-    LOCK_OBJ,
-    UNLOCK_OBJ,
-    LOCK_OBJS,
-    UNLOCK_OBJS,
-    LOCK_ALONE_TABLET,
-    UNLOCK_ALONE_TABLET,
-  };
-
-  static int replace_lock_(const ObReplaceLockRequest &req,
-      observer::ObInnerSQLConnection *conn,
-      observer::ObInnerSQLResult &res);
-  static int replace_lock_(const ObReplaceAllLocksRequest &req,
-      observer::ObInnerSQLConnection *conn,
-      observer::ObInnerSQLResult &res);
-  static int do_obj_lock_(const ObLockRequest &arg,
-      const LockOperationType operation_type,
-      observer::ObInnerSQLConnection *conn,
-      observer::ObInnerSQLResult &res);
-  static int handle_request_by_operation_type_(
-    ObTxDesc &tx_desc,
-    const ObTxParam &tx_param,
-    const ObLockRequest &arg,
-    const LockOperationType operation_type);
-  static int request_lock_(const ObLockRequest &arg,
-      const LockOperationType operation_type,
-      observer::ObInnerSQLConnection *conn);
-  static int set_to_mysql_compat_mode_(observer::ObInnerSQLConnection *conn,
-                                       bool &need_reset_sess_mode,
-                                       bool &need_reset_conn_mode);
-  static int reset_compat_mode_(observer::ObInnerSQLConnection *conn,
-                                const bool need_reset_sess_mode,
-                                const bool need_reset_conn_mode);
+      common::sqlclient::ObISQLConnection *conn);
+  static int execute_write_sql(
+      common::sqlclient::ObISQLConnection *conn,
+      const ObSqlString &sql,
+      int64_t &affected_rows);
+  static int execute_read_sql(
+      common::sqlclient::ObISQLConnection *conn,
+      const ObSqlString &sql,
+      ObISQLClient::ReadResult &res);
 };
 
 } // tablelock

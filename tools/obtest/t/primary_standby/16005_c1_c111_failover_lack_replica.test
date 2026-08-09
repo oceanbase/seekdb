@@ -1,0 +1,52 @@
+#rs
+#msy
+#验证failover缺副本的情况下，拉起后可以正常补副本
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+#case 1
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1, 1, 30;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_virtual_ddl_operation where tenant_id = 1001, s, 1);
+ob1.check_until_timeout select count(*) c from __all_virtual_server_schema_info where refreshed_schema_version = $primary_schema_version and tenant_id = 1001, 1, 30;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int);
+insert into t1 values(1, 1);
+create index il on t1(c2);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql set global ob_query_timeout = 100000000;
+sleep 30;
+ob2.check_version 2;
+
+#failover
+ob1.force_stop;
+ob2.z3.obs0.force_stop;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where zone = 'z3', 0, 100;
+ob2.mysql alter system set enable_rereplication = false;
+ob2.z3.obs0.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active', 3, 100;
+ob2.mysql set global ob_query_timeout = 600000000;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system activate physical standby cluster;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob2.mysql alter system set enable_rereplication = true;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_replica_task, 0, 100;
+

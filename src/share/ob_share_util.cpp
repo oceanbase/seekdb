@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_global_stat_proxy.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/io/ob_io_manager.h"
 #include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
@@ -156,35 +157,105 @@ int ObShareUtil::get_ora_rowscn(
   return ret;
 }
 
+int ObShareUtil::get_server_role(ObServerRole::Role &server_role)
+{
+  int ret = OB_SUCCESS;
+  server_role = share::server_role();
+  if (OB_SUCC(ret) && OB_UNLIKELY(is_invalid_role(server_role))) {
+    ret = OB_NEED_WAIT;
+    LOG_WARN("server role is not ready, need wait", KR(ret), K(server_role));
+  }
+  return ret;
+}
+
+int ObShareUtil::check_if_server_role_is_primary(bool &is_primary)
+{
+  int ret = OB_SUCCESS;
+  is_primary = false;
+  ObServerRole::Role server_role;
+  if (OB_FAIL(get_server_role(server_role))) {
+  } else if (is_primary_role(server_role)) {
+    is_primary = true;
+  }
+  return ret;
+}
+
+int ObShareUtil::check_if_server_role_is_standby(bool &is_standby)
+{
+  int ret = OB_SUCCESS;
+  is_standby = false;
+  ObServerRole::Role server_role;
+  if (OB_FAIL(get_server_role(server_role))) {
+  } else if (is_standby_role(server_role)) {
+    is_standby = true;
+  }
+  return ret;
+}
+int ObShareUtil::get_server_role_state(ObServerRole &server_role)
+{
+  int ret = OB_SUCCESS;
+  server_role.reset();
+  server_role = share::server_role();
+  return ret;
+}
+
+int ObShareUtil::check_if_server_role_state_is_primary(bool &is_primary)
+{
+  int ret = OB_SUCCESS;
+  share::ObServerRole server_role;
+  is_primary = false;
+  if (OB_FAIL(get_server_role_state(server_role))) {
+  } else if (server_role.is_primary()) {
+    is_primary = true;
+  }
+  return ret;
+}
+int ObShareUtil::check_if_server_role_state_is_standby(bool &is_standby)
+{
+  int ret = OB_SUCCESS;
+  share::ObServerRole server_role;
+  is_standby = false;
+  if (OB_FAIL(get_server_role_state(server_role))) {
+  } else if (server_role.is_standby()) {
+    is_standby = true;
+  }
+  return ret;
+}
+
 int ObShareUtil::gen_default_server_runtime_schema(
     common::ObISQLClient &sql_client,
     schema::ObServerRuntimeSchema &runtime_schema)
 {
   int ret = OB_SUCCESS;
-  UNUSED(sql_client);
   runtime_schema.reset();
-  // The server runtime is a synthetic singleton that exists from the core
-  // schema. baseline_schema_version is a lower bound for schema snapshots,
-  // not the version of every schema object visible in those snapshots.
-  const int64_t schema_version = OB_CORE_SCHEMA_VERSION;
+  int64_t schema_version = 0;
   if (OB_FAIL(runtime_schema.set_runtime_name(OB_SERVER_RUNTIME_NAME))) {
   } else if (OB_FAIL(runtime_schema.set_comment("server runtime"))) {
   } else {
-    runtime_schema.set_schema_version(schema_version);
-    runtime_schema.set_locked(false);
-    runtime_schema.set_read_only(false);
-    runtime_schema.set_in_recyclebin(false);
-    runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
-    // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
+    ObGlobalStatProxy proxy(sql_client);
+    if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
+    } else if (-1 == schema_version) {
+      LOG_INFO("use bootstrap schema version", KR(ret));
+      schema_version = 1;
+    }
+    if (OB_SUCC(ret)) {
+      runtime_schema.set_schema_version(schema_version);
+      runtime_schema.set_locked(false);
+      runtime_schema.set_read_only(false);
+      runtime_schema.set_in_recyclebin(false);
+      runtime_schema.set_status(schema::ObServerRuntimeStatus::SERVER_RUNTIME_STATUS_NORMAL);
+      // The runtime schema uses the fixed MySQL charset, collation, and name-case defaults.
+    }
   }
   LOG_INFO("finish constructing server runtime schema", KR(ret), K(runtime_schema), K(schema_version));
   return ret;
 }
 
-int ObShareUtil::is_server_write_enabled(bool &enabled)
+int ObShareUtil::is_primary_server(bool &is_primary)
 {
-  enabled = share::server_is_write_enabled();
-  return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  is_primary = share::server_is_primary();
+  return ret;
 }
 
 } //end namespace share

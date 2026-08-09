@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "share/config/ob_server_config.h"
 #include "query/vector/ob_vector_query_result.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/engine/ob_exec_context.h"
@@ -588,7 +587,9 @@ int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limi
 {
   bool ret = OB_SUCCESS;
   {
-    memory_limit = GMEMCONF.get_vector_memory_limit();
+    int64_t memory_budget = lib::get_memory_budget();
+    int64_t vector_limit = ObVectorAllocator::get_vector_mem_limit_percentage(&GCONF);
+    memory_limit = memory_budget / 100 * vector_limit;
   }
   return ret;
 }

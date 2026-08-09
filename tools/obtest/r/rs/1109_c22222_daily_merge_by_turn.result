@@ -1,0 +1,69 @@
+ob1=OBI(cluster=2:2:2:2:2,proxy_num=0,init_unit_cpu=0,locality=HZ:HZ:SH:SH:SZ);
+ob1.reboot;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system major freeze;
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=2;
+value2
+z1
+z2
+'success'
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=2;
+value2
+z1
+z2
+z3
+z4
+z5
+ob1.mysql alter system major freeze;
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=3;
+value2
+z1
+z2
+z3
+'success'
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=3;
+value2
+z1
+z2
+z3
+z4
+z5
+ob1.mysql alter system major freeze;
+'success'
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=4;
+value2
+z1
+z2
+z3
+z4
+z5
+ob1.mysql create table oceanbase.test(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=5;
+value2
+z1
+z3
+'success'
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=5;
+value2
+z1
+z3
+z2
+z4
+z5
+ob1.mysql alter system major freeze;
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=6;
+value2
+z1
+z3
+z5
+'success'
+select value2 from __all_virtual_server_event_history where module = 'daily_merge' and event='start_merge' and name1='merge_version' and value1=6;
+value2
+z1
+z3
+z5
+z2
+z4
+ob1.mysql alter system major freeze;
+'success'

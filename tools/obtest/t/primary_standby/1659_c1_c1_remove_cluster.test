@@ -1,0 +1,51 @@
+#rs
+#msy
+#验证删除备库之后，不会继续同步主库数据
+#再次添加后会报错
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob1.mysql_p select cluster_status, primary_cluster_id from oceanbase.__all_virtual_cluster;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout=30000000;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.mysql_p select cluster_status, primary_cluster_id from oceanbase.__all_virtual_cluster;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#确定备库收到心跳
+sleep 20;
+ob2.mysql set @@global.ob_query_timeout = 3000000;
+ob1.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+ob1.mysql_p select cluster_status, primary_cluster_id from oceanbase.__all_virtual_cluster;
+#同步到自己被删除
+ob2.check_until_timeout select count(*) from __all_cluster, 1, 30;
+sleep 3;
+ob2.mysql_p select cluster_status, primary_cluster_id from oceanbase.__all_virtual_cluster;
+ob1.mysql set @@global.ob_query_timeout = 3000001;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+sleep 3;
+ob2.mysql select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version;
+
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3.reset;
+ob3.deploy;
+ob3.bootstrap;
+#插入一行数据，并且不能是finish bootstrap·
+ob_connect(conn3, ob3.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+select cluster_status, primary_cluster_id from oceanbase.v$ob_cluster;
+INSERT INTO oceanbase.__all_ddl_operation (SCHEMA_VERSION, TENANT_ID, EXEC_TENANT_ID, USER_ID, DATABASE_ID, DATABASE_NAME, column_id, TABLE_ID, TABLE_NAME, OPERATION_TYPE, DDL_STMT_STR, gmt_modified) values (80000000000, 1, 1, 0, 1099511627777, '', 1099511627777, 1099511627778, '', 4, X'', now(6));
+let $cluster_id = query_get_value(select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--disable_query_log
+--error 4692
+eval alter system add cluster '$cluster_name' cluster_id = $cluster_id;
+--error 1210
+eval alter system add cluster '$cluster_name' cluster_id = 1111111111111111111111;
+--error 1210
+eval alter system add cluster '$cluster_name' cluster_id = '';
+--error 1210
+eval alter system add cluster '$cluster_name' cluster_id = '2';
+--enable_query_log

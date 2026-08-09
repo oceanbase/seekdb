@@ -1,0 +1,46 @@
+# owner: handora.qc
+# owner group: transaction
+# description: 测试转储提交并发
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0);
+ob1.reboot;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql set GLOBAL ob_query_timeout = 100000000000;
+ob1.mysql set GLOBAL ob_trx_timeout = 100000000000;
+
+ob1.mysql create resource pool qc unit = 'sys_unit_config', unit_num =1;
+ob1.mysql create tenant mysql replica_num = 1, resource_pool_list=('qc') set ob_tcp_invited_nodes='%';
+sleep 3;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+
+connect(conn1,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn0,$ip0,root@mysql,,test,$sql_port0);
+
+connection conn0;
+create table t1(a int);
+insert into t1 value(1);
+
+connection conn1;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_SYNC_LOG_SUCCESS wait_for continue_signal';
+
+connection conn0;
+begin;
+insert into t1 value(1);
+
+connection conn1;
+alter system minor freeze;
+connection conn0;
+sleep 1;
+send commit;
+
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+
+connection conn0;
+reap;

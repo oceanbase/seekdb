@@ -1,0 +1,111 @@
+###########
+#owner: xf375358
+#owner group: opensource
+#description: basic test for observer lite
+###########
+
+ob1=OBI(cluster=1,proxy_num=0);
+
+# case 1. 验证bootstrap
+--echo ===============================================================
+--echo ====================     bootstrap   ==========================
+--echo ===============================================================
+--echo test case for bootstrap begin
+ob1.reboot;
+sleep 3;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--echo test case for bootstrap finish
+--echo check server start_service_time
+select count(*) as cnt from oceanbase.__all_virtual_server_stat where create_time != 0;
+--error 4147
+alter system set server_create_time = 1000;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.V\$OB_SERVER_STAT where start_service_time > 0, 1, 60;
+
+# case 2. 验证sys租户创建表和DML/SELECT操作
+--echo ===============================================================
+--echo ===========     dml/select under sys tenant   =================
+--echo ===============================================================
+--echo test case for dml and select under sys tenant begin
+source t/quick/include/sys_tenant_dml_and_select.inc;
+--echo test case for dml and select under sys tenant finish
+
+# case 3. 验证minor freeze后sys租户的读写
+--echo ===============================================================
+--echo ==========     dml/select under sys tenant   ================
+--echo ===============================================================
+--echo test dml and select under sys tenant after minor freeze begin
+source t/quick/include/sys_tenant_dml_and_select_after_minor.inc;
+--echo test dml and select under sys tenant after minor freeze finish
+
+# case 5. 验证建索引
+--echo ===============================================================
+--echo ============     create index before restart   ================
+--echo ===============================================================
+--echo test create index before restart begin
+source t/quick/include/create_index.inc;
+--echo test create index before restart finish
+
+# case 6. 验证schema修改后重启回放
+--echo ===============================================================
+--echo ============     alter schema before restart   ================
+--echo ===============================================================
+--echo test alter schema before restart begin
+source t/quick/include/alter_schema.inc;
+--echo test alter schema before restart finish
+
+# case 7. 集群重启
+--echo ===============================================================
+--echo =================     restart cluster    ======================
+--echo ===============================================================
+--echo test restart cluster begin
+source t/quick/include/restart_cluster.inc;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+--echo test restart cluster finish
+
+# case 8. 验证tablet到meta表的汇报
+--echo ===============================================================
+--echo =================     tablet report    ========================
+--echo ===============================================================
+--echo test tablet report begin
+source t/quick/include/tablet_report.inc;
+--echo test tablet report finish
+
+# case 9: 验证重启后的minor freeze
+--echo ===============================================================
+--echo =================     minor freeze    =========================
+--echo ===============================================================
+--echo test minor freeze begin
+source t/quick/include/minor_freeze_after_restart_cluster.inc;
+--echo test minor freeze finish
+
+# case 10: 验证__all_tablet_to_table_history以及删表
+--echo ===============================================================
+--echo ====    test __all_tablet_to_table_history & drop table    ====
+--echo ===============================================================
+--echo test __all_tablet_to_table_history & drop table begin
+source t/quick/include/all_tablet_to_table_history_and_drop_table.inc;
+--echo test __all_tablet_to_table_history & drop table finish
+
+# case 11: 验证views
+--echo ===============================================================
+--echo ===========    test views    ===========
+--echo ===============================================================
+--echo test views begin
+source t/quick/include/views.inc;
+--echo test views end
+
+# case 12: 验证sys租户，重启后刷schema正常，能通过内部表自检
+--echo =================================================================
+--echo ==========    test root_inspection pass  =========
+--echo =================================================================
+--echo test 'root_inspection begin' begin
+source t/quick/include/root_inspection.inc;
+--echo test 'root_inspection end' finish
+
+# 注意：在此之前添加case，此处是最后一个case
+--echo ===============================================================
+--echo ========================= clear ===============================
+--echo ===============================================================
+--echo clear begin
+source t/quick/include/clear.inc;
+--echo clear end

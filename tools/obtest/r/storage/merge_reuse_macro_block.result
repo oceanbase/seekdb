@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_async_syslog=false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+set global UNDO_RETENTION=0;
+use test;
+create table t0(a int);
+insert into t0(a) values(1);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+select * from t0;
+a
+1

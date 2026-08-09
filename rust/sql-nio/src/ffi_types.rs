@@ -20,29 +20,6 @@ pub struct NioTlsConfig {
     pub ca_file: *const c_char,
     pub cert_file: *const c_char,
     pub key_file: *const c_char,
-    pub min_tls_version: u8,
-    pub reserved: [u8; 7],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct NioTlsStringView {
-    pub data: *const c_char,
-    pub len: i64,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct NioTlsSessionInfo {
-    pub tls_active: u8,
-    pub peer_cert_present: u8,
-    pub peer_cert_verified: u8,
-    pub peer_cert_info_valid: u8,
-    pub reserved: [u8; 4],
-    pub cipher_name: NioTlsStringView,
-    pub peer_cert_common_name: NioTlsStringView,
-    pub peer_cert_issuer: NioTlsStringView,
-    pub peer_cert_subject: NioTlsStringView,
 }
 
 #[repr(C)]

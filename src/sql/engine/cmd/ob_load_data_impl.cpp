@@ -17,25 +17,21 @@
 #define USING_LOG_PREFIX  SQL_ENG
 
 #include "sql/engine/cmd/ob_load_data_impl.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "sql/resolver/ob_resolver.h"
 #include "sql/resolver/dml/ob_insert_stmt.h"
 #include "sql/plan_cache/ob_sql_parameterization.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "storage/tx_storage/ob_memstore_freezer.h"
+#include "data_plane/ob_i_memory_pressure_service.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "share/ob_timezone_mgr.h"
-#include "src/observer/mysql/ob_query_driver.h"
-#include "observer/ob_inner_sql_connection.h"
-#include "share/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
-using namespace oceanbase::observer;
 
 namespace oceanbase
 {
@@ -79,7 +75,6 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
     SqlInfo not_param_info;
     bool is_transform_outline = false;
     if (OB_FAIL(parser.parse(insertsql.string(), parse_result))) {
-      LOG_WARN("parser template insert sql failed", K(ret));
     } else if (OB_FAIL(ObSqlParameterization::transform_syntax_tree(ctx.get_allocator(),
                                                                     *session,
                                                                     NULL,
@@ -88,7 +83,6 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
                                                                     param_store,
                                                                     NULL,
                                                                     is_transform_outline))) {
-      LOG_WARN("parameterize parser tree failed", K(ret));
     } else {
       SMART_VAR(ObResolverParams, resolver_ctx) {
         ObSchemaChecker schema_checker;
@@ -120,7 +114,6 @@ int ObLoadDataBase::make_parameterize_stmt(ObExecContext &ctx,
           } else if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT,
                                               *stmt_tree,
                                               astmt))) {
-            LOG_WARN("resolve sql failed", K(ret), K(insertsql));
           } else {
             insert_stmt = static_cast<ObInsertStmt*>(astmt);
             ctx.get_stmt_factory()->get_query_ctx()->reset();
@@ -137,8 +130,8 @@ int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
   int ret = OB_SUCCESS;
 
   SERVER_MODULE_SCOPE {
-    storage::ObMemstoreFreezer *freezer = nullptr;
-    if (FALSE_IT(freezer = share::g_mp->memstore_freezer())) {
+    data_plane::ObIMemoryPressureService *memory_pressure = nullptr;
+    if (FALSE_IT(memory_pressure = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIMemoryPressureService>())) {
     } else {
       int64_t active_memstore_used = 0;
       int64_t total_memstore_used = 0;
@@ -146,12 +139,12 @@ int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
       int64_t memstore_limit = 0;
       int64_t freeze_cnt = 0;
 
-      if (OB_FAIL(freezer->get_memstore_condition(active_memstore_used,
-                                                    total_memstore_used,
-                                                    major_freeze_trigger,
-                                                    memstore_limit,
-                                                    freeze_cnt))) {
-        LOG_WARN("fail to get memstore used", K(ret));
+      if (OB_FAIL(memory_pressure->get_memstore_condition(
+              active_memstore_used,
+              total_memstore_used,
+              major_freeze_trigger,
+              memstore_limit,
+              freeze_cnt))) {
       } else {
         if (total_memstore_used > (memstore_limit - major_freeze_trigger)/2 + major_freeze_trigger) {
           need_wait_minor_freeze = true;
@@ -159,12 +152,6 @@ int ObLoadDataBase::memory_check_worker(bool &need_wait_minor_freeze)
           need_wait_minor_freeze = false;
         }
       }
-      LOG_DEBUG("load data check server runtime memory usage", K(active_memstore_used),
-                                                       K(total_memstore_used),
-                                                       K(major_freeze_trigger),
-                                                       K(memstore_limit),
-                                                       K(freeze_cnt),
-                                                       K(need_wait_minor_freeze));
     }
   } else {
     LOG_ERROR("enter server runtime failed", K(ret));
@@ -187,9 +174,7 @@ int ObLoadDataBase::wait_local_memory(ObExecContext &ctx, int64_t &total_wait_se
   while (OB_SUCC(ret) && need_wait_freeze) {
     ob_usleep(WAIT_INTERVAL_US);
     if (OB_FAIL(ObLoadDataUtils::check_session_status(*session))) {
-      LOG_WARN("session is not valid during memory wait", K(ret));
     } else if (OB_FAIL(memory_check_worker(need_wait_freeze))) {
-      LOG_WARN("failed to check local runtime memory", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -252,7 +237,6 @@ int ObLoadDataBase::pre_parse_lines(ObLoadFileBuffer &buffer,
     };
     struct Functor unused_handler;
     if (OB_FAIL(parser.scan(ptr, end, line_count, NULL, NULL, unused_handler, err_records, is_last_buf))) {
-      LOG_WARN("fail to scan buf", K(ret));
     } else {
       valid_len = ptr - buffer.begin_ptr();
     }
@@ -303,7 +287,6 @@ int ObInsertValueGenerator::gen_insert_values(ObIArray<ObString> &insert_values,
         if (OB_FAIL(ObCharset::charset_convert(
           coll_type, const_string.ptr(), const_string.length(),
           CS_TYPE_UTF8MB4_BIN, data_buffer_->begin_ptr(), data_buffer_->get_remain_len(), pos, false))) {
-          LOG_WARN("fail to convert charset", K(ret));
         } else {
           const_string.assign_ptr(data_buffer_->begin_ptr(), pos);
           data_buffer_->update_pos(pos);
@@ -330,7 +313,6 @@ int ObInsertValueGenerator::gen_insert_values(ObIArray<ObString> &insert_values,
     OX (insert_values.at(i) = store_value);
     //OZ (insert_values.push_back(store_value));
   }
-  LOG_DEBUG("LOAD DATA insert values generated", K(insert_values));
   return ret;
 }
 
@@ -370,11 +352,9 @@ int ObLoadDataSPImpl::gen_insert_columns_names_buff(ObExecContext &ctx,
 
   ObSEArray<ObString, 16> insert_column_names;
   if (OB_FAIL(insert_column_names.reserve(insert_infos.count()))) {
-    LOG_WARN("fail to reserve", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < insert_infos.count(); ++i) {
     if (OB_FAIL(insert_column_names.push_back(insert_infos.at(i).column_name_))) {
-      LOG_WARN("fail to push back", K(ret));
     }
   }
   /*
@@ -400,9 +380,7 @@ int ObLoadDataSPImpl::gen_insert_columns_names_buff(ObExecContext &ctx,
                                                               insert_column_names,
                                                               insert_stmt,
                                                               need_online_osg))) {
-      LOG_WARN("gen insert sql column_names failed", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), insert_stmt.string(), data_buff))) {
-      LOG_WARN("fail to write string", K(ret));
     }
   }
 
@@ -480,7 +458,6 @@ public:
               ObObj var_obj;
               ObSessionVariable user_var;
               if (OB_FAIL(session->get_user_variable(ref_name, user_var))) {
-                LOG_WARN("get user variable failed", K(ret), K(ref_name));
               } else {
                 var_obj = user_var.value_;
                 var_obj.set_meta_type(user_var.meta_);
@@ -502,8 +479,6 @@ public:
       }
     }
 */
-      LOG_DEBUG("replace variable name to field value",
-                K(ref_name), K(idx), KPC(orig_expr), KPC(raw_expr), KPC(new_expr));
 
     }
     return ret;
@@ -553,7 +528,6 @@ int ObLoadDataSPImpl::copy_exprs_for_shuffle_task(ObExecContext &ctx,
         insert_expr = field_exprs.at(desc.array_ref_idx_);
       }
       OZ (insert_exprs.push_back(insert_expr));
-      LOG_DEBUG("push final insert expr", KPC(insert_expr));
     }
   }
   return ret;
@@ -588,7 +562,6 @@ int ObLoadDataSPImpl::gen_load_table_column_desc(ObExecContext &ctx,
       tmp_info.array_ref_idx_ = i; //array offset
       tmp_info.expr_value_ = NULL;
       if (OB_FAIL(insert_infos.push_back(tmp_info))) {
-        LOG_WARN("push str failed", K(ret));
       }
     } else {
       //do nothing
@@ -633,13 +606,11 @@ int ObLoadDataSPImpl::gen_load_table_column_desc(ObExecContext &ctx,
         tmp_info.is_set_values_ = true;
         tmp_info.expr_value_ = right;
         if (OB_FAIL(insert_infos.push_back(tmp_info))) {
-          LOG_WARN("push str failed", K(ret));
         }
       }
     }
   }
 
-  LOG_DEBUG("generate insert info", K(insert_infos));
 
   return ret;
 }
@@ -712,7 +683,6 @@ int ObShuffleTaskHandle::expand_buf(const int64_t max_size, const int64_t to_buf
             new_size - sizeof(ObLoadFileBuffer));
     }
   }
-  LOG_DEBUG("expand buf to", K(new_size));
   return ret;
 }
 
@@ -735,14 +705,11 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     ObPartDataFragMgr *part_datafrag_mgr = NULL;
     if (OB_FAIL(handle->datafrag_mgr.get_part_datafrag(tablet_id,
                                                        part_datafrag_mgr))) {
-      LOG_WARN("fail to get part datafrag", K(ret), K(tablet_id));
     } else if (OB_ISNULL(part_datafrag_mgr)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(part_datafrag_mgr->queue_.push(frag))) {
-      LOG_WARN("fail to push frag", K(ret));
     } else {
       ATOMIC_AAF(&(part_datafrag_mgr->total_row_proceduced_), frag->row_cnt);
-      LOG_DEBUG("saving frag", K(tablet_id), K(*frag));
     }
     return OB_SUCCESS == ret;
   };
@@ -765,11 +732,8 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
 //  } else if (FALSE_IT(handle->exec_ctx.get_allocator().reuse())) {
   } else if (OB_FAIL(part_buf_mgr.init(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA),
                                        handle->datafrag_mgr.get_total_part_cnt()))) {
-    LOG_WARN("fail to init part buf mgr", K(ret));
   } else if (OB_FAIL(insert_values.prepare_allocate(
                        handle->generator.get_insert_exprs().count()))) {
-    LOG_WARN("fail to prealloc", K(ret),
-             "insert values count", handle->generator.get_insert_exprs().count());
   } else if (OB_ISNULL(expr_buf = ob_malloc(handle->data_buffer->get_buffer_size() + sizeof(ObLoadFileBuffer),
                                             ObMemAttr(ObModIds::OB_SQL_LOAD_DATA)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -797,9 +761,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
     struct Functor handle_one_line;
     if (OB_FAIL(handle->generator.init(*(handle->exec_ctx.get_my_session()), expr_buffer,
                                        handle->exec_ctx.get_sql_ctx()->schema_guard_))) {
-      LOG_WARN("fail to init buffer", K(ret));
     } else if (OB_FAIL(parse_result.prepare_allocate(handle->generator.get_field_exprs().count()))) {
-      LOG_WARN("fail to allocate", K(ret));
     } else {
       handle->exec_ctx.set_use_temp_expr_ctx_cache(true);
     }
@@ -812,14 +774,12 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
                                                                  handle->escape_buffer->begin_ptr() + handle->escape_buffer->get_buffer_size(),
                                                                  handle_one_line, err_records, true);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fail to scan", K(ret));
       } else {
         if (err_records.count() > 0) {
           ObParserErrRec rec;
           rec.row_offset_in_task = parsed_line_num;
           rec.ret = err_records[0].err_code;
           if (OB_FAIL(handle->err_records.push_back(rec))) {
-            LOG_WARN("fail to push back", K(ret));
           }
         }
       }
@@ -832,9 +792,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
         str_buf.reuse();
         if (OB_FAIL(handle->generator.fill_field_expr(handle->parser.get_fields_per_line(),
                                                       handle->string_values))) {
-          LOG_WARN("fail to fill field expr", K(ret));
         } else if (OB_FAIL(handle->generator.gen_insert_values(insert_values, str_buf))) {
-          LOG_WARN("fail to generate insert values", K(ret));
         } else if (nullptr == handle->calc_tablet_id_expr) {
           int64_t idx = task_id % handle->datafrag_mgr.get_tablet_ids().count();
           tablet_id = handle->datafrag_mgr.get_tablet_ids().at(idx);
@@ -845,7 +803,6 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
               static_cast<ObConstRawExpr *>(handle->generator.get_field_exprs().at(i))->get_value();
           }
           if (OB_FAIL(handle->calc_tablet_id_expr->eval(handle->exec_ctx, handle->row_in_file, result))) {
-            LOG_WARN("fail to calc tablet id", K(ret));
           } else {
             tablet_id = ObTabletID(result.get_uint64());
             if (OB_UNLIKELY(!tablet_id.is_valid())) {
@@ -872,19 +829,15 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
             // Create a new
             ObDataFrag *new_frag = NULL;
             if (OB_FAIL(handle->datafrag_mgr.create_datafrag(new_frag, len))) {
-              LOG_WARN("fail to create data fragment", K(ret));
             } else {
               if (frag_exist) {
                 if (OB_UNLIKELY(!save_frag(tablet_id, frag))) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("fail to save frag", K(ret));
                 } else if (OB_FAIL(part_buf_mgr.update(tablet_id, new_frag))) {
-                  //never goes here
-                  LOG_ERROR("fail to install new frag", K(ret));
                 }
               } else {
                 if (OB_FAIL(part_buf_mgr.insert(tablet_id, new_frag))) {
-                  LOG_ERROR("fail to insert new frag", K(ret));
                 }
               }
               if (OB_SUCC(ret)) {
@@ -916,7 +869,6 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(part_buf_mgr.for_each(save_frag))) {
-        LOG_WARN("fail to for each", K(ret));
       }
     }
 
@@ -995,7 +947,6 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task)
   if (OB_SUCC(ret)) {
     ObTZMapWrap tz_map_wrap;
     if (OB_FAIL(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
-      LOG_WARN("get time zone map failed", K(ret));
     } else {
       task.timezone_.set_tz_info_map(tz_map_wrap.get_tz_map());
     }
@@ -1014,7 +965,6 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task)
     LOG_WARN("fail to execute worker insert", K(ret), "task_id", task.task_id_);
   }
 
-  LOG_DEBUG("LOAD DATA worker process", K(affected_rows), K(task.task_id_), K(ret));
 
   return ret;
 }
@@ -1043,7 +993,6 @@ int ObLoadDataSPImpl::handle_returned_shuffle_task(ToolBox &box, ObShuffleTaskHa
                                 line_num,
                                 handle.err_records.at(i).ret,
                                 ObString()))) {
-      LOG_WARN("fail to log failed line", K(ret));
     }
   }
 
@@ -1085,7 +1034,6 @@ int ObLoadDataSPImpl::next_file_buffer(ObExecContext &ctx,
         box.job_status->read_bytes_ += box.read_cursor.read_size_;
       } else if (box.file_reader->eof()) {
         box.read_cursor.is_end_file_ = true;
-        LOG_DEBUG("LOAD DATA reach file end", K(box.read_cursor));        
       }
     }
     // Find complete lines from buffer, the remaining backup to data_trimer
@@ -1095,10 +1043,8 @@ int ObLoadDataSPImpl::next_file_buffer(ObExecContext &ctx,
       if (OB_FAIL(pre_parse_lines(*handle->data_buffer, box.parser,
                                   box.read_cursor.is_end_file(),
                                   complete_len, complete_cnt))) {
-        LOG_WARN("fail to fast_lines_parse", K(ret));
       } else if (OB_FAIL(box.data_trimer.backup_incomplate_data(*handle->data_buffer,
                                                                 complete_len))) {
-        LOG_WARN("fail to back up data", K(ret));
       } else {
         box.data_trimer.commit_line_cnt(complete_cnt);
         has_valid_data = complete_cnt > 0;
@@ -1133,13 +1079,10 @@ int ObLoadDataSPImpl::process_shuffle_tasks(ObExecContext &ctx, ToolBox &box)
     handle->err_records.reuse();
 
     if (OB_FAIL(box.file_buf_row_num.push_back(box.data_trimer.get_lines_count()))) {
-      LOG_WARN("fail to record file row offset", K(ret));
     } else if (OB_FAIL(next_file_buffer(ctx, box, handle))) {
-      LOG_WARN("fail to read next file buffer", K(ret));
     } else if (handle->data_buffer->get_data_len() > 0) {
       const int64_t begin_ts = ObTimeUtil::current_time();
       if (OB_FAIL(exec_shuffle(task_id, handle))) {
-        LOG_WARN("fail to process local shuffle task", K(ret), K(task_id));
       }
       handle->result.process_us_ = ObTimeUtil::current_time() - begin_ts;
       box.suffle_rt_sum += handle->result.process_us_;
@@ -1160,15 +1103,12 @@ int ObLoadDataSPImpl::create_log_file(ToolBox &box)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(box.file_appender.open(box.log_file_name, false, true))) {
-    LOG_WARN("fail to open file", K(ret), K(box.log_file_name));
   } else if (OB_FAIL(box.file_appender.append(box.load_info.ptr(),
                                               box.load_info.length(),
                                               false))) {
-    LOG_WARN("fail to append file", K(ret));
   } else if (OB_FAIL(box.file_appender.append(log_file_column_names,
                                               strlen(log_file_column_names),
                                               false))) {
-    LOG_WARN("fail to append file", K(ret));
   }
   return ret;
 }
@@ -1203,13 +1143,10 @@ int ObLoadDataSPImpl::log_failed_line(ToolBox &box,
                                 err_code,
                                 err_msg.length(),
                                 err_msg.ptr()))) {
-      LOG_WARN("fail to printf", K(ret), K(err_msg));
     } else if (OB_FAIL(box.file_appender.append(box.expr_buffer->begin_ptr(),
                                                 log_buf_pos,
                                                 false))) {
-      LOG_WARN("fail to append file", K(ret), K(log_buf_pos));
     } else {
-      LOG_DEBUG("LOAD DATA log failed rows", K(task_id), K(line_num), K(task_type));
     }
 
   }
@@ -1227,7 +1164,6 @@ int ObLoadDataSPImpl::log_failed_insert_task(ToolBox &box, ObInsertTask &task)
     LOG_ERROR("fail to create log file", K(ret));
   } else {
     log_err = task.result_.exec_ret_;
-    LOG_DEBUG("check task result", K(task.result_));
   }
 
   for (int64_t buf_i = 0; OB_SUCC(ret) && buf_i < task.insert_value_data_.count(); ++buf_i) {
@@ -1289,7 +1225,6 @@ int ObLoadDataSPImpl::execute_insert_task(ObExecContext &ctx,
         result.err_line_no_ = warning_buf->get_error_line();
         int copy_ret = ob_write_string(result.allocator_, warning_buf->get_err_msg(), result.err_msg_);
         if (OB_SUCCESS != copy_ret) {
-          LOG_WARN("fail to copy local insert error message", K(copy_ret));
         }
       }
     }
@@ -1320,7 +1255,6 @@ int ObLoadDataSPImpl::handle_insert_result(ObExecContext &ctx,
     LOG_WARN("failed to wait for local memory", K(ret));
   } else if (OB_SUCCESS != insert_task.result_.exec_ret_) {
     if (OB_SUCCESS != log_failed_insert_task(box, insert_task)) {
-      LOG_WARN("fail to log failed local insert task");
     }
     ret = insert_task.result_.exec_ret_;
     LOG_WARN("LOAD DATA local insert task failed", K(ret),
@@ -1350,7 +1284,6 @@ int ObLoadDataSPImpl::process_insert_tasks(ObExecContext &ctx, ToolBox &box)
     ObPartDataFragMgr *part_mgr = NULL;
     const ObTabletID tablet_id = box.data_frag_mgr.get_tablet_ids().at(i);
     if (OB_FAIL(box.data_frag_mgr.get_part_datafrag(tablet_id, part_mgr))) {
-      LOG_WARN("fail to get local partition data", K(ret), K(tablet_id));
     } else if (OB_ISNULL(part_mgr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("local partition data is null", K(ret), K(tablet_id));
@@ -1376,13 +1309,9 @@ int ObLoadDataSPImpl::process_insert_tasks(ObExecContext &ctx, ToolBox &box)
       insert_task.column_count_ = box.insert_infos.count();
       insert_task.sql_mode_ = session->get_sql_mode();
       if (OB_FAIL(insert_task.timezone_.deep_copy(session->get_tz_info_wrap()))) {
-        LOG_WARN("fail to copy local insert timezone", K(ret));
       } else if (OB_FAIL(part_mgr->next_insert_task(row_count, insert_task))) {
-        LOG_WARN("fail to generate local insert task", K(ret), K(tablet_id), K(row_count));
       } else if (OB_FAIL(execute_insert_task(ctx, box, insert_task))) {
-        LOG_WARN("fail to execute local insert task", K(ret));
       } else if (OB_FAIL(handle_insert_result(ctx, box, insert_task))) {
-        LOG_WARN("fail to handle local insert result", K(ret));
       }
     }
   }
@@ -1406,7 +1335,6 @@ int ObLoadDataSPImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
     
     ObString filename;
     while (OB_SUCC(ret) && OB_SUCC(box.file_iter.get_next_file(filename))) {
-      LOG_TRACE("begin to load file", K(filename));
 
       OZ (box.open_file(filename, ctx));
 
@@ -1450,7 +1378,6 @@ int ObLoadDataSPImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("LOAD DATA execute failed, ", K(ret));
     }
 
     if (box.file_appender.is_opened()) {
@@ -1577,28 +1504,21 @@ int ObPartDataFragMgr::next_insert_task(int64_t batch_row_count, ObInsertTask &t
       if (OB_FAIL(rowoffset2pos(frag,
                                 new_top_begin_point.frag_row_pos_,
                                 new_top_begin_point.frag_data_pos_))) {
-        LOG_WARN("fail to rowoffset to pos", K(ret));
       } else if (OB_FAIL(task.insert_value_data_.push_back(
          ObString(new_top_begin_point.frag_data_pos_ - queue_top_begin_point_.frag_data_pos_,
          frag->data + queue_top_begin_point_.frag_data_pos_)))) {
-        LOG_WARN("fail to do push back", K(ret));
       } else if (OB_FAIL(task.source_frag_.push_back(frag))) {
-        LOG_WARN("fail to push back frag", K(ret));
       }
     } else {
       //case2 frag is empty，need pop
       if (OB_FAIL(queue_.pop(link))) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(frag_free_list_.push_back(frag))) {
-        //TODO free frag for failure
-        LOG_WARN("fail to push back", K(ret));
       } else {
         if (OB_FAIL(task.insert_value_data_.push_back(
                       ObString(frag->frag_pos - queue_top_begin_point_.frag_data_pos_,
                                frag->data + queue_top_begin_point_.frag_data_pos_)))) {
-          LOG_WARN("fail to do push back", K(ret));
         } else if (OB_FAIL(task.source_frag_.push_back(frag))) {
-          LOG_WARN("fail to push back frag", K(ret));
         }
 
         task.data_size_ += frag->orig_data_size;
@@ -1609,7 +1529,6 @@ int ObPartDataFragMgr::next_insert_task(int64_t batch_row_count, ObInsertTask &t
 
   task.row_count_ = batch_row_count;
 
-  LOG_DEBUG("next_insert_task", K(task));
 
   return ret;
 }
@@ -1623,12 +1542,10 @@ int ObDataFragMgr::free_unused_datafrag()
     ObPartDataFragMgr *part_data_frag = NULL;
 
     if (OB_FAIL(get_part_datafrag(tablet_id, part_data_frag))) {
-      LOG_WARN("fail to get part datafrag", K(ret), K(tablet_id));
     } else if (OB_ISNULL(part_data_frag)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part data frag is null", K(ret));
     } else if (OB_FAIL(part_data_frag->free_frags())) {
-      LOG_WARN("fail to free frag", K(ret));
     }
   }
 
@@ -1645,12 +1562,10 @@ int ObDataFragMgr::clear_all_datafrag()
     ObPartDataFragMgr *part_data_frag = NULL;
 
     if (OB_FAIL(get_part_datafrag(tablet_id, part_data_frag))) {
-      LOG_WARN("fail to get part datafrag", K(ret), K(tablet_id));
     } else if (OB_ISNULL(part_data_frag)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part data frag is null", K(ret));
     } else if (OB_FAIL(part_data_frag->clear())) {
-      LOG_WARN("fail to free frag", K(ret));
     } else {
       part_data_frag->~ObPartDataFragMgr();
     }
@@ -1673,12 +1588,10 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
     LOG_WARN("sql ctx is null", K(ret), KP(ctx.get_sql_ctx()));
   } else if (OB_FAIL(schema_guard->get_table_schema(
              table_id, table_schema))) {
-    LOG_WARN("fail to get partition count", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is NULL", K(ret));
   } else if (OB_FAIL(table_schema->get_all_tablet_and_object_ids(tablet_ids_, part_ids))) {
-    LOG_WARN("failed to get partition ids", K(ret));
   } else {
     LOG_INFO("table partition ids", K(tablet_ids_));
     total_part_cnt_ = tablet_ids_.count();
@@ -1697,9 +1610,7 @@ int ObDataFragMgr::init(ObExecContext &ctx, uint64_t table_id)
       LOG_WARN("allocate memory failed", K(ret));
     } else if (FALSE_IT(part_data_frag->tablet_id_ = tablet_id)) {
     } else if (OB_FAIL(part_datafrag_map_.set_refactored(part_data_frag))) {
-      LOG_WARN("fail to set hash map", K(ret));
     } else if (OB_FAIL(part_bitset_.add_member(i))) {
-      LOG_WARN("fail to add bitset", K(ret));
     }
   }
 
@@ -1785,7 +1696,6 @@ int ObLoadDataSPImpl::ToolBox::release_resources()
   if (gid.is_valid()) {
     ObLoadDataStat *job_status = nullptr;
     if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->unregister_job(gid, job_status))) {
-      LOG_ERROR("fail to unregister job", K(ret), K(gid));
     } else if (OB_ISNULL(job_status)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("fail to unregister job", K(ret), K(gid));
@@ -1891,7 +1801,6 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
     for (int i = 0; OB_SUCC(ret) && i < num_of_file_column; i++) {
       ObColumnRefRawExpr *field_expr = nullptr;
       if (OB_FAIL(ctx.get_expr_factory()->create_raw_expr(T_REF_COLUMN, field_expr))) {
-        LOG_WARN("create column ref raw expr failed", K(ret));
       } else if (OB_ISNULL(field_expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN(("field_expr is null"));
@@ -1900,9 +1809,7 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
         field_expr->set_collation_type(load_args.file_cs_type_);
         field_expr->set_column_attr("__field", ObCharsetUtils::get_const_str(CS_TYPE_UTF8MB4_BIN, '0' + i));
         if (OB_FAIL(field_expr->add_flag(IS_COLUMN))) {
-          LOG_WARN("failed to add flag IS_COLUMN", K(ret));
         } else if (OB_FAIL(field_exprs.push_back(field_expr))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -1919,7 +1826,6 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
           insert_expr = field_exprs.at(desc.array_ref_idx_);
         }
         OZ (insert_exprs.push_back(insert_expr));
-        LOG_DEBUG("push final insert expr", KPC(insert_expr));
       }
     }
 
@@ -1927,7 +1833,6 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
 
     for (int i = 0; OB_SUCC(ret) && i < field_exprs.count(); i++) {
       if (OB_FAIL(row_desc.add_column(field_exprs.at(i)))) {
-        LOG_WARN("fail to add column", K(ret));
       }
     }
 
@@ -1947,17 +1852,13 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
                                                           part_expr,
                                                           subpart_expr,
                                                           calc_partid_expr))) {
-        LOG_WARN("fail to build table location expr", K(ret));
       } else if (OB_FAIL(ObTransformUtils::replace_exprs(value_mock_columns,
                                                          insert_exprs,
                                                          column_convert_exprs))) {
-        LOG_WARN("fail to replace exprs", K(ret));
       } else if (OB_FAIL(ObTransformUtils::replace_expr(insert_columns,
                                                         column_convert_exprs,
                                                         calc_partid_expr))) {
-        LOG_WARN("fail to replace exprs", K(ret));
       } else if (OB_FAIL(calc_partid_expr->formalize(ctx.get_my_session()))) {
-        LOG_WARN("fail to formalize expr", K(ret));
       }
     }
 
@@ -1971,7 +1872,6 @@ int ObLoadDataSPImpl::ToolBox::build_calc_partid_expr(ObExecContext &ctx,
                                                                ctx.get_my_session(),
                                                                ctx.get_sql_ctx()->schema_guard_,
                                                                temp_expr))) {
-        LOG_WARN("fail to gen temp expr", K(ret));
       } else {
         calc_tablet_id_expr = temp_expr;
       }
@@ -2033,18 +1933,13 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(data_trimer.init(ctx.get_allocator(), formats))) {
-    LOG_WARN("fail to init data_trimer", K(ret));
   } else if (OB_FAIL(gen_load_table_column_desc(ctx, load_stmt, insert_infos))) {
-    LOG_WARN("fail to build load table column desc", K(ret));
   } else if (OB_FAIL(ObLoadDataUtils::check_need_opt_stat_gather(ctx, load_stmt, need_online_osg))) {
-    LOG_WARN("fail to check need online stats gather", K(ret));
   } else if (OB_FAIL(gen_insert_columns_names_buff(ctx, load_args,
                                                    insert_infos,
                                                    insert_stmt_head_buff,
                                                    need_online_osg))) {
-    LOG_WARN("fail to gen insert column names buff", K(ret));
   } else if (OB_FAIL(data_frag_mgr.init(ctx, load_args.table_id_))) {
-    LOG_WARN("fail to init data frag mgr", K(ret));
   }
 
   if (OB_SUCC(ret) && OB_FAIL(file_iter.copy(load_args.file_iter_))) {
@@ -2070,7 +1965,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     const ObLoadTableColumnDesc &desc = insert_infos.at(i);
     if (!desc.is_set_values_ && (ob_is_string_tc(desc.column_type_) || ob_is_enumset_tc(desc.column_type_))) {
       if (OB_FAIL(string_type_column_bitset.add_member(i))) {
-        LOG_WARN("fail to add bitset", K(ret));
       }
     }
   }
@@ -2097,7 +1991,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
 
     if (OB_SUCC(ret) && load_args.part_level_ != PARTITION_LEVEL_ZERO) {
       if (OB_FAIL(build_calc_partid_expr(ctx, load_stmt, calc_tablet_id_expr))) {
-        LOG_WARN("fail to build expr", K(ret));
       }
     }
 
@@ -2108,7 +2001,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     int64_t hint_max_batch_buffer_size = 0;
     ObString hint_batch_buffer_size_str;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::BATCH_SIZE, hint_batch_size))) {
-      LOG_WARN("fail to get value", K(ret));
     } else if (0 == hint_batch_size) {
       batch_row_count = DEFAULT_BUFFERRED_ROW_COUNT;
     } else {
@@ -2116,7 +2008,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(hint.get_value(ObLoadDataHint::BATCH_BUFFER_SIZE, hint_batch_buffer_size_str))) {
-        LOG_WARN("fail to get value", K(ret));
       } else {
         bool is_valid = false;
         hint_batch_buffer_size_str = hint_batch_buffer_size_str.trim();
@@ -2130,16 +2021,13 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
         batch_buffer_size = MAX(ObLoadFileBuffer::MAX_BUFFER_SIZE, hint_max_batch_buffer_size);
       }
     }
-    LOG_DEBUG("batch size", K(hint_batch_size), K(batch_row_count), K(batch_buffer_size));
   }
 
   if (OB_SUCC(ret)) {
     int64_t query_timeout = 0;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::QUERY_TIMEOUT, query_timeout))) {
-      LOG_WARN("fail to get value", K(ret));
     } else if (0 == query_timeout) {
       if (OB_FAIL(ctx.get_my_session()->get_query_timeout(query_timeout))) {
-        LOG_WARN("fail to get query timeout", KR(ret));
       } else {
         THIS_WORKER.set_timeout_ts(ctx.get_my_session()->get_query_start_time() + query_timeout);
       }
@@ -2150,7 +2038,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(parser.init(file_formats, num_of_file_column, load_args.file_cs_type_))) {
-      LOG_WARN("fail to init parser", K(ret));
     }
   }
 
@@ -2161,19 +2048,15 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       LOG_WARN("fail to allocate local shuffle handle", K(ret));
     } else if (OB_FAIL(shuffle_handle->expand_buf(batch_buffer_size,
                                                   ObLoadFileBuffer::MAX_BUFFER_SIZE))) {
-      LOG_WARN("fail to expand local shuffle buffer", K(ret));
     } else if (OB_FAIL(shuffle_handle->parser.init(file_formats,
                                                    num_of_file_column,
                                                    load_args.file_cs_type_))) {
-      LOG_WARN("fail to init local shuffle parser", K(ret));
     } else if (OB_FAIL(shuffle_handle->generator.set_params(insert_stmt_head_buff,
                                                              load_args.file_cs_type_,
                                                              session->get_sql_mode()))) {
-      LOG_WARN("fail to init local value generator", K(ret));
     } else if (OB_FAIL(copy_exprs_for_shuffle_task(ctx, load_stmt, insert_infos,
                                                    shuffle_handle->generator.get_field_exprs(),
                                                    shuffle_handle->generator.get_insert_exprs()))) {
-      LOG_WARN("fail to copy local shuffle expressions", K(ret));
     } else {
       shuffle_handle->calc_tablet_id_expr = calc_tablet_id_expr;
       ObObj *obj_array = static_cast<ObObj *>(
@@ -2227,7 +2110,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     int64_t max_task_count = (fake_file_size / ObLoadFileBuffer::MAX_BUFFER_SIZE + 1) * 2;
     file_buf_row_num.set_attr(ObMemAttr(ObModIds::OB_SQL_LOAD_DATA));
     if (OB_FAIL(file_buf_row_num.reserve(max_task_count))) {
-      LOG_WARN("fail to reserve", K(ret));
     }
   }
 
@@ -2296,7 +2178,6 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
       job_status->start_time_ = common::ObTimeUtility::current_time();
       job_status->total_bytes_ = file_size;
       if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->register_job(temp_gid, job_status))) {
-        LOG_WARN("fail to register job", K(ret));
       } else {
         gid = temp_gid;
       }
@@ -2319,7 +2200,6 @@ int ObLoadDataSPImpl::ToolBox::open_file(ObString filename, ObExecContext &ctx)
   }
 
   if (OB_FAIL(ObFileReader::open(file_read_param, ctx.get_allocator(), file_reader))) {
-    LOG_WARN("failed to open file.", KR(ret), K(file_read_param));
   } else {
     read_cursor.read_size_ = 0;
     read_cursor.is_end_file_ = false;
@@ -2339,7 +2219,6 @@ int ObLoadDataSPImpl::ToolBox::init_file_size(ObExecContext &ctx)
     while (OB_SUCC(ret) && OB_SUCC(file_iter.get_next_file(filename))) {
       int64_t this_file_size = 0;
       if (OB_FAIL(open_file(filename, ctx))) {
-        LOG_WARN("failed to open file", K(filename));
       } else if (OB_ISNULL(file_reader)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("open file return success but got null", KP(file_reader), K(ret));
@@ -2347,7 +2226,6 @@ int ObLoadDataSPImpl::ToolBox::init_file_size(ObExecContext &ctx)
         file_size = -1;
         ret = OB_ITER_END;
       } else if (OB_FAIL(file_reader->get_file_size(this_file_size))) {
-        LOG_WARN("failed to get io device file size", KR(ret), K(this_file_size));
       } else {
         file_size += this_file_size;
       }

@@ -54,16 +54,7 @@ struct epoll_event {
 #define EPOLLERR 0x008
 #define EPOLLHUP 0x010
 
-// Windows does not expose a native epoll backend here, but the shared wrapper
-// still needs a definition so the Windows build links cleanly.
-int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events, int maxevents, int timeout)
-{
-  (void)epfd;
-  (void)events;
-  (void)maxevents;
-  (void)timeout;
-  return -1;
-}
+extern "C" int ob_win32_epoll_wait_impl(int epfd, struct epoll_event *events, int maxevents, int timeout);
 
 int ob_epoll_wait(int __epfd, struct epoll_event *__events,
                   int __maxevents, int __timeout)

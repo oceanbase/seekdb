@@ -1,0 +1,27 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description:this case is use for create index test
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+ob1.create_client;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set schema_drop_gc_delay_time='1s';
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+create table t1 (c1 int, c2 int, c3 varchar(25), c4 int, primary key(c1)) partition by hash (c1) partitions 2;
+insert into t1 values (1, 2, '3', 4);
+insert into t1 values (5, 2, '7', 8);
+insert into t1 values (9, 10, '11', 12);
+insert into t1 values(13, NULL, '15', 16);
+
+create unique index idx01 on t1(c2) global;
+
+let $index_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like '%idx01', table_id, 1);
+
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where tenant_id=1001 and table_name like '%idx01%', 5, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = '$index_id' and partition_id = 0, 0, 100;

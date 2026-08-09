@@ -174,7 +174,6 @@ seekdb_semantic_unity_cc_library(
         "//src/rootserver:__subpackages__",
         "//src/sql:__subpackages__",
         "//src/storage:__subpackages__",
-        "//src/standby:__subpackages__",
     ],
 )
 

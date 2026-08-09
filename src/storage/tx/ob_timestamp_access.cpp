@@ -25,26 +25,12 @@ namespace transaction
 
 int ObTimestampAccess::get_number(int64_t &gts)
 {
-  int ret = OB_SUCCESS;
-  ObTimestampProvider provider = provider_.load(std::memory_order_acquire);
-  if (nullptr != provider) {
-    ret = provider(gts);
-  } else {
-    ret = ::oceanbase::share::server_service<ObTimestampService>()->get_timestamp(gts);
-  }
-  return ret;
+  return ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>()->get_timestamp(gts);
 }
 
 void ObTimestampAccess::get_virtual_info(int64_t &ts_value)
 {
-  ObTimestampProvider provider = provider_.load(std::memory_order_acquire);
-  if (nullptr != provider) {
-    if (OB_SUCCESS != provider(ts_value)) {
-      ts_value = 0;
-    }
-  } else {
-    ::oceanbase::share::server_service<ObTimestampService>()->get_virtual_info(ts_value);
-  }
+  ::oceanbase::share::server_service<::oceanbase::transaction::ObTimestampService>()->get_virtual_info(ts_value);
 }
 
 }

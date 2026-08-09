@@ -1,0 +1,11 @@
+ob1=OBI(cluster=2:2:2,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool pool_1 unit_num=2, zone_list=('z1','z2','z3'), unit='unit_1';
+ob1.mysql create tenant tenant_1 RESOURCE_POOL_LIST = ('pool_1') set ob_tcp_invited_nodes='%';
+create table t1(c1 int primary key) partition by hash(c1) partitions 10;
+create table t2(c1 int primary key) partition by hash(c1) partitions 10;
+create table t3(c1 int primary key) partition by hash(c1) partitions 10;
+ob1.mysql alter system drop replica partition_id = '0%0@$t1_id' server = '$svr_ip1:$svr_port1';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = '$t1_id' and svr_ip = "$svr_ip1" and svr_port = "$svr_port1" and length(member_list)-length(replace(member_list,',','')) = 1, 1, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = '$t1_id' and svr_ip = "$svr_ip1" and svr_port = "$svr_port1" and length(member_list)-length(replace(member_list,',','')) = 1, 0, 360;

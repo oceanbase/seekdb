@@ -1,0 +1,60 @@
+# owner: msy164651 
+# description: 本case是为了测试备库遇到empty primary zone和random的处理
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1, proxy_num = 0, leaderob=ob1, locality=SH:HZ:SH);
+ob1.reboot;
+
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+
+let $case_index = 2;
+source include/create_tenant_1.inc;
+ob1.mysql alter tenant tenant_1 set primary_zone = 'RANDOM';
+ob1.mysql update oceanbase.__all_tenant_history set primary_zone = '' where tenant_name = 'tenant_2';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.reboot;
+ob1.force_stop;
+sleep 10;
+ob1.start;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 3, 100;
+ob2.mysql_p select tenant_name, primary_zone from oceanbase.__all_tenant;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table, 1, 100;
+ob1.mysql drop tenant tenant_1 force;
+ob1.mysql drop tenant tenant_2 force;
+ob1.mysql drop resource pool pool_1;
+ob1.mysql drop resource pool pool_2;
+
+ob2.mysql set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+
+let $case_index = 3;
+source include/create_tenant_1.inc;
+
+let $case_index = 4;
+source include/create_tenant_1.inc;
+
+ob1.mysql alter tenant tenant_3 set primary_zone = 'RANDOM';
+ob1.mysql update oceanbase.__all_tenant_history set primary_zone = '' where tenant_name = 'tenant_4';
+
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 1000;
+ob2.mysql_p select tenant_name, primary_zone from oceanbase.__all_tenant;
+ob2.check_version 2;
+ob1.mysql set ob_query_timeout=30000000;
+
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 20;
+ob2.mysql alter system commit to switchover to primary;
+

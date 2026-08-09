@@ -36,7 +36,7 @@ extern "C" {
 typedef struct Reactor nio_reactor;
 typedef struct nio_connection_handle nio_connection_handle;
 
-#define NIO_ABI_VERSION 26U
+#define NIO_ABI_VERSION 24U
 
 /* nio_start failure reasons, written through its out_err parameter. */
 #define NIO_START_OK 0
@@ -50,45 +50,16 @@ typedef struct nio_connection_handle nio_connection_handle;
 /* TLS channel encryption. Paths are passed verbatim; Rust inherits the
  * process cwd, so seekdb's relative wallet PEM-path convention works as-is.
  * The strings must stay valid for the duration of the nio_start call.
- * A client certificate is verified when ca_file is set and the client
- * presents one, but never demanded, so certificate-less --ssl-mode=REQUIRED
- * clients still connect. The negotiated TLS metadata is exposed separately
- * by nio_get_tls_session_info; no OpenSSL SSL* crosses this ABI. */
-#define NIO_TLS_MIN_NONE 0U
-#define NIO_TLS_MIN_TLSV1 1U
-#define NIO_TLS_MIN_TLSV1_1 2U
-#define NIO_TLS_MIN_TLSV1_2 3U
-#define NIO_TLS_MIN_TLSV1_3 4U
-
+ * Scope is channel encryption only: X509-based user identity is not part of
+ * this ABI — no SSL* is ever handed back to C++ (check_user_access already
+ * receives NULL). A client certificate is verified when ca_file is set and
+ * the client presents one, but never demanded, so certificate-less
+ * --ssl-mode=REQUIRED clients still connect. */
 typedef struct {
   const char *ca_file;   /* nullable: no client-certificate verification */
   const char *cert_file; /* required: server certificate chain, PEM */
   const char *key_file;  /* required: server private key, PEM (PKCS#8/RSA) */
-  uint8_t min_tls_version; /* NIO_TLS_MIN_*; TLS 1.2 is the lowest rustls supports */
-  uint8_t reserved[7];
 } nio_tls_config;
-
-/* Borrowed Rust-normalized TLS state for the active request. The strings point
- * into the Rustls session and remain valid until the request is committed or
- * aborted; C++ must consume them synchronously. No SSL*, X509*, or DER object
- * crosses this ABI. cipher_name is the Rust-normalized SQL account cipher
- * name. */
-typedef struct {
-  const char *data;
-  int64_t len;
-} nio_tls_string_view;
-
-typedef struct {
-  uint8_t tls_active;
-  uint8_t peer_cert_present;
-  uint8_t peer_cert_verified;
-  uint8_t peer_cert_info_valid;
-  uint8_t reserved[4];
-  nio_tls_string_view cipher_name;
-  nio_tls_string_view peer_cert_common_name;
-  nio_tls_string_view peer_cert_issuer;
-  nio_tls_string_view peer_cert_subject;
-} nio_tls_session_info;
 
 /* The capability bits both sides consult — the single cross-language
  * vocabulary. Values are pinned against C++'s ObMySQLCapabilityFlags and
@@ -562,10 +533,6 @@ int nio_interrupt_read(void *sess, uint64_t generation);
 int nio_release_read_packet(void *sess, uint64_t generation,
                             uint64_t packet_lease);
 int nio_get_login_view(void *sess, uint64_t generation, nio_login_view *out);
-/* The returned certificate pointer is borrowed from the active Rustls
- * connection; it must not be retained after the current request finishes. */
-int nio_get_tls_session_info(void *sess, uint64_t generation,
-                             nio_tls_session_info *out);
 
 #ifdef __cplusplus
 }

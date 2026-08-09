@@ -883,6 +883,8 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tx/ob_id_service.cpp",
             "src/storage/tx/ob_keep_alive_ls_handler.cpp",
             "src/storage/tx/ob_tx_loop_worker.cpp",
+            "src/storage/tx/ob_tx_log_cb_define.cpp",
+            "src/storage/tx/ob_tx_log_cb_mgr.cpp",
             "src/storage/tx/ob_tx_ctx_log_cb_helper.cpp",
             "src/storage/tx/ob_timestamp_access.cpp",
             "src/storage/tx/ob_timestamp_service.cpp",

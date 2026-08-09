@@ -22,7 +22,7 @@
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_routine_info.h"
 #include "share/schema/ob_package_info.h"
-#include "sql/resolver/ob_stmt_type.h"
+#include "share/statement/ob_stmt_type.h"
 //#include "sql/resolver/dml/ob_select_stmt.h"
 #include "share/schema/ob_trigger_info.h"
 

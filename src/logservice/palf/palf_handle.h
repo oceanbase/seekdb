@@ -57,10 +57,6 @@ public:
              const share::SCN &ref_scn,
              LSN &lsn,
              share::SCN &scn);
-  int append_imported_group(const LSN &source_lsn,
-                            const share::SCN &source_scn,
-                            const void *buffer,
-                            const int64_t nbytes);
 
   // @brief: read up to 'nbytes' from palf at offset of 'lsn' into the 'read_buf', and 
   //         there are alignment restrictions on the length and address of user-space buffers
@@ -124,7 +120,7 @@ public:
   // @desc: query coarse lsn by scn, that means there is a LogGroupEntry in disk,
   // its lsn and scn are result_lsn and result_scn, and result_scn <= scn.
   // Note that this function may be time-consuming
-  // Note that result_lsn is a readable coarse lower bound for the located log.
+  // Note that result_lsn always points to head of log file
   // @params [in] scn:
   // @params [out] result_lsn: the lower bound lsn which includes scn
   // @return

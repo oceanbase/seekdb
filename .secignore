@@ -7,9 +7,13 @@
 # Under the segmentation lines there are the folders which you need to ignore #
 ##########################################################
 **
+  http://0.0.0.0*
+  http://service.cn-hangzhou.maxcompute.aliyun.com/api
+  http://dt.cn-hangzhou.maxcompute.aliyun.com
   http://license.coscl.org.cn/MulanPubL-2.0*
   http://license.coscl.org.cn/MulanPubL-1.0
   license.coscl.org.cn
+  http://11.166.86.153:8877/*
   https://open.oceanbase.com*
   https://www.oceanbase.com*
   https://github.com/oceanbase/oceanbase*
@@ -51,9 +55,18 @@
   http://software.intel.com/en-us/forums/intel-c-compiler/*
   http://astyle.sourceforge.net
   http://1.taobao.com/
+  vince.rogier@ocilib.net
+  http://www.ocilib.net
+  lexicalunit@lexicalunit.com
+  squarious@gmail.com
+  russell@kliese.id.au
+  http://simpledb.sourceforge.net
+  http://code.google.com/p/*
   www.mysql.com
   www.oceanbase.com
   www.test_url.com/abcdefg/
+  http://www.codeguru.com/*
+  http://code.google.com/p/pyodbc*
   https://www.percona.com/downloads/percona-toolkit/2.2.14/tarball/percona-toolkit-2.2.14.tar.gz
   https://oapi.dingtalk.com/robot/send?access_token=
   http://hbase.apache.org/apidocs/org/apache/hadoop/hbase/*
@@ -63,6 +76,8 @@
   http://dev.mysql.com*
   https://dev.mysql.com*
   http://bugs.mysql.com*
+  http://csrc.nist.gov/cryptval/shs.htm
+  http://www.fileformat.info/info/unicode/block/index.htm
   http://www.opensource.org/licenses*
   https://connect.microsoft.com/VisualStudio*
   https://dev.mysql.com/doc/*
@@ -114,6 +129,8 @@
   *@taobao.com
   *@alibaba.inc.com
   kaizhan.dkz@antigroup.com
+  vadimb@google.com
+  marcus.boerger@google.com
   bobak@relog.ch
   emily@163.com
   mike@sohu.com
@@ -123,6 +140,8 @@
   internals@lists.mysql.com
   mysql@modernduck.com
   wawasa@gmail.com
+  frankie@etsetb.upc.es
+  kaido@tradenet.ee
   http://www.gnu.org/licenses/*
   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34772).
   https://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
@@ -185,6 +204,7 @@
   http://oceanbase.alibaba-inc.com/*
   https://community.oracle.com/tech/*
   https://docs.docker.com/*
+  https://hub.docker.com/*
   http://helloworld.com/*
   http://1.1.1.1:8080/*
   https://mirrors.aliyun.com/*
@@ -197,6 +217,48 @@
   https://github.com/lz4/lz4
   https://www.contributor-covenant.org/*
   https://github.com/oceanbase/*
+  http://ob-make.oceanbase-dev.com:8000/obbuild/api/v1
+  https://join.slack.com/t/oceanbase/shared_invite/zt-1e25oz3ol-lJ6YNqPHaKwY_mhhioyEuw)
+  Javier.Lewis@VFAxlnZEvOx.org
+  Amy.Moses@Ovk9KjHH.com
+  http://kb.askmonty.org/v/segmented-key-cache
+  BR+no5NoyKqyYEHz6Zvc2w==
+  7LjlyJJCbY+H945i4sFCwQ==
+  googletestframework@googlegroups.com
+  vladl@google.com
+  http://www.parashift.com/c++-faq-lite/misc-technical-issues.html#faq-39.6
+  http://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+  https://gcc.gnu.org/onlinedocs/libstdc++/manual/abi.html#abi.versioning
+  http://clang.llvm.org/docs/LanguageExtensions.html#__has_include
+  http://gcc.gnu.org/gcc-4.2/changes.html
+  http://gcc.gnu.org/onlinedocs/libstdc++/manual/bk01pt01ch01.html#manual.intro.status.standard.200x
+  http://linux.die.net/man/2/clone.
+  http://code.google.com/p/googlemock/wiki/CookBook
+  http://computer-programming-forum.com/7-vc.net/6fbc30265f860ad1.htm
+  www.xifenfei.com
+  https://fastcompression.blogspot.fr/*
+  http://www.zstd.net
+  https://msdn.microsoft.com/*
+  http://www.cse.wustl.edu/*
+  https://github.com/facebook/zstd/*
+  http://www.quicklz.com/*
+  http://www.w3.org/XML/1998/namespace
+  http://www.w3.org/1999/xhtml
+  http://www.w3.org/TR/html4/
+  http://www.w3.org/1999/XSL/Transform
+  https://join.slack.com/t/oceanbase*
+  https://hub.docker.com/r/oceanbase/oceanbase-ce
+  mheule@google.com
+  keith.ray@gmail.com
+  egnor@google.com
+  eefacm@gmail.com
+  barthelemy@prologique.com
+  http://blogs.msdn.com/b/oldnewthing/archive/2004/02/23/78395.aspx 
+  sesse@google.com
+  http://fastcompression.blogspot.fr*
+  https://www.zstd.net*
+  https://github.com/facebook*
+  https://ob-yum.oceanbase-dev.com*
   https://openwebapi.oceanbase.com*
   https://mirrors.tuna.tsinghua.edu.cn*
   https://lldb.llvm.org*
@@ -210,6 +272,91 @@
   http://wixtoolset.org*
   https://www.python.org*
   https://visualstudio.microsoft.com*
+  http://www.w3.org*
+**/MODULE.bazel.lock
+  https://bcr.bazel.build/*
+  https://github.com/bazelbuild/*
+**/tools/bazel_registry.py
+  https://github.com/bazelbuild/*
+CMakeLists.txt
+  https://www.oceanbase.ai*
+rpm/seekdb-build.sh
+  https://www.oceanbase.ai/*
+tools/systemd/profile/post_install.sh.template
+  https://www.oceanbase.ai/*
+**/README.md
+  https://img.shields.io*
+  https://en.oceanbase.com*
+  https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
+  https://obbusiness-private.oss-cn-shanghai.aliyuncs.com/download-center/opensource/oceanbase-all-in-one/installer.sh*
+  https://discord.gg/*
+  https://oceanbase.ai*
+  https://www.linkedin.com/company/oceanbase*
+  https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff*
+  https://www.youtube.com/@OceanBaseDB*
+  https://pepy.tech/projects/*
+  https://static.pepy.tech/badge/seekdb*
+  https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)*
+  https://huggingface.co*
+  https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase*
+  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
+  https://deepwiki.com/oceanbase/seekdb*
+  https://deepwiki.com/badge.svg*
+  https://static.pepy.tech/badge/pylibseekdb*
+  https://static.pepy.tech/badge/pyseekdb*
+  https://seekdb.ai*
+**/README_CN.md
+  https://img.shields.io*
+  https://en.oceanbase.com*
+  https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf)
+  https://obbusiness-private.oss-cn-shanghai.aliyuncs.com/download-center/opensource/oceanbase-all-in-one/installer.sh*
+  https://ask.oceanbase.com*
+  https://oceanbase.ai*
+  https://www.linkedin.com/company/oceanbase*
+  https://custom-icon-badges.demolab.com/badge/LinkedIn-0A66C2?logo=linkedin-white&logoColor=fff*
+  https://www.youtube.com/@OceanBaseDB*
+  https://pepy.tech/projects/*
+  https://static.pepy.tech/badge/seekdb*
+  https://aws.amazon.com/marketplace/pp/prodview-d2evwth3ztaja?sr=0-1&ref_=beagle&applicationId=AWSMPContessa)*
+  https://huggingface.co*
+  https://github.com/langchain-ai/langchain/pulls?q=is%3Apr+is%3Aclosed+oceanbase*
+  https://space.bilibili.com/3546900567427713*
+  https://console-cn.oceanbase.com/*
+  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
+  https://zread.ai/oceanbase/seekdb*
+  https://static.pepy.tech/badge/pylibseekdb*
+  https://static.pepy.tech/badge/pyseekdb*
+  https://seekdb.ai*
+  https://discord.gg/*
+**/README_JP.md
+  https://seekdb.ai*
+  https://img.shields.io*
+  https://mdn.alipayobjects.com/huamei_ytl0i7/afts/img/A*
+  https://pepy.tech/projects/*
+  https://static.pepy.tech/badge/seekdb*
+  https://static.pepy.tech/badge/pyseekdb*
+  https://static.pepy.tech/badge/pylibseekdb*
+  https://discord.gg/*
+  https://img.shields.io*
+**/CONTRIBUTING.md
+  https://github.com/*
+  https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork*
+  https://chris.beams.io/posts/git-commit/*
+**/docs/README.md
+  https://www.oceanbase.ai/*
+**/docs/developer-guide/*/contributing.md
+  https://github.com/*
+  https://cla-assistant.io/oceanbase*
+  https://user-images.githubusercontent.com/*
+  https://discord.gg/74cF8vbNEs*
+**/docs/blog/*.md
+  https://github.com/zilliztech/VectorDBBench)*
+  https://d0.seekdb.ai)*
+  https://en.oceanbase.com/)*
+  https://jp.oceanbase.com/)*
+**/mkdocs.yml
+  https://oceanbase.github.io/seekdb
+**/images/**
   http://www.w3.org*
 **/Doxyfile
   www.doxygen.org)
@@ -241,6 +388,8 @@
   https://www.baidu.com/*
   http://maven.apache.org/*
   http://www.w3.org*
+  http://www.w3*
+  http://www.w3z
   www.baidu.com*
   https://dev.mysql.com*
   https://docs.cts.t.taobao.com*
@@ -310,6 +459,18 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+  xxxxx@qq.com
+  www.xxxxx.com
+  123@cur.com
+  456@cur.com
+  789@cur.com
+  123456@cur.com
+  www.mysql.com.cn
+  https://www.baidu.com
+  http://www.atguigu.com/*
+  sad2547@gmail.com
+  arthur.stygall@achme.com
+  Q3i5we8jVm0V21SrpCiqaQ==
 **/*.test
   http://trade.taobao.com/trade/*
   https://workitem.aone.alibaba-inc.com/*
@@ -318,12 +479,14 @@
   https://www.baidu.com/*
   http://maven.apache.org/*
   http://www.w3.org*
+  http://www.w3
   www.baidu.com*
   https://dev.mysql.com*
   https://docs.cts.t.taobao.com*
   http://www.cmd5.com/*
   https://code.aone.alibaba-inc.com*
   https://127.0.0.1*
+  https://technology.amis.nl/2009/10/13/oracle-rdbms-11gr2-solving-a-sudoku-using-recursive-subquery-factoring/
   www.360.com
   www.wangyi.com
   *@alipaymock.com
@@ -385,6 +548,18 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+  xxxxx@qq.com
+  www.xxxxx.com
+  123@cur.com
+  456@cur.com
+  789@cur.com
+  123456@cur.com
+  Q3i5we8jVm0V21SrpCiqaQ==
+  www.mysql.com.cn
+  https://www.baidu.com
+  http://www.atguigu.com/*
+  sad2547@gmail.com
+  arthur.stygall@achme.com
 **/*.inc
   http://trade.taobao.com/trade/*
   https://workitem.aone.alibaba-inc.com/*
@@ -460,18 +635,501 @@
   xingxing4@163.com
   xingxing5@163.com
   14844887@sina.com
+**/tools/deploy/deploy.py
+  http://pre-gw.obrde.alibaba-inc.com/cmd-trace/api/v1/audit/add
+**/mittest/logservice/archiveservice/create_restore_tenant.h
+  VjIDX5kAR6DDhGgnL3YuVA==
+**/tools/deploy/h/mysqltest.py
+  http://11.166.86.153:8877/mytest10.jar
+  http://11.166.86.153:8877/mytest_for_oracle.jar
+  http://11.166.86.153:8877/mytest_for_oracle.md5
+**/tools/deploy/mysqltest_config.yaml
+  http://11.166.86.153:8877/mytest10.jar
+**/tools/obtest/copy_for_compat.sh
+  http://11.166.86.153:8877/obproxy*
+  http://11.166.86.153:8877/mytest_workaround_version/mytest40.jar
+  http://11.166.86.153:8877/oceanbase_released/
+  http://11.166.86.153:8877/obproxy.support_4.0
+  http://11.166.86.153:8877/obproxy-ce-4.1.0.0_dev
+  http://11.166.86.153:8877/mytest_latest.jar
+**/tools/deploy/h/obi.py
+  http://ocp-cfg.alibaba.net:8080/services?User_ID=alibaba&UID=test
+  http://11.166.86.153:8877/obproxy
+  http://10.244.4.22:8080/oceanbase_configer/v2/
+  http://10.244.4.22:8080/diamond/cgi/a.py?key=
+  http://11.166.86.153:8877
+  root
+  f0455d5edb4833fa2e91762e71b61bc35d45cf0b
+  D8GVpapRiOtG4Am/rgHexdE7QIdMGxSndRdedotfU2VYuI+gYHDBNDFyaIpoafUE
+**/deps/init/oceanbase.el7.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
+**/deps/init/oceanbase.el7.aarch64.deps
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/ob-deploy/
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/corebolt/
+**/deps/init/oceanbase.el7.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/7/aarch64/test/obshell/
+**/deps/init/oceanbase.el7.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/obshell/
+**/deps/init/oceanbase.el8.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/7/x86_64/test/corebolt/
+**/deps/init/oceanbase.al8.aarch64.deps
+  https://ob-yum.oceanbase-dev.com/8/aarch64/current
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test
+**/deps/init/oceanbase.al8.x86_64.deps
+  https://ob-yum.oceanbase-dev.com/8/x86_64/current
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test
+**/deps/init/oceanbase.el8.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+**/deps/init/oceanbase.el8.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+**/deps/init/oceanbase.el9.aarch64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/aarch64/test/obshell/
+**/deps/init/oceanbase.el9.x86_64.deps.opensource
+  https://ob-yum.oceanbase-dev.com/8/x86_64/test/obshell/
+**/docs/developer-guide/*/coding-standard.md
+  http://en.cppreference.com/w/cpp/memory/shared_ptr*
+**/docs/developer-guide/*/container.md
+  https://www.cs.utoronto.ca/%7Etabrown/debra/fullpaper.pdf*
+**/docs/developer-guide/*/debug.md
+  https://sourceware.org/gdb/current/onlinedocs/gdb.html/)
+**/docs/developer-guide/*/unittest.md
+  https://google.github.io/googletest/)
+**/docs/developer-guide/*/ide-settings.md
+  https://github.com/MaskRay/ccls*
+  https://github.com/jacobdufault/cquery*
+**/docs/developer-guide/assets/favicon.ico
+  http://www.w3.org/1999/02/22-rdf-syntax-ns*
+  http://ns.adobe.com/tiff/1.0/
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/t/ob_ob_select_subquery_oracle.test
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/r/oracle/ob_ob_select_subquery_oracle.result
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/copy.sh
+  http://11.166.86.153:8877/obproxy.support_4.0
+**/.github/**
+  https://ce-farm.oceanbase-dev.com/*
+  https://obfarm-ce.oss-cn-hongkong.aliyuncs.com*
+  https://rust-lang.github.io/*
+  https://sh.rustup.rs*
+**/cmake/Rust.cmake
+  https://rustup.rs
+**/.github/actions/setup-rust/action.yml
+  https://rsproxy.cn/index/
+**/.github/workflows/seekdb.yml
+  https://rsproxy.cn/rustup-init.sh
+  https://rsproxy.cn
+  https://rsproxy.cn/rustup
+**/test/ci/templates/farm_for_standalone_src.yml
+  https://rsproxy.cn/index/
+  https://rsproxy.cn/rustup-init.sh
+  https://rsproxy.cn
+  https://rsproxy.cn/rustup
+**/tools/deploy/mysql_test/test_suite/dblink_write_oracle_sqlqa/r/oracle/ob_ob_insert_supplement_oracle.result
+  stu3_1
+**/tools/deploy/mysql_test/test_suite/xml_ns_oracle_sqlqa/r/oracle/xml_ns_extract_oracle.result
+  http://example.com/ns
+**/tools/obtest/conf/configure_temp.ini
+  http://127.0.0.1:11211
+  http://127.0.0.1:11211&access_id=
+  http://ob-jenkins.alibaba.net:8081/oceanbase_configer/v2/
+  http://ob-jenkins.alibaba.net:8081/diamond/cgi/a.py
+**/tools/obtest/t/compat/download_rpm.sh
+  http://yum.tbsite.net/taobao/7/x86_64/current/oceanbase/
+  http://yum.tbsite.net/taobao/7/x86_64/test/oceanbase/
+**/tools/deploy/mysql_test/test_suite/dblink_write_ob_to_oracle_all_sqlqa/t/ob_ob_select_subquery_oracle.test
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**/tools/deploy/mysql_test/test_suite/dblink_write_ob_to_oracle_all_sqlqa/r/oracle/ob_ob_select_subquery_oracle.result
+  dlt4@my_link1.id
+  dlt6@my_link1.id
+  dlt4@my_link1.name
+  dlt6@my_link1.name
+**tools/obtest/upgrade_farm_ss/configure_upgrade_temp.ini
+  http://ob-jenkins.alibaba.net:8081/oceanbase_configer/v2/
+  http://ob-jenkins.alibaba.net:8081/diamond/cgi/a.py
+**/tools/systemd/profile/post_install.sh.template
+  https://www.oceanbase.ai/*
+**/tools/deploy/mysql_test/test_suite/auto_inc/t/innodb-autoinc-44030.test
+  http://lists.mysql.com/commits/75268)
+**/tools/obtest/conf/{configure.ak_obtest.ini,configure.ak_obtest2.ini}
+  https://obconfig.alibaba.net/diamond/cgi/a.py
+  http://10.244.4.22:8080/oceanbase_obconfig/
+  http://10.244.4.22:8080/diamond/cgi/a.py
+  http://10.244.4.22:8080/oceanbase_configer/v2/
 --------------------------------------------------------
 # Should use GLOB wildcard to config and analysis the ignored folder
 # The root patch should start with '/'
-/tools/deploy/**
-/tools/obtest/**
-/tools/codestyle/**
-/src/objit/deps/googletest/**
 /.git/**
-/src/oblib/lib/compress/**
+/test/**
+# The seekdb reduction removes these paths completely. Keep the ignore rules
+# limited to absent directories and exact deleted file names so retained code
+# remains covered by the secret scan when it parses the full Git diff.
+/deps/oblib/src/lib/vtoa/**
+/deps/oblib/unittest/lib/restore/**
+/src/observer/net/**
+/src/observer/table/**
+/src/pl/pl_recompile/**
+/src/share/catalog/**
+/src/share/external_table/**
+/src/share/object_storage/**
+/src/share/sequence/**
+/src/share/storage_cache_policy/**
+/src/share/unit/**
+/src/sql/engine/sequence/**
+/src/storage/utl_file/**
+/tools/deploy/mysql_test/include/external_table/**
+/tools/deploy/mysql_test/r/tenant/**
+/tools/deploy/mysql_test/test_suite/auto_increment_mode_mysql_sqlqa/**
+/tools/deploy/mysql_test/test_suite/ccl/**
+/tools/deploy/mysql_test/test_suite/dbms_debug_sqlqa/**
+/tools/deploy/mysql_test/test_suite/dbms_lob_write_sqlqa/**
+/tools/deploy/mysql_test/test_suite/delete_insert/**
+/tools/deploy/mysql_test/test_suite/fast_migrate/**
+/tools/deploy/mysql_test/test_suite/flush_table/**
+/tools/deploy/mysql_test/test_suite/macro_block_bloom_filter/**
+/tools/deploy/mysql_test/test_suite/mysql_event/**
+/tools/deploy/mysql_test/test_suite/pl_debugger_sqlqa/**
+/tools/deploy/mysql_test/test_suite/primary_standby/**
+/tools/deploy/mysql_test/test_suite/remote_execute_send_plan/**
+/tools/deploy/mysql_test/test_suite/sequence/**
+/tools/deploy/mysql_test/test_suite/sequence_mysql_sqlqa/**
+/tools/deploy/mysql_test/test_suite/sequence_sqlqa/**
+/tools/deploy/mysql_test/test_suite/skip_scan/**
+/tools/deploy/mysql_test/test_suite/tenant/**
+/tools/deploy/mysql_test/test_suite/tenant_parameter/**
+/tools/deploy/mysql_test/test_suite/xa/**
+/tools/obtest/include/balance/**
+/tools/obtest/r/compat/**
+/tools/obtest/r/compat_farm/**
+/tools/obtest/r/election/**
+/tools/obtest/r/pg/**
+/tools/obtest/r/security/**
+/tools/obtest/r/session/**
+/tools/obtest/r/storage_ha/restore/**
+/tools/obtest/r/storage_ha_sn_only/**
+/tools/obtest/rs_reserved_cases/encryption_zone/**
+/tools/obtest/rs_reserved_cases/locality/**
+/tools/obtest/rs_reserved_cases/location_cache/**
+/tools/obtest/rs_reserved_cases/migrate/**
+/tools/obtest/rs_reserved_cases/resource/**
+/tools/obtest/rs_reserved_cases/tablegroup/**
+/tools/obtest/rs_reserved_cases/tablegroup_coordinate/**
+/tools/obtest/t/compat_farm/**
+/tools/obtest/t/election/**
+/tools/obtest/t/errsim_ofs_mode/**
+/tools/obtest/t/ofs_mode/**
+/tools/obtest/t/pg/**
+/tools/obtest/t/security/**
+/tools/obtest/t/storage_ha/restore/**
+/tools/obtest/t/storage_ha_sn_only/**
+/tools/obtest/upgrade_farm_ss/**
+/unittest/archive/**
+/unittest/observer/rpc/**
+/unittest/pub/**
+/unittest/rootserver/server_balancer_v2_testcase/**
+/unittest/storage/utl_file/**
+/deps/oblib/src/common/{ob_learner_list.h,ob_learner_list.ipp,ob_member.cpp,ob_member.h,ob_member_list.h,ob_member_list.ipp,ob_tenant_data_version_mgr.h,ob_zone.h,ob_zone_status.h,ob_zone_type.cpp,ob_zone_type.h}
+/deps/oblib/src/common/mysqlclient/ob_tenant_oci_envs.h
+/deps/oblib/src/lib/{ob_replica_define.cpp,ob_replica_define.h}
+/deps/oblib/src/lib/alloc/{memory_sanity.cpp,memory_sanity.h,ob_futex_v2.cpp,ob_futex_v2.h,ob_latch_v2.cpp,ob_latch_v2.h}
+/deps/oblib/src/lib/allocator/{ob_mem_leak_checker.cpp,ob_mem_leak_checker.h}
+/deps/oblib/src/lib/compress/{ob_stream_compressor.cpp,ob_stream_compressor.h}
+/deps/oblib/src/lib/compress/zstd_1_3_8/{ob_zstd_stream_compressor_1_3_8.cpp,ob_zstd_stream_compressor_1_3_8.h}
+/deps/oblib/src/lib/errsim_module/{ob_tenant_errsim_event.cpp,ob_tenant_errsim_event.h}
+/deps/oblib/src/lib/resource/{ob_affinity_ctrl.cpp,ob_affinity_ctrl.h}
+/deps/oblib/src/lib/restore/{ob_fd_simulator.cpp,ob_fd_simulator.h,ob_i_storage.cpp,ob_i_storage.h,ob_object_device.cpp,ob_object_device.h,ob_object_storage_base.cpp,ob_object_storage_base.h,ob_storage.cpp,ob_storage.h,ob_storage_file.cpp,ob_storage_file.h,ob_storage_info.cpp,ob_storage_info.h,ob_storage_path.cpp,ob_storage_path.h}
+/deps/oblib/src/rpc/{ob_req_operator.cpp,ob_req_operator.h}
+/deps/oblib/src/rpc/frame/{ob_net_consts.h,ob_net_easy.h,ob_req_handler.cpp,ob_req_handler.h,ob_req_packet_code.h,ob_req_transport.cpp,ob_req_transport.h,obi_easy_packet_handler.h}
+/deps/oblib/src/rpc/obmysql/{ob_easy_sql_request_operator.cpp,ob_easy_sql_request_operator.h,ob_virtual_cs_protocol_processor.cpp}
+/deps/oblib/unittest/lib/alloc/test_object_set_v2.cpp
+/deps/oblib/unittest/lib/resource/test_affinity_ctrl.cpp
+/src/logservice/{ob_tenant_mutil_allocator_mgr.cpp,ob_tenant_mutil_allocator_mgr.h}
+/src/observer/{ob_resource_inner_sql_connection_pool.cpp,ob_resource_inner_sql_connection_pool.h,ob_root_service_monitor.cpp,ob_root_service_monitor.h,ob_tenant_duty_task.cpp}
+/src/observer/mysql/{ob_query_response_time.cpp,ob_query_response_time.h}
+/src/observer/omt/{ob_multi_tenant.cpp,ob_multi_tenant.h,ob_tenant_meta.h}
+/src/observer/report/{ob_tenant_meta_checker.cpp,ob_tenant_meta_checker.h}
+/src/observer/vector_index/{ob_tenant_vector_index_async_task.cpp,ob_tenant_vector_index_async_task.h}
+/src/observer/virtual_table/{ob_all_virtual_ccl_status.cpp,ob_all_virtual_ccl_status.h,ob_all_virtual_dtl_first_cached_buffer.cpp,ob_all_virtual_dtl_first_cached_buffer.h,ob_all_virtual_dump_tenant_info.cpp,ob_all_virtual_ha_diagnose.cpp,ob_all_virtual_ha_diagnose.h,ob_all_virtual_server_storage.cpp,ob_all_virtual_server_storage.h,ob_all_virtual_tenant_memory_info.h,ob_all_virtual_tenant_memstore_info.cpp,ob_all_virtual_tenant_vector_mem_info.cpp,ob_all_virtual_unit.cpp,ob_all_virtual_unit.h,ob_information_query_response_time.cpp,ob_information_query_response_time.h,ob_mem_leak_checker_info.cpp,ob_mem_leak_checker_info.h,ob_show_create_catalog.cpp,ob_show_create_catalog.h,ob_show_create_location.cpp,ob_show_create_location.h,ob_show_create_tablegroup.cpp,ob_show_create_tablegroup.h,ob_show_tenant_status.cpp,ob_show_tenant_status.h,ob_tenant_show_catalog_databases.cpp}
+/src/observer/virtual_table/{ob_tenant_show_catalog_databases.h,ob_tenant_virtual_concurrent_limit_sql.cpp,ob_tenant_virtual_concurrent_limit_sql.h,ob_tenant_virtual_current_tenant.cpp,ob_tenant_virtual_current_tenant.h}
+/src/pl/{ob_pl_build_utils.cpp,ob_pl_build_utils.h,ob_pl_object_id_util.h,ob_pl_package_encode_info.cpp,ob_pl_package_encode_info.h,ob_pl_persistent.cpp,ob_pl_persistent.h}
+/src/rootserver/{ob_catalog_ddl_operator.cpp,ob_catalog_ddl_operator.h,ob_catalog_ddl_service.cpp,ob_catalog_ddl_service.h,ob_ccl_ddl_operator.cpp,ob_ccl_ddl_operator.h,ob_ccl_ddl_service.cpp,ob_ccl_ddl_service.h,ob_ddl_help.cpp,ob_ddl_help.h,ob_location_ddl_operator.cpp,ob_location_ddl_operator.h,ob_location_ddl_service.cpp,ob_location_ddl_service.h,ob_objpriv_mysql_schema_history_recycler.cpp,ob_objpriv_mysql_schema_history_recycler.h,ob_replica_addr.h,ob_rs_job_type.h,ob_rs_serial_call.h,ob_schema_history_recycler.cpp,ob_schema_history_recycler.h,ob_sequence_ddl_proxy.cpp,ob_sequence_ddl_proxy.h,ob_tenant_thread_helper.h}
+/src/rootserver/ddl_task/ob_ddl_single_replica_executor.cpp
+/src/rootserver/freeze/{ob_major_freeze_rpc_define.cpp,ob_major_freeze_rpc_define.h,ob_tenant_all_zone_merge_strategy.cpp,ob_tenant_all_zone_merge_strategy.h,ob_tenant_major_merge_strategy.cpp,ob_tenant_major_merge_strategy.h,ob_zone_merge_manager.cpp,ob_zone_merge_manager.h}
+/src/rootserver/parallel_ddl/{ob_create_tablegroup_helper.cpp,ob_create_tablegroup_helper.h,ob_drop_tablegroup_helper.cpp,ob_drop_tablegroup_helper.h,ob_index_name_checker.cpp,ob_index_name_checker.h}
+/src/share/{ob_all_tenant_info.cpp,ob_all_tenant_info.h,ob_cluster_role.cpp,ob_cluster_role.h,ob_cluster_version.cpp,ob_cluster_version.h,ob_duplicate_scope_define.h,ob_gais_msg.cpp,ob_gais_msg.h,ob_global_autoinc_service.cpp,ob_global_autoinc_service.h,ob_i_global_autoincrement_service.h,ob_resource_limit.cpp,ob_resource_limit.h,ob_resource_limit_def.h,ob_server_status.cpp,ob_storage_format.h,ob_tablet_checksum_iterator.cpp,ob_tablet_checksum_iterator.h,ob_tablet_replica_checksum_operator.cpp,ob_tablet_replica_checksum_operator.h,ob_tenant_memstore_info_operator.cpp,ob_tenant_memstore_info_operator.h,ob_tenant_mgr.cpp,ob_tenant_role.cpp,ob_tenant_role.h,ob_tenant_switchover_status.h,ob_tenant_timezone.cpp,ob_tenant_timezone.h,ob_unit_getter.cpp,ob_unit_getter.h,ob_unit_replica_counter.h,ob_unit_stat.h}
+/src/share/compaction/ob_shared_storage_compaction_util.h
+/src/share/config/ob_system_config_key.cpp
+/src/share/errsim_module/{ob_tenant_errsim_event_mgr.cpp,ob_tenant_errsim_event_mgr.h}
+/src/share/inner_table/sys_package/{dbms_ash_internal.sql,dbms_ash_internal_body.sql,dbms_udr.sql,dbms_udr_body.sql,dbms_udr_body_mysql.sql,dbms_udr_mysql.sql,dbms_workload_repository.sql,dbms_workload_repository_body.sql,dbms_workload_repository_body_mysql.sql,dbms_workload_repository_mysql.sql,utl_recomp.sql,utl_recomp_body.sql}
+/src/share/io/{ob_backup_io_adapter.cpp,ob_backup_io_adapter.h}
+/src/share/rc/{ob_tenant_base.cpp,ob_tenant_base.h,ob_tenant_module_init_ctx.h}
+/src/share/schema/{ob_catalog_mgr.cpp,ob_catalog_mgr.h,ob_catalog_schema_struct.cpp,ob_catalog_schema_struct.h,ob_catalog_sql_service.cpp,ob_catalog_sql_service.h,ob_ccl_rule_mgr.cpp,ob_ccl_rule_mgr.h,ob_ccl_rule_sql_service.cpp,ob_ccl_rule_sql_service.h,ob_ccl_schema_struct.cpp,ob_ccl_schema_struct.h,ob_context_ddl_proxy.cpp,ob_context_ddl_proxy.h,ob_context_mgr.cpp,ob_context_mgr.h,ob_context_sql_service.cpp,ob_context_sql_service.h,ob_directory_mgr.cpp,ob_directory_mgr.h,ob_directory_sql_service.cpp,ob_directory_sql_service.h,ob_location_mgr.cpp,ob_location_mgr.h,ob_location_schema_struct.cpp,ob_location_schema_struct.h,ob_location_sql_service.cpp,ob_location_sql_service.h,ob_schema_getter_guard_ccl_rule.cpp,ob_schema_getter_guard_location.cpp,ob_sequence_mgr.cpp,ob_sequence_mgr.h,ob_sequence_sql_service.cpp,ob_sequence_sql_service.h,ob_tablegroup_sql_service.cpp}
+/src/share/schema/{ob_tablegroup_sql_service.h,ob_tenant_sql_service.cpp,ob_tenant_sql_service.h,ob_udf.cpp,ob_udf.h,ob_udf_mgr.cpp,ob_udf_mgr.h,ob_udf_sql_service.cpp,ob_udf_sql_service.h}
+/src/share/storage/{ob_tablet_replica_checksum_table_storage.cpp,ob_tablet_replica_checksum_table_storage.h}
+/src/share/table/{ob_module_data_arg.h,ob_redis_data_model.h,ob_table_config_util.h,ob_ttl_util.cpp,ob_ttl_util.h}
+/src/share/tablet/{ob_tablet_filter.cpp,ob_tablet_filter.h}
+/src/sql/{ob_sql_ccl_rule_manager.cpp,ob_sql_ccl_rule_manager.h,ob_sql_mock_schema_utils.cpp,ob_sql_mock_schema_utils.h}
+/src/sql/das/{ob_das_extra_data.cpp,ob_das_extra_data.h,ob_das_task_result.cpp,ob_das_task_result.h}
+/src/sql/engine/cmd/{ob_catalog_executor.cpp,ob_catalog_executor.h,ob_ccl_rule_executor.cpp,ob_ccl_rule_executor.h,ob_context_executor.cpp,ob_context_executor.h,ob_directory_executor.cpp,ob_directory_executor.h,ob_event_executor.cpp,ob_event_executor.h,ob_load_data_storage_info.cpp,ob_load_data_storage_info.h,ob_location_executor.cpp,ob_location_executor.h,ob_mock_executor.cpp,ob_redis_importer.cpp,ob_redis_importer.h,ob_sequence_executor.cpp,ob_sequence_executor.h,ob_sys_dispatch_call_executor.cpp,ob_sys_dispatch_call_executor.h,ob_tablegroup_executor.cpp,ob_tablegroup_executor.h,ob_udf_executor.cpp,ob_udf_executor.h,ob_xa_executor.cpp,ob_xa_executor.h}
+/src/sql/engine/expr/{check_eval_func_serialize.sh,ob_expr_check_catalog_access.cpp,ob_expr_check_catalog_access.h,ob_expr_check_location_access.cpp,ob_expr_check_location_access.h,ob_expr_current_catalog.cpp,ob_expr_current_catalog.h,ob_expr_dll_udf.cpp,ob_expr_dll_udf.h,ob_expr_eval_functions.cpp,ob_expr_eval_functions.h,ob_expr_merging_frozen_time.cpp,ob_expr_merging_frozen_time.h,ob_expr_seq_nextval.cpp,ob_expr_seq_nextval.h}
+/src/sql/engine/user_defined_function/{ob_udf_ctx_mgr.cpp,ob_udf_ctx_mgr.h,ob_udf_registration_types.h,ob_udf_util.cpp,ob_udf_util.h,ob_user_defined_function.cpp,ob_user_defined_function.h}
+/src/sql/executor/{ob_direct_receive_op.cpp,ob_direct_receive_op.h,ob_direct_transmit_op.cpp,ob_direct_transmit_op.h,ob_executor_rpc_impl.cpp,ob_executor_rpc_impl.h,ob_executor_rpc_processor.h,ob_job.cpp,ob_job.h,ob_job_control.cpp,ob_job_control.h,ob_job_parser.cpp,ob_job_parser.h,ob_local_identity_task_spliter.cpp,ob_local_identity_task_spliter.h,ob_local_job_executor.cpp,ob_local_job_executor.h,ob_local_task_executor.cpp,ob_local_task_executor.h,ob_remote_identity_task_spliter.cpp,ob_remote_identity_task_spliter.h,ob_remote_job_control.cpp,ob_remote_job_control.h,ob_remote_job_executor.cpp,ob_remote_job_executor.h,ob_remote_scheduler.cpp,ob_remote_scheduler.h,ob_remote_task_executor.cpp,ob_remote_task_executor.h,ob_task.cpp,ob_task.h,ob_task_control.cpp,ob_task_control.h,ob_task_executor.cpp,ob_task_executor.h,ob_task_runner_notifier.h,ob_task_runner_notifier_service.cpp}
+/src/sql/executor/{ob_task_runner_notifier_service.h,ob_task_spliter_factory.cpp,ob_task_spliter_factory.h}
+/src/sql/optimizer/{ob_log_sequence.cpp,ob_log_sequence.h}
+/src/sql/plan_cache/{ob_pc_ref_handle.cpp,ob_pc_ref_handle.h}
+/src/sql/printer/ob_schema_printer_external_table.cpp
+/src/sql/resolver/cmd/{ob_event_resolver.cpp,ob_event_resolver.h,ob_event_stmt.cpp,ob_event_stmt.h,ob_mock_resolver.cpp,ob_mock_resolver.h,ob_mock_stmt.h,ob_sys_dispatch_call_config.h,ob_sys_dispatch_call_resolver.cpp,ob_sys_dispatch_call_resolver.h,ob_sys_dispatch_call_stmt.h}
+/src/sql/resolver/ddl/{ob_alter_location_resolver.cpp,ob_alter_location_resolver.h,ob_alter_sequence_resolver.cpp,ob_alter_sequence_resolver.h,ob_alter_tablegroup_resolver.cpp,ob_alter_tablegroup_resolver.h,ob_alter_tablegroup_stmt.cpp,ob_alter_tablegroup_stmt.h,ob_catalog_resolver.cpp,ob_catalog_resolver.h,ob_catalog_stmt.cpp,ob_catalog_stmt.h,ob_column_sequence_resolver.cpp,ob_column_sequence_resolver.h,ob_context_stmt.h,ob_create_ccl_rule_resolver.cpp,ob_create_ccl_rule_resolver.h,ob_create_ccl_rule_stmt.cpp,ob_create_ccl_rule_stmt.h,ob_create_context_resolver.cpp,ob_create_context_resolver.h,ob_create_directory_resolver.cpp,ob_create_directory_resolver.h,ob_create_directory_stmt.cpp,ob_create_directory_stmt.h,ob_create_func_resolver.cpp,ob_create_func_resolver.h,ob_create_func_stmt.h,ob_create_location_resolver.cpp,ob_create_location_resolver.h,ob_create_location_stmt.cpp}
+/src/sql/resolver/ddl/{ob_create_location_stmt.h,ob_create_sequence_resolver.cpp,ob_create_sequence_resolver.h,ob_create_tablegroup_resolver.cpp,ob_create_tablegroup_resolver.h,ob_create_tablegroup_stmt.cpp,ob_create_tablegroup_stmt.h,ob_drop_ccl_rule_resolver.cpp,ob_drop_ccl_rule_resolver.h,ob_drop_ccl_rule_stmt.cpp,ob_drop_ccl_rule_stmt.h,ob_drop_context_resolver.cpp,ob_drop_context_resolver.h,ob_drop_directory_resolver.cpp,ob_drop_directory_resolver.h,ob_drop_directory_stmt.h,ob_drop_func_resolver.cpp,ob_drop_func_resolver.h,ob_drop_func_stmt.h,ob_drop_location_resolver.cpp,ob_drop_location_resolver.h,ob_drop_location_stmt.cpp,ob_drop_location_stmt.h,ob_drop_sequence_resolver.cpp,ob_drop_sequence_resolver.h,ob_drop_tablegroup_resolver.cpp,ob_drop_tablegroup_resolver.h,ob_drop_tablegroup_stmt.h,ob_sequence_resolver.h,ob_sequence_stmt.h,ob_storage_cache_ddl_util.cpp}
+/src/sql/resolver/ddl/{ob_storage_cache_ddl_util.h,ob_tablegroup_resolver.cpp,ob_tablegroup_resolver.h,ob_tablegroup_stmt.h}
+/src/sql/resolver/dml/{ob_sequence_namespace_checker.cpp,ob_sequence_namespace_checker.h}
+/src/sql/resolver/xa/{ob_xa_commit_resolver.cpp,ob_xa_commit_resolver.h,ob_xa_end_resolver.cpp,ob_xa_end_resolver.h,ob_xa_prepare_resolver.cpp,ob_xa_prepare_resolver.h,ob_xa_rollback_resolver.cpp,ob_xa_rollback_resolver.h,ob_xa_start_resolver.cpp,ob_xa_start_resolver.h,ob_xa_stmt.h}
+/src/sql/rewrite/ObRewriteRule
+/src/storage/access/{ob_index_skip_scanner.h,ob_multiple_multi_skip_scan_merge.cpp,ob_multiple_multi_skip_scan_merge.h,ob_multiple_skip_scan_merge.cpp,ob_multiple_skip_scan_merge.h}
+/src/storage/blocksstable/{ob_bloom_filter_data_reader.cpp,ob_bloom_filter_data_reader.h,ob_bloom_filter_data_writer.cpp,ob_bloom_filter_data_writer.h,ob_bloom_filter_load_task.cpp,ob_bloom_filter_load_task.h,ob_macro_block_bloom_filter.cpp,ob_macro_block_bloom_filter.h,ob_major_checksum_info.cpp,ob_major_checksum_info.h,ob_shared_macro_block_manager.cpp,ob_shared_macro_block_manager.h,ob_sstable_private_object_cleaner.cpp,ob_sstable_private_object_cleaner.h,ob_storage_object_rw_info.cpp}
+/src/storage/compaction/{ob_compaction_dag_ranker.cpp,ob_compaction_dag_ranker.h,ob_tenant_status_cache.cpp,ob_tenant_status_cache.h}
+/src/storage/concurrency_control/{ob_data_validation_service.cpp,ob_data_validation_service.h}
+/src/storage/deadlock/{ob_deadlock_detector_rpc.cpp,ob_deadlock_detector_rpc.h,ob_deadlock_message.cpp,ob_deadlock_message.h}
+/src/storage/deadlock/ob_lcl_scheme/{ob_lcl_batch_sender_thread.cpp,ob_lcl_batch_sender_thread.h,ob_lcl_message.cpp,ob_lcl_message.h}
+/src/storage/memtable/{ob_memtable_block_reader.cpp,ob_memtable_block_reader.h,ob_memtable_block_row_scanner.cpp,ob_memtable_block_row_scanner.h}
+/src/storage/meta_mem/{ob_tablet_leak_checker.cpp,ob_tablet_leak_checker.h}
+/src/storage/meta_store/{ob_tenant_seq_generator.cpp,ob_tenant_seq_generator.h,ob_tenant_storage_meta_service.h}
+/src/storage/tablelock/{ob_table_lock_rpc_client.cpp,ob_table_lock_rpc_client.h}
+/src/storage/tx/{ob_leak_checker.h,ob_tx_retain_ctx_mgr.cpp,ob_tx_retain_ctx_mgr.h,ob_xa_define.cpp,ob_xa_define.h}
+/src/storage/tx_storage/{ob_tenant_freezer_rpc.h,ob_tenant_mem_limit_getter.h}
+/tools/deploy/{check_archive_progress.sql,function.map,ocitest_sys_configure.sql}
+/tools/deploy/mysql_test/include/{check_storage_cache_policy_prewarm_task.inc,create_basic_tablegroups_mysql.inc,drop_basic_tablegroups_mysql.inc,storage_cache_check_index.inc,storage_cache_check_task.inc,storage_cache_check_verified_part.inc,tde_cloud.inc,wait_set_enable_major_freeze.inc}
+/tools/deploy/mysql_test/r/mysql/{create2.result,create3.result,create_table_with_max_used_part_id.result,create_tablegroup_with_tablegroup_id.result,ddl_on_core_table_supplement.result,expire.result,expire_bug5328455.result,expire_index.result,expire_index_trxdel.result,expire_trx.result,expire_trx2.result,expire_trx_drop_tbl.result,expire_trx_modifydata.result,expire_trx_nop.result,expire_trx_replace.result,expire_trx_replace2.result,expire_trx_update.result,expire_unique_index_trxdel.result,index_05_create_id.result,join_dist_remote_bug_pushdown.result,pl_dbms_debug.result,rpc_stream_compress.result.no,selectotherdb.result,show_create_tablegroup.result,sql_filter.result,tablegroup_collate.result,tenant2.ce.result,tenant2.result,tenant_space_table_refresh.result,trx_expire_alter_drop_add_col.result,trx_expire_alter_drop_add_col_idx.result,trx_expire_idx_unique_merge_step.result}
+/tools/deploy/mysql_test/r/mysql/{trx_expire_more_oper.result,trx_expire_step_merge_num.result,zaddlmajor_gt64times_expire_trx.result}
+/tools/deploy/mysql_test/sql_test_template/ddl_template.test
+/tools/deploy/mysql_test/t/{create_tablegroup_with_tablegroup_id.test,ddl_on_core_table_supplement.test,expire.test,expire_bug5328455.test,expire_index.test,expire_index_trxdel.test,expire_trx.test,expire_trx2.test,expire_trx_drop_tbl.test,expire_trx_modifydata.test,expire_trx_nop.test,expire_trx_replace.test,expire_trx_replace2.test,expire_trx_update.test,expire_unique_index_trxdel.test,index_05_create_id.test,join_dist_remote_bug_pushdown.test,rpc_stream_compress.test.no,selectotherdb.test,show_create_tablegroup.test,tablegroup_collate.test,tenant2.test,trx_expire_alter_drop_add_col.test,trx_expire_alter_drop_add_col_idx.test,trx_expire_idx_unique_merge_step.test,trx_expire_more_oper.test,trx_expire_step_merge_num.test,zaddlmajor_gt64times_expire_trx.test}
+/tools/deploy/mysql_test/test_suite/alloc_op/r/mysql/{remote_plan.result,remote_plan.slave.result}
+/tools/deploy/mysql_test/test_suite/alloc_op/t/remote_plan.test
+/tools/deploy/mysql_test/test_suite/alter/r/mysql/{alter_log_archive_option.result,alter_table_with_algorithm_or_lock_opt.result}
+/tools/deploy/mysql_test/test_suite/alter/t/{alter_log_archive_option.test,alter_table_with_algorithm_or_lock_opt.test}
+/tools/deploy/mysql_test/test_suite/auto_inc/r/mysql/{auto_increment_mode.result,auto_increment_role_change.result}
+/tools/deploy/mysql_test/test_suite/auto_inc/t/{auto_increment_mode.test,auto_increment_role_change.test}
+/tools/deploy/mysql_test/test_suite/create_table/r/mysql/{create_table_in_tablegroup_with_max_used_part_id.result,create_table_with_column_id.result,create_table_with_max_used_part_id.result}
+/tools/deploy/mysql_test/test_suite/create_table/t/{create_table_with_column_id.test,create_table_with_max_used_part_id.test}
+/tools/deploy/mysql_test/test_suite/das/r/mysql/das_remote_execution_shchema_bug.result
+/tools/deploy/mysql_test/test_suite/das/t/das_remote_execution_shchema_bug.test
+/tools/deploy/mysql_test/test_suite/dblink/r/mysql/sequence_for_dblink_mysql.result
+/tools/deploy/mysql_test/test_suite/dblink/t/sequence_for_dblink_mysql.test
+/tools/deploy/mysql_test/test_suite/dcl/r/mysql/{binlog_priv.result,mock_proxy_priv.result,sequence_priv.result}
+/tools/deploy/mysql_test/test_suite/dcl/t/{binlog_priv.test,mock_proxy_priv.test,sequence_priv.test,ssl_bkmi_check.inc}
+/tools/deploy/mysql_test/test_suite/ddl/r/mysql/{create_logfile_group.result,create_server_mock.result,create_tablegroup_enable_pg.result,create_tablegroup_with_sharding.result,mock_cmpt.result,orig_default_value.result,tablegroup_add_different_partitions_mysql.result,tablegroup_add_tables_in_different_databases.result}
+/tools/deploy/mysql_test/test_suite/ddl/t/{create_logfile_group.test,create_server_mock.test,create_tablegroup_with_sharding.test,mock_cmpt.test,orig_default_value.test,tablegroup_add_different_partitions_mysql.test,tablegroup_add_tables_in_different_databases.test}
+/tools/deploy/mysql_test/test_suite/delete/r/mysql/delete_remote.result
+/tools/deploy/mysql_test/test_suite/delete/t/delete_remote.test
+/tools/deploy/mysql_test/test_suite/enum_and_set/r/mysql/enum_and_set_config_hints.result
+/tools/deploy/mysql_test/test_suite/enum_and_set/t/enum_and_set_config_hints.test
+/tools/deploy/mysql_test/test_suite/expr/r/mysql/{disable_so_udf.result,mysql_udf_seri_bug.result}
+/tools/deploy/mysql_test/test_suite/expr/t/{disable_so_udf.test,mysql_udf_seri_bug.test}
+/tools/deploy/mysql_test/test_suite/format_outline_qa/r/mysql/{format_outline_basic.result,format_outline_basic.slave.result,format_outline_use.result,format_outline_use.slave.result}
+/tools/deploy/mysql_test/test_suite/format_outline_qa/t/{format_outline_basic.test,format_outline_use.test}
+/tools/deploy/mysql_test/test_suite/hierarchical_query/r/mysql/hierarchical_ddl.result
+/tools/deploy/mysql_test/test_suite/hint/r/mysql/optimize_index_ss.result
+/tools/deploy/mysql_test/test_suite/hint/t/optimize_index_ss.test
+/tools/deploy/mysql_test/test_suite/histogram/r/mysql/histogram_syntax_mysql.result
+/tools/deploy/mysql_test/test_suite/histogram/t/histogram_syntax_mysql.test
+/tools/deploy/mysql_test/test_suite/hkscs_utf16le_sqlqa/r/mysql/{ctype_sjis_myisam.result,ctype_tis620_myisam_mysql.result,ctype_utf16le_myisam.result}
+/tools/deploy/mysql_test/test_suite/hkscs_utf16le_sqlqa/t/{ctype_sjis_myisam.test,ctype_tis620_myisam_mysql.test,ctype_utf16le_myisam.test}
+/tools/deploy/mysql_test/test_suite/inner_table/r/mysql/{all_virtual_unit.result,tenant_virtual_charset.result,tenant_virtual_concurrent_limit_sql.result,tenant_virtual_outline.result,tenant_virtual_outline_bug.result,test_check_archive.result}
+/tools/deploy/mysql_test/test_suite/inner_table/t/{tenant_virtual_charset.test,tenant_virtual_concurrent_limit_sql.test,tenant_virtual_outline.test,tenant_virtual_outline_bug.test}
+/tools/deploy/mysql_test/test_suite/insert/r/mysql/insert_up_many_conflicts.slave.result
+/tools/deploy/mysql_test/test_suite/major_freeze/r/mysql/{all_tenant_major_freeze.result,checksum_error.result,sys_tenant_major_freeze.result,tenant_major_freeze.result}
+/tools/deploy/mysql_test/test_suite/major_freeze/t/{all_tenant_major_freeze.test,checksum_error.test,sys_tenant_major_freeze.test,tenant_major_freeze.test}
+/tools/deploy/mysql_test/test_suite/mysql57_t/r/mysql/{csv_alter_table.result,csv_not_null.result,heap_auto_increment.result,myisam-blob.result,strict_autoinc_1myisam.result,type_temporal_upgrade.result}
+/tools/deploy/mysql_test/test_suite/mysql57_t/t/{csv_alter_table.test,csv_not_null.test,heap_auto_increment.test,myisam-blob.test,strict_autoinc_1myisam.test,type_temporal_upgrade.test}
+/tools/deploy/mysql_test/test_suite/mysql8_t_1/include/{index_merge_intersect_dml.inc,mrr_myisam_tests.inc,mysql_upgrade_cleanup.inc,mysql_upgrade_preparation.inc,no_checkpoint_end.inc,no_checkpoint_start.inc,no_running_event_scheduler.inc,skip_scan_data.inc,skip_scan_query.inc,skip_scan_test.inc}
+/tools/deploy/mysql_test/test_suite/mysql8_t_1/r/mysql/{almost_full.result,archive.result,archive_bitfield.result,blackhole.result,csv.result,heap.result,heap_btree.result,heap_hash.result,index_merge_intersect_dml.result,merge_innodb.result,mix2_myisam.result,myisam.result,myisam_debug.result,myisam_icp.result,myisam_mrr.result,myisampack.result,ps_2myisam.result}
+/tools/deploy/mysql_test/test_suite/mysql8_t_1/t/{almost_full.test,archive.test,archive_bitfield.test,blackhole.test,csv.test,heap.test,heap_btree.test,heap_hash.test,index_merge_intersect_dml.test,merge_innodb.test,mix2_myisam.test,myisam.test,myisam_debug.test,myisam_icp.test,myisam_mrr.test,myisampack.test,ps_2myisam.test}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/include/{check_events_off.inc,get_ndb_epochs.inc,handler.inc,have_component_keyring_file.inc,have_memcached_sasl.inc,have_udf.inc,index_merge_intersect_dml.inc,install_group_replication_plugin.inc,install_replication_observers_example.inc,install_semisync.inc,install_semisync_replica.inc,install_semisync_source.inc,mysql_upgrade_cleanup.inc,mysql_upgrade_preparation.inc,no_checkpoint_end.inc,no_checkpoint_start.inc,no_running_event_scheduler.inc,null_key_myisam.inc,running_event_scheduler.inc,skip_scan_data.inc,skip_scan_query.inc,skip_scan_test.inc,uninstall_group_replication_plugin.inc,uninstall_replication_observers_example.inc,uninstall_semisync.inc,uninstall_semisync_replica.inc,uninstall_semisync_source.inc,wait_for_ndb_committed_to_binlog.inc}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/r/mysql/{alter_table_myisam.result,archive_skip_lock_nowait.result,bug46760_myisam.result,check_constraints_myisam.result,create-big_myisam.result,create_select_tmp_myisam.result,csv_myisam.result,ctype_binary_myisam.result,ctype_cp1251_myisam.result,ctype_latin1_de_myisam.result,ctype_latin1_myisam.result,ctype_latin2_ch_myisam.result,ctype_uca_myisam.result,ctype_ucs_myisam.result,ctype_utf16_myisam.result,ctype_utf16_uca_myisam.result,dd_is_compatibility_ci_myisam.result,dd_is_compatibility_cs_myisam.result,delete_all_rows_myisam.result,delete_myisam.result,filter_single_col_idx_big_myisam.result,filter_single_col_idx_small_myisam.result,foreign_key_myisam.result,func_date_add_myisam.result,func_str_myisam.result,function_defaults_myisam.result,grant4_myisam.result,having_myisam.result,heap_btree_myisam.result,heap_hash_myisam.result}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/r/mysql/{information_schema_statistics_myisam.result,insert_myisam.result,insert_select_myisam.result,insert_update_myisam.result,key_myisam.result,limit_myisam.result,locking_clause_myisam.result,memory_skip_lock_nowait.result,metadata_myisam.result,multi_update_myisam.result,myisam_optimize_table.result,null_key_all_myisam.result,olap_myisam.result,opt_hints_join_order_myisam.result,partition_check_myisam.result,partition_not_supported_myisam.result,ps_w_max_indexes_64_myisam.result,session_tracker_trx_state_myisam.result,show_check_ci_myisam.result,show_check_cs_myisam.result,skip_scan.result,skip_scan_myisam.result,slow_log_extra_myisam.result,sp_trans_myisam.result,temp_table_myisam.result,temptable_myisam.result,time_zone2_myisam.result,trigger-trans_myisam.result,trigger_before_not_null_myisam.result,trigger_myisam.result}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/r/mysql/{type_bit_myisam.result,type_blob_myisam.result,type_datetime_myisam.result,type_float_myisam.result,type_newdecimal_myisam.result,type_set_myisam.result,type_timestamp_myisam.result,union_myisam.result,update_myisam.result,view_myisam.result,window_functions_myisam.result}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/t/{alter_table_myisam.test,archive_skip_lock_nowait.test,bug46760_myisam.test,check_constraints_myisam.test,create-big_myisam.test,create_select_tmp_myisam.test,csv_myisam.test,ctype_binary_myisam.test,ctype_cp1251_myisam.test,ctype_latin1_de_myisam.test,ctype_latin1_myisam.test,ctype_latin2_ch_myisam.test,ctype_uca_myisam.test,ctype_ucs_myisam.test,ctype_utf16_myisam.test,ctype_utf16_uca_myisam.test,dd_is_compatibility_ci_myisam.test,dd_is_compatibility_cs_myisam.test,delete_all_rows_myisam.test,delete_myisam.test,filter_single_col_idx_big_myisam.test,filter_single_col_idx_small_myisam.test,foreign_key_myisam.test,func_date_add_myisam.test,func_str_myisam.test,function_defaults_myisam.test,grant4_myisam.test,having_myisam.test,heap_btree_myisam.test,heap_hash_myisam.test,information_schema_statistics_myisam.test,insert_myisam.test}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/t/{insert_select_myisam.test,insert_update_myisam.test,key_myisam.test,limit_myisam.test,locking_clause_myisam.test,memory_skip_lock_nowait.test,metadata_myisam.test,multi_update_myisam.test,myisam_optimize_table.test,null_key_all_myisam.test,olap_myisam.test,opt_hints_join_order_myisam.test,partition_check_myisam.test,partition_not_supported_myisam.test,ps_w_max_indexes_64_myisam.test,session_tracker_trx_state_myisam.test,show_check_ci_myisam.test,show_check_cs_myisam.test,skip_scan.test,skip_scan_myisam.test,slow_log_extra_myisam.test,sp_trans_myisam.test,temp_table_myisam.test,temptable_myisam.test,time_zone2_myisam.test,trigger-trans_myisam.test,trigger_before_not_null_myisam.test,trigger_myisam.test,type_bit_myisam.test,type_blob_myisam.test,type_datetime_myisam.test,type_float_myisam.test,type_newdecimal_myisam.test}
+/tools/deploy/mysql_test/test_suite/mysql8_t_2/t/{type_set_myisam.test,type_timestamp_myisam.test,union_myisam.test,update_myisam.test,view_myisam.test,window_functions_myisam.test}
+/tools/deploy/mysql_test/test_suite/naaj_mysql_sqlqa/include/explain_blob_na.inc
+/tools/deploy/mysql_test/test_suite/ob_all_charset_specific_sqlqa/r/mysql/{ctype_uca_myisam.result,ctype_utf16_myisam.result,ctype_utf16_uca_myisam.result}
+/tools/deploy/mysql_test/test_suite/ob_all_charset_specific_sqlqa/t/{ctype_uca_myisam.test,ctype_utf16_myisam.test,ctype_utf16_uca_myisam.test}
+/tools/deploy/mysql_test/test_suite/optimizer/r/mysql/optimizer_bug2025021800107246031_mysql.result
+/tools/deploy/mysql_test/test_suite/optimizer/t/optimizer_bug2025021800107246031_mysql.test
+/tools/deploy/mysql_test/test_suite/outline/r/mysql/{alter_outline.result,concurrent_with_outline.result,concurrent_with_sql_id.result,concurrent_with_sql_id.slave.result,create_charge_outline_1.result,create_charge_outline_1.slave.result,create_charge_outline_1_mysql.result,create_outline.ce.result,create_outline.result,create_pttrans_outline_delete.result,create_pttrans_outline_insert.result,create_pttrans_outline_select.result,create_pttrans_outline_update.result,outline_concurrent.result,outline_datatype.result}
+/tools/deploy/mysql_test/test_suite/outline/t/{alter_outline.test,concurrent_with_outline.test,concurrent_with_sql_id.test,create_charge_outline_1.test,create_charge_outline_1_mysql.test,create_outline.test,create_pttrans_outline_delete.test,create_pttrans_outline_insert.test,create_pttrans_outline_select.test,create_pttrans_outline_update.test,outline_concurrent.test,outline_datatype.test}
+/tools/deploy/mysql_test/test_suite/part_mg/r/mysql/{alter_tablegroup_timeout.result,basic_partition_mg4.result,basic_partition_mg_pg4.result,pg_add_partition_list.result,pg_add_partition_range.result,pg_basic_subpartition.result,pg_gc.result}
+/tools/deploy/mysql_test/test_suite/part_mg/t/{alter_tablegroup_timeout.test,basic_partition_mg4.test,basic_partition_mg_pg4.test,pg_add_partition_list.test,pg_add_partition_range.test,pg_basic_subpartition.test,pg_gc.test}
+/tools/deploy/mysql_test/test_suite/partition/r/mysql/{partition_alter2_1_myisam.result,partition_alter2_2_myisam.result,partition_myisam.result,partition_recover_myisam.result}
+/tools/deploy/mysql_test/test_suite/partition/t/{partition_alter2_1_myisam.test,partition_alter2_2_myisam.test,partition_myisam.test,partition_recover_myisam.test}
+/tools/deploy/mysql_test/test_suite/partition_double_mysql_sqlqa/r/mysql/partition_double_rqg_mysql.result
+/tools/deploy/mysql_test/test_suite/partition_double_mysql_sqlqa/t/partition_double_rqg_mysql.test
+/tools/deploy/mysql_test/test_suite/pl/r/mysql/{pl_alter_compile_mysql.result,pl_bug_concurrent_mysql.result,pl_sys_dispatch_call_mysql.result}
+/tools/deploy/mysql_test/test_suite/pl/t/{pl_alter_compile_mysql.test,pl_bug_concurrent_mysql.test,pl_sys_dispatch_call_mysql.test}
+/tools/deploy/mysql_test/test_suite/plan_cache/r/mysql/{remote_local_insert.result,remote_uncertain.result}
+/tools/deploy/mysql_test/test_suite/plan_cache/t/{remote_local_insert.test,remote_uncertain.test}
+/tools/deploy/mysql_test/test_suite/prepare_text_sqlqa/r/mysql/prepare_ddl_mysql.result
+/tools/deploy/mysql_test/test_suite/prepare_text_sqlqa/t/prepare_ddl_mysql.test
+/tools/deploy/mysql_test/test_suite/ps/t/{disable_ps.sql,enable_ps.sql}
+/tools/deploy/mysql_test/test_suite/resolver/r/mysql/resolver_bug49316810_mysql.result
+/tools/deploy/mysql_test/test_suite/resolver/t/resolver_bug49316810_mysql.test
+/tools/deploy/mysql_test/test_suite/security/r/mysql/{bug_2025051500109030408.result,connection_control.result}
+/tools/deploy/mysql_test/test_suite/security/t/{bug_2025051500109030408.test,connection_control.test}
+/tools/deploy/mysql_test/test_suite/static_engine/r/mysql/{calc_partition_pseudo_column.result,expr_nextval.result,pseudo_partition_id_bugs.result,remote_plan_mysql.result}
+/tools/deploy/mysql_test/test_suite/static_engine/t/{calc_partition_pseudo_column.test,expr_nextval.test,pseudo_partition_id_bugs.test,remote_plan_mysql.test}
+/tools/deploy/mysql_test/test_suite/storage/r/mysql/{compat_syntax.result,tenant_max_disk_size.result}
+/tools/deploy/mysql_test/test_suite/storage/t/{compat_syntax.test,tenant_max_disk_size.test}
+/tools/deploy/mysql_test/test_suite/view/r/mysql/{dba_ob_tablegroups_views.result,gv_ob_units.result}
+/tools/deploy/mysql_test/test_suite/view/t/{dba_ob_tablegroups_views.test,gv_ob_units.test}
+/tools/deploy/obd/{bmsql.obproxy.yaml.template,obproxy.yaml.template}
+/tools/deploy/plugin_dir/udf_example.cc
+/tools/obtest/{migrate_test.sh,need_arbitration,upgrade_conf_proxy,upgrade_from_beta.sh,upgrade_test.sh}
+/tools/obtest/farm/disabled/outline_quick.cases
+/tools/obtest/include/{all_user_upgrade.inc,check_archive_finish.inc,check_storage_cache_policy_prewarm_task.inc,check_tablegroup_schema.inc,feature_case_in_upgrade.inc,hu_check_auto_upgrade.inc,migrate_errsim.inc,online_ddl_compat_check_upgraded.inc,query_for_upgrade.inc,rename_table_add_table_lock_upgraded.inc,set_archive_lag_target.inc,upgrade_from_1.2.0_for_proxy.sql,upgrade_from_434_member_change.inc}
+/tools/obtest/plugin_dir/udf_example.cc
+/tools/obtest/r/clog/{3003_z3_obs1_partition1_leader_down_yulan.result,3004_z3_obs1_partition1_leader_down_yulan.result,3005_z3_obs1_partition1_leader_down_yulan.result,3006_z3_obs1_partition1_follower_down_yulan.result,3007_z3_obs1_partition1_follower_down_yulan.result,3008_z3_obs1_partition1_zone_restart_when_sync_yulan.result,3009_z3_obs1_partition1_zone_restart_when_nsync_yulan.result,3010_z3_obs1_partition1_zone_restart_when_unconfirmed_yulan.result,3011_z3_obs1_partition1_many_times_switch_yulan.result,3012_z3_obs1_partition1_blocknet_leader_and_follower_yulan.result,3013_z3_obs1_partition1_leader_change_1_yulan.result,3014_z3_obs1_partition1_leader_change_2_yulan.result,3015_z3_obs1_partition1_leader_change_3_yulan.result,3016_z3_obs1_partition1_leader_change_4_yulan.result,3017_z3_obs1_partition1_reconfirm_1_yulan.result,3018_z3_obs1_partition1_reconfirm_2_yulan.result}
+/tools/obtest/r/clog/{3019_z3_obs1_partition1_reconfirm_3_yulan.result,3020_z3_obs1_partition1_reconfirm_4_yulan.result,3021_z3_obs1_partition1_reconfirm_5_yulan.result,3022_z3_obs1_partition1_reconfirm_6_yulan.result,3023_z3_obs1_partition1_frozen_1_yulan.result,3024_z3_obs1_partition1_frozen_2_yulan.result,3025_z3_obs1_partition1_frozen_3_yulan.result,3026_clog_histroy_reporter_online_qianxi.result,3027_clog_histroy_reporter_migrate_qianxi.result,3028_clog_histroy_reporter_delete_server_qianxi.result,3029_C222_p1_readonly_replica_cascading.result,3030_stop_zone_with_region_zone_1.result,3031_c111_p3_stop_server_not_election_xianlin.result,3032_c111_p3_stop_zone_not_election_xianlin.result,3033_c111_p1_restart_after_delete_partition.result,3034_c111_p3_is_in_sync_xianlin.result,3036_c22222_auto_remove_invalid_child.result,3037_c222_logonly_replica_type_change.result}
+/tools/obtest/r/clog/{3039_batch_change_member_list_xianlin.result,3040_C22222_cascading_replace_block_net.result,3041_c111_p1_many_restart_without_eof.result,3041_test_election_for_rdonly_replica.result,3042_auto_remove_paxos_child.result,3043_c111_p0_election_blacklist_xianlin_lh.result,3043_clog_persistent_compress.result,3044_c111_server_blacklist_haofan.result,3045_c111_election_network_broken_haofan.result,3048_ofs_single_zone_R_to_F_clog.result,3049_ofs_proxy_service_load.result,3053_rpc_compress.result}
+/tools/obtest/r/column_redefinition/{recover_table_idempotence_finish.result,recover_table_stuck_in_check_dag_exit.result}
+/tools/obtest/r/errsim_primary_standby/16048_c1_c1_failover_with_schema_history_recycle.result
+/tools/obtest/r/errsim_storage/{batch_migrate_add_member_error.result,batch_migrate_add_member_part_error.result,batch_migrate_remove_member_error.result,batch_migrate_remove_member_error2.result,batch_migrate_remove_member_error_3.result,batch_migrate_remove_member_part_error.result,batch_migrate_with_no_batch_change_member_list.result,bug_11895548_migrate_delete_error_msg.result,bug_16344706_all_migrate_all_and_write_checkpoint_and_reboot.result,bug_9953306_server_exit_during_migrating.result,cancel_migration_task.result,drop_table_during_migrate_chagne_member.result,migrate_change_member_first_succ.result,migrate_change_member_list_retry.result,migrate_check_sub_task_fail.result,migrate_commit_fail.result,migrate_disk_full.result,migrate_fail_during_wait_replay.result,migrate_finish_task_fail.result,migrate_partition_with_second_index.result,migrate_rebuild_during_wait_replay.result}
+/tools/obtest/r/errsim_storage/{migrate_rebuild_failed.result,migrate_retry_during_fetch_macro_block.result,migrate_retry_errsim.result,migrate_schedule_fail.result,migrate_src_disk_error.result,migrate_status.result,migrate_to_disk_full.result,migrate_to_exist_partition_during_merge.result,migrate_to_exist_partition_with_high_version.result,migrate_to_exist_partition_with_low_version.result,migrate_to_exist_partition_with_same_version.result,test_add_pg_failed_during_migrate.result,test_empty_pg_migrate.result,test_gc_after_migrate_fail.result,upgrade_from_1_4_72_with_rebuild.result,upgrade_from_3_0_0_with_rebuild.result}
+/tools/obtest/r/errsim_storage_compaction/common/ls_migration_minor_merge.result
+/tools/obtest/r/errsim_storage_compaction/shared_nothing/medium_with_migrate.result
+/tools/obtest/r/errsim_storage_compaction/truncate_info/truncate_trans_abort_and_migrate.result
+/tools/obtest/r/errsim_storage_ddl/{migrate_lob_ddl_with_data_tablet_checkpoint.result,migrate_with_lob_ddl.result,recover_restore_table_basic_mysql.result,recover_restore_table_cst_error_mysql.result,recover_restore_table_index_error.result}
+/tools/obtest/r/logservice/{1101_test_arbitration_service_basic.result,1102_test_arbitration_service_advance.result,1103_test_arbitration_service_diff_clusterid.result,1104_test_mutil_cluter_share_arb.result,1105_test_arbitration_degradation_policy.result,1106_test_arbitration_service_basic_part01.result,1107_test_arbitration_service_basic_part02.result,1108_test_arbitration_service_basic_part03.result,upgrade_from_4_2_1_0_net_standby_with_log_compress.result,upgrade_from_4_2_1_0_with_log_compress.result}
+/tools/obtest/r/logservice/archive_restore/{2507_update_ls_archive_task.result,2509_sw_bigger_piece.result,2510_send_task_cumulation.result,2511_switch_leader_after_archive_suspend.result,2516_basic_net_standby_with_compression.result,2517_archive_stop_with_ls_gc.result,2519_gc_wait_archive.result,2520_ls_gc_delay.result,2523_restore_in_second_round.result,2526_archive_empty_first_piece.result,2528_basic_net_standby_for_log_compress.result,2530_archive_sender_error.result}
+/tools/obtest/r/minor_freeze/migrate_trans_table.result
+/tools/obtest/r/ob_connector/{1009_datasource_migrate_flow_imm_in_switch_leader.result,1010_datasource_migrate_flow_imm_in_stop_zone.result,3003_blacklist_server.result}
+/tools/obtest/r/online_ddl/{create_index_with_migrate.result,upgrade_at_last_progressive_version.result,upgrade_basic.result,upgrade_with_add_column.result,upgrade_with_alter_rewrite_merge_version.result}
+/tools/obtest/r/outline/concurrent_limit_sql.result
+/tools/obtest/r/primary_standby/{14022_p1_c1_c1_snapshot_schema_after_upgrade.result,14026_p1_c1_c1_c1_snapshot_schema_after_upgrade.result,14027_p1_c111_location_cache_sql_refresh.result,16043_c1_c111_create_tenant_E.result}
+/tools/obtest/r/quick/{basic_function.result,basic_function_for_schema_split.result}
+/tools/obtest/r/rootservice/{cangming_cancel_migrate_unit_when_dst_offline.result,cangming_migrate_sys_unit_may_fail_2.result,cangming_migrate_unit.result,cangming_migrate_unit_dest_server_down.result,cangming_migrate_unit_rs_job.result,cangming_migrate_unit_when_create_tenant.result,jingyu_add_replica_when_paxos_replica_number_already_expected.result,jingyu_basic_migrate_and_locality.result,jingyu_bugtest_decrease_sys_cpu_usaged_caused_by_arb_service.result,jingyu_check_required_size_before_migrate.result,jingyu_config_change_when_upgrade.result,jingyu_create_ls_when_2F1A_with_1F1A_restart.result,jingyu_create_ls_when_2F1A_with_1F_down.result,jingyu_create_ls_when_4F1A_with_2F_down.result,jingyu_create_ls_with_arb_while_replace_arb.result,jingyu_do_ddl_when_upgrade.result,jingyu_migrate_before_ls_is_removed.result,jingyu_migrate_unit_while_switch_rs.result}
+/tools/obtest/r/rootservice/{jingyu_permanent_offline_with_arbitration_service.result,jingyu_replace_arbitration_service_several_times.result,jingyu_replicate_migrate_permanent_offline_with_duplicate_table.result,jingyu_stop_server_with_arb_service_down.result,jingyu_switch_rs_while_migrate_unit.result,jinqian_alter_system_migrate_ls_replica.result,jinqian_alter_system_replica_with_arbitration.result,jinqian_alter_system_unit_in_migrate_and_add.result,jinqian_auto_cancel_migrate_task_in_schedule_status.result,jinqian_basic_migrate_and_locality.result,jinqian_parallel_migration_avoid_rebuild_problem.result,jinqian_parallel_migration_basic_function_and_switch_rs.result,jinqian_parallel_migration_configuration_item_function.result,jinqian_parallel_migration_task_conflict_rules.result,jinqian_parallel_migration_task_priority.result,jinqian_tenant_dr_upgrade_compatibility.result}
+/tools/obtest/r/rootservice/{wenyu_create_table_if_not_exists.result,xingrui_broadcast_schema_when_has_stopped_server.result,xingrui_schema_history_recycle.result,yanli_all_tablegroup_balance.result,yanli_ls_migrate_task.result,yanli_standby_member_list_change_arb.result,yanli_sys_ls_report.result,yanli_upgrade_from_4_2_3_standby_change_member_list.result,yiping_2F1A_switchover.result,yiping_bootstrap_flag.result,yiping_ob_table_schema_in_upgrade.result,yiping_upgrade_alter_table_increase_progressive_merge_round.result,yiping_upgrade_check_unit_gc.result,yiping_upgrade_finish.result,yiping_upgrade_order.result,yiping_upgrade_root_inspection_error.result,zhennan_meta_table_checker.result,zhoulan_dataversion_arb_verify.result,zhoulan_upgrade_from_4_3_0_1_standby_dataversion.result,ziqian_schema_history_recycler_skip_new_tenant.result}
+/tools/obtest/r/rs/{1009_c3_p0_merge_obs_operate_yangxiu.result,1021_c333_p0_leader_manage_yangxiu.result,1030_c222_p0_partition_rebalance_switch_leader_when_copy_yangxiu.result,1038_c222_p1_end_migrate_when_server_block.result,1039_c222_p1_choose_valid_candidate_while_leader_migrating.result,1043_c222_p3_only_generate_executable_migrate_task.result,1044_c1_p1_auto_upgrade_virtual_schema.result,1045_c222_p0_no_loop_migrate_task.result,1050_c333_p2_unit_offline_while_anohter_unit_migrating.result,1056_c222_p2_enable_upgrade_mode.result,1060_c222_p1_unit_id_not_updated_if_dest_replica_exist_while_migrating.result,1063_c222_p1_do_not_migrate_rs.result,1078_c222_p0_switch_partition_group_leader_while_migrating.result,1096_c222_p1_migrate_sys_unit_may_fail.result,1099_c444_alter_tablegroup_migrate_fail.result,1105_c222_p1_repeat_migrate_replica_remove_member.result}
+/tools/obtest/r/rs/{1125_c33333_p0_balance_migrate_full_unit.result,1164_migrate_F_unit_add_R_replica_conflict_when_R_at_all_server.result,1169_c222_emergency_migrate_rebuild_replica.result,1301_c222_cancel_migrate_unit.result,1426_c222_p1_migrate_unit_counter_block.result,1438_c333_p2_locality_check_with_unit_migrate.result,1448_c333_p0_tablegroup_option.result,1449_c333_p0_tablegroup_option_inherit.result,1456_c111_p1_tablegroup_max_part_id.result,1470_c222_p1_migrate_unit_required_size.result,1548_c111_create_tablegroup.result,1553_c222_tablegroup_locality_1.result,1607_c2_migrate_not_grant_unit.result,1611_c3_unit_migrate_rs_job.result,1612_c3_migrate_unit_fail_rs_job.result,1626_c33_remote_sql_proxy.result,1710_c1111_ofs_stop_server.result,1718_c222_shrink_unit_pre_check_unit_can_migrate.result,1728_migrate_unit_check.result}
+/tools/obtest/r/rs/{upgrade_from_1_4_71_when_create_tenant_tables_failed.result}
+/tools/obtest/r/rs_success/{1551_c111_create_table_set_tablegroup.result,1555_c222_set_default_tablegroup.result,1594_c1_upgrade_stage.result}
+/tools/obtest/r/sql/remote_plan.result
+/tools/obtest/r/storage/{1005_c1_p9_basic_restore_point.result,1006_c1_p9_replay_restore_point.result,1007_c222_p1_pg_migrate_in_after_out.result,1008_c1_p9_restore_point_deal_index.result,6518166_6518574_migrate_out_and_in.result,6518574_6514466_6496560_migrate.result,6522584_migrate_back_after_restart.result,6582203_check_step_merge_num_info_after_migrate.result,6596878_migrate_same_memstore.result,7519742_migrate_out_and_in_before_merge.result,8569225_migrate_low_to_high_verion.result,9890226_migrate_release_stores.result,block_encrypt.result,buf_minor_migrate.result,buf_minor_migrate2.result,bug_16344706_all_migrate_all_and_write_checkpoint_and_reboot.result,build_index_when_migrating.result,cancel_batch_migrate.result,cancel_part_of_batch_migrate.result,check_migrate_macro_block_bug_10683732.result,continue_migrate.result,drop_table_during_migrating_copy_data.result}
+/tools/obtest/r/storage/{drop_tenant_during_migrate_chagne_member.result,empty_memstore_migrate.result,fast_recovery_migrate_in_fail.result,general_migrate.result,general_migrate_lob.result,leader_migrate.result,leader_migrate_lob.result,log_replica_batch_migrate.result,log_replica_migrate.result,logic_migrate.result,logic_migrate_lob.result,logic_migrate_vp_table.result,migrate_between_minor_merge_and_major_merge.result,migrate_build_index_partition.result,migrate_checksum_error.result,migrate_dest_add_member_at_background.result,migrate_diff_version_leader_and_src.result,migrate_disk_full.result,migrate_empty_partition.result,migrate_fulfilled_blocks.result,migrate_in_and_out.result,migrate_incr_on_zero_data.result,migrate_increment_basedata.result,migrate_low_to_high_verion_lob.result,migrate_many_indexes.result,migrate_out_and_in_with_restart.result}
+/tools/obtest/r/storage/{migrate_rebuild_during_copy_base_data.result,migrate_rebuild_during_copy_base_data_and_fail.result,migrate_rebuild_no_need.result,migrate_rebuild_on_leader.result,migrate_replica_fail_with_fast_recovery_1.result,migrate_replica_fail_with_fast_recovery_1_single_zone.result,migrate_replica_fail_with_fast_recovery_2.result,migrate_replica_fail_with_fast_recovery_2_single_zone.result,migrate_replica_fail_with_fast_recovery_3.result,migrate_replica_fail_with_fast_recovery_3_single_zone.result,migrate_replica_fail_with_fast_recovery_4.result,migrate_replica_fail_with_fast_recovery_4_single_zone.result,migrate_replica_fail_with_fast_recovery_5.result,migrate_replica_fail_with_fast_recovery_5_single_zone.result,migrate_replica_fail_with_fast_recovery_6.result,migrate_replica_fail_with_fast_recovery_6_single_zone.result,migrate_replica_fail_with_fast_recovery_7.result}
+/tools/obtest/r/storage/{migrate_replica_fail_with_fast_recovery_7_single_zone.result,migrate_replica_fail_with_fast_recovery_8.result,migrate_replica_fail_with_fast_recovery_8_single_zone.result,migrate_restart_dest_server.result,migrate_retry.result,migrate_src_down_after_handover.result,migrate_src_retakeover.result,migrate_table_with_global_index.result,migrate_with_dirty_sstable.result,migrate_without_minor_version.result,migrate_zero_partition.result,migrator_fail_and_gc.result,migrator_fail_and_reboot_and_freeze.result,migrator_fail_and_reboot_and_retry.result,migrator_fail_and_retry.result,minor_merge_during_migrate_and_reboot.result,multi_major_tables_migrate.result,multi_minor_tables_migrate.result,normal_batch_migrate.result,ob_on_ofs.result,ofs_clean_zone_dir.result,ofs_replica_F_and_L_exchange.result,ofs_replica_F_and_R_exchange.result,ofs_replica_L_basic.result}
+/tools/obtest/r/storage/{ofs_replica_R_to_F_basic.result,ofs_replica_R_to_F_with_recovery_1.result,ofs_replica_create_R_replica_basic.result,ofs_replica_migrate_F_replica_multi_zone.result,ofs_replica_migrate_F_replica_single_zone.result,ofs_replica_migrate_R_replica_multi_zone.result,ofs_replica_migrate_R_replica_single_zone.result,ofs_single_zone_upgrade_isolate_server.result,ofs_single_zone_upgrade_isolate_server_single_unit.result,ofs_single_zone_upgrade_stop_server.result,ofs_single_zone_upgrade_stop_server_single_unit.result,old_version_replica_online.result,pg_create_index.result,pg_empty_migrate.result,pg_manager_partition_truncate_table_migrate.result,pg_migrate.result,pg_multi_partition_create_index.result,pg_multi_partition_migrate.result,physical_minor_sstable_migrate.result,preprocess_migrate_dest.result,preprocess_migrate_normal.result,preprocess_migrate_source.result}
+/tools/obtest/r/storage/{preprocess_recover_migrate_normal.result,test_minor_merge_with_storage_schema_after_migrate.result}
+/tools/obtest/r/storage_kernal/{1001_migrate_after_create_global_index_acquire_snapshot.result,migrate_restore_point_basic.result}
+/tools/obtest/r/trx_succ/migrate_trans_table.result
+/tools/obtest/r/tsc/{storage_0006_migrate.result,storage_0007_batch_migrate.result}
+/tools/obtest/sql/backup_restore/{base_tablegroup_definition.sql,inc_tablegroup_definition.sql}
+/tools/obtest/t/{black_test.list,ha_farm_test.list,run_errsim_test.list}
+/tools/obtest/t/clog/{3003_z3_obs1_partition1_leader_down_yulan.test,3004_z3_obs1_partition1_leader_down_yulan.test,3005_z3_obs1_partition1_leader_down_yulan.test,3006_z3_obs1_partition1_follower_down_yulan.test,3007_z3_obs1_partition1_follower_down_yulan.test,3008_z3_obs1_partition1_zone_restart_when_sync_yulan.test,3009_z3_obs1_partition1_zone_restart_when_nsync_yulan.test,3011_z3_obs1_partition1_many_times_switch_yulan.test,3012_z3_obs1_partition1_blocknet_leader_and_follower_yulan.test,3025_z3_obs1_partition1_frozen_3_yulan.test,3026_clog_histroy_reporter_online_qianxi.test,3029_C222_p1_readonly_replica_cascading.test,3030_stop_zone_with_region_zone_1.test,3031_c111_p3_stop_server_not_election_xianlin.test,3032_c111_p3_stop_zone_not_election_xianlin.test,3033_c111_p1_restart_after_delete_partition.test,3034_c111_p3_is_in_sync_xianlin.test,3036_c22222_auto_remove_invalid_child.test}
+/tools/obtest/t/clog/{3037_c222_logonly_replica_type_change.test,3041_c111_p1_many_restart_without_eof.test,3041_test_election_for_rdonly_replica.test,3042_auto_remove_paxos_child.test,3043_clog_persistent_compress.test,3044_test_new_ilog_dump_strategy_for_gc.test,3045_test_new_ilog_dump_strategy_for_migrate.test,3046_test_new_ilog_dump_strategy_for_migrate.test,3048_ofs_single_zone_R_to_F_clog.test,3049_ofs_proxy_service_load.test,3050_rebuild_when_leader_reconfirm.test,3051_rebuild_when_has_no_leader.test,3053_rpc_compress.test}
+/tools/obtest/t/column_redefinition/{recover_table_idempotence_finish.test,recover_table_stuck_in_check_dag_exit.test}
+/tools/obtest/t/compat/{farm_upgrade_from_4_3_0_1.test,farm_upgrade_from_4_3_0_1_rc2.test,farm_upgrade_from_4_3_0_1_rc2_standby.test,farm_upgrade_from_4_3_0_1_standby.test,farm_upgrade_from_4_3_0_rc1.test,farm_upgrade_from_4_3_0_rc1_nobarrier.test,farm_upgrade_from_4_3_0_rc1hotfix.test,farm_upgrade_from_4_3_0_rc1hotfix_standby.test,farm_upgrade_from_4_3_1_0.test,farm_upgrade_from_4_3_1_0_standby.test,farm_upgrade_from_4_3_2_0.test,farm_upgrade_from_4_3_2_0_standby.test,farm_upgrade_from_4_3_2_1.test,farm_upgrade_from_4_3_2_1_standby.test,farm_upgrade_from_4_3_2_release.test,farm_upgrade_from_4_3_2_release_standby.test,farm_upgrade_from_4_3_3_0.test,farm_upgrade_from_4_3_3_0_standby.test,farm_upgrade_from_4_3_3_1.test,farm_upgrade_from_4_3_3_1_standby.test,farm_upgrade_from_4_3_3_release.test,farm_upgrade_from_4_3_3_release_standby.test,farm_upgrade_from_4_3_4_0.test}
+/tools/obtest/t/compat/{farm_upgrade_from_4_3_4_0_standby.test,farm_upgrade_from_4_3_4_1.test,farm_upgrade_from_4_3_4_1_standby.test,farm_upgrade_from_4_3_4_release.test,farm_upgrade_from_4_3_4_release_standby.test,farm_upgrade_from_4_3_5_0.test,farm_upgrade_from_4_3_5_0_ss.test,farm_upgrade_from_4_3_5_0_standby.test,farm_upgrade_from_4_3_5_1.test,farm_upgrade_from_4_3_5_1_ss.test,farm_upgrade_from_4_3_5_1_standby.test,farm_upgrade_from_4_3_5_2.test,farm_upgrade_from_4_3_5_2_ss.test,farm_upgrade_from_4_3_5_2_standby.test,upgrade_from_2_2_1_standby.test,upgrade_from_2_2_20.test,upgrade_from_2_2_20_5zone.test,upgrade_from_2_2_20_standby.test,upgrade_from_2_2_30.test,upgrade_from_2_2_30_standby.test,upgrade_from_2_2_50_standby.test,upgrade_from_2_2_50_standby_lite.test,upgrade_from_2_2_60_standby_lite.test,upgrade_from_2_2_75_standby.test}
+/tools/obtest/t/compat/{upgrade_from_2_2_75_standby_with_archive_log_lite.test,upgrade_from_2_2_77_standby.test,upgrade_from_3_0_0_with_migrate.test,upgrade_from_4_3_0_1.test,upgrade_from_4_3_0_1_rc2.test,upgrade_from_4_3_0_rc1.test,upgrade_from_4_3_0_rc1_nobarrier.test,upgrade_from_4_3_0_rc1hotfix.test,upgrade_from_4_3_0_release.test,upgrade_from_4_3_1_0.test,upgrade_from_4_3_1_0_beta.test,upgrade_from_4_3_1_release.test,upgrade_from_4_3_2_0.test,upgrade_from_4_3_2_1.test,upgrade_from_4_3_2_release.test,upgrade_from_4_3_3_0.test,upgrade_from_4_3_3_0ga.test,upgrade_from_4_3_3_0hotfix1.test,upgrade_from_4_3_3_1.test,upgrade_from_4_3_3_release.test,upgrade_from_4_3_4_release.test,upgrade_with_mysqltest.inc,upgrade_with_mysqltest_from_2_2_20.test}
+/tools/obtest/t/compat/include_for_obtest/{abri_obdocker.inc,afetr_data_insert_tablegroup.inc,data_insert_obdocker_tablegroup.inc,prepare_for_cache_policy.inc,test_for_cache_policy.inc,upgrade_checker_obdocker.inc,upgradecher_obdocker.inc}
+/tools/obtest/t/compat/include_for_obtest_ss/{abri_obdocker.inc,afetr_data_insert_tablegroup.inc,data_insert_obdocker_tablegroup.inc,upgrade_checker_obdocker.inc,upgradecher_obdocker.inc}
+/tools/obtest/t/errsim_primary_standby/16048_c1_c1_failover_with_schema_history_recycle.test
+/tools/obtest/t/errsim_storage/{batch_migrate_add_member_error.test,batch_migrate_add_member_part_error.test,batch_migrate_remove_member_error.test,batch_migrate_remove_member_error2.test,batch_migrate_remove_member_error_3.test,batch_migrate_remove_member_part_error.test,batch_migrate_with_no_batch_change_member_list.test,bug_11895548_migrate_delete_error_msg.test,bug_16344706_all_migrate_all_and_write_checkpoint_and_reboot.test,bug_9953306_server_exit_during_migrating.test,cancel_migration_task.test,drop_table_during_migrate_chagne_member.test,migrate_change_member_first_succ.test,migrate_change_member_list_retry.test,migrate_check_sub_task_fail.test,migrate_commit_fail.test,migrate_create_partition_failed.test,migrate_disk_full.test,migrate_fail_during_wait_replay.test,migrate_finish_task_fail.test,migrate_partition_with_second_index.test,migrate_rebuild_during_wait_replay.test}
+/tools/obtest/t/errsim_storage/{migrate_rebuild_failed.test,migrate_retry_during_fetch_macro_block.test,migrate_retry_errsim.test,migrate_schedule_fail.test,migrate_src_disk_error.test,migrate_status.test,migrate_to_disk_full.test,migrate_to_exist_partition_during_merge.test,migrate_to_exist_partition_with_high_version.test,migrate_to_exist_partition_with_low_version.test,migrate_to_exist_partition_with_same_version.test,test_add_pg_failed_during_migrate.test,test_empty_pg_migrate.test,test_gc_after_migrate_fail.test,upgrade_from_1_4_72_with_rebuild.test,upgrade_from_3_0_0_with_rebuild.test}
+/tools/obtest/t/errsim_storage_compaction/common/ls_migration_minor_merge.test
+/tools/obtest/t/errsim_storage_compaction/shared_nothing/medium_with_migrate.test
+/tools/obtest/t/errsim_storage_compaction/truncate_info/truncate_trans_abort_and_migrate.test
+/tools/obtest/t/errsim_storage_ddl/{migrate_lob_ddl_with_data_tablet_checkpoint.test,migrate_with_lob_ddl.test,recover_restore_table_basic_mysql.test,recover_restore_table_cst_error_mysql.test,recover_restore_table_index_error.test}
+/tools/obtest/t/gc/{3027_clog_histroy_reporter_migrate_qianxi.test.no,general_migrate_lob.test.no,leader_migrate_lob.test.no,log_replica_migrate.test.no,migrate_low_to_high_verion_lob.test.no,migrate_rebuild_during_copy_base_data.test.no,migrator_fail_and_gc.test.no,old_version_replica_online.test.no}
+/tools/obtest/t/logservice/{1101_test_arbitration_service_basic.test,1102_test_arbitration_service_advance.test,1103_test_arbitration_service_diff_clusterid.test,1104_test_mutil_cluter_share_arb.test,1105_test_arbitration_degradation_policy.test,1106_test_arbitration_service_basic_part01.test,1107_test_arbitration_service_basic_part02.test,1108_test_arbitration_service_basic_part03.test,upgrade_from_4_2_1_0_net_standby_with_log_compress.test,upgrade_from_4_2_1_0_with_log_compress.test}
+/tools/obtest/t/logservice/archive_restore/{2507_update_ls_archive_task.test,2509_sw_bigger_piece.test,2510_send_task_cumulation.test,2511_switch_leader_after_archive_suspend.test,2516_basic_net_standby_with_compression.test,2517_archive_stop_with_ls_gc.test,2519_gc_wait_archive.test,2520_ls_gc_delay.test,2523_restore_in_second_round.test,2526_archive_empty_first_piece.test,2528_basic_net_standby_for_log_compress.test,2530_archive_sender_error.test}
+/tools/obtest/t/minor_freeze/migrate_trans_table.test
+/tools/obtest/t/ob_connector/{1009_datasource_migrate_flow_imm_in_switch_leader.test,1010_datasource_migrate_flow_imm_in_stop_zone.test,3003_blacklist_server.test}
+/tools/obtest/t/online_ddl/{create_index_with_migrate.test,upgrade_at_last_progressive_version.test,upgrade_basic.test,upgrade_with_add_column.test,upgrade_with_alter_rewrite_merge_version.test}
+/tools/obtest/t/outline/concurrent_limit_sql.test
+/tools/obtest/t/primary_standby/{14022_p1_c1_c1_snapshot_schema_after_upgrade.test.no,14026_p1_c1_c1_c1_snapshot_schema_after_upgrade.test,14027_p1_c111_location_cache_sql_refresh.test,16043_c1_c111_create_tenant_E.test}
+/tools/obtest/t/quick/{basic_function.test,basic_function_for_schema_split.test}
+/tools/obtest/t/quick/include/{migrate_unit.inc,migrate_unit_check_gc.inc,permanent_offline_migrate_unit.inc}
+/tools/obtest/t/rootservice/{cangming_cancel_migrate_unit_when_dst_offline.test,cangming_migrate_sys_unit_may_fail_2.test,cangming_migrate_unit.test,cangming_migrate_unit_dest_server_down.test,cangming_migrate_unit_rs_job.test,cangming_migrate_unit_when_create_tenant.test,jingyu_add_replica_when_paxos_replica_number_already_expected.test,jingyu_basic_migrate_and_locality.test,jingyu_bugtest_decrease_sys_cpu_usaged_caused_by_arb_service.test,jingyu_check_required_size_before_migrate.test,jingyu_config_change_when_upgrade.test,jingyu_create_ls_when_2F1A_with_1F1A_restart.test,jingyu_create_ls_when_2F1A_with_1F_down.test,jingyu_create_ls_when_4F1A_with_2F_down.test,jingyu_create_ls_with_arb_while_replace_arb.test,jingyu_do_ddl_when_upgrade.test,jingyu_migrate_before_ls_is_removed.test,jingyu_migrate_unit_while_switch_rs.test,jingyu_permanent_offline_with_arbitration_service.test}
+/tools/obtest/t/rootservice/{jingyu_replace_arbitration_service_several_times.test,jingyu_replicate_migrate_permanent_offline_with_duplicate_table.test,jingyu_stop_server_with_arb_service_down.test,jingyu_switch_rs_while_migrate_unit.test,jinqian_alter_system_migrate_ls_replica.test,jinqian_alter_system_replica_with_arbitration.test,jinqian_alter_system_unit_in_migrate_and_add.test,jinqian_auto_cancel_migrate_task_in_schedule_status.test,jinqian_basic_migrate_and_locality.test,jinqian_parallel_migration_avoid_rebuild_problem.test,jinqian_parallel_migration_basic_function_and_switch_rs.test,jinqian_parallel_migration_configuration_item_function.test,jinqian_parallel_migration_task_conflict_rules.test,jinqian_parallel_migration_task_priority.test,jinqian_tenant_dr_upgrade_compatibility.test,wenyu_create_table_if_not_exists.test,xingrui_broadcast_schema_when_has_stopped_server.test}
+/tools/obtest/t/rootservice/{xingrui_schema_history_recycle.test,yanli_all_tablegroup_balance.test,yanli_ls_migrate_task.test,yanli_standby_member_list_change_arb.test,yanli_sys_ls_report.test,yanli_upgrade_from_4_2_3_standby_change_member_list.test,yiping_2F1A_switchover.test,yiping_bootstrap_flag.test,yiping_ob_table_schema_in_upgrade.test,yiping_upgrade_alter_table_increase_progressive_merge_round.test,yiping_upgrade_check_unit_gc.test,yiping_upgrade_finish.test,yiping_upgrade_order.test,yiping_upgrade_root_inspection_error.test,zhennan_meta_table_checker.test,zhoulan_dataversion_arb_verify.test,zhoulan_upgrade_from_4_3_0_1_standby_dataversion.test,ziqian_schema_history_recycler_skip_new_tenant.test}
+/tools/obtest/t/rs/{1009_c3_p0_merge_obs_operate_yangxiu.test,1021_c333_p0_leader_manage_yangxiu.test,1030_c222_p0_partition_rebalance_switch_leader_when_copy_yangxiu.test,1038_c222_p1_end_migrate_when_server_block.test,1039_c222_p1_choose_valid_candidate_while_leader_migrating.test,1044_c1_p1_auto_upgrade_virtual_schema.test,1045_c222_p0_no_loop_migrate_task.test,1056_c222_p2_enable_upgrade_mode.test,1078_c222_p0_switch_partition_group_leader_while_migrating.test,1099_c444_alter_tablegroup_migrate_fail.test,1105_c222_p1_repeat_migrate_replica_remove_member.test,1124_c22233_migrate_unit_with_readonly_replica.test.raw,1164_migrate_F_unit_add_R_replica_conflict_when_R_at_all_server.test,1301_c222_cancel_migrate_unit.test,1426_c222_p1_migrate_unit_counter_block.test,1438_c333_p2_locality_check_with_unit_migrate.test,1456_c111_p1_tablegroup_max_part_id.test}
+/tools/obtest/t/rs/{1470_c222_p1_migrate_unit_required_size.test,1548_c111_create_tablegroup.test,1553_c222_tablegroup_locality_1.test,1710_c1111_ofs_stop_server.test,1718_c222_shrink_unit_pre_check_unit_can_migrate.test,1728_migrate_unit_check.test}
+/tools/obtest/t/rs_success/{1551_c111_create_table_set_tablegroup.test,1555_c222_set_default_tablegroup.test,1594_c1_upgrade_stage.test}
+/tools/obtest/t/session/kill_remote_session.test
+/tools/obtest/t/sql/remote_plan.test
+/tools/obtest/t/storage/{1005_c1_p9_basic_restore_point.test,1006_c1_p9_replay_restore_point.test,1007_c222_p1_pg_migrate_in_after_out.test,1008_c1_p9_restore_point_deal_index.test,6518166_6518574_migrate_out_and_in.test,6518574_6514466_6496560_migrate.test,6522584_migrate_back_after_restart.test,6582203_check_step_merge_num_info_after_migrate.test,6596878_migrate_same_memstore.test,7519742_migrate_out_and_in_before_merge.test,8569225_migrate_low_to_high_verion.test,9890226_migrate_release_stores.test,block_encrypt.test,buf_minor_migrate.test,buf_minor_migrate2.test,build_index_when_migrating.test,cancel_batch_migrate.test,cancel_part_of_batch_migrate.test,check_migrate_macro_block_bug_10683732.test,continue_migrate.test,drop_table_during_migrating_copy_data.test,drop_tenant_during_migrate_chagne_member.test,empty_memstore_migrate.test,fast_recovery_migrate_in_fail.test}
+/tools/obtest/t/storage/{general_migrate.test,leader_migrate.test,leader_migrate_lob.test,log_replica_batch_migrate.test,logic_migrate.test,logic_migrate_lob.test,logic_migrate_vp_table.test,migrate_between_minor_merge_and_major_merge.test,migrate_build_index_partition.test,migrate_checksum_error.test,migrate_dest_add_member_at_background.test,migrate_diff_version_leader_and_src.test,migrate_empty_partition.test,migrate_fulfilled_blocks.test,migrate_in_and_out.test,migrate_incr_on_zero_data.test,migrate_increment_basedata.test,migrate_many_indexes.test_later,migrate_out_and_in_with_restart.test,migrate_rebuild_during_copy_base_data.test,migrate_rebuild_during_copy_base_data_and_fail.test_later,migrate_rebuild_on_leader.test_later,migrate_replica_fail_with_fast_recovery_1.test,migrate_replica_fail_with_fast_recovery_1_single_zone.test,migrate_replica_fail_with_fast_recovery_2.test}
+/tools/obtest/t/storage/{migrate_replica_fail_with_fast_recovery_2_single_zone.test,migrate_replica_fail_with_fast_recovery_3.test,migrate_replica_fail_with_fast_recovery_3_single_zone.test,migrate_replica_fail_with_fast_recovery_4.test,migrate_replica_fail_with_fast_recovery_4_single_zone.test,migrate_replica_fail_with_fast_recovery_5.test,migrate_replica_fail_with_fast_recovery_5_single_zone.test,migrate_replica_fail_with_fast_recovery_6.test,migrate_replica_fail_with_fast_recovery_6_single_zone.test,migrate_replica_fail_with_fast_recovery_7.test,migrate_replica_fail_with_fast_recovery_7_single_zone.test,migrate_replica_fail_with_fast_recovery_8.test,migrate_replica_fail_with_fast_recovery_8_single_zone.test,migrate_restart_dest_server.test,migrate_src_down_after_handover.test,migrate_src_retakeover.test,migrate_table_with_global_index.test,migrate_with_dirty_sstable.test}
+/tools/obtest/t/storage/{migrate_without_minor_version.test,migrate_zero_partition.test,migrator_fail_and_gc.test,migrator_fail_and_reboot_and_freeze.test,migrator_fail_and_reboot_and_retry.test,migrator_fail_and_retry.test,minor_merge_during_migrate_and_reboot.test,multi_major_tables_migrate.test,multi_minor_tables_migrate.test,normal_batch_migrate.test,ob_on_ofs.test,ofs_clean_zone_dir.test,ofs_replica_F_and_L_exchange.test,ofs_replica_F_and_R_exchange.test,ofs_replica_L_basic.test,ofs_replica_R_to_F_basic.test,ofs_replica_R_to_F_with_recovery_1.test,ofs_replica_create_R_replica_basic.test,ofs_replica_migrate_F_replica_multi_zone.test,ofs_replica_migrate_F_replica_single_zone.test,ofs_replica_migrate_R_replica_multi_zone.test,ofs_replica_migrate_R_replica_single_zone.test,ofs_single_zone_upgrade_isolate_server.test,ofs_single_zone_upgrade_isolate_server_single_unit.test}
+/tools/obtest/t/storage/{ofs_single_zone_upgrade_stop_server.test,ofs_single_zone_upgrade_stop_server_single_unit.test,pg_create_index.test,pg_empty_migrate.test,pg_manager_partition_truncate_table_migrate.test,pg_migrate.test,pg_multi_partition_create_index.test,pg_multi_partition_migrate.test,physical_minor_sstable_migrate.test,preprocess_migrate_dest.test,preprocess_migrate_normal.test,preprocess_migrate_source.test,preprocess_recover_migrate_normal.test,test_minor_merge_with_storage_schema_after_migrate.test}
+/tools/obtest/t/storage_kernal/{1001_migrate_after_create_global_index_acquire_snapshot.test,migrate_restore_point_basic.test}
+/tools/obtest/t/trx_succ/migrate_trans_table.test
+/tools/obtest/t/tsc/{storage_0006_migrate.test,storage_0007_batch_migrate.test}
+/tools/script/wr_snapshot_test.py
+/unittest/logservice/mock_logservice_container/mock_election_user.h
+/unittest/observer/mysql/test_query_response_time.cpp
+/unittest/pl/test_compile.result
+/unittest/rootserver/{fake_freeze_info_manager.cpp,fake_zone_merge_manager.cpp,fake_zone_merge_manager.h,test_tenant_all_zone_merge_strategy.cpp}
+/unittest/share/{test_cluster_id_hash_conflict.cpp,test_storage_file.cpp}
+/unittest/share/deadlock/{mock_deadlock_rpc.h,test_lcl_message_drop.cpp}
+/unittest/share/schema/ob_schema_test_utils.cpp
+/unittest/sql/resolver/expr/test_res_type_serialization.cpp
+/unittest/sql/resolver/result/test_resolver_tablegroup.result
+/unittest/sql/resolver/sql/test_resolver_tablegroup.test
+/unittest/storage/partition_schema.ini
+/unittest/storage/mockcontainer/{mock_ob_partition_service.h,mock_ob_server.cpp,mock_ob_server.h}
 --------------------------------------------------------
 # Config the ignored fold to escape the Chinese scan by GLOB wildcard
 --------------------------------------------------------
 # Set md5 of pemFile string to filter
 # This section must be end up with '--------------------------------------------------------'!!!
+**/tools/deploy/wallet/SE.key.pem
+  f97c83f882d68e584b1082fff3cdb957
+**/tools/deploy/wallet/SE.cert.pem
+  1038a03ed5ea43b9402bd83ff5833125
+**/tools/deploy/wallet/SS.key.pem
+  b4c54e42914ea3cda2396ff363909ef9
+**/tools/deploy/wallet/SS.cert.pem
+  bdb9e53d4b0a8f0780497f91d39b7e28
+**/tools/deploy/wallet/client-key_error.pem
+  a46fef5078c11447802b0c493c687563
+**/tools/deploy/wallet/client-cert_error.pem
+  8b765baf7128c3543205894b0e544ec3
+**/tools/deploy/wallet/client-key.pem
+  e900f819ca6be21a04ac6cc7a7f84e33
+**/tools/deploy/wallet/client-cert.pem
+  cf5447ad9eb9638d0e85c8ca59280653
+**/tools/deploy/wallet/server-key.pem
+  c2493a7311ac6f6139e23c6796ec9e66
+**/tools/deploy/wallet/server-cert.pem
+  2e7dd25765e5558f8f781a9f55110f59
+**/tools/deploy/wallet/ca.pem
+  e1e4fd0ed230935d7d50c6cd2330f575
+**/tools/deploy/wallet/ca_error.pem
+  d1c7c13649df2e2d25da97d3a86da45c
+**/tools/deploy/mysql_test/test_suite/online_ddl/r/oracle/change_column_type_varchar_to_longer_varchar_oracle.result
+  5036e88e490a588c0f5813552297cc21
+**/tools/deploy/mysql_test/test_suite/error_code_oracle_sqlqa/t/error_code_pls_oracle.test
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/error_code_oracle_sqlqa/r/oracle/error_code_pls_oracle.result
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/pl/r/oracle/pl_dbms_random_oracle.result
+  be16daebc04e5ea314ab971fa7ee4a54
+**/tools/deploy/mysql_test/test_suite/pl/r/oracle/pl_bugs_14_oracle.result
+  9c342119ad3480d7a8341a10eb1cdf8f
+**/tools/deploy/mysql_test/test_suite/pl/t/pl_bugs_14_oracle.test
+  9c342119ad3480d7a8341a10eb1cdf8f
+**tools/deploy/mysql_test/test_suite/groupby/data/t1.sql
+  0bb6df2b42f9da7d09ae338ca995d286
+**tools/deploy/mysql_test/test_suite/groupby/data/t9.sql
+  113bc4e2278a856f4b6f2689fea9435e
 --------------------------------------------------------

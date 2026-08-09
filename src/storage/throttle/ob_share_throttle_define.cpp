@@ -16,8 +16,8 @@
 
 
 #include "ob_share_throttle_define.h"
-#include "lib/alloc/alloc_func.h"
 #include "storage/throttle/ob_throttle_info.h"
+#include "storage/allocator/ob_vector_allocator.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_task_define.h"
 
@@ -32,26 +32,11 @@ int64_t FakeAllocatorForTxShare::resource_unit_size()
   return SHARE_RESOURCE_UNIT_SIZE;
 }
 
-int64_t get_tx_share_memory_limit()
-{
-  static constexpr int64_t LOW_RESOURCE_MEMORY_BUDGET = (32LL << 30) / 5; // 6.4 GiB
-  static constexpr int64_t MEMORY_FRACTION_DENOMINATOR = 16;
-  static constexpr int64_t SMALL_TX_SHARE_MEMORY_NUMERATOR = 11; // 68.75%
-  static constexpr int64_t LARGE_TX_SHARE_MEMORY_NUMERATOR = 13; // 81.25%
-  const int64_t memory_budget = lib::get_memory_budget();
-  const int64_t numerator = memory_budget <= LOW_RESOURCE_MEMORY_BUDGET
-      ? SMALL_TX_SHARE_MEMORY_NUMERATOR
-      : LARGE_TX_SHARE_MEMORY_NUMERATOR;
-  return memory_budget / MEMORY_FRACTION_DENOMINATOR * numerator
-      + memory_budget % MEMORY_FRACTION_DENOMINATOR * numerator
-          / MEMORY_FRACTION_DENOMINATOR;
-}
-
 void FakeAllocatorForTxShare::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &trigger_percentage,
                                                    int64_t &max_duration)
 {
-  resource_limit = get_tx_share_memory_limit();
+  resource_limit = lib::get_tx_share_memory_limit();
   trigger_percentage = GCONF.writing_throttling_trigger_percentage;
   max_duration = GCONF.writing_throttling_maximum_duration;
 }
@@ -61,6 +46,31 @@ void FakeAllocatorForTxShare::adaptive_update_limit(const int64_t holding_size,
                                                     int64_t &resource_limit,
                                                     int64_t &last_update_limit_ts,
                                                     bool &is_updated)
+{
+  UNUSEDx(holding_size, config_specify_resource_limit, resource_limit,
+          last_update_limit_ts);
+  is_updated = false;
+}
+
+int64_t FakeAllocatorForVector::resource_unit_size()
+{
+  return ObVectorAllocator::resource_unit_size();
+}
+
+void FakeAllocatorForVector::init_throttle_config(int64_t &resource_limit,
+                                                  int64_t &trigger_percentage,
+                                                  int64_t &max_duration)
+{
+  resource_limit = INT64_MAX;
+  trigger_percentage = 100;
+  max_duration = GCONF.writing_throttling_maximum_duration;
+}
+
+void FakeAllocatorForVector::adaptive_update_limit(const int64_t holding_size,
+                                                   const int64_t config_specify_resource_limit,
+                                                   int64_t &resource_limit,
+                                                   int64_t &last_update_limit_ts,
+                                                   bool &is_updated)
 {
   UNUSEDx(holding_size, config_specify_resource_limit, resource_limit,
           last_update_limit_ts);

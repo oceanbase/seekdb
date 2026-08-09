@@ -39,7 +39,6 @@ ObLogHandler::ObLogHandler() : self_(),
                                replay_service_(NULL),
                                deps_lock_(),
                                append_cost_stat_("[PALF STAT APPEND COST TIME]", 1 * 1000 * 1000),
-                               local_append_enabled_(false),
                                is_offline_(false),
                                get_max_decided_scn_debug_time_(OB_INVALID_TIMESTAMP)
 {
@@ -75,7 +74,6 @@ int ObLogHandler::init(const common::ObAddr &self,
     replay_service_ = replay_service;
     apply_status_->inc_ref();
     append_cost_stat_.set_extra_info("");
-    local_append_enabled_.store(false, std::memory_order_release);
     self_ = self;
     palf_env_ = palf_env;
     is_in_stop_state_ = false;
@@ -127,7 +125,6 @@ int ObLogHandler::stop()
 void ObLogHandler::destroy()
 {
   WLockGuard guard(lock_);
-  local_append_enabled_.store(false, std::memory_order_release);
   is_inited_ = false;
   is_offline_ = false;
   is_in_stop_state_ = true;
@@ -154,12 +151,7 @@ int ObLogHandler::append(const void *buffer,
                          SCN &scn)
 {
   int ret = OB_SUCCESS;
-  if (!local_append_enabled_.load(std::memory_order_acquire)) {
-    ret = OB_NOT_MASTER;
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      CLOG_LOG(INFO, "local append is disabled", K(ret), K(nbytes), K(ref_scn));
-    }
-  } else if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
+  if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
@@ -176,45 +168,10 @@ int ObLogHandler::append_big_log(const void *buffer,
                                  SCN &scn)
 {
   int ret = OB_SUCCESS;
-  if (!local_append_enabled_.load(std::memory_order_acquire)) {
-    ret = OB_NOT_MASTER;
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      CLOG_LOG(INFO, "local big-log append is disabled", K(ret), K(nbytes), K(ref_scn));
-    }
-  } else if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
+  if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, cb, lsn, scn))) {
-  }
-  return ret;
-}
-
-int ObLogHandler::append_imported_group(const palf::LSN &source_lsn,
-                                        const SCN &source_scn,
-                                        const void *buffer,
-                                        const int64_t nbytes)
-{
-  int ret = OB_SUCCESS;
-  if (!source_lsn.is_valid() || !source_scn.is_valid()
-      || OB_ISNULL(buffer) || nbytes <= 0
-      || nbytes > palf::MAX_LOG_BUFFER_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid imported group", K(ret), K(source_lsn), K(source_scn),
-        KP(buffer), K(nbytes));
-  } else {
-    RLockGuard guard(lock_);
-    CriticalGuard(ls_qs_);
-    if (IS_NOT_INIT) {
-      ret = OB_NOT_INIT;
-    } else if (is_in_stop_state_ || is_offline_) {
-      ret = OB_NOT_RUNNING;
-    } else if (OB_FAIL(palf_handle_.append_imported_group(
-        source_lsn, source_scn, buffer, nbytes))) {
-      if (OB_EAGAIN != ret) {
-        CLOG_LOG(WARN, "appending imported group failed", K(ret), K(source_lsn),
-            K(source_scn), K(nbytes));
-      }
-    }
   }
   return ret;
 }
@@ -374,18 +331,6 @@ int ObLogHandler::append_(const void *buffer,
         ret = OB_NOT_INIT;
       } else if (is_in_stop_state_ || is_offline_) {
         ret = OB_NOT_RUNNING;
-      } else if (!local_append_enabled_.load(std::memory_order_acquire)) {
-        // Re-check inside the quiescent critical section so that
-        // fence_local_append_ (set_local_append_enabled(false) +
-        // WaitQuiescent(ls_qs_)) closes the window where a caller that
-        // already passed the entry check still commits via palf_handle_,
-        // advancing end_scn past the cutover_scn captured by
-        // prepare_to_standby and tripping the durably-fenced promotion check.
-        ret = OB_NOT_MASTER;
-        if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-          CLOG_LOG(INFO, "local append is disabled (checked in critical section)",
-              K(ret), K(nbytes), K(ref_scn));
-        }
       } else if (OB_FAIL(palf_handle_.append(opts, buffer, nbytes, ref_scn, lsn, scn))) {
         if (REACH_TIME_INTERVAL(1*1000*1000)) {
           CLOG_LOG(WARN, "palf_handle_ append failed", K(ret), KPC(this));

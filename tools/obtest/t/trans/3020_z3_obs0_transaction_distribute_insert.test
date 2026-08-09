@@ -1,0 +1,157 @@
+# owner: shanyan.g
+# owner group: transaction
+# description: 主要测试跨机insert
+
+#--disable_query_log
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=5);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+#leader上的连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+--disable_result_log
+drop table if exists test01;
+drop table if exists test02;
+drop table if exists test03;
+--enable_result_log
+create table test01 (c1 int primary key, c2 int) partition by hash(c1 % 3) partitions 3;
+create table test02 (c1 int primary key, c2 int) partition by hash(c1 % 3) partitions 6;
+create table test03(i int primary key, c1 varchar(1024), c256 varchar(1024), dt datetime(6), d  datetime(6)) partition by hash(i % 3) partitions 3;
+let $value = aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa;
+
+####################case1:单机跨partition insert场景############################################
+ob1.z1.obs0.switch_partition obtest:test:test01:0;
+ob1.z1.obs0.switch_partition obtest:test:test01:1;
+ob1.z1.obs0.switch_partition obtest:test:test01:2;
+sleep 5;
+ob1.z1.obs0.check_leader obtest:test:test01:0;
+ob1.z1.obs0.check_leader obtest:test:test01:1;
+ob1.z1.obs0.check_leader obtest:test:test01:2;
+#case1.1:正常的跨partition 插入
+connection conn1;
+insert into test01 values(0, 1), (1, 1), (2, 1);
+select * from test01;
+
+#case1.2:事务回滚
+set autocommit=0;
+insert into test01 values(3, 1), (4, 1), (5, 1);
+rollback;
+select * from test01;
+commit;
+
+#case1.3:主键冲突
+--error 1062
+insert into test01 values(0, 1), (1, 1), (2, 1);
+insert into test01 values(3, 1), (4, 1), (5, 1);
+commit;
+select * from test01;
+commit;
+
+#case1.4:insert on duplicate key
+insert into test01 values(0,1), (1, 1), (2, 1) ON DUPLICATE KEY UPDATE c2=c2-1;
+commit;
+select * from test01;
+commit;
+
+####################case2:跨机跨partition操作############################################
+ob1.z1.obs0.switch_partition obtest:test:test02:0;
+ob1.z1.obs0.switch_partition obtest:test:test02:3;
+ob1.z2.obs0.switch_partition obtest:test:test02:1;
+ob1.z2.obs0.switch_partition obtest:test:test02:4;
+ob1.z3.obs0.switch_partition obtest:test:test02:2;
+ob1.z3.obs0.switch_partition obtest:test:test02:5;
+sleep 5;
+ob1.z1.obs0.check_leader obtest:test:test02:0;
+ob1.z1.obs0.check_leader obtest:test:test02:3;
+ob1.z2.obs0.check_leader obtest:test:test02:1;
+ob1.z2.obs0.check_leader obtest:test:test02:4;
+ob1.z3.obs0.check_leader obtest:test:test02:2;
+ob1.z3.obs0.check_leader obtest:test:test02:5;
+
+#case2.1:正常的跨partition 插入
+connection conn1;
+set autocommit=1;
+insert into test02 values(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1);
+select * from test02 where c1 = 0;
+select * from test02 where c1 = 1;
+select * from test02 where c1 = 2;
+select * from test02 where c1 = 3;
+select * from test02 where c1 = 4;
+select * from test02 where c1 = 5;
+
+#ase2.2:事务回滚
+set autocommit=0;
+insert into test02 values(6, 1), (7, 1), (8, 1);
+rollback;
+select * from test02 where c1 = 6;
+select * from test02 where c1 = 7;
+select * from test02 where c1 = 8;
+commit;
+
+#case2.3:主键冲突
+--error 1062
+insert into test02 values(0, 1), (1, 1), (2, 1);
+insert into test02 values(6, 1), (7, 1), (8, 1);
+commit;
+
+select * from test02 where c1 = 0;
+select * from test02 where c1 = 1;
+select * from test02 where c1 = 2;
+select * from test02 where c1 = 6;
+select * from test02 where c1 = 7;
+select * from test02 where c1 = 8;
+commit;
+
+#case2.4:insert on duplicate key
+insert into test02 values(0,1), (1, 1), (2, 1) ON DUPLICATE KEY UPDATE c2=c2-1;
+commit;
+
+select * from test02 where c1 = 0;
+select * from test02 where c1 = 1;
+select * from test02 where c1 = 2;
+commit;
+
+############################case3:大事务场景########################################
+set autocommit = 0;
+set ob_query_timeout=1000000000;
+set ob_trx_timeout=1000000000;
+let $i=0;
+--disable_query_log
+--disable_result_log
+while($i < 2000)
+{
+  eval insert into test03(i,c1,c256,dt,d) values ($i,'$value','$value','2012-10-10 12:00:00','2012-10-10'), ($i+1,'$value','$value','2012-10-10 12:00:00','2012-10-10'), ($i+2,'$value','$value','2012-10-10 12:00:00','2012-10-10');
+  inc $i;
+  inc $i;
+  inc $i;
+}
+--enable_result_log
+--enable_query_log
+commit;
+
+#保证备机已经收到日志
+sleep 2;
+#check数据
+select /*+read_consistency(weak)+*/ count(1) from test03;
+
+#下面两个case，由于sql对错误码处理有问题，1.4.61上暂时不打开，2.0再打开
+#case2 : 跨server强一致性查询
+#--error 1235
+#select * from test01;
+
+#case3 : 跨server update功能
+#--error 1235
+#update test01 set c2 = 0;
+
+#case4 : 跨server delete
+#--error 1235
+#delete from test01;
+
+drop table test01;
+drop table test02;
+drop table test03;

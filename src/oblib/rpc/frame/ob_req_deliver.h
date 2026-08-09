@@ -34,7 +34,9 @@ class ObReqDeliver
 public:
   virtual ~ObReqDeliver() {}
 
+  virtual int init() = 0;
   virtual int deliver(rpc::ObRequest &req) = 0;
+  virtual void stop() = 0;
 
 }; // end of class ObPktDeliver
 

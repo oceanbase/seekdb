@@ -20,7 +20,7 @@
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
 #include "share/io/ob_io_calibration.h"
-#include "observer/scheduler/ob_sys_task_stat.h"
+#include "data_plane/scheduler/ob_sys_task_stat.h"
 namespace oceanbase
 {
 namespace sql

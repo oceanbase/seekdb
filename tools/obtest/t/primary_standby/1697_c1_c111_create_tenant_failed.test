@@ -1,0 +1,47 @@
+#rs
+#msy164651
+#创建租户过程中宕掉一台机器：在创建resource pool成功后，少数派宕机，然后创建租户成功，在机器启动成功后，可以正常补副本；
+ob1=OBI(cluster = 1, proxy_num = 0);
+ob2=OBI(cluster = 1:1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob_connect(conn1, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set debug_sync_timeout = '100000s';
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+#检查备库同步完成
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob2.mysql alter tenant sys set primary_zone = 'z1';
+ob2.mysql set ob_global_debug_sync = 'AFTER_INSERT_FLAG_REPLICA wait_for continue_signal';
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tenant_1', tenant_id, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id', 1, 30;
+#宕机一台机器
+ob2.z3.obs0.force_stop;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'inactive', 1, 30;
+sleep 3;
+connection conn2;
+set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = $tenant_id, 1, 30;
+ob2.z3.obs0.start;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = 1001, c, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 1200;
+ob1.mysql set ob_query_timeout=30000000;
+
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 60;
+connection conn2;
+alter system commit to switchover to primary;
+
+

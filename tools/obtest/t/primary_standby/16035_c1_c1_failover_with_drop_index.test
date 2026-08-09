@@ -1,0 +1,79 @@
+# owner: msy164651
+# description: 本case是为了验证failover时，删除索引中在回滚点构建之后的索引和未生效的索引有重合的情况下的处理
+# 验证在回收站中的索引
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter tenant tt set variables recyclebin = 'on';
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+create table t(c1 int primary key, c2 int, c3 int);
+create table t1(c1 int primary key, c2 int, c3 int);
+create table t2(c1 int primary key, c2 int, c3 int);
+insert into t values (1,1,1);
+select * from t;
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+source include/standby_ddl.inc;
+alter system set debug_sync_timeout = '1000s';
+
+ob1.check_until_timeout select switchover_status from oceanbase.__all_virtual_cluster, TO STANDBY, 500;
+ob2.mysql set global ob_query_timeout = 300000000;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 't', table_id, 1);
+sleep 10;
+#卡住gc点的推进
+ob2.mysql set ob_global_debug_sync = 'BLOCK_FREEZE_INFO_UPDATE wait_for signal';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_REBALANCE_TASK_EXECUTE wait_for signal1';
+sleep 3;
+connection tt1_conn;
+set recyclebin = on;
+create index il on t(c2);
+create table t11(c1 int, c2 int, c3 int, c4 int);
+insert into t11 values (11, 11, 11, 11);
+sleep 3;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where is_restore != 0, 0, 100;
+create index il on t11(c2) local;
+create index ili on t11(c3);
+drop table t11;
+
+ob_connect(mysql_conn, ob1.z1.obs0, root@tt, , test, , USE_MYSQL_CONNECTOR);
+connection mysql_conn;
+create table t11(c1 int, c2 int, c3 int, c4 int);
+insert into t11 values (11, 11, 1,1);
+create table t12 (c1 int primary key, c2 int, c3 int);
+insert into t12 values (11, 11, 1);
+sleep 3;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where is_restore != 0, 0, 100;
+
+create index il on t11(c2) local;
+create index ili on t11(c3);
+drop table t11;
+create index il on t12(c2) local;
+create index ili on t12(c3);
+drop table t12;
+
+#等待备库同步到索引
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_helper, 7, 100;
+#宕机主备库
+
+ob1.force_stop;
+ob2.force_stop;
+sleep 10;
+ob2.start;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where status = 'active', 2, 200;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where zone = 'z1' and role = 1, 1, 100;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';

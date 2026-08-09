@@ -1,3 +1,4 @@
+#include "rootserver/ob_local_management_service.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -19,7 +20,6 @@
 #include "rootserver/freeze/ob_local_major_freeze.h"
 
 #include "share/ob_tablet_meta_table_compaction_operator.h"
-#include "share/schema/ob_schema_getter_guard.h"
 
 namespace oceanbase
 {
@@ -71,19 +71,16 @@ int ObLocalMajorFreeze::init(
   return ret;
 }
 
-int ObLocalMajorFreeze::start(const bool append_mode)
+int ObLocalMajorFreeze::start()
 {
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else {
-    set_log_mode_(append_mode);
-    if (OB_FAIL(major_merge_info_detector_.start())) {
-    } else if (OB_FAIL(merge_scheduler_.start())) {
-    } else if (is_primary_service()) {
-      if (OB_FAIL(daily_launcher_.start())) {
-      }
+  } else if (OB_FAIL(major_merge_info_detector_.start())) {
+  } else if (OB_FAIL(merge_scheduler_.start())) {
+  } else if (is_primary_service()) {
+    if (OB_FAIL(daily_launcher_.start())) {
     }
   }
   return ret;
@@ -152,25 +149,14 @@ void ObLocalMajorFreeze::pause()
   merge_scheduler_.pause();
 }
 
-void ObLocalMajorFreeze::resume(const bool append_mode)
+void ObLocalMajorFreeze::resume()
 {
+  if (is_primary_service()) {
+    daily_launcher_.resume();
+  }
+  snapshot_gc_scn_renewer_.resume();
   major_merge_info_detector_.resume();
   merge_scheduler_.resume();
-  set_log_mode_(append_mode);
-}
-
-void ObLocalMajorFreeze::set_log_mode_(const bool append_mode)
-{
-  major_merge_info_detector_.set_replay_mode(!append_mode);
-  if (is_primary_service()) {
-    if (append_mode) {
-      daily_launcher_.resume();
-      snapshot_gc_scn_renewer_.resume();
-    } else {
-      daily_launcher_.pause();
-      snapshot_gc_scn_renewer_.pause();
-    }
-  }
 }
 
 int ObLocalMajorFreeze::on_become_primary()
@@ -182,9 +168,6 @@ int ObLocalMajorFreeze::on_become_primary()
   } else if (!is_primary_service()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("local major freeze is not primary service", KR(ret));
-  } else if (major_merge_info_detector_.is_replay_mode()) {
-    ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("local major freeze is still in replay mode", KR(ret));
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.on_become_primary())) {
   } else if (OB_FAIL(major_merge_info_detector_.signal())) {
   }
@@ -193,7 +176,13 @@ int ObLocalMajorFreeze::on_become_primary()
 
 bool ObLocalMajorFreeze::is_paused() const
 {
-  return major_merge_info_detector_.is_paused() || merge_scheduler_.is_paused();
+  bool is_paused = (snapshot_gc_scn_renewer_.is_paused()
+      || major_merge_info_detector_.is_paused()
+      || merge_scheduler_.is_paused());
+  if (is_primary_service()) {
+    is_paused = (is_paused || daily_launcher_.is_paused());
+  }
+  return is_paused;
 }
 
 int ObLocalMajorFreeze::set_freeze_info(const ObMajorFreezeReason freeze_reason)

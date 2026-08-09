@@ -1,0 +1,46 @@
+# owner: bin.lb
+# owner group: sql
+# parallel build index
+#
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.create_client;
+
+create table t1 (c1 int primary key, c2 int, c3 int, c4 varchar(512)) compression 'none' partition by hash(c1) partitions 2;
+
+# update tablet_size to 16K
+let $tid = deploy_get_value(ob1.select select max(table_id) v from oceanbase.__all_table_v2, v, 1);
+ob1.mysql update oceanbase.__all_table_v2 set tablet_size = 16384 where table_id = $tid;
+ob1.mysql update oceanbase.__all_table_v2_history set tablet_size = 16384 where table_id = $tid;
+ob1.obs0.restart;
+sleep 30;
+ob1.create_client;
+show create table t1;
+
+let $i=10000;
+--disable_query_log
+while ($i > 0)
+{
+  let $v=deploy_get_value(ob1.get_random_string 256);
+  eval insert into t1 (c1, c2, c3, c4) values ($i, $i, 1, concat('$v'));
+  dec $i;
+}
+--enable_query_log
+
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+sleep 1;
+
+create unique index idx01 on t1(c2) global partition by hash(c2) partitions 2;
+
+show index from t1;
+
+ob1.mysql_p select count(*) > 6 from oceanbase.__all_sql_execute_task;
+
+# test sampling duplicate ranges
+create index idx02 on t1(c3) global partition by hash(c3) partitions 2;
+

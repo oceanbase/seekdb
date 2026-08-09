@@ -118,7 +118,7 @@ private:
   int inner_get(const ObQRIterType type, CachedIteratorNode *&cache_node);
   bool is_washing() const;
   bool is_disabled() const;
-  static const int64_t ITER_POOL_MIN_MEM_THRESHOLD = (32LL << 30) / 5; // 6.4G
+  static const int64_t ITER_POOL_MIN_MEM_THRESHOLD = 4L << 30; // 4G
   static constexpr double ITER_POOL_MAX_MEM_PERCENT = 0.004;
   static const int64_t ITER_POOL_MAX_TABLE_CNT_LIMIT = 6;
   static const int64_t ITER_POOL_MAX_COL_CNT_LIMIT = 32;

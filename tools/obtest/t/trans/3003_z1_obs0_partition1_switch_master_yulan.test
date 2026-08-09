@@ -1,0 +1,55 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试点：多partition，Partition同步个别备机失败但仍然满足多数派，事务执行成功
+# 测试场景：1. 开启事务，阻塞leader和一个备的网络， commit 2. 恢复网络，将这台备切换成主，数据正确
+##
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+ob_connect(conn, ob1.z1.obs0, root@obtest, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+let $leader=deploy_get_value(ob1.get_leader obtest:obtest:t1);
+let $follower_1=deploy_get_value(ob1.get_follower obtest:obtest:t1,1);
+let $follower_2=deploy_get_value(ob1.get_follower obtest:obtest:t1,2);
+
+let $ip=deploy_get_value($follower_2.ip);
+let $port=deploy_get_value($follower_2.mysql_port);
+connect (conn,$ip,admin@obtest,admin,obtest,$port);
+
+connection conn;
+
+set autocommit=0;
+insert into t1 values(1,1,'a');
+insert into t1 values(2,2,'b');
+
+$leader.block_net $follower_1;
+
+sleep 2;
+
+update t1 set c2='aa' where pk=2;
+
+commit;
+
+set autocommit=1;
+
+select * from t1;
+
+$leader.clean_net $follower_1;
+
+sleep 10;
+
+$follower_1.switch_partition obtest:obtest:t1;
+
+sleep 2;
+
+
+select * from t1;

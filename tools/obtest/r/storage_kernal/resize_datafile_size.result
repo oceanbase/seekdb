@@ -1,0 +1,11 @@
+ob1=OBI(cluster=1, proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+ob1.mysql alter system set debug_sync_timeout = '20s';
+ob1.mysql alter system set datafile_size = '$resize_size';
+ob1.check_until_timeout select concat(2 * total_count, "M") as block_file_size from __all_virtual_macro_block_marker_status, $resize_size, 120;
+ob1.mysql set ob_global_debug_sync = 'DOING_MARK_AND_SWEEP wait_for signal_1';
+ob1.mysql alter system set datafile_size = '$resize_size2';
+ob1.mysql set ob_global_debug_sync = 'now signal signal_1';
+ob1.check_until_timeout select concat(2 * total_count, "M") as block_file_size from __all_virtual_macro_block_marker_status, $resize_size2, 120;

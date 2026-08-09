@@ -222,7 +222,7 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
 
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_FAIL(tx_ctx_->prepare_log_cb_(log_op_arg_.submit_arg_.log_cb_))) {
+  } else if (OB_FAIL(tx_ctx_->prepare_log_cb_(false, log_op_arg_.submit_arg_.log_cb_))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", K(ret), KPC(this));
     }

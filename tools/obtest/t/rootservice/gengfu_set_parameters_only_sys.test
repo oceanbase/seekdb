@@ -1,0 +1,40 @@
+# CASE_OWNER:
+#    @gengfu.zpc
+# CASE_DESC:
+#    This case is aimed to test the following scenario:
+#        When there is only the sys tenant in the cluster, set the cluster-level parameters first, 
+#        and then set the tenant-level parameters with tenant=all/all_user/all_meta, making sure 
+#        that the cluster-level parameters can be synchronized to each OBServer.
+#
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0);
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+--result_format 4
+
+# there is only sys tenant
+select tenant_name, tenant_id from __all_tenant;
+
+# Set the tenant-level parameters immediately after setting the cluster-level parameters, 
+# using all/all_user while only the sys tenant exists.
+# (1) using tenant=all
+alter system set rpc_timeout='3s';
+alter system set balancer_idle_time='12s';
+# (2) using tenant=all_user
+alter system set _ob_trans_rpc_timeout='5s';
+alter system set merger_check_interval='12m';
+alter system set trx_2pc_retry_interval='120ms';
+
+sleep 5;
+
+# make sure all OBServer are synchronized to the parameters
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'rpc_timeout' order by zone;
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = '_ob_trans_rpc_timeout' order by zone;
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'trx_2pc_retry_interval' order by zone;
+# neither all nor all_user contains the sys tenant, so the values
+# of the following parameters should remain unchanged.
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'balancer_idle_time' order by zone;
+select zone, name, value, scope from __all_virtual_sys_parameter_stat where name = 'merger_check_interval' order by zone;

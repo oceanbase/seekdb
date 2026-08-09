@@ -1,0 +1,28 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob2);
+ob1.reboot;
+ob2.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql set global ob_query_timeout = 60000000;
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+ob3.reboot;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob3.mysql_p delete from oceanbase.__all_failover_info;
+ob2.mysql_p select cluster_id,cluster_status,synchronization_status from oceanbase.__all_virtual_standby_status;
+cluster_id	cluster_status	synchronization_status
+1	DISABLED	NOT AVAILABLE
+3	VALID	FAILOVER INFO NOT LATEST

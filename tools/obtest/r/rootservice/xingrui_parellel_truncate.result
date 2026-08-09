@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000000s';
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE '4G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1,z2' set ob_tcp_invited_nodes='%';
+set ob_global_debug_sync = 'reset';
+create table xingrui_test(col1 int);
+set ob_global_debug_sync = 'BEFORE_PARELLEL_TRUNCATE wait_for signal';
+use test;
+truncate table xingrui_test;
+use test;
+drop table xingrui_test;
+set ob_global_debug_sync = 'now signal signal';
+set ob_global_debug_sync = 'reset';
+ERROR 42S02: Table 'test.xingrui_test' doesn't exist

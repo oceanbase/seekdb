@@ -1,0 +1,11 @@
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1, locality=SH:SH);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob1.z2.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z2.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system add zone z4 region = 'HS';
+alter system add zone z3 region = 'HS';
+ERROR HY000: follower cluster has multi region not allowed

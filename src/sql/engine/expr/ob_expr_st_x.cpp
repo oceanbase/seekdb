@@ -228,7 +228,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   ObIWkbPoint *point = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
   uint32_t srid = 0;
   ObGeometry *geo = NULL;
@@ -240,19 +240,15 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
 
   // get wkb
   if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
-    LOG_WARN("failed to eval first argument", K(ret));
   } else if (datum->is_null()) {
     is_null_result = true;
   } else {
     ObString wkb = datum->get_string();
-    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum,
+    if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(ctx.exec_ctx_, temp_allocator, *datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, func_name))) {
-      LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb,
         geo, srs, func_name, ObGeoBuildFlag::GEO_CORRECT | ObGeoBuildFlag::GEO_CHECK_RANGE | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("failed to create geometry object with raw wkb", K(ret));
     } else if (ObGeoType::POINT != geo->type()) {
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, "POINT",
@@ -285,7 +281,6 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
     res.set_double(d);
   } else if (num_args == 2) {
     if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, datum))) {
-      LOG_WARN("failed to eval", K(ret));
     } else if (datum->is_null()) {
       res.set_null();
     } else {
@@ -293,16 +288,13 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
       if (is_geog) {
         double new_val_radian = 0.0;
         if (OB_FAIL(srs->from_srs_unit_to_radians(new_val, new_val_radian))) {
-          LOG_WARN("failed to convert longitude to radians");
         } else if (is_long_res) {
           // check longitude
           if (OB_FAIL(check_longitude(new_val_radian, srs, new_val, func_name))) {
-            LOG_WARN("failed to check longitude", K(ret));
           }
         } else {
           // check latitude
           if (OB_FAIL(check_latitude(new_val_radian, srs, new_val, func_name))) {
-            LOG_WARN("failed to check latitude", K(ret));
           }
         }
       }
@@ -314,7 +306,6 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
           is_long_res ? point->x(new_val) : point->y(new_val);
           ObString res_wkb;
           if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*point, expr, ctx, srs, res_wkb))) {
-            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
           }
@@ -339,9 +330,7 @@ int ObExprSTCoordinate::check_longitude(double new_val_radian,
 
   if (new_val_radian <= -M_PI || new_val_radian > M_PI) {
     if (OB_FAIL(srs->longtitude_convert_from_radians(-M_PI, min_long_val))) {
-      LOG_WARN("failed to convert longitude from radians", K(ret));
     } else if (OB_FAIL(srs->longtitude_convert_from_radians(M_PI, max_long_val))) {
-      LOG_WARN("failed to convert longitude from radians", K(ret));
     } else {
       ret = OB_ERR_LONGITUDE_OUT_OF_RANGE;
       LOG_USER_ERROR(OB_ERR_LONGITUDE_OUT_OF_RANGE, new_val, func_name, min_long_val, max_long_val);
@@ -363,9 +352,7 @@ int ObExprSTCoordinate::check_latitude(double new_val_radian,
 
   if (new_val_radian < -M_PI_2 || new_val_radian > M_PI_2) {
     if (OB_FAIL(srs->latitude_convert_from_radians(-M_PI_2, min_lat_val))) {
-      LOG_WARN("failed to convert latitude from radians", K(ret));
     } else if (OB_FAIL(srs->latitude_convert_from_radians(M_PI_2, max_lat_val))) {
-      LOG_WARN("failed to convert latitude from radians", K(ret));
     } else {
       ret = OB_ERR_LATITUDE_OUT_OF_RANGE;
       LOG_USER_ERROR(OB_ERR_LATITUDE_OUT_OF_RANGE, new_val, func_name, min_lat_val, max_lat_val);

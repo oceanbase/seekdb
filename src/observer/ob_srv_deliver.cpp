@@ -38,7 +38,7 @@ namespace oceanbase
 int dispatch_req(ObRequest &req)
 {
   int ret = OB_SUCCESS;
-
+  
   SERVER_MODULE_SCOPE {
     ObServerRuntime *runtime = static_cast<ObServerRuntime *>(share::server_runtime());
     if (OB_ISNULL(runtime)) {
@@ -66,8 +66,27 @@ int dispatch_req(ObRequest &req)
 } // namespace oceanbase
 
 ObSrvDeliver::ObSrvDeliver(ObiReqQHandler &qhandler)
-    : ObReqQDeliver(qhandler)
+    : ObReqQDeliver(qhandler),
+      unix_socket_login_queue_()
 {}
+
+int ObSrvDeliver::init()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(unix_socket_login_queue_.init(UNIX_SOCKET_LOGIN_THREAD_CNT, qhandler_))) {
+  } else if (OB_FAIL(unix_socket_login_queue_.start())) {
+  } else {
+    SERVER_LOG(INFO, "init ObSrvDeliver done");
+  }
+  return ret;
+}
+
+void ObSrvDeliver::stop()
+{
+  // stop sql service first
+  unix_socket_login_queue_.stop();
+  unix_socket_login_queue_.wait();
+}
 
 int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
 {
@@ -97,7 +116,14 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         conn->connect_in_bytes_ = static_cast<int64_t>(pkt.get_wire_bytes());
       }
 
-      if (OB_FAIL(dispatch_req(req))) {
+      if (OB_UNLIKELY(SQL_REQ_OP.get_peer(&req).get_port() <= 0)) {
+        LOG_INFO("receive login request from unix domain socket");
+        if (!unix_socket_login_queue_.push(&req, UNIX_SOCKET_LOGIN_QUEUE_MAX_LEN)) {
+          ret = OB_QUEUE_OVERFLOW;
+          EVENT_INC(MYSQL_DELIVER_FAIL);
+          LOG_ERROR("deliver unix socket login request fail", K(req));
+        }
+      } else if (OB_FAIL(dispatch_req(req))) {
       }
     } else {
       const obmysql::ObMySQLRawPacket &pkt

@@ -79,7 +79,6 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
   if (ob_is_null(type1)) {
     is_null_res = true;
   } else if (OB_FAIL(temp_allocator.eval_arg(arg1, ctx, datum1))) {
-    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null()) {
     is_null_res = true;
   } else {
@@ -88,15 +87,14 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     ObGeometry *geo = nullptr;
 
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-            temp_allocator, *datum1, arg1->datum_meta_, arg1->obj_meta_.has_lob_header(), wkb))) {
-      LOG_WARN("fail to read real string data", K(ret), K(arg1->obj_meta_.has_lob_header()));
+            ctx.exec_ctx_, temp_allocator, *datum1, arg1->datum_meta_,
+            arg1->obj_meta_.has_lob_header(), wkb))) {
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                    wkb,
                    geo,
                    nullptr,
                    N_PRIV_ST_NUMINTERIORRINGS,
-                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {  // ObIWkbGeom
-      LOG_WARN("fail to build geometry from wkb", K(ret), K(wkb));
+                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
     } else if (geo->type() != ObGeoType::POLYGON) {
       is_null_res = true;
     } else {

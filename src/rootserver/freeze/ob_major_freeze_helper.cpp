@@ -36,7 +36,7 @@ int ObMajorFreezeHelper::major_freeze(const ObMajorFreezeParam &param)
 {
   int ret = OB_SUCCESS;
   bool is_restore = false;
-  bool write_enabled = true;
+  bool is_primary_server = true;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(param), KR(ret));
@@ -44,8 +44,8 @@ int ObMajorFreezeHelper::major_freeze(const ObMajorFreezeParam &param)
   } else if (is_restore) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major freeze is not allowed while restoring", KR(ret));
-  } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
-  } else if (!write_enabled) {
+  } else if (OB_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+  } else if (!is_primary_server) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
     LOG_WARN("major freeze is not allowed on a standby server", KR(ret));
   } else if (OB_FAIL(do_local_major_freeze(param.freeze_reason_))) {

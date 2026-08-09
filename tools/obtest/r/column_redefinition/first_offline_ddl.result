@@ -1,0 +1,29 @@
+ob1=OBI(cluster=1, proxy_num=0);
+===============================================================
+====================     bootstrap   ==========================
+===============================================================
+test case for bootstrap begin
+ob1.reboot;
+ob1.mysql alter system set enable_rebalance='false';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+test case for bootstrap finish
+===============================================================
+==================     create tenant   ========================
+===============================================================
+test case for create tenant begin
+set @@session.ob_query_timeout = 1000000000;
+CREATE RESOURCE UNIT unit_1 MAX_CPU 2, MEMORY_SIZE='8G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 60;
+test case for create tenant finish
+===============================================================
+===============       first offline ddl     ===================
+===============================================================
+test case for first offline ddl begin
+create table t1 (c1 int primary key, c2 varchar(255));
+insert into t1 values (1, "hello"), (2, "world");
+ob1.force_stop;
+ob1.nstart;
+alter table t1 MODIFY column c2 varchar(30) NOT NULL;
+test case for first offline ddl finish

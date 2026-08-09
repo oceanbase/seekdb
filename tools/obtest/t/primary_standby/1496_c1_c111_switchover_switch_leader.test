@@ -1,0 +1,83 @@
+# owner: rongxuan.lc
+# description: 本case是为了测试主备切换后，新备不需要发起改选
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(tt2_conn, ob1.z1.obs0, root@tenant_2, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+
+ob_connect(tt3_conn, ob1.z1.obs0, root@tenant_3, , test, , USE_MYSQL_CONNECTOR);
+connection tt3_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+
+
+ob_connect(tt1_conn, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt1_conn;
+let $tablenum=2;
+source sql/init_table.sql;
+
+create table t(c1 int primary key, c2 int) partition by hash(c1) partitions 10;
+insert into t values (1,2),(3,4),(5,6);
+select * from t;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+ob_connect(tt2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+####验证备库所有租户都有自己的primary zone
+ob2.check_until_timeout select count(*) > 0 from __all_tenant where primary_zone = 'RANDOM', 0, 4;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 3;
+--disable_result_log
+select /*+ read_consistency(weak)*/* from t;
+--enable_result_log
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+set ob_query_timeout = 20000000;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+alter system commit to switchover to physical standby;
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+set ob_query_timeout = 20000000;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+alter system commit to switchover to primary;
+ob_connect(tt2_conn, ob2.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+connection tt2_conn;
+sleep 30;
+ob2.check_until_timeout select count(*) c from (select count(*) c from __all_virtual_meta_table where is_previous_leader > 0 group by tenant_id,table_id,partition_id having c > 1), 0, 30; 

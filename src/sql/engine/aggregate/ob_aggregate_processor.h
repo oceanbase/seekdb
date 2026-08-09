@@ -1117,10 +1117,10 @@ private:
  * @param[out] has_null_cell Set to true if any column in the row is NULL
  * @return Calculated hash value, this value is invalid if the output has_null_cell is true
  */
-  static int llc_calc_hash_value(const ObChunkDatumStore::StoredRow &stored_row,
-                                 const ObIArray<ObExpr *> &param_exprs,
-                                 bool &has_null_cell,
-                                 uint64_t &hash_value);
+  int llc_calc_hash_value(const ObChunkDatumStore::StoredRow &stored_row,
+                          const ObIArray<ObExpr *> &param_exprs,
+                          bool &has_null_cell,
+                          uint64_t &hash_value);
   static int llc_add(ObDatum &result, const ObDatum &new_value);
   void set_expr_datum_null(ObExpr *expr);
 
@@ -1269,6 +1269,7 @@ private:
   bool has_extra_;
 
   ObEvalCtx &eval_ctx_;
+  const common::ObDatumAccessContext *datum_access_ctx_;
   common::ObArenaAllocator aggr_alloc_;
   int64_t cur_batch_group_idx_;
   char *cur_batch_group_buf_;
@@ -1387,7 +1388,6 @@ OB_INLINE int ObAggregateProcessor::clone_cell(
           ((int64_t *)buff_ptr)[0] = need_size;
           ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
           buf = (char *)((int64_t *)(buff_ptr) + 2);
-          SQL_LOG(DEBUG, "succ to alloc buff", K(need_size), K(target_cell));
         }
       } else {
         buf = (char *)(data_ptr);
@@ -1403,7 +1403,6 @@ OB_INLINE int ObAggregateProcessor::clone_cell(
       ((int64_t *)buff_ptr)[0] = need_size;
       ((int64_t *)buff_ptr)[1] = STORED_ROW_MAGIC_NUM;
       buf = (char *)((int64_t *)(buff_ptr) + 2);
-      SQL_LOG(DEBUG, "succ to alloc buff", K(need_size), K(target_cell));
     }
   }
 
@@ -1424,7 +1423,6 @@ OB_INLINE int ObAggregateProcessor::clone_aggr_cell(AggrCell &aggr_cell, const O
   int64_t need_size = sizeof(int64_t) * 2 +
       (is_number ? number::ObNumber::MAX_BYTE_LEN : src_cell.len_);
   if (OB_FAIL(clone_cell(aggr_cell, need_size, nullptr))) {
-    SQL_LOG(WARN, "failed to clone cell", K(ret));
   } else {
     const char *buf = aggr_cell.get_buf() + 2 * sizeof(int64_t);
     memcpy(const_cast<char *> (buf), src_cell.ptr_, src_cell.len_);
@@ -1444,7 +1442,6 @@ OB_INLINE int ObAggregateProcessor::reuse_group(const int64_t group_id,
   int ret = OB_SUCCESS;
   GroupRow *group_row = NULL;
   if (OB_FAIL(group_rows_.at(group_id, group_row))) {
-    SQL_LOG(WARN, "fail to get stored row", K(ret));
   } else if (OB_ISNULL(group_row)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "stored_row is null", K(group_row));

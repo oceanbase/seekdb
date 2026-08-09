@@ -538,8 +538,7 @@ int ObLogReplayService::disable_local_replay()
   return ret;
 }
 
-int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
-                                            const SCN &base_scn)
+int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn)
 {
   int ret = OB_SUCCESS;
   ObReplayStatus *replay_status = NULL;
@@ -551,8 +550,8 @@ int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
   } else if (NULL == (replay_status = guard.get_replay_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "replay status is not exist", K(ret));
-  } else if (OB_FAIL(replay_status->enable_local_replay(begin_lsn, base_scn))) {
-    CLOG_LOG(WARN, "failed to enable local replay", K(ret), K(begin_lsn), K(base_scn));
+  } else {
+    replay_status->enable_local_replay(begin_lsn);
   }
   return ret;
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::cert::PeerCertificateInfo;
 use crate::*;
 
 pub(crate) const TLS_SEND_LIMIT: usize = 256 * 1024;
@@ -24,8 +23,6 @@ pub(crate) struct TlsSession {
     pub(crate) plaintext_pending: usize,
     pub(crate) handshake_bytes: usize,
     pub(crate) close_notify_sent: bool,
-    pub(crate) peer_cert_info: Option<PeerCertificateInfo>,
-    pub(crate) cipher_name: Option<Vec<u8>>,
 }
 
 impl TlsSession {
@@ -37,60 +34,7 @@ impl TlsSession {
             plaintext_pending: 0,
             handshake_bytes: 0,
             close_notify_sent: false,
-            peer_cert_info: None,
-            cipher_name: None,
         }))
-    }
-
-    pub(crate) fn ensure_peer_cert_info(&mut self) {
-        if self.peer_cert_info.is_none() {
-            self.peer_cert_info = self
-                .conn
-                .peer_certificates()
-                .and_then(|certs| certs.first())
-                .map(|cert| PeerCertificateInfo::parse(cert.as_ref()));
-        }
-    }
-}
-
-pub(crate) fn tls_cipher_name(suite: rustls::CipherSuite) -> Option<&'static [u8]> {
-    use rustls::CipherSuite::*;
-    Some(match suite {
-        TLS13_AES_128_GCM_SHA256 => b"TLS_AES_128_GCM_SHA256",
-        TLS13_AES_256_GCM_SHA384 => b"TLS_AES_256_GCM_SHA384",
-        TLS13_CHACHA20_POLY1305_SHA256 => b"TLS_CHACHA20_POLY1305_SHA256",
-        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA => b"ECDHE-ECDSA-AES128-SHA",
-        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA => b"ECDHE-ECDSA-AES256-SHA",
-        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA => b"ECDHE-RSA-AES128-SHA",
-        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA => b"ECDHE-RSA-AES256-SHA",
-        TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256 => b"ECDHE-ECDSA-AES128-SHA256",
-        TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384 => b"ECDHE-ECDSA-AES256-SHA384",
-        TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256 => b"ECDHE-RSA-AES128-SHA256",
-        TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384 => b"ECDHE-RSA-AES256-SHA384",
-        TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 => b"ECDHE-ECDSA-AES128-GCM-SHA256",
-        TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 => b"ECDHE-ECDSA-AES256-GCM-SHA384",
-        TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 => b"ECDHE-RSA-AES128-GCM-SHA256",
-        TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 => b"ECDHE-RSA-AES256-GCM-SHA384",
-        TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 => b"ECDHE-RSA-CHACHA20-POLY1305",
-        TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 => b"ECDHE-ECDSA-CHACHA20-POLY1305",
-        _ => return None,
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::tls_cipher_name;
-
-    #[test]
-    fn exposes_sql_cipher_names() {
-        assert_eq!(
-            tls_cipher_name(rustls::CipherSuite::TLS13_AES_256_GCM_SHA384),
-            Some(&b"TLS_AES_256_GCM_SHA384"[..])
-        );
-        assert_eq!(
-            tls_cipher_name(rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256),
-            Some(&b"ECDHE-RSA-AES128-GCM-SHA256"[..])
-        );
     }
 }
 

@@ -1,0 +1,34 @@
+## hosts for observer
+1.obs_hosts=<hosts1>
+2.obs_hosts=<hosts2>
+3.obs_hosts=<hosts3>
+4.obs_hosts=<hosts4>
+5.obs_hosts=<hosts5>
+
+## data path
+data_path = ~/data
+clog_path = ~/data
+
+## create default tenant after reboot if value > 0;
+memory_size_limit =68719476736
+
+node_cpu_count=16
+node_cpu_reserved=0
+## save core to collected_log if value is 1
+## default value : 1
+save_core=1
+
+#修改用户租户和恢复租户参数
+#extra_tenant_params=ob_compaction_schedule_interval = '3s',compaction_low_thread_score = 100,compaction_mid_thread_score = 100,compaction_high_thread_score = 100,merger_check_interval = '10s',storage_high_thread_score = 100
+## save server log to collected_log if values is 1
+## default value : 1
+save_log=1
+
+## kill all observer processes in machine if value is 1
+## default value : 1
+cleanup=1
+
+## default value : 1G
+disk_avail_space=5G
+
+mock_server_path=/home/hudson/obtest_1.0/mockobserver

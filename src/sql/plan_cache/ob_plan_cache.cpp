@@ -21,7 +21,6 @@
 #include "sql/pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "query/plan_cache/ob_plan_cache_access_service.h"
-#include "share/rc/ob_server_runtime.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
@@ -354,12 +353,12 @@ int ObPlanCache::init(
     } else {
       cn_factory_.set_lib_cache(this);
       ObMemAttr attr = get_mem_attr();
-
+      
       inner_allocator_.set_attr(attr);
       set_host(const_cast<ObAddr &>(GCTX.self_addr()));
       bucket_num_ = hash::cal_next_prime(hash_bucket);
-
-
+      
+      
       inited_ = true;
     }
     if (OB_FAIL(ret)) {
@@ -470,31 +469,20 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to cast cache obj to physical plan.", K(ret));
       } else {
-        const bool is_internal_maintenance =
-            pc_ctx.sql_ctx_.session_info_->is_inner()
-            && !pc_ctx.sql_ctx_.session_info_->is_user_session();
-        const bool is_write_enabled = share::server_is_write_enabled();
-        const bool is_standby_control_stmt = !is_write_enabled
-            && ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_);
         MEMCPY(pc_ctx.sql_ctx_.sql_id_,
                plan->stat_.sql_id_.ptr(),
                plan->stat_.sql_id_.length());
         MEMCPY(pc_ctx.sql_ctx_.format_sql_id_,
                plan->stat_.format_sql_id_.ptr(),
                plan->stat_.format_sql_id_.length());
-        if (!is_internal_maintenance
-            && !is_write_enabled
-                   && !pc_ctx.sql_traits_.is_readonly_stmt_
-                   && !ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_)) {
-          ret = OB_STANDBY_DATABASE_READ_ONLY;
-          LOG_WARN("standby server is read only", KR(ret), K(pc_ctx.sql_traits_));
-         } else if (!is_internal_maintenance
-                    && !is_standby_control_stmt
-                    && GCONF.enable_perf_event) {
-           bool read_only = false;
-           if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_runtime_read_only(read_only))) {
-           } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(
-                        read_only, pc_ctx.sql_traits_))) {
+        if (GCONF.enable_perf_event) {
+          
+          bool read_only = false;
+          if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
+            // do nothing
+          } else if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_runtime_read_only(read_only))) {
+          } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(
+                       read_only, pc_ctx.sql_traits_))) {
           }
         }
       }
@@ -1059,13 +1047,6 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
             cache_node->dec_ref_count(); //cache node dec ref in alloc
           }
         } else {
-          // Keep the node write lock while inspecting the newly cached
-          // object.  Once unlocked, concurrent eviction may remove the
-          // object's last reference before the accounting reads its arena.
-          if (cache_obj->added_lc()) {
-            account_cache_object(*cache_obj);
-            refresh_cache_node(*cache_node);
-          }
           cache_node->unlock();
           cache_node->dec_ref_count(); //cache node dec ref in block
         }
@@ -1093,15 +1074,13 @@ int ObPlanCache::add_cache_obj(ObILibCacheCtx &ctx,
         ctx.need_destroy_node_ = true;
       }
     }
-    if (OB_SUCC(ret) && cache_obj->added_lc()) {
-      // The write lock pins both the node and its object list against
-      // concurrent eviction while their allocator totals are sampled.
-      account_cache_object(*cache_obj);
-      refresh_cache_node(*cache_node);
-    }
     // release wlock whatever
     cache_node->unlock();
     cache_node->dec_ref_count();
+  }
+  if (OB_SUCC(ret) && OB_NOT_NULL(cache_node) && cache_obj->added_lc()) {
+    account_cache_object(*cache_obj);
+    refresh_cache_node(*cache_node);
   }
   return ret;
 }
@@ -1277,7 +1256,7 @@ int ObPlanCache::cache_evict()
   int64_t cache_evict_num = 0;
   query::check_plan_cache_access(access_service());
   SQL_PC_LOG(INFO, "start lib cache evict",
-
+             
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
              "cache_obj_num", get_cache_obj_size(),
@@ -1310,7 +1289,7 @@ int ObPlanCache::cache_evict()
     }
   }
   SQL_PC_LOG(INFO, "end lib cache evict",
-
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_limit", get_mem_limit(),
@@ -1332,7 +1311,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
       int64_t N = co_list.count();
       int64_t mem_to_free = traverse_op.get_total_mem_used() / 2;
       SQL_PC_LOG(INFO, "cache evict plan by glitch node start",
-
+             
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
              "mem_to_free", mem_to_free,
@@ -1357,7 +1336,7 @@ int ObPlanCache::cache_evict_by_glitch_node()
         }
       }
       SQL_PC_LOG(INFO, "cache evict plan by glitch node end",
-
+             
              "cache_evict_num", cache_evict_num,
              "mem_hold", get_mem_hold(),
              "mem_high", get_mem_high(),
@@ -1719,7 +1698,7 @@ void ObPlanCache::release_cache_object(ObILibCacheObject &cache_obj)
   dec_managed_used(cache_obj.take_accounted_size());
 }
 
-void ObPlanCache::release_cache_node_memory_account(ObILibCacheNode &cache_node)
+void ObPlanCache::release_cache_node(ObILibCacheNode &cache_node)
 {
   dec_managed_used(cache_node.exchange_accounted_size(0));
 }
@@ -1950,7 +1929,7 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
   }
   //check read only privilege
   if (OB_SUCC(ret) && GCONF.enable_perf_event) {
-
+    
     bool read_only = false;
     if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
       // do nothing
@@ -2073,7 +2052,7 @@ int ObPlanCache::server_module_init(
     query::ObIPlanCacheAccessService &access_service)
 {
   int ret = OB_SUCCESS;
-
+  
   if (OB_FAIL(plan_cache->init(common::calculate_scaled_value_by_memory(
       common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN, common::OB_PLAN_CACHE_BUCKET_NUMBER),
       access_service))) {

@@ -1,0 +1,53 @@
+##
+# owner:yuchen.wyc
+# owner group:join
+# description:
+# 测试merge join两张表都是在远程server上的单表的情况，生成的分布式plan有正确性问题
+# t1位于z2, t2位于z3, scheduler位于z1
+#
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,root@obtest,,oceanbase,$port);
+connect (conn_sys,$ip,root@sys,,oceanbase,$port);
+
+connection conn1;
+create database obtest;
+use obtest;
+create table t1(c1 int, c2 int);
+create table t2(c1 int, c2 int);
+
+sleep 10;
+
+ob1.z2.obs0.switch_partition obtest:obtest:t1;
+sleep 5;
+ob1.z3.obs0.switch_partition obtest:obtest:t2;
+sleep 5;
+
+##commit
+insert into t1 values(1, 1), (2, 2), (3, 3);
+insert into t2 values(1, 1), (2, 2), (3, 3);
+sleep 10;
+
+explain basic select /*+ use_merge(t1, t2) */ * from t1, t2 where t1.c1+1=t2.c1+1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ * from t1, t2 where t1.c1+1=t2.c1+1;
+
+explain basic select /*+ use_merge(t1, t2) */ * from t1, t2 where t1.c1+1=t2.c1-1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ * from t1, t2 where t1.c1+1=t2.c1-1;
+
+explain basic select /*+ use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1=t2.c1 and t1.c1+1=t2.c1+1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1=t2.c1 and t1.c1+1=t2.c1+1;
+
+explain basic select /*+ use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1+1=t2.c1+1 and t1.c1=t2.c1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1+1=t2.c1+1 and t1.c1=t2.c1;
+
+explain basic select /*+ use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1+1=t2.c1+1 and t1.c1=t2.c1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1+1=t2.c1+1 and t1.c1=t2.c1;
+
+explain basic select /*+ use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1=t2.c1 and t1.c1+1=t2.c1-1;
+select /*+ read_consistency(weak), + use_merge(t1, t2) */ count(*) from t1, t2 where t1.c1=t2.c1 and t1.c1+1=t2.c1-1;

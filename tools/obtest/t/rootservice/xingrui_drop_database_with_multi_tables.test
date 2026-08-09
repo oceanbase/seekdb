@@ -1,0 +1,42 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#   test if increment refresh schema will fail consistently when drop database with multi tables.
+#   bugfix:50438134
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+
+ob1.mysql alter tenant sys set primary_zone = 'z1';
+ob1.check_until_timeout select count(*) from DBA_OB_LS_LOCATIONS where ls_id = 1 and role = 'LEADER' and zone = 'z1', 1, 60;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU 10, MEMORY_SIZE '10G';
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z3;z2;z1' set ob_tcp_invited_nodes='%';
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+ob1.check_until_timeout select count(*) from CDB_OB_LS_LOCATIONS where tenant_id = $tenant_id and ls_id = 1 and role = 'LEADER' and zone = 'z3', 1, 60;
+
+ob1.mysql alter system set debug_sync_timeout = '30s';
+
+ob_connect(conn_mysql, ob1.z2.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql;
+
+let $idx = 0;
+--disable_query_log
+while ($idx < 300)
+{
+eval create table t_$idx(c1 int primary key);
+inc $idx;
+}
+--enable_query_log
+
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_FETCH_SIMPLE_TABLES wait_for signal execute 1000000';
+set recyclebin = on;
+sleep 10;
+
+set @@session.ob_query_timeout = 240000000;
+drop database test;

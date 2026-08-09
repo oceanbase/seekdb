@@ -1,0 +1,88 @@
+#owner: yangjiali.yjl
+#owner group: storage
+--echo # owner: yangjiali.yjl
+--echo # owner group: storage
+--echo # ----------------------------------------------------------------------
+--echo # Test of DISK AUTO EXTEND
+--echo # ----------------------------------------------------------------------
+
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+
+sleep 1;
+
+--disable_warnings
+
+--echo #
+--echo # test __all_virtual_server, __all_virtual_disk_stat
+--echo #
+
+alter system set datafile_size='10G';
+alter system set datafile_maxsize='2G';
+
+--let $datfile_size=10737418240
+let $data_disk_allocated_1 = query_get_value(select data_disk_allocated from oceanbase.__all_virtual_server, data_disk_allocated, 1);
+let $data_disk_total_1 = query_get_value(select data_disk_capacity from oceanbase.__all_virtual_server, data_disk_capacity, 1);
+
+if ($data_disk_allocated_1 == $datfile_size)
+{
+  --echo test __all_virtual_server, datafile_maxsize=1G, data_disk_allocated = datfile_size success
+}
+
+if ($data_disk_allocated_1 == $data_disk_total_1)
+{
+  --echo test __all_virtual_server, datafile_maxsize=1G, data_disk_allocated = data_disk_capacity success
+}
+
+let $allocated_size_1 = query_get_value(select allocated_size from oceanbase.__all_virtual_disk_stat, allocated_size, 1);
+let $total_size_1 = query_get_value(select total_size from oceanbase.__all_virtual_disk_stat, total_size, 1);
+
+if ($allocated_size_1 == $datfile_size)
+{
+  --echo test __all_virtual_disk_stat, datafile_maxsize=1G, allocated_size = datfile_size success
+}
+
+if ($allocated_size_1 == $total_size_1)
+{
+  --echo test __all_virtual_disk_stat, datafile_maxsize=1G, allocated_size = total_size success
+}
+
+ob1.mysql alter system set datafile_maxsize='20G';
+--let $datafile_maxsize=21474836480
+let $data_disk_allocated_2 = query_get_value(select data_disk_allocated from oceanbase.__all_virtual_server, data_disk_allocated, 1);
+let $data_disk_total_2 = query_get_value(select data_disk_capacity from oceanbase.__all_virtual_server, data_disk_capacity, 1);
+
+if ($data_disk_total_2 == $datafile_maxsize)
+{
+  --echo test __all_virtual_server, datafile_maxsize=20G, data_disk_allocated = datfile_size success
+}
+
+if ($data_disk_allocated_2 != $data_disk_total_2)
+{
+  --echo test __all_virtual_server, datafile_maxsize=20G, data_disk_allocated = data_disk_capacity success
+}
+
+let $allocated_size_2 = query_get_value(select allocated_size from oceanbase.__all_virtual_disk_stat, allocated_size, 1);
+let $total_size_2 = query_get_value(select total_size from oceanbase.__all_virtual_disk_stat, total_size, 1);
+
+if ($total_size_2 == $datafile_maxsize)
+{
+  --echo test __all_virtual_disk_stat, datafile_maxsize=20G, allocated_size = datfile_size success
+}
+
+if ($allocated_size_2 != $total_size_2)
+{
+  --echo test __all_virtual_disk_stat, datafile_maxsize=20G, allocated_size = total_size success
+}
+
+--enable_query_log
+alter system set datafile_maxsize = 0;
+
+--echo # ----------------------------------------------------------------------
+--echo # Test of disk auto extend end.
+--echo # ----------------------------------------------------------------------
+

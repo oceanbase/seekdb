@@ -615,9 +615,6 @@ public:
                          const ObNeedPriv &routine_need_priv);
 
   int check_routine_definer_existed(const ObString &user_name, bool &existed);
-  int check_obj_mysql_priv(const ObSessionPrivInfo &session_priv,
-                           const common::ObIArray<uint64_t> &enable_role_id_array,
-                           const ObNeedPriv &obj_mysql_need_priv);
   int get_obj_mysql_priv_with_obj_name(const ObString &obj_name,
                                        const uint64_t obj_type,
                                        ObIArray<const ObObjMysqlPriv *> &obj_privs,

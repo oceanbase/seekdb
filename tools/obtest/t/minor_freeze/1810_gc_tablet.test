@@ -1,0 +1,59 @@
+# owner: zk250686
+# description: 
+
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.create_client;
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+
+# 准备环境
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+
+let $i = 0;
+while($i < 2)
+{
+  --disable_query_log
+  connect (oblog_conn_sys,$ip,admin@sys,admin,oceanbase,$port);
+  connection oblog_conn_sys;
+  let $j = 0;
+  while($j < 2)
+  {
+    # create table
+    eval create table t_hash_range${i}_$j (c1 int, c2 int, c3 int, c4 int) partition by hash(c1) subpartition by range(c2) ( partition hp0 ( subpartition hp0sp0 values less than (100), subpartition hp0sp1 values less than (200), subpartition hp0sp2 values less than (300)), partition hp1 ( subpartition hp1sp0 values less than (100), subpartition hp1sp1 values less than (200), subpartition hp1sp2 values less than (300)), partition hp2 ( subpartition hp2sp0 values less than (100), subpartition hp2sp1 values less than (200), subpartition hp2sp2 values less than (300)), partition hp3 ( subpartition hp3sp0 values less than (100), subpartition hp3sp1 values less than (200), subpartition hp3sp2 values less than (300)));
+    # create index
+    eval create index i_hash_range1_${i}_$j on t_hash_range${i}_$j (c2) local;
+    eval create index i_hash_range2_${i}_$j on t_hash_range${i}_$j (c3) local;
+    # insert data
+    let $r = 0;
+    while($r < 100)
+    {
+      eval insert into t_hash_range${i}_$j values($r,2,3,4);
+      inc $r;
+    }
+    # drop table
+    eval drop table t_hash_range${i}_$j;
+    inc $j;
+  }
+  # gc finish
+  dec $j;
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_tablet_info where tablet_id > 50000, 0, 500;
+
+  # reboot
+  ob1.force_stop;
+  sleep 6;
+  ob1.nstart;
+  # check reboot
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= 0, 0 ,180;
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info where refreshed_schema_version > 1, 3, 180;
+  ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version, 0, 120;
+  ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+  --enable_query_log
+
+  ob1.z1.obs0.count_log "print_multi_data";
+  ob1.z2.obs0.count_log "print_multi_data";
+  ob1.z3.obs0.count_log "print_multi_data";
+  
+  inc $i;
+}
+

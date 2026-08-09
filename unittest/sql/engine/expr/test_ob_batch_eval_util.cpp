@@ -24,7 +24,6 @@
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_expr_cmp_func.h"
-#include "sql/engine/expr/ob_expr_basic_funcs.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase
@@ -385,7 +384,7 @@ static int64_t round_decimal_int_down(const int64_t value, const int64_t scale_f
   return is_negative ? -absolute : absolute;
 }
 
-static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
+static void verify_batch_hash_shapes(const common::ObDatumBasicFuncs &basic_funcs,
                                      common::ObDatum *datums,
                                      const int64_t batch_size)
 {
@@ -418,8 +417,8 @@ static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
 
     skip->init(batch_size);
     skip->set_all(batch_size);
-    hash_func.batch_func_(nullptr, nullptr, false, *skip, batch_size, nullptr, false);
-    hash_func.batch_func_(nullptr, nullptr, false, *skip, 0, nullptr, false);
+    hash_func.batch_func_(nullptr, nullptr, false, *skip, batch_size, nullptr, false, nullptr);
+    hash_func.batch_func_(nullptr, nullptr, false, *skip, 0, nullptr, false, nullptr);
 
     skip->init(batch_size);
     const int64_t skipped_rows[] = {0, 2, 63, 64, 127};
@@ -431,7 +430,7 @@ static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
     for (const auto &shape : shapes) {
       std::fill(hash_values.begin(), hash_values.end(), HASH_SENTINEL);
       hash_func.batch_func_(hash_values.data(), datums, shape[0], *skip, batch_size,
-                            seeds.data(), shape[1]);
+                            seeds.data(), shape[1], nullptr);
       for (int64_t i = 0; i < batch_size; ++i) {
         if (skip->at(i)) {
           EXPECT_EQ(HASH_SENTINEL, hash_values[i]);
@@ -440,7 +439,8 @@ static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
           const int64_t seed_idx = shape[1] ? i : 0;
           uint64_t scalar_hash = 0;
           ASSERT_EQ(OB_SUCCESS,
-                    hash_func.scalar_func_(datums[datum_idx], seeds[seed_idx], scalar_hash));
+                    hash_func.scalar_func_(
+                        datums[datum_idx], seeds[seed_idx], scalar_hash, nullptr));
           EXPECT_EQ(scalar_hash, hash_values[i]);
         }
       }
@@ -451,11 +451,12 @@ static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
     for (int64_t i = 0; i < batch_size; ++i) {
       if (!skip->at(i)) {
         ASSERT_EQ(OB_SUCCESS,
-                  hash_func.scalar_func_(datums[i], in_place_hashes[i], expected[i]));
+                  hash_func.scalar_func_(
+                      datums[i], in_place_hashes[i], expected[i], nullptr));
       }
     }
     hash_func.batch_func_(in_place_hashes.data(), datums, true, *skip, batch_size,
-                          in_place_hashes.data(), true);
+                          in_place_hashes.data(), true, nullptr);
     for (int64_t i = 0; i < batch_size; ++i) {
       EXPECT_EQ(skip->at(i) ? seeds[i] : expected[i], in_place_hashes[i]);
     }
@@ -465,13 +466,14 @@ static void verify_batch_hash_shapes(const ObExprBasicFuncs &basic_funcs,
     expected.assign(batch_size, HASH_SENTINEL);
     uint64_t scalar_seed = seeds[0];
     for (int64_t i = 0; i < batch_size; ++i) {
-      ASSERT_EQ(OB_SUCCESS, hash_func.scalar_func_(datums[i], scalar_seed, expected[i]));
+      ASSERT_EQ(OB_SUCCESS,
+                hash_func.scalar_func_(datums[i], scalar_seed, expected[i], nullptr));
       if (0 == i) {
         scalar_seed = expected[i];
       }
     }
     hash_func.batch_func_(in_place_hashes.data(), datums, true, *skip, batch_size,
-                          in_place_hashes.data(), false);
+                          in_place_hashes.data(), false, nullptr);
     for (int64_t i = 0; i < batch_size; ++i) {
       EXPECT_EQ(expected[i], in_place_hashes[i]);
     }
@@ -641,12 +643,12 @@ TEST(ObDatumHash, batch_shapes_match_scalar_hash)
   }
   int_datums[65].set_null();
 
-  ObExprBasicFuncs *int_funcs = common::ObDatumFuncs::get_basic_func(
+  common::ObDatumBasicFuncs *int_funcs = common::ObDatumFuncs::get_basic_func(
       common::ObIntType, common::CS_TYPE_BINARY);
-  ObExprBasicFuncs *general_ci_funcs = common::ObDatumFuncs::get_basic_func(
+  common::ObDatumBasicFuncs *general_ci_funcs = common::ObDatumFuncs::get_basic_func(
       common::ObVarcharType, common::CS_TYPE_UTF8MB4_GENERAL_CI,
       common::SCALE_UNKNOWN_YET, false);
-  ObExprBasicFuncs *utf8_bin_funcs = common::ObDatumFuncs::get_basic_func(
+  common::ObDatumBasicFuncs *utf8_bin_funcs = common::ObDatumFuncs::get_basic_func(
       common::ObVarcharType, common::CS_TYPE_UTF8MB4_BIN,
       common::SCALE_UNKNOWN_YET, false);
   ASSERT_NE(nullptr, int_funcs);
@@ -682,7 +684,7 @@ TEST(ObDatumHash, fixed_double_batch_scales_match_scalar_hash)
 
   for (int64_t scale = 0; scale < common::OB_NOT_FIXED_SCALE; ++scale) {
     SCOPED_TRACE(scale);
-    ObExprBasicFuncs *basic_funcs = common::ObDatumFuncs::get_basic_func(
+    common::ObDatumBasicFuncs *basic_funcs = common::ObDatumFuncs::get_basic_func(
         common::ObDoubleType, common::CS_TYPE_BINARY, static_cast<common::ObScale>(scale));
     ASSERT_NE(nullptr, basic_funcs);
     verify_batch_hash_shapes(*basic_funcs, datums, BATCH_SIZE);
@@ -1468,7 +1470,8 @@ TEST(ObExprCmpFunc, tc_scalar_semantics)
     int cmp_ret = 0;
     if (!test_case.left_null_ && !test_case.right_null_) {
       ASSERT_EQ(OB_SUCCESS,
-                datum_func(left_frame.datums_[0], right_frame.datums_[0], cmp_ret));
+                datum_func(
+                    left_frame.datums_[0], right_frame.datums_[0], cmp_ret, nullptr));
     }
     for (int64_t op_idx = 0; op_idx < ARRAYSIZEOF(FIXED_DOUBLE_CMP_OPS); ++op_idx) {
       const common::ObCmpOp cmp_op = FIXED_DOUBLE_CMP_OPS[op_idx];
@@ -1609,7 +1612,8 @@ TEST(ObExprCmpFunc, tc_batch_semantics)
         } else {
           int cmp_ret = 0;
           ASSERT_EQ(OB_SUCCESS,
-                    datum_func(left_frame.datums_[i], right_frame.datums_[i], cmp_ret));
+                    datum_func(
+                        left_frame.datums_[i], right_frame.datums_[i], cmp_ret, nullptr));
           EXPECT_EQ(get_expected_cmp_result(cmp_op, cmp_ret),
                     result_frame.datums_[i].get_int()) << "row=" << i;
         }
@@ -2011,9 +2015,3 @@ TEST(ObDatumCast, decimal_int_generic_batch_const_modes_use_runtime_scale_direct
 
 } // namespace sql
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

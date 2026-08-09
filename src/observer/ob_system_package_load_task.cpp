@@ -120,8 +120,8 @@ void ObSystemPackageLoadTask::runTimerTask()
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("task not inited", KR(ret), K_(inited));
-  } else if (!share::server_is_write_enabled()) {
-    LOG_INFO("read-only server skips loading sys package");
+  } else if (GCTX.is_standby_server()) {
+    LOG_INFO("standby cluster skip loading sys package");
   } else if (GCTX.sys_package_ready_) {
     LOG_INFO("sys package already loaded");
   } else if (OB_FAIL(load_system_package_())) {

@@ -1,0 +1,117 @@
+# owner: rongxuan.lc
+# description: 本case是为了主要为了测试location cache解决对RS的依赖；
+# 1171号case测试重启rs停服务需要的时间;
+# 分两个case： （1）做一次主备切换，阻止新RS start service成功，测试此时读写无异常；
+##（2）再重启一个备机，检查备机上面的读写正常；
+
+ob1=OBI(cluster=2:2:2, init_unit_cpu=2, proxy_num=0, ct_num=0);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.mysql alter system set debug_sync_timeout = '10000s';
+sleep 3;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.port);
+let $mysql_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn,$ip, root@sys,,oceanbase,$mysql_port);
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name ='obtest', tenant_id,1);
+let $resource_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where tenant_id = $tenant_id,resource_pool_id,1);
+let $tt1ip= deploy_get_value(ob1.select select svr_ip from __all_unit where zone='z1' and resource_pool_id = $resource_id limit 1, svr_ip, 1);
+let $svr_port= deploy_get_value(ob1.select select svr_port from __all_unit where zone='z1' and resource_pool_id = $resource_id limit 1, svr_port, 1);
+let $tt1port = deploy_get_value(ob1.select select inner_port from __all_server where svr_ip='$tt1ip' and svr_port=$svr_port, inner_port, 1);
+connect(obtest_conn, $tt1ip, root@obtest,,test, $tt1port);
+create table test(c1 int primary key) partition by hash(c1) partitions 20;
+connection sys_conn;
+set ob_global_debug_sync = 'BEFORE_START_RS wait_for begin execute 100000000';
+connection obtest_conn;
+select * from oceanbase.test;
+let $ip = deploy_get_value(ob1.z2.obs0.ip);
+let $port = deploy_get_value(ob1.z2.obs0.port);
+let $mysql_port = deploy_get_value(ob1.z2.obs0.mysql_port);
+connect(sys_conn,$ip, root@sys,,oceanbase,$mysql_port);
+connection sys_conn;
+set ob_global_debug_sync = 'BEFORE_START_RS wait_for begin execute 100000000';
+connection obtest_conn;
+select * from oceanbase.test;
+connection sys_conn;
+sleep 5;
+##切主
+--disable_query_log
+eval alter system switch ROOTSERVICE leader server='$ip:$port';
+sleep 3;
+--enable_query_log
+
+##检查新主启动失败；
+let $count = deploy_get_value(ob1.select select count(*) c from __all_server where svr_ip = '$ip' and svr_port=$port and with_rootserver = 1, c, 1 );
+if ($count == 0)
+{
+  echo 'success';
+}
+##检查只有stop server 没有start service的event;
+let $stop_count = deploy_get_value(ob1.select select count(*) c from __all_virtual_server_event_history where event = 'stop_rootservice', c, 1);
+let $start_count = deploy_get_value(ob1.select select (count(*)+ 1) c from __all_virtual_server_event_history where event ='start_rootservice', c, 1);
+
+if ($stop_count == $start_count)
+{
+  echo 'success';
+}
+connection obtest_conn;
+ob1.mysql insert into test values(2);
+let$ip=deploy_get_value(ob1.z1.obs1.ip);
+let$port=deploy_get_value(ob1.z1.obs1.port);
+connect(conn1,$ip,root@obtest,,test,$port);
+let$ip=deploy_get_value(ob1.z2.obs0.ip);
+let$port=deploy_get_value(ob1.z2.obs0.mysql_port);
+connect(conn2_0,$ip,root@obtest,,test,$port);
+let$ip=deploy_get_value(ob1.z2.obs1.ip);
+let$port=deploy_get_value(ob1.z2.obs1.port);
+connect(conn2_1,$ip,root@obtest,,test,$port);
+let$ip=deploy_get_value(ob1.z3.obs0.ip);
+let$port=deploy_get_value(ob1.z3.obs0.mysql_port);
+connect(conn3_0,$ip,root@obtest,,test,$port);
+let$ip=deploy_get_value(ob1.z3.obs1.ip);
+let$port=deploy_get_value(ob1.z3.obs1.port);
+connect(conn3_1,$ip,root@obtest,,test,$port);
+connection conn1;
+insert into test values(3);
+connection conn2_0;
+insert into test values(4);
+connection conn2_1;
+insert into test values(6);
+connection conn3_0;
+insert into test values(5);
+connection conn3_1;
+insert into test values(7);
+ob1.z1.obs1.mysql select count(*) from oceanbase.__all_core_table; 
+ob1.z2.obs0.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z2.obs1.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z3.obs0.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z3.obs1.mysql select count(*) from oceanbase.__all_core_table;
+ob1.z1.obs1.mysql select count(*) from oceanbase.__all_root_table; 
+ob1.z2.obs0.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z2.obs1.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z3.obs0.mysql select count(*) from oceanbase.__all_root_table;
+ob1.z3.obs1.mysql select count(*) from oceanbase.__all_root_table;
+
+#--error 4638
+#create table oceanbase.t(c1 int);
+
+###重启z3.obs0;
+#ob1.z3.force_stop;
+#ob1.z3.start;
+#sleep 15;
+#let $ip = deploy_get_value(ob1.z3.obs0.ip);
+#let $port = deploy_get_value(ob1.z3.obs0.port);
+#let $mysql_port = deploy_get_value(ob1.z3.obs0.mysql_port);
+#connect(sys_conn1,$ip, root@sys,,oceanbase,$mysql_port);
+#connection sys_conn1;
+#insert into oceanbase.test values(12);
+#let $ip = deploy_get_value(ob1.z3.obs1.ip);
+#let $port = deploy_get_value(ob1.z3.obs1.port);
+#let $mysql_port = deploy_get_value(ob1.z3.obs1.mysql_port);
+#connect(sys_conn2,$ip, root@sys,,oceanbase,$mysql_port);
+#connection sys_conn2;
+#insert into oceanbase.test values(13);
+#--error 4638
+#create table oceanbase.t(c1 int);
+#

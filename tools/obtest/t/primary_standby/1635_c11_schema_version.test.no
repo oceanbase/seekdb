@@ -1,0 +1,119 @@
+#测试点：schema version生成方式
+#1.bootstrap阶段都是平等生成
+#2.主库生成不受备库影响，每隔10s生成一次next_new_schema_version
+#3.备库的同步不变
+#4.备库自己生成，需要保证已经同步完成，并且小于主库的next_new_schema_version
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob2.reboot;
+#case 1: 主库生成next_new_schema_version
+#检查主库注册成功
+let $next_schema_version = deploy_get_value(ob1.select  select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 12;
+#检查备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob2.check_until_timeout select count(*) from oceanbase.__all_cluster, 2, 20;
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+#保证把主库的next推上去了
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $primary_schema_version, 1, 12;
+#同步完成后，需要等待第一次成功的心跳，把schema version带回来，等待一个心跳的时间
+sleep 5;
+ob2.mysql set @@global.ob_query_timeout = 10000001;
+ob2.mysql alter system set _ob_ddl_timeout = '3s';
+#case 2: 暂停备库的同步，主库做一次ddl，备库不能做ddl，开启同步，同步完成之后，备库可以正常的ddl
+ob_connect(conn, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn;
+set ob_global_debug_sync = 'BEFORE_FOLLOWER_CLUSTER_SYNC_SCHEMA wait_for continue_signal';
+#备库不同步
+ob1.mysql set @@global.ob_query_timeout = 10000001;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+#等待5秒，确认备库上已经收到最新的心跳了
+sleep 5;
+ob2.mysql_p select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version;
+connection conn;
+set ob_query_timeout = 3000000;
+--error 1235
+set @@global.ob_query_timeout = 10000002;
+--error 1235
+set @@global.ob_query_timeout = 10000002;
+--error 1235
+set @@global.ob_query_timeout = 10000002;
+set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+let $next_schema_version = deploy_get_value(ob1.select  select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+#等待一个心跳
+sleep 5;
+connection conn;
+set @@global.ob_query_timeout = 10000002;
+sleep 4;
+let $slave_schema_version = query_get_value(select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+if ($slave_schema_version > $primary_schema_version) 
+{
+  if ($slave_schema_version < $next_schema_version)
+  {
+    echo "schema version succ";
+  }
+}
+
+#case 3: 暂停主库生成next_schema_version，主库做一次ddl，备库同步完成，但是没有办法做ddl
+ob1.mysql set @@global.ob_query_timeout = 10000003;
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GEN_NEXT_SCHEMA_VERSION wait_for continue_signal';
+let $next_schema_version = deploy_get_value(ob1.select  select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+sleep 3;
+ob1.mysql set @@global.ob_query_timeout = 10000004;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+if ($primary_schema_version > $next_schema_version)
+{
+  echo "gen next schema version succ";
+}
+#等待10秒，不生成新的schema version
+sleep 5;
+ob1.mysql_p select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version;
+#add 备库
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+connection conn;
+--error 1235
+set @@global.ob_query_timeout = 10000004;
+connection conn1;
+set ob_global_debug_sync = 'now signal continue_signal';
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 12;
+#等待一个心跳过来
+sleep 5;
+let $next_schema_version = deploy_get_value(ob1.select  select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+if ($primary_schema_version < $next_schema_version)
+{
+  echo "gen next schema version succ";
+}
+
+ob2.mysql set @@global.ob_query_timeout = 10000005;
+ob1.mysql set @@global.ob_query_timeout = 10000006;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $primary_schema_version, 1, 12;
+#case 4: 阻止主备库之间的网络，在已经同步完成的情况下，主库可以继续做ddl，但是备库最多只能生成5000条ddl
+ob1.mysql set ob_global_debug_sync = 'BEFORE_GEN_NEXT_SCHEMA_VERSION wait_for continue_signal';
+#保证备库同步到这个心跳
+sleep 5;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 10;
+let $next_schema_version = deploy_get_value(ob1.select select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+connection conn;
+#步长为1s，至少可以做500个ddl
+let $count = 499;
+--disable_all_result_log
+while ($count > 0)
+{
+  alter tenant sys set locality = 'f@z1';
+  dec $count;
+}
+--enable_all_result_log
+let $next_schema_version = deploy_get_value(ob1.select  select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version', column_value, 1); 
+connection conn;
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+#等待一次推next_schema_version ,等待备库收到这个心跳
+ob1.check_until_timeout select count(*) from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name ='next_schema_version' and column_value > $next_schema_version, 1, 22;
+#等待新一次心跳过来
+sleep 5;
+ob2.mysql set @@global.ob_query_timeout = 10000012;

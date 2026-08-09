@@ -70,7 +70,6 @@ int ObExprSubQueryRef::ExtraInfo::init_extra_info(ObIAllocator *allocator,
     Extra::get_info(rt_expr).is_scalar_ = result_is_scalar;
     Extra::get_info(rt_expr).iter_idx_ = expr.get_ref_id() - 1;
     rt_expr.extra_info_ = extra_info;
-    LOG_DEBUG("succeed to initialize subquery extra info", KPC(extra_info));
   }
   return ret;
 }
@@ -82,12 +81,10 @@ int ObExprSubQueryRef::ExtraInfo::deep_copy(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ExtraInfo *copied_extra_info = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("failed to alloc expr extra info", K(ret));
   } else if (OB_ISNULL(copied_extra_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
   } else if (OB_FAIL(copied_extra_info->scalar_result_type_.assign(scalar_result_type_))) {
-    LOG_WARN("failed to copy scalar result type", K(ret));
   }
   return ret;
 }
@@ -96,7 +93,6 @@ OB_DEF_SERIALIZE(ObExprSubQueryRef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprOperator::serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize ObExprOperator", K(buf_len), K(pos), K(ret));
   }
   bool is_scalar = static_cast<bool>(extra_.is_scalar_);
   int64_t iter_idx = static_cast<int64_t>(extra_.iter_idx_);
@@ -111,7 +107,6 @@ OB_DEF_DESERIALIZE(ObExprSubQueryRef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprOperator::deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to serialize ObExprOperator", K(data_len), K(pos), K(ret));
   }
   bool is_scalar = false;
   int64_t iter_idx = 0;
@@ -165,7 +160,6 @@ int ObExprSubQueryRef::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       OZ (extra_.assign(tmp_other->extra_));
       OZ (extra_info_.assign(tmp_other->extra_info_));
@@ -225,12 +219,10 @@ int ObExprSubQueryRef::expr_eval(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("extra info is null", K(ret));
   } else if (OB_FAIL(get_subquery_iter(ctx, extra, iter))) {
-    LOG_WARN("get sub query iterator failed", K(ret), K(extra));
   } else if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null iter returned", K(ret));
   } else if (OB_FAIL(iter->rewind())) {
-    LOG_WARN("filter to rewind subquery iterator", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (extra.is_scalar_) {
@@ -245,7 +237,6 @@ int ObExprSubQueryRef::expr_eval(
       if (is_hash_enabled) {
         ObDatum out;
         if (OB_FAIL(iter->get_curr_probe_row())) {
-          LOG_WARN("failed to get probe row", K(ret));
         } else if (OB_FAIL(iter->get_refactored(out))) {
           if (OB_HASH_NOT_EXIST != ret) {
             LOG_WARN("failed to find in hash map", K(ret));
@@ -255,7 +246,6 @@ int ObExprSubQueryRef::expr_eval(
         } else {
           found_in_hash_map = true;
           if (OB_FAIL(expr.deep_copy_datum(ctx, out))) {
-            LOG_WARN("failed to deep copy datum", K(ret));
           }
         }
       }
@@ -269,10 +259,7 @@ int ObExprSubQueryRef::expr_eval(
           LOG_WARN("get next row from subquery failed", K(ret));
         }
       } else if (OB_FAIL(iter->get_output().at(0)->eval(iter->get_eval_ctx(), datum))) {
-        LOG_WARN("expr evaluate failed", K(ret));
-        // deep copy datum since the following iter->get_next_row() make datum invalid.
       } else if (OB_FAIL(expr.deep_copy_datum(ctx, *datum))) {
-        LOG_WARN("deep copy datum failed", K(ret), K(datum));
       }
       if (OB_SUCC(ret) && is_hash_enabled
                        && iter->probe_row_.cnt_ > 0
@@ -299,11 +286,9 @@ int ObExprSubQueryRef::expr_eval(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc memory for row key", K(ret),  K(row_key.cnt_));
         } else if (OB_FAIL(value.deep_copy(*datum, *alloc))) {
-          LOG_WARN("deep copy datum failed", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < row_key.cnt_; ++i) {
             if (OB_FAIL(row_key.elems_[i].deep_copy(iter->probe_row_.elems_[i], *alloc))) {
-              LOG_WARN("failed to copy probe row", K(ret));
             }
           }
           if (OB_SUCC(ret) && OB_FAIL(iter->set_refactored(row_key, value, need_size))) {
@@ -371,14 +356,12 @@ int ObExprSubQueryRef::reset_onetime_expr(const ObExpr &expr, ObEvalCtx &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("extra info is null", K(ret));
   } else if (OB_FAIL(get_subquery_iter(ctx, extra, iter))) {
-    LOG_WARN("get sub query iterator failed", K(ret), K(extra));
   } else if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null iter returned", K(ret));
   } else if (!iter->is_onetime_plan()) {
     // do nothing
   } else if (OB_FAIL(iter->rewind(reset_for_onetime_expr))) {
-    LOG_WARN("filter to rewind subquery iterator", K(ret));
   }
   return ret;
 }

@@ -18,6 +18,7 @@
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "ob_opt_est_parameter_normal.h"
 #include "sql/optimizer/ob_sel_estimator.h"
 namespace oceanbase {
 using namespace share::schema;
@@ -1387,8 +1388,8 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
     index_est_arg->scan_flag_.index_back_ = ap.est_cost_info_.index_meta_info_.is_index_back_;
     index_est_arg->range_columns_count_ = ap.est_cost_info_.range_columns_.count();
     index_est_arg->tablet_id_ = tablet.tablet_id_;
-
-
+    
+    
     index_est_arg->tx_id_ = ctx.get_session_info()->get_tx_id();
   }
   // FIXME, move following codes
@@ -1599,7 +1600,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = local_tablet.tablet_id_;
-
+      
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(ObSQLUtils::make_whole_range(arena,
                                                meta.ref_table_id_,
@@ -1708,7 +1709,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
       path_arg.range_columns_count_ = meta.table_rowkey_count_;
       path_arg.batch_.type_ = ObSimpleBatch::T_SCAN;
       path_arg.tablet_id_ = local_tablet.tablet_id_;
-
+      
       path_arg.tx_id_ = ctx.get_session_info()->get_tx_id();
       if (OB_FAIL(construct_scan_range_batch(ctx.get_allocator(), chosen_scan_ranges, path_arg.batch_))) {
       } else if (OB_FAIL(task->arg_.index_params_.push_back(path_arg))) {

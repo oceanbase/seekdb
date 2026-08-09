@@ -23,7 +23,6 @@
 #endif
 
 #include "share/config/ob_runtime_config.h"
-#include "lib/alloc/alloc_func.h"
 #include "lib/thread_local/ob_tsi_utils.h"
 
 namespace oceanbase {
@@ -32,8 +31,7 @@ namespace share {
 #define THROTTLE_UNIT_INFO                                                                                             \
   KP(this), K(enable_adaptive_limit_), "Unit Name", unit_name_, "Config Specify Resource Limit(MB)",                   \
       config_specify_resource_limit_ / 1024 / 1024, "Resource Limit(MB)", resource_limit_ / 1024 / 1024,               \
-      "Throttle Trigger(MB)", lib::get_memory_by_percentage(                                                          \
-          resource_limit_, throttle_trigger_percentage_) / 1024 / 1024,                                               \
+      "Throttle Trigger(MB)", resource_limit_ *throttle_trigger_percentage_ / 100 / 1024 / 1024,                       \
       "Throttle Percentage", throttle_trigger_percentage_, "Max Duration(us)", throttle_max_duration_, "Decay Factor", \
       decay_factor_
 
@@ -42,7 +40,7 @@ int ObThrottleUnit<ALLOCATOR>::init()
 {
   int ret = OB_SUCCESS;
   ObMemAttr attr;
-
+  
   attr.label_ = "ThrottleInfoMap";
   attr.ctx_id_ = ObCtxIds::DEFAULT_CTX_ID;
   if (IS_INIT) {
@@ -54,7 +52,7 @@ int ObThrottleUnit<ALLOCATOR>::init()
     (void)update_decay_factor_();
     config_specify_resource_limit_ = resource_limit_;
     enable_adaptive_limit_ = false;
-
+    
     is_inited_ = true;
     SHARE_LOG(INFO,
               "[Throttle]Init throttle config finish",
@@ -88,8 +86,7 @@ int ObThrottleUnit<ALLOCATOR>::alloc_resource(const int64_t holding_size,
     }
 
     // check if need throttle
-    const int64_t throttle_trigger =
-        lib::get_memory_by_percentage(resource_limit_, trigger_percentage);
+    int64_t throttle_trigger = resource_limit_ * trigger_percentage / 100;
     if (OB_UNLIKELY(holding_size < 0 || alloc_size <= 0 || resource_limit_ <= 0 || trigger_percentage <= 0)) {
       SHARE_LOG(ERROR, "invalid arguments", K(holding_size), K(alloc_size), K(resource_limit_), K(trigger_percentage));
     } else if (holding_size > throttle_trigger) {
@@ -114,8 +111,7 @@ bool ObThrottleUnit<ALLOCATOR>::has_triggered_throttle(const int64_t holding_siz
   int64_t trigger_percentage = throttle_trigger_percentage_;
 
   if (OB_LIKELY(trigger_percentage < 100)) {
-    const int64_t throttle_trigger =
-        lib::get_memory_by_percentage(resource_limit_, trigger_percentage);
+    int64_t throttle_trigger = resource_limit_ * trigger_percentage / 100;
     if (OB_UNLIKELY(holding_size < 0 || trigger_percentage <= 0)) {
       triggered_throttle = true;
       SHARE_LOG(ERROR, "invalid arguments", K(holding_size), K(resource_limit_), K(trigger_percentage));
@@ -135,8 +131,7 @@ bool ObThrottleUnit<ALLOCATOR>::exceeded_resource_limit(const int64_t holding_re
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(holding_resource < 0 || apply_resource <= 0)) {
     SHARE_LOG(ERROR, "invalid arguments", K(holding_resource), K(resource_limit_), K(apply_resource));
-  } else if (resource_limit_ <= 0 || holding_resource >= resource_limit_ ||
-             apply_resource > resource_limit_ - holding_resource) {
+  } else if (holding_resource + apply_resource > resource_limit_) {
     exceeded = true;
   }
   return exceeded;
@@ -287,8 +282,7 @@ int ObThrottleUnit<ALLOCATOR>::get_throttle_info_(const ThrottleID &throttle_id,
 template <typename ALLOCATOR>
 void ObThrottleUnit<ALLOCATOR>::update_decay_factor_(const bool is_adaptive_update /* default : false */)
 {
-  const int64_t avaliable_resources = lib::get_memory_by_percentage(
-      resource_limit_, 100 - throttle_trigger_percentage_);
+  int64_t avaliable_resources = (100 - throttle_trigger_percentage_) * resource_limit_ / 100;
   double N = static_cast<double>(avaliable_resources) / static_cast<double>(RESOURCE_UNIT_SIZE_);
   double decay_factor =
       (static_cast<double>(throttle_max_duration_) - N) / static_cast<double>((((N * (N + 1) * N * (N + 1))) / 4));
@@ -324,8 +318,7 @@ void ObThrottleUnit<ALLOCATOR>::advance_clock(const int64_t holding_size)
     }
 
     bool unused = false;
-    const int64_t throttle_trigger = lib::get_memory_by_percentage(
-        resource_limit_, throttle_trigger_percentage_);
+    const int64_t throttle_trigger = resource_limit_ * throttle_trigger_percentage_ / 100;
     const int64_t avaliable_resource = avaliable_resource_after_dt_(holding_size, throttle_trigger, advance_us);
     const int64_t clock = ATOMIC_LOAD(&clock_);
     const int64_t cur_seq = ATOMIC_LOAD(&sequence_num_);
@@ -440,11 +433,10 @@ bool ObThrottleUnit<ALLOCATOR>::still_throttling(ObThrottleInfoGuard &ti_guard, 
   bool still_throttling = false;
   int64_t trigger_percentage = throttle_trigger_percentage_;
   ObThrottleInfo *ti_info = ti_guard.throttle_info();
-
+  
   // check if still throttling
   if (trigger_percentage < 100 && OB_NOT_NULL(ti_info)) {
-    const int64_t throttle_trigger =
-        lib::get_memory_by_percentage(resource_limit_, trigger_percentage);
+    int64_t throttle_trigger = resource_limit_ * trigger_percentage / 100;
     if (ti_info->sequence_ <= clock_) {
       still_throttling = false;
     } else {
@@ -471,8 +463,7 @@ int64_t ObThrottleUnit<ALLOCATOR>::expected_wait_time(share::ObThrottleInfoGuard
     // do not need wait cause clock has reached queue_sequence
     expected_wait_time = 0;
   } else {
-    const int64_t throttle_trigger = lib::get_memory_by_percentage(
-        resource_limit_, throttle_trigger_percentage_);
+    int64_t throttle_trigger = resource_limit_ * throttle_trigger_percentage_ / 100;
     int64_t can_assign_in_next_period =
         avaliable_resource_after_dt_(holding_size, throttle_trigger, ADVANCE_CLOCK_INTERVAL);
     if (can_assign_in_next_period != 0) {

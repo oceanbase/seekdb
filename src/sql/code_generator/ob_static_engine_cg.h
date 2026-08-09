@@ -500,7 +500,7 @@ private:
 
   bool column_exists_in_list(const ObIArray<std::pair<uint64_t, uint64_t>> &visited_columns, const uint64_t table_id, const uint64_t column_id);
 
-  void set_murmur_hash_func(ObHashFunc &hash_func, const ObExprBasicFuncs *basic_funcs_);
+  void set_murmur_hash_func(ObHashFunc &hash_func, const common::ObDatumBasicFuncs *basic_funcs_);
 
   int prepare_topn_runtime_filter_info(ObLogSort &op, ObOpSpec &spec);
 

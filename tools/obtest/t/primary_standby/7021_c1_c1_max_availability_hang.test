@@ -1,0 +1,59 @@
+#rs
+#zbf
+#When standby resource is not enough, and the cluster is in MAXIMUM AVAILABILITY protection level, test cannot create tenant successfully on standby.
+ob1=OBI(cluster=1, proxy_num = 0, memory_size_limit=30G);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1, memory_size_limit=20G);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality set ob_tcp_invited_nodes='%';
+
+
+
+let $case_index = 2;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality set ob_tcp_invited_nodes='%';
+
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+#set redo_transport_options='SYNC
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='SYNC'; 
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 300;
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE AVAILABILITY;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+ob1.check_until_timeout select protection_level from oceanbase.__all_cluster where cluster_id = $cluster_id, MAXIMUM AVAILABILITY, 100;
+ob1.mysql_p select protection_level from oceanbase.__all_cluster;
+
+let $memory = 2073741824;
+let $min_memory = 2073741824;
+
+let $case_index = 3;
+ob1.mysql CREATE RESOURCE UNIT unit_$case_index MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_$case_index UNIT = 'unit_$case_index', UNIT_NUM = $unit_num, ZONE_LIST = ($zone_list);
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_$case_index'), locality=$locality set ob_tcp_invited_nodes='%';
+
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, NOT ALLOWED, 60;
+ob1.check_until_timeout select switchover_info from oceanbase.v\$ob_cluster, NONE SYNCED STANDBY CLUSTER, 60;
+ob1.check_until_timeout select synchronization_status from oceanbase.v\$ob_standby_status, SYS SCHEMA NOT SYNC, 60;

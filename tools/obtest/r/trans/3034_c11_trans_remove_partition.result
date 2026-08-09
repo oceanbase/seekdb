@@ -1,0 +1,17 @@
+ob1=OBI(cluster=1:1:1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2', locality='F@z1,F@z2,R@z3' set ob_tcp_invited_nodes='%';
+id1	id2
+1	1
+id1	id2
+1	1
+ob1.mysql alter tenant tenant_1 set locality = 'F@z1,F@z2";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 3000;
+ob1.mysql alter tenant tenant_1 set locality = 'F@z1,F@z2,R@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_name = "tenant_1" and previous_locality != "", 0, 3000;

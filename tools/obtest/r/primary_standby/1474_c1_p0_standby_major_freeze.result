@@ -1,0 +1,31 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table t(c1 int primary key, c2 int);
+insert into t values (1, 2);
+select * from t;
+c1	c2
+1	2
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.check_version 3;
+select count(*) from __all_core_table where table_name = '__all_freeze_info';
+count(*)
+9
+select count(*) from __all_freeze_schema_version;
+count(*)
+5
+select count(*) from __all_core_table where table_name = '__all_freeze_info';
+count(*)
+9
+select count(*) from __all_freeze_schema_version;
+count(*)
+5

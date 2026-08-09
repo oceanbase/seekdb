@@ -1,0 +1,54 @@
+# CASE_OWNER:
+#    @cangming.zl
+# CASE_DESC:
+#    shrink unit config
+
+ob1=OBI(cluster=1:1:1, proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set balancer_idle_time = '10s';
+
+let $proxy_ip = deploy_get_value(ob1.z1.obs0.ip);
+let $proxy_port = deploy_get_value(ob1.z1.obs0.mysql_port);
+connect(sys_conn, $proxy_ip, root@sys,,oceanbase, $proxy_port);
+
+ob1.mysql CREATE RESOURCE UNIT small_unit MAX_CPU 1, memory_size '1G';
+ob1.mysql CREATE RESOURCE UNIT big_unit MAX_CPU 1, memory_size '4G';
+
+ob1.mysql CREATE RESOURCE UNIT test_unit MAX_CPU 1, memory_size '2G';
+
+
+connection sys_conn;
+
+CREATE RESOURCE POOL tt1_pool1 UNIT = 'big_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE RESOURCE POOL tt1_pool2 UNIT = 'big_unit', UNIT_NUM = 1, ZONE_LIST = ('z2');
+CREATE RESOURCE POOL tt1_pool3 UNIT = 'big_unit', UNIT_NUM = 1, ZONE_LIST = ('z3');
+
+CREATE RESOURCE POOL tt2_pool1 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE RESOURCE POOL tt2_pool2 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z2');
+CREATE RESOURCE POOL tt2_pool3 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z3');
+
+CREATE RESOURCE POOL tt3_pool1 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE RESOURCE POOL tt3_pool2 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z2');
+CREATE RESOURCE POOL tt3_pool3 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z3');
+
+CREATE RESOURCE POOL tt4_pool1 UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+
+
+CREATE TENANT tt1 RESOURCE_POOL_LIST = ('tt1_pool1','tt1_pool2','tt1_pool3') set ob_tcp_invited_nodes='%';
+CREATE TENANT tt2 RESOURCE_POOL_LIST = ('tt2_pool1','tt2_pool2','tt2_pool3') set ob_tcp_invited_nodes='%';
+CREATE TENANT tt3 RESOURCE_POOL_LIST = ('tt3_pool1','tt3_pool2','tt3_pool3') set ob_tcp_invited_nodes='%';
+CREATE TENANT tt4 RESOURCE_POOL_LIST = ('tt4_pool1') set ob_tcp_invited_nodes='%';
+
+sleep 60;
+
+sleep 1;
+ALTER RESOURCE POOL tt1_pool1 UNIT = 'small_unit';
+
+sleep 1;
+ALTER RESOURCE POOL tt1_pool2 UNIT = 'small_unit';
+
+sleep 1;
+ALTER RESOURCE POOL tt1_pool3 UNIT = 'small_unit';
+
+sleep 1;
+ALTER RESOURCE UNIT test_unit MAX_CPU 1, memory_size '1G';

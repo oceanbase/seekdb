@@ -117,10 +117,6 @@ public:
                          const share::SCN &ref_scn,
                          LSN &lsn,
                          share::SCN &scn) = 0;
-  virtual int submit_imported_group(const LSN &source_lsn,
-                                    const share::SCN &source_scn,
-                                    const char *buf,
-                                    const int64_t buf_len) = 0;
   // Set the recyclable point of the log file, log files with LSN less than or equal to lsn can be safely recycled
   //
   // @param [in] lsn, the log file position that can be recycled
@@ -287,10 +283,6 @@ public:
                  const share::SCN &ref_scn,
                  LSN &lsn,
                  share::SCN &scn) override final;
-  int submit_imported_group(const LSN &source_lsn,
-                            const share::SCN &source_scn,
-                            const char *buf,
-                            const int64_t buf_len) override final;
 
   int set_base_lsn(const LSN &lsn) override final;
   void set_deleted() override final;

@@ -1,46 +1,74 @@
 # 在 Android 上构建和运行 seekdb
 
-本文介绍如何在 macOS 上将 seekdb 交叉编译为 Android arm64-v8a 二进制，并部署到模拟器或真机。
+在 macOS 上使用 NDK 工具链将 seekdb 交叉编译为 Android arm64-v8a 架构，然后在模拟器或真机上部署运行。
 
 ## 前置条件
 
-- macOS 主机
-- Android NDK 27.x；如果不在 SDK 默认路径，需设置 `ANDROID_NDK_HOME`
-- API 28 或更高版本的 arm64-v8a 真机或模拟器
-- 已将 `adb` 和 MySQL 兼容客户端加入 `PATH`
+- macOS 主机（本文档基于 macOS 环境编写）
+- 已安装 Android NDK 27.x（默认路径：`~/Library/Android/sdk/ndk/27.3.13750724`）
+- 运行 arm64-v8a（API 28+）的 Android 模拟器，或物理设备
+- 通过 [ob-deps](https://github.com/oceanbase/ob-deps/tree/android_arm64-v8a) 的 `ndk/build_all.sh` 构建依赖
+- 已安装 `adb` 并加入 PATH
+- 已安装 `mysql` 客户端（用于启动后连接）
+
+若 NDK 不在默认路径，请设置 `ANDROID_NDK_HOME`：
+
+```bash
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/27.3.13750724
+```
+
+> **说明**：配置阶段可能出现 `CMake Deprecation Warning`（来自 NDK 的 `flags.cmake` 中 `cmake_minimum_required(VERSION 3.6.0)`）。该警告可忽略，不影响构建。
 
 ## 构建
 
-使用受支持的 Android 构建入口，一次完成依赖初始化、配置和编译：
+### 1. 初始化依赖
 
 ```bash
-./build.sh release --android --init --make -j16
+./build.sh release --android --init
 ```
 
-二进制文件位于：
+该命令会以 Android 模式执行 `deps/init/dep_create.sh`，下载并解压预构建的 NDK 依赖 tarball 到 `deps/3rd/`。
 
-```text
-build_android_release/src/observer/seekdb
-```
+### 2. 配置并构建
 
-Android CMake 构建不提供 `all_tests` 目标。单元测试修改应按照[编写与运行单元测试](unittest.md)中的流程，在受支持的 Linux 主机上验证。
-
-## 移除符号并部署
-
-macOS 自带的 `strip` 无法处理 Android ELF 二进制，必须使用 NDK 提供的工具：
+仅构建 observer 二进制：
 
 ```bash
-NDK_STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip"
-"$NDK_STRIP" -o /tmp/seekdb build_android_release/src/observer/seekdb
+cd build_android_release
+make seekdb -j$(nproc)
+```
+
+### 3. 构建单元测试（可选）
+
+`all_tests` 会将所有单元测试合并到一个可执行文件中：
+
+```bash
+cd build_android_release
+make all_tests
+```
+
+## 部署到模拟器
+
+### 移除调试符号
+
+```bash
+NDK_STRIP=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
+
+$NDK_STRIP -o /tmp/seekdb build_android_release/src/observer/seekdb
+```
+
+macOS 自带的 `strip` 无法处理 ELF 二进制，必须使用 NDK 提供的 strip。
+
+### 推送到模拟器
+
+```bash
 adb push /tmp/seekdb /data/local/tmp/seekdb
 adb shell chmod +x /data/local/tmp/seekdb
 ```
 
-Apple Silicon 上应以 `$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/` 下实际存在的主机目录为准。
+## 启动 seekdb
 
-## 启动并连接
-
-根据设备资源选择合适的参数：
+### 启动服务
 
 ```bash
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
@@ -53,16 +81,34 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-转发 SQL 端口并连接：
+Android 上建议显式设置资源参数。`memory_budget` 未设置时默认使用 1 GiB，应结合设备可用资源一并设置数据文件和日志文件大小。
+
+### 端口转发
+
+在另一个终端中执行：
 
 ```bash
-adb forward tcp:2881 tcp:2881
-mysql -h127.0.0.1 -P2881 -uroot
+adb forward tcp:2881 tcp:2881   # MySQL 协议
 ```
 
-查看日志和停止进程：
+### 连接
+
+```bash
+mysql -h 127.0.0.1 -P 2881 -u root
+```
+
+```sql
+SELECT 1;
+```
+
+### 查看日志
 
 ```bash
 adb shell "tail -100 /data/local/tmp/seekdb_data/log/seekdb.log"
+```
+
+### 停止服务
+
+```bash
 adb shell "kill \$(pidof seekdb)"
 ```

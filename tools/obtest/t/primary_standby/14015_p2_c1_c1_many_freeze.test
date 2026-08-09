@@ -1,0 +1,85 @@
+# owner: rongxuan.lc
+# description: 
+#  (1)备库合并版本落后超过16时，不继续同步新的同步信息；
+#  (2)如果是快照接入阶段冻结版本超过16时，则会一直同步到最新版本；
+
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob3=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_$case_index RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set merger_check_interval='10s';
+
+
+sleep 3;
+##卡住备库每日合并；主库发起20次合并；
+ob_connect(sys2_conn, ob2.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys2_conn;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set merger_check_interval='10s';
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob2.mysql set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for signal';
+ob_connect(sys1_conn, ob1.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys1_conn;
+
+let $count = 16;
+while ($count>0)
+{
+  alter system major freeze;
+  dec $count;
+}
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 16, 60;
+ob1.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'global_broadcast_version' and value > 4 and zone = '', 1, 300; 
+let $count = 2;
+while ($count>0)
+{
+  alter system major freeze;
+  dec $count;
+}
+
+##主库合并完成
+ob1.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value >= 19 and zone = '', 1, 1200;
+##备库还在16版本；
+ob2.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 16, 3;
+##备库合并完成
+ob2.mysql set ob_global_debug_sync = 'now signal signal';
+ob2.check_until_timeout select count(*) from oceanbase.__all_zone where name = 'last_merged_version' and value > 18 and zone = '', 1, 1200;
+
+####启动备库3
+ob3.reboot;
+ob_connect(sys3_conn, ob3.z1.obs0, root, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection sys3_conn;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set merger_check_interval='10s';
+set ob_global_debug_sync = 'BEFORE_DAILY_MERGE_RUN wait_for signal';
+ob3.check_until_timeout select column_value from oceanbase.__all_core_table where table_name = '__all_global_stat' and column_name = 'frozen_version', 19, 200;

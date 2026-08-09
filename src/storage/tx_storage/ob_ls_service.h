@@ -54,10 +54,7 @@ public:
 public:
   // create a LS
   int create_ls(const share::ObServerRole &server_role = share::PRIMARY_SERVER_ROLE);
-  int create_ls_for_restore(
-      const palf::PalfBaseInfo &palf_base_info,
-      const share::SCN &restore_checkpoint_scn);
-  int update_ls_meta_for_physical_restore(const ObLSMeta &source_meta);
+  int create_ls_for_restore();
 
   // create a LS for replay or update LS's meta
   // @param [in] ls_epoch, the epoch increases monotonically in database scope when an LS is created
@@ -73,11 +70,6 @@ public:
 
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
-
-  int fence_local_transactions(const int64_t deadline_us);
-  int fence_local_append(const int64_t deadline_us);
-  int prepare_local_append(const int64_t deadline_us);
-  int activate_local_append();
 
   // remove the ls that is creating and write abort slog.
   int gc_ls_after_replay_slog();
@@ -118,14 +110,12 @@ private:
     share::ObServerRole server_role_;
     ObRestoreStatus restore_status_;
     share::SCN create_scn_;
-    palf::PalfBaseInfo palf_base_info_;
     bool need_create_inner_tablet_;
   };
 
   int create_ls_(const ObCreateLSCommonArg &arg);
   int inner_create_ls_(const ObRestoreStatus &restore_status,
                        const share::SCN &create_scn,
-                       const palf::LSN &clog_base_lsn,
                        ObLS *&ls);
   int publish_ls_(ObLS *ls);
   void free_ls_(ObLS *ls);
@@ -141,7 +131,6 @@ private:
   bool is_inited_;
   bool is_running_; // used by create/remove, only can be used after start and before stop.
   bool is_stopped_;
-  bool boot_append_mode_;
   ObLS *ls_;
 
   common::ObConcurrentFIFOAllocator ls_allocator_;

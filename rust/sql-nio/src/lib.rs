@@ -36,7 +36,6 @@ use slab::Slab;
 
 mod abi_layout;
 mod capability;
-mod cert;
 mod codec;
 mod command;
 mod compress;
@@ -83,7 +82,7 @@ const WAKER: Token = Token(1);
 #[cfg_attr(not(unix), allow(dead_code))]
 const LOCAL_LISTENER: Token = Token(2);
 const FIRST_CONN: usize = 3;
-const NIO_ABI_VERSION: u32 = 26;
+const NIO_ABI_VERSION: u32 = 24;
 const MAX_IO_THREADS: usize = 128;
 
 const REQUEST_BUSY: u8 = 1 << 0;

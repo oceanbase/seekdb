@@ -1,0 +1,191 @@
+#rs
+#msy
+#多备库典型测试
+#case 1：启动一个备库B，创建租户，然后合并，创建租户合并；创建租户，合并；
+#case 2: 新增一个备库C，然后进行主备库切换；
+#case 3: 在新主库B上创建一个租户，然后合并，等待同步完成，然后切换，
+#case 4: 在新加一个备库D，去掉第一个备库B，等待同步完成, 然后切换
+#case 5：再次新加一个备库E，去掉C，切回备库A；
+#case 6: 把BCreboot后重新接入, BC可以同步完成
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob4=OBI(cluster=1, proxy_num = 0, leaderob=ob3);
+ob5=OBI(cluster=1, proxy_num = 0, leaderob=ob4);
+
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 40;
+ob2.mysql alter system set balancer_idle_time = '10s';
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+ob2.mysql alter system set data_copy_concurrency = 60;
+#case1 A B
+#检查备库同步完成主库
+#建租户
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+sleep 3;
+ob_connect(conn1, ob1, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int, c3 int);
+insert into t1 values(1, 1, 1);
+create index il on t1(c2) local;
+create index il1 on t1(c3) global;
+ob1.mysql alter system major freeze;
+let $case_index = 2;
+source include/create_tenant_1.inc;
+ob1.check_version 2;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.check_version 2;
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+create table t2 (c1 int primary key);
+ob2.check_version 3;
+
+#case 2 B A C
+ob3.reboot;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob3.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob3.mysql alter system set balancer_idle_time = '10s';
+ob3.mysql alter system set server_data_copy_out_concurrency = 30;
+ob3.mysql alter system set server_data_copy_in_concurrency = 30;
+ob3.mysql alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 40;
+ob1.mysql alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob2.mysql alter system commit to switchover to primary;
+
+#case3
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 30;
+ob1.mysql alter system set server_data_copy_in_concurrency = 30;
+ob1.mysql alter system set data_copy_concurrency = 60;
+
+ob2.mysql set global ob_query_timeout = 30000000;
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob2.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob2.mysql CREATE TENANT tt3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(conn2, ob2.z1.obs0, root@tt3, , test, , USE_MYSQL_CONNECTOR);
+create table t1(c1 int primary key, c2 int, c3 int) partition by hash(c1) partitions 10;
+drop table t1;
+ob2.mysql alter system major freeze;
+ob2.check_version 4;
+#检查新备库是否可以同步完成
+let $primary_schema_version = deploy_get_value(ob2.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob3.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+let $cluster_name = deploy_get_value(ob1.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+
+let $cluster_id = deploy_get_value(ob1.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'HANG_HEART_BEAT_ON_RS wait_for continue_signal';
+sleep 2;
+#吧A机器的状态变成deleting，停止A的同步
+ob1.mysql update oceanbase.__all_server set status = 'DELETING';
+ob1.mysql alter system reload server;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 800;
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+create table t3 (c1 int primary key);
+ob2.mysql  alter system commit to switchover to physical standby;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob3.mysql alter system commit to switchover to primary;
+
+#case 4 C成主库， B为备库 添加备库D, 删除掉备库B
+ob4.reboot;
+let $primary_schema_version = deploy_get_value(ob3.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob4.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 60;
+
+ob4.mysql alter system set balancer_idle_time = '10s';
+ob4.mysql alter system set server_data_copy_out_concurrency = 30;
+ob4.mysql alter system set server_data_copy_in_concurrency = 30;
+ob4.mysql alter system set data_copy_concurrency = 60;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+--disable_query_log
+ob3.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob3.mysql create user msy;
+ob3.mysql alter system major freeze;
+ob3.mysql grant select on oceanbase.* to msy;
+ob3.mysql set global ob_query_timeout = 30000000;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob_connect(conn4, ob4.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn4;
+create table t4 (c1 int primary key);
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob3.mysql alter system commit to switchover to physical standby;
+ob4.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob4.mysql alter system commit to switchover to primary;
+
+#case 5 D成为主库,A(宕机状态)  C 为备库，把 E 添加进来，然后去掉C
+ob5.reboot;
+let $primary_schema_version = deploy_get_value(ob4.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob5.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+
+ob5.mysql alter system set balancer_idle_time = '10s';
+ob5.mysql alter system set server_data_copy_out_concurrency = 30;
+ob5.mysql alter system set server_data_copy_in_concurrency = 30;
+ob5.mysql alter system set data_copy_concurrency = 60;
+let $cluster_name = deploy_get_value(ob3.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob3.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+--disable_query_log
+ob4.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+--enable_query_log
+ob4.mysql drop user msy;
+ob4.mysql alter system major freeze;
+ob4.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob_connect(conn5, ob5.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn5;
+create table t5 (c1 int primary key);
+ob4.mysql alter system commit to switchover to physical standby;
+ob5.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob5.mysql alter system commit to switchover to primary;
+
+
+#case 6 E是主库，A D是备库，把D宕掉，然后把A切回主库，把B库重新接入
+ob1.mysql update oceanbase.__all_server set status = 'ACTIVE';
+ob1.mysql alter system reload server;
+#D变成deleting
+ob4.mysql alter system set debug_sync_timeout = '100000s';
+ob4.mysql set ob_global_debug_sync = 'HANG_HEART_BEAT_ON_RS wait_for continue_signal';
+sleep 2;
+ob4.mysql update oceanbase.__all_server set status = 'DELETING';
+ob4.mysql alter system reload server;
+ob5.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+connection conn5;
+create table t6 (c1 int primary key);
+ob5.mysql alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 40;
+ob1.mysql alter system commit to switchover to primary;
+
+#case 7 A是主库
+#ob2.reboot;
+#let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+#ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+#
+#ob2.mysql alter system set balancer_idle_time = '10s';
+#ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+#ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+#ob2.mysql alter system set data_copy_concurrency = 60;
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+#ob5.mysql update oceanbase.__all_server set status = 'DELETING';
+#ob5.mysql alter system reload server;
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+
+

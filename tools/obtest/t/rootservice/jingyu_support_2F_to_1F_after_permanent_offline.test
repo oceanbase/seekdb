@@ -1,0 +1,107 @@
+# CASE_OWNER:
+#    @jingyu.cr
+# CASE_DESC:
+#    This case is aimed to test remove 2F to 1F
+#
+ob1=OBI(cluster=2:2:1, proxy_num=0, asvr_num=0);
+
+let $extra_conf = "cpu_count=8,memory_budget='20G',system_memory='5G',__min_full_resource_pool_memory='1073741824',cache_wash_threshold='1G',log_disk_size='20G'";
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z1.obs1.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+ob1.z2.obs1.set extra_config=$extra_conf;
+ob1.z3.obs0.set extra_config=$extra_conf;
+
+# bootstrap
+ob1.reboot;
+sleep 3;
+
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+let $z1_dst_ip0 = deploy_get_value(ob1.z1.obs0.ip);
+let $z1_dst_port0 = deploy_get_value(ob1.z1.obs0.port);
+let $z1_dst0 = $z1_dst_ip0:$z1_dst_port0;
+let $z1_dst_ip1 = deploy_get_value(ob1.z1.obs1.ip);
+let $z1_dst_port1 = deploy_get_value(ob1.z1.obs1.port);
+let $z1_dst1 = $z1_dst_ip1:$z1_dst_port1;
+
+let $z2_dst_ip0 = deploy_get_value(ob1.z2.obs0.ip);
+let $z2_dst_port0 = deploy_get_value(ob1.z2.obs0.port);
+let $z2_dst0 = $z2_dst_ip0:$z2_dst_port0;
+let $z2_dst_ip1 = deploy_get_value(ob1.z2.obs1.ip);
+let $z2_dst_port1 = deploy_get_value(ob1.z2.obs1.port);
+let $z2_dst1 = $z2_dst_ip1:$z2_dst_port1;
+
+# create mysql tenant(2F)
+--echo ==================================================
+--echo          create mysql tenant with FF
+--echo ==================================================
+--enable_query_log
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE='2G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1', 'z2');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'),  locality='F@z1, F@z2', primary_zone='z1;z2' set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = 'mysql', tenant_id, 1);
+let $meta_tenant_id = deploy_get_value(ob1.select select tenant_id - 1 as meta_tenant_id from oceanbase.DBA_OB_TENANTS where tenant_name = "mysql", meta_tenant_id, 1);
+let $ls_cnt = deploy_get_value(ob1.select select count(distinct ls_id) as ls_cnt from oceanbase.__all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id, ls_cnt, 1);
+
+ob1.mysql alter tenant sys set primary_zone = "z3;z2;z1";
+ob1.check_until_timeout select count(*) c from oceanbase.CDB_OB_LS_LOCATIONS where role like "%LEADER%" and tenant_id = 1 and zone = 'z3', 0, 60;
+
+--echo ==================================================
+--echo       migrate unit in z2 and ERRSIM 2F in z2
+--echo ==================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 1;
+let $resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $mysql_tenant_id, resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $resource_pool_id AND zone = 'z2', unit_id, 1);
+let $ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_ip, 1);
+let $port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $unit_id, svr_port, 1);
+let $z2_cur = $ip:$port;
+
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+if ($z2_cur != $z2_dst0)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z2_dst0";
+}
+if ($z2_cur != $z2_dst1)
+{
+  --disable_query_log
+  eval ALTER SYSTEM MIGRATE UNIT $unit_id DESTINATION "$z2_dst1";
+}
+# check whether z2 has 2 F-replicas
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id and role = 'LEADER' and member_list like "%$z2_dst0%" and member_list like "%$z2_dst1%", 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $mysql_tenant_id and role = 'LEADER' and member_list like "%$z2_dst0%" and member_list like "%$z2_dst1%", 2, 120;
+
+--echo ==================================================
+--echo         permanent offline replica in z1
+--echo ==================================================
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+let $z1_resource_pool_id = deploy_get_value(ob1.select SELECT resource_pool_id FROM oceanbase.__all_resource_pool WHERE tenant_id = $mysql_tenant_id, resource_pool_id, 1);
+let $z1_unit_id = deploy_get_value(ob1.select SELECT unit_id FROM oceanbase.DBA_OB_UNITS WHERE resource_pool_id = $z1_resource_pool_id AND zone = 'z1', unit_id, 1);
+let $z1_ip = deploy_get_value(ob1.select SELECT svr_ip FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z1_unit_id, svr_ip, 1);
+let $z1_port = deploy_get_value(ob1.select SELECT svr_port FROM oceanbase.DBA_OB_UNITS WHERE unit_id = $z1_unit_id, svr_port, 1);
+let $z1_cur = $z1_ip:$z1_port;
+if ($z1_cur != $z1_dst0)
+{
+  --disable_query_log
+  ob1.z1.obs1.force_stop;
+}
+if ($z1_cur != $z1_dst1)
+{
+  --disable_query_log
+  ob1.z1.obs0.force_stop;
+}
+
+ob1.check_until_timeout select count(*) as server_cnt from oceanbase.DBA_OB_SERVERS where status like "%INACTIVE%", 1, 30;
+sleep 20;
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 0;
+
+--echo ==================================================
+--echo     release debug sync and wait auto-recovery
+--echo ==================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $meta_tenant_id and role = 'LEADER' and member_list not like "%$z1_cur%" and paxos_replica_number = 2, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id = $mysql_tenant_id and role = 'LEADER' and member_list not like "%$z1_cur%" and paxos_replica_number = 2, $ls_cnt, 300;

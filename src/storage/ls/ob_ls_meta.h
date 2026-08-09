@@ -45,6 +45,7 @@ public:
   bool is_valid() const;
   int set_start_work_state();
   int set_start_restore_state();
+  int set_finish_restore_state();
   int set_remove_state();
   const ObLSPersistentState &get_persistent_state() const;
   ObLSMeta &operator=(const ObLSMeta &other);
@@ -68,14 +69,12 @@ public:
                      const bool write_slog);
   int get_all_id_meta(transaction::ObAllIDMeta &all_id_meta) const;
   int get_saved_info(ObLSSavedInfo &saved_info);
-  int update_for_physical_restore(const int64_t ls_epoch, const ObLSMeta &source_meta);
   int build_saved_info(const int64_t ls_epoch);
   int clear_saved_info(const int64_t ls_epoch);
   int check_ls_need_online(bool &need_online) const;
   int init(
       const ObRestoreStatus &restore_status,
-      const share::SCN &create_scn,
-      const palf::LSN &clog_base_lsn);
+      const share::SCN &create_scn);
 
   // IF I have locked with W:
   //    lock with R/W will be succeed do nothing.
@@ -122,7 +121,7 @@ private:
 public:
   mutable common::ObLatch rw_lock_;     // only for atomic read/write in memory.
   mutable common::ObLatch update_lock_; // only one process can update ls meta. both for write slog and memory
-
+  
 private:
   ObLSPersistentState ls_persistent_state_;
   typedef common::ObFunction<int(const int64_t, const ObLSMeta &)> WriteSlog;

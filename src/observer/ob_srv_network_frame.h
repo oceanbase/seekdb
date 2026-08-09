@@ -45,6 +45,7 @@ public:
   int start();
   void sql_nio_stop();
   void wait();
+  int stop();
 
   int reload_config();
   ObSrvDeliver& get_deliver() { return deliver_; }

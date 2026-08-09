@@ -1,0 +1,47 @@
+ob1=OBI(cluster = 1, proxy_num = 0);
+ob2=OBI(cluster = 1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set global ob_query_timeout = 40000000;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql_p select name from oceanbase.__all_unit_config where unit_config_id = (select unit_config_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id');
+name
+__unit_config_1001
+ob2.mysql create resource unit standby_unit_config_template max_cpu $cpu, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql drop tenant tt force;
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql_p select name,max_cpu,min_cpu,max_memory,min_memory,max_iops,min_iops,max_disk_size, max_session_num from oceanbase.__all_unit_config where unit_config_id = (select unit_config_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id');
+name	max_cpu	min_cpu	max_memory	min_memory	max_iops	min_iops	max_disk_size	max_session_num
+__unit_config_1002	1	1	1073741824	1073741824	128	128	536870912	64
+alter resource pool pool_2 unit = 'standby_unit_config_template';
+ERROR HY000: alter resource pool use stanby unit config template not allowed
+CREATE RESOURCE POOL pool_2 UNIT = 'standby_unit_config_template', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ERROR HY000: create resource pool use stanby unit config template not allowed
+ob2.mysql alter resource unit standby_unit_config_template max_cpu $cpu, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql drop tenant tt force;
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql_p select name,max_cpu,min_cpu,max_memory,min_memory,max_iops,min_iops,max_disk_size, max_session_num from oceanbase.__all_unit_config where unit_config_id = (select unit_config_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id');
+name	max_cpu	min_cpu	max_memory	min_memory	max_iops	min_iops	max_disk_size	max_session_num
+__unit_config_1003	1	1	1073741824	1073741824	1280	128	536870912	640
+ob2.mysql alter resource unit __unit_config_$tenant_id max_cpu $cpu, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=357;
+ob2.mysql_p select name,max_cpu,min_cpu,max_memory,min_memory,max_iops,min_iops,max_disk_size, max_session_num from oceanbase.__all_unit_config where unit_config_id = (select unit_config_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id');
+name	max_cpu	min_cpu	max_memory	min_memory	max_iops	min_iops	max_disk_size	max_session_num
+__unit_config_1003	1	1	1073741824	1073741824	1280	357	536870912	640
+ob2.mysql alter resource pool __resource_pool_$tenant_id unit='__unit_config_$tenant_id';
+ob1.mysql drop tenant tt force;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 200;
+ob2.mysql drop resource unit standby_unit_config_template;
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 400;
+ob2.mysql_p select name from oceanbase.__all_unit_config where unit_config_id = (select unit_config_id from oceanbase.__all_resource_pool where name = '__resource_pool_$tenant_id');
+name
+__unit_config_1004

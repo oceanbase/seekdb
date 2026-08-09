@@ -90,7 +90,7 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
   } else {
     freeze_param_.loop_cnt_ = get_loop_cnt();
     if (OB_TMP_FAIL(ObScheduleDagFunc::schedule_batch_freeze_dag(freeze_param_))) {
-      LOG_WARN_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
+      LOG_ERROR_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
       // most tablets will clear failed since the capacity of ObTabletStatMgr is limited
     } else {
       LOG_INFO("success to schedule batch freeze dag", KR(tmp_ret), K_(freeze_param));

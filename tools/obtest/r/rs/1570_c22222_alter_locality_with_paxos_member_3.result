@@ -1,0 +1,108 @@
+ob1=OBI(cluster=2:2:2:2:2, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz:hz);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1','z2','z3','z4','z5');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4', locality='F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4' set ob_tcp_invited_nodes='%';
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3, F{1}@z4, F{1}@z5";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z4, F{1}@z5";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, L{1}@z3, L{1}@z4";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4";
+ERROR HY000: violate locality principal not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, R{1}@z3, F{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z4";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, L{1}@z4";
+ERROR HY000: Operation not allowed now
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,L{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3";
+ERROR HY000: Operation not allowed now
+alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,R{1}@z3";
+ERROR HY000: Operation not allowed now
+drop tenant tenant_1 force;
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1', locality='F{1}@z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2";
+alter tenant tenant_1 set locality = "F{1}@z2";
+ERROR HY000: alter tenant locality when previous one not finish not allowed
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 2, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, R{1}@z3";
+ERROR HY000: alter tenant locality when previous one not finish not allowed
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 3, 0, 5;
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3";
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, L{1}@z5";
+alter tenant tenant_1 set locality = "F{1}@z1, F{1}@z2, F{1}@z3, F{1}@z4, F{1}@z5";
+ERROR HY000: Operation not allowed now
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality != "", 0, 360;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and role = 1 and quorum != 5, 0, 5;
+drop tenant tenant_1 force;
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set server_permanent_offline_time = '20s';
+ob1.mysql alter system set replica_safe_remove_time = '1m';
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1;z2;z3;z4;z5', locality='F{1}@z1,F{1}@z2,F{1}@z3,F{1}@z4,F{1}@z5' set ob_tcp_invited_nodes='%';
+create table t1(c1 int primary key, c2 int);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where table_id = "$user_table_id", 5, 5;
+$stop_obs.force_stop;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_replica_task where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and dst_replica_type = 0 and cmd_type = "ADD_REPLICA", 1, 30;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0, 4, 5;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z2", 0, 5;
+ob1.mysql alter tenant tenant_1 set locality = "F{1}@z1,F{1}@z2,F{1}@z3";
+ob1.mysql alter system set enable_rereplication = 'true';
+ob1.mysql alter system set enable_rebalance = 'true';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0, 3, 180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_tenant where tenant_id = "$tenant1_id" and previous_locality = "", 1, 180;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_table where tenant_id = "$tenant1_id" and table_id = "$user_table_id" and partition_id = 0 and zone = "z2", 1, 5;

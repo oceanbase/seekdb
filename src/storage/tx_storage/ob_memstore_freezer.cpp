@@ -17,9 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/alloc/alloc_func.h"
 #include "ob_memstore_freezer.h"
-#include "share/config/ob_server_config.h"
 #include "data_plane/compaction/ob_i_major_freeze_coordinator.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/ob_running_mode.h"
@@ -38,24 +36,6 @@ using namespace share;
 namespace storage
 {
 using namespace mds;
-
-namespace
-{
-constexpr int64_t TX_DATA_FREEZE_MEMORY_FRACTION_DENOMINATOR = 16; // 6.25%
-constexpr int64_t MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR = 40; // 2.5%
-
-int64_t get_tx_data_freeze_trigger_memory()
-{
-  return lib::get_memory_budget() /
-      TX_DATA_FREEZE_MEMORY_FRACTION_DENOMINATOR;
-}
-
-int64_t get_mds_freeze_trigger_memory()
-{
-  return lib::get_memory_budget() /
-      MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR;
-}
-}
 
 ObMemstoreFreezer::ObMemstoreFreezer()
 	: is_inited_(false),
@@ -229,8 +209,7 @@ bool ObMemstoreFreezer::memstore_remain_memory_is_exhausting()
       const int64_t memstore_used = memstore_allocator.get_memstore_quota_used();
       const int64_t memstore_remain = memstore_limit - memstore_used;
       remain_mem_exhausting =
-          memstore_remain < lib::get_memory_by_percentage(
-              memstore_limit, MEMORY_IS_EXHAUSTING_PERCENTAGE);
+          memstore_remain < (memstore_limit * MEMORY_IS_EXHAUSTING_PERCENTAGE / 100);
 
       if (remain_mem_exhausting && REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL /* 1 second */)) {
         STORAGE_LOG(INFO,
@@ -457,8 +436,8 @@ int ObMemstoreFreezer::check_and_freeze_tx_data_()
   int64_t frozen_tx_data_mem_used = 0;
   int64_t active_tx_data_mem_used = 0;
   int64_t memory_budget = lib::get_memory_budget();
-  int64_t self_freeze_trigger_memory = get_tx_data_freeze_trigger_memory();
-  int64_t tx_data_mem_limit = ObTxDataAllocator::get_memory_limit();
+  int64_t self_freeze_trigger_memory = lib::get_tx_data_freeze_trigger_memory();
+  int64_t tx_data_mem_limit = lib::get_tx_data_memory_limit();
 
   static int skip_count = 0;
   bool need_re_freeze = false;
@@ -583,7 +562,7 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000 /*10 seconds*/)) {
     bool trigger_flush = false;
     int64_t memory_budget = lib::get_memory_budget();
-    int64_t trigger_freeze_memory = get_mds_freeze_trigger_memory();
+    int64_t trigger_freeze_memory = lib::get_mds_freeze_trigger_memory();
     ObMdsAllocator &mds_allocator =
         ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()
             ->mds_allocator();
@@ -594,8 +573,8 @@ int ObMemstoreFreezer::check_and_freeze_mds_table_()
       LOG_ERROR("invalid trigger freeze memory",
                 K(trigger_freeze_memory),
                 K(memory_budget),
-                "mds_freeze_memory_fraction_denominator",
-                MDS_FREEZE_MEMORY_FRACTION_DENOMINATOR);
+                "mds_freeze_memory_percent",
+                lib::MDS_FREEZE_MEMORY_PERCENT);
     } else if (hold_memory >= trigger_freeze_memory) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(post_mds_table_freeze_request_())) {
@@ -839,13 +818,15 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
     LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(lower_limit), K(upper_limit));
   } else {
     const int64_t freeze_trigger_percentage = get_freeze_trigger_percentage_();
-    const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
-    if (memstore_limit <= 0 ||
+    const int64_t memstore_limit_percent = get_memstore_limit_percentage_();
+    if (memstore_limit_percent > 100 ||
+        memstore_limit_percent <= 0 ||
         freeze_trigger_percentage > 100 ||
         freeze_trigger_percentage <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("[MemstoreFreezer] memory config is invalid",
-               K(memstore_limit),
+      LOG_WARN("[MemstoreFreezer] memstore limit percent in ObServerConfig is invaild",
+               "memstore limit percent",
+               memstore_limit_percent,
                "minor freeze trigger percent",
                freeze_trigger_percentage,
                KR(ret));
@@ -853,7 +834,7 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
 
       ObMemstoreFreezeCtx ctx;
       memstore_info_.update_mem_limit(lower_limit, upper_limit);
-      memstore_info_.update_memstore_limit(memstore_limit);
+      memstore_info_.update_memstore_limit(memstore_limit_percent);
       memstore_info_.is_loaded_ = true;
       memstore_info_.get_freeze_ctx(ctx);
       if (OB_FAIL(get_freeze_trigger_(ctx))) {
@@ -1018,6 +999,11 @@ int ObMemstoreFreezer::get_memstore_limit(int64_t &mem_limit)
     }
   }
   return ret;
+}
+
+int64_t ObMemstoreFreezer::get_memstore_limit_percentage()
+{
+  return get_memstore_limit_percentage_();
 }
 
 int ObMemstoreFreezer::get_memory_usage_(ObMemstoreFreezeCtx &ctx)
@@ -1192,6 +1178,11 @@ int64_t ObMemstoreFreezer::get_freeze_trigger_percentage_()
   return percent;
 }
 
+int64_t ObMemstoreFreezer::get_memstore_limit_percentage_()
+{
+  return lib::get_memstore_memory_limit_percentage();
+}
+
 int ObMemstoreFreezer::async_freeze_(const ObMemstoreFreezeArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -1263,24 +1254,27 @@ int ObMemstoreFreezer::reload_config()
 {
   int ret = OB_SUCCESS;
   const int64_t freeze_trigger_percentage = get_freeze_trigger_percentage_();
-  const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
+  const int64_t memstore_limit_percent = get_memstore_limit_percentage_();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
-  } else if (memstore_limit <= 0
+  } else if (memstore_limit_percent > 100
+             || memstore_limit_percent <= 0
              || freeze_trigger_percentage > 100
              || freeze_trigger_percentage <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] memory config is invalid",
-             K(memstore_limit),
+    LOG_WARN("[MemstoreFreezer] memstore limit percent in ObServerConfig is invalid",
+             "memstore limit percent",
+             memstore_limit_percent,
              "minor freeze trigger percent",
              freeze_trigger_percentage,
              KR(ret));
   } else if (true == memstore_info_.is_loaded_ &&
-             memstore_info_.is_memstore_limit_changed(memstore_limit)) {
-    memstore_info_.update_memstore_limit(memstore_limit);
+             memstore_info_.is_memstore_limit_changed(memstore_limit_percent)) {
+    memstore_info_.update_memstore_limit(memstore_limit_percent);
     LOG_INFO("[MemstoreFreezer] reload config for memstore freezer",
-             K(memstore_limit),
+             "new memstore limit percent",
+             memstore_limit_percent,
              "new minor freeze trigger percent",
              freeze_trigger_percentage);
   }
@@ -1780,7 +1774,7 @@ void ObMemstoreAllocator::init_throttle_config(int64_t &resource_limit,
     trigger_percentage = MEMSTORE_THROTTLE_TRIGGER_PERCENTAGE;
     max_duration = MEMSTORE_THROTTLE_MAX_DURATION;
   }
-  resource_limit = GMEMCONF.get_memstore_memory_limit();
+  resource_limit = lib::get_memstore_memory_limit();
 }
 
 
@@ -1802,11 +1796,13 @@ void ObSharedMemAllocMgr::update_throttle_config()
   {
     int64_t trigger_percentage = runtime_config->writing_throttling_trigger_percentage;
     int64_t max_duration = runtime_config->writing_throttling_maximum_duration;
-    const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
-    const int64_t share_mem_limit = get_tx_share_memory_limit();
-    const int64_t tx_data_limit = ObTxDataAllocator::get_memory_limit();
-    const int64_t mds_limit = ObMdsAllocator::get_memory_limit();
-    const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
+    int64_t vector_limit_percentage =
+        ObVectorAllocator::get_vector_mem_limit_percentage(runtime_config);
+    const int64_t share_mem_limit = lib::get_tx_share_memory_limit();
+    const int64_t memstore_limit = lib::get_memstore_memory_limit();
+    const int64_t tx_data_limit = lib::get_tx_data_memory_limit();
+    const int64_t mds_limit = lib::get_mds_memory_limit();
+    const int64_t vector_limit = memory_budget / 100 * vector_limit_percentage;
 
     bool share_config_changed = false;
     (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(
@@ -1825,7 +1821,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
         mds_limit, trigger_percentage, max_duration, mds_config_changed);
 
     bool vector_config_changed = false;
-    (void)share_resource_throttle_tool_.update_throttle_config<ObVectorAllocator>(
+    (void)vector_throttle_tool_.update_throttle_config<ObVectorAllocator>(
         vector_limit, trigger_percentage, max_duration, vector_config_changed);
 
     if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||
@@ -1839,6 +1835,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
                 K(mds_limit),
                 K(trigger_percentage),
                 K(max_duration),
+                K(vector_limit_percentage),
                 K(vector_limit));
 
     }

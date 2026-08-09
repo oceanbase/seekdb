@@ -30,14 +30,6 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 
-# Python 3.14 removed these deprecated AST compatibility node classes.  Keep
-# accepting them when running on older Python versions, where literal nodes may
-# still be represented by the legacy classes.
-_AST_STR = getattr(ast, "Str", None)
-_AST_NUM = getattr(ast, "Num", None)
-_AST_NAME_CONSTANT = getattr(ast, "NameConstant", None)
-
-
 class InventoryError(RuntimeError):
     """Raised when an inventory no longer matches the supported data subset."""
 
@@ -45,13 +37,9 @@ class InventoryError(RuntimeError):
 def _read_value(node: ast.AST) -> Any:
     if isinstance(node, ast.Constant) and isinstance(node.value, (str, type(None))):
         return node.value
-    if _AST_STR is not None and isinstance(node, _AST_STR):
+    if isinstance(node, ast.Str):
         return node.s
-    if (
-        _AST_NAME_CONSTANT is not None
-        and isinstance(node, _AST_NAME_CONSTANT)
-        and node.value is None
-    ):
+    if isinstance(node, ast.NameConstant) and node.value is None:
         return None
     if (
         isinstance(node, ast.Constant)
@@ -60,8 +48,7 @@ def _read_value(node: ast.AST) -> Any:
     ):
         return node.value
     if (
-        _AST_NUM is not None
-        and isinstance(node, _AST_NUM)
+        isinstance(node, ast.Num)
         and isinstance(node.n, int)
         and not isinstance(node.n, bool)
     ):
@@ -105,10 +92,7 @@ def _read_assignments(path: Path) -> Dict[str, Any]:
                     isinstance(statement.value, ast.Constant)
                     and isinstance(statement.value.value, str)
                 )
-                or (
-                    _AST_STR is not None
-                    and isinstance(statement.value, _AST_STR)
-                )
+                or isinstance(statement.value, ast.Str)
             )
         ):
             continue

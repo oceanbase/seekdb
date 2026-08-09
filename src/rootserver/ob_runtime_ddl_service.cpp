@@ -33,7 +33,6 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/scn.h"
 #include "share/ob_server_struct.h"
-#include "share/ob_cpu_share_calculator.h"
 #include "share/ob_version_parser.h"
 
 // The input of value must be a string
@@ -300,13 +299,19 @@ int ObRuntimeDDLService::init_system_variables(
         SET_RUNTIME_VARIABLE(SYS_VAR_READ_ONLY, read_only_value);
       }
 
+      // Derive the default PX thread target from the local server CPU floor.
+      int64_t default_px_thread_count = 0;
       if (OB_SUCC(ret)) {
+        const int64_t server_default_min_cpu =
+            static_cast<int64_t>(GCONF.get_server_default_min_cpu());
+        default_px_thread_count = std::max(
+            static_cast<int64_t>(3),
+            server_default_min_cpu * GCONF.px_workers_per_cpu_quota);
+      }
+
+      if (OB_SUCC(ret) && default_px_thread_count > 0) {
         // target cannot be less than 3, otherwise any px query will not come in
-        const int64_t default_px_servers_target =
-            common::ObCpuShareCalculator::resolve_parallel_servers_target(
-                0,
-                static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-                GCONF.px_workers_per_cpu_quota);
+        int64_t default_px_servers_target = std::max(static_cast<int64_t>(3), static_cast<int64_t>(default_px_thread_count));
         VAR_INT_TO_STRING(val_buf, default_px_servers_target);
         SET_RUNTIME_VARIABLE(SYS_VAR_PARALLEL_SERVERS_TARGET, val_buf);
       }

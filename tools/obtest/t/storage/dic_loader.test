@@ -1,0 +1,432 @@
+# owner: youchuan.yc
+# owner group: storage
+# description: verify that the dictionary loader
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.reboot;
+sleep 3;
+let $extra_conf = "cpu_count=16,memory_budget='20G',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='20G',diag_syslog_per_error_limit=100000";
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+
+--echo # 1. fts index afterward and fts index afterward
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE RESOURCE UNIT if not exists unit_x MAX_CPU 2, MEMORY_SIZE='4G';
+CREATE RESOURCE POOL if not exists pool_x UNIT = 'unit_x', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+ob_connect(conn_mysql_0, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_1, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_2, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_3, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_0;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+--disable_warnings
+drop table if exists t;
+--enable_warnings
+create table t(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+send alter table t add fulltext index idx0(c2) with parser ik;
+
+connection conn_mysql_1;
+send alter table t add fulltext index idx1(c3) with parser ik;
+
+connection conn_mysql_2;
+send create fulltext index idx2 on t(c2) with parser ik;
+
+connection conn_mysql_3;
+send create fulltext index idx3 on t(c2) with parser ik;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+sleep 3;
+
+connection conn_mysql_0;
+reap;
+
+connection conn_mysql_1;
+reap;
+
+connection conn_mysql_2;
+reap;
+
+connection conn_mysql_3;
+reap;
+
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+
+--echo # 2. fts index previously and fts index previously, _enable_parallel_table_creation = true
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+alter system set _enable_parallel_table_creation = true;
+sleep 3;
+
+ob_connect(conn_mysql_4, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_5, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_4;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+--disable_warnings
+drop table if exists t1;
+drop table if exists t2;
+--enable_warnings
+send create table t1(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+
+connection conn_mysql_5;
+send create table t2(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+sleep 3;
+
+connection conn_mysql_4;
+reap;
+
+connection conn_mysql_5;
+reap;
+
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't1');
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't2');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+
+--echo # 3. fts index afterward and fts index previously, _enable_parallel_table_creation = true
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+alter system set _enable_parallel_table_creation = true;
+sleep 3;
+
+ob_connect(conn_mysql_6, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_7, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_8, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_6;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+--disable_warnings
+drop table if exists t3;
+drop table if exists t4;
+--enable_warnings
+create table t3(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+
+connection conn_sys;
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+sleep 3;
+
+connection conn_mysql_6;
+send create table t4(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2), fulltext index idx1(c3) with parser ik);
+
+connection conn_mysql_7;
+send create fulltext index idx0 on t3(c2) with parser ik;
+
+connection conn_mysql_8;
+send alter table t3 add fulltext index idx1(c3) with parser ik;
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+sleep 3;
+
+connection conn_mysql_6;
+reap;
+
+connection conn_mysql_7;
+reap;
+
+connection conn_mysql_8;
+reap;
+
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't3');
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't4');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+--echo # 4. fts index previously and fts index previously, _enable_parallel_table_creation = false
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+alter system set _enable_parallel_table_creation = false;
+sleep 3;
+
+ob_connect(conn_mysql_9, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_10, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_9;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+--disable_warnings
+drop table if exists t5;
+drop table if exists t6;
+--enable_warnings
+send create table t5(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+
+connection conn_mysql_10;
+send create table t6(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+sleep 3;
+
+connection conn_mysql_9;
+reap;
+
+connection conn_mysql_10;
+reap;
+
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't5');
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't6');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+
+--echo # 5. fts index afterward and fts index previously, _enable_parallel_table_creation = false
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BUILD_FTS_INDEX_PREPARE_STATUS wait_for continue_signal_fts_afterward execute 10000';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+alter system set _enable_parallel_table_creation = false;
+sleep 3;
+
+ob_connect(conn_mysql_11, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_12, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql_13, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_11;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+--disable_warnings
+drop table if exists t7;
+drop table if exists t8;
+--enable_warnings
+create table t7(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+
+connection conn_sys;
+set ob_global_debug_sync = 'BEFOR_EXECUTE_CREATE_TABLE_WITH_FTS_INDEX wait_for continue_signal_fts_index execute 10000';
+sleep 3;
+
+connection conn_mysql_11;
+send create fulltext index idx0 on t7(c2) with parser ik;
+
+connection conn_mysql_12;
+send alter table t7 add fulltext index idx1(c3) with parser ik;
+
+connection conn_mysql_13;
+send create table t8(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser ik, fulltext index idx1(c3));
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_afterward';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+set ob_global_debug_sync = 'now broadcast continue_signal_fts_index';
+sleep 3;
+
+connection conn_mysql_11;
+reap;
+
+connection conn_mysql_12;
+reap;
+
+connection conn_mysql_13;
+reap;
+
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't7');
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't8');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+
+--echo # 6. the parser name contain special characters
+connection conn_sys;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+ob_connect(conn_mysql_14, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql_14;
+
+--error 1128
+create table t9(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1), fulltext index idx0(c2) with parser iḱ, fulltext index idx1(c3));
+
+create table t10(c1 int, c2 varchar(255), c3 varchar(255), primary key(c1));
+
+--error 1128
+create fulltext index idx0 on t10(c2) with parser iḱ;
+
+--error 1128
+alter table t10 add fulltext index idx1(c3) with parser iḱ;
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;
+
+
+--echo # 7. using tokenize
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_sys;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+sleep 3;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'BEFORE_LOAD_DICTIONARY_IN_BACKGROUND wait_for continue_signal_background execute 10000';
+sleep 3;
+
+--echo # create mysql tenant
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_x'), primary_zone='z1,z2', locality="F@z1,F@z2" set ob_tcp_invited_nodes='%';
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $mysql_leader_ip_port=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from __all_virtual_ls_meta_table where tenant_id = $mysql_tenant_id and ls_id =  1 and role = 1 limit 1, host, 1);
+let $mysql_leader_obs =deploy_get_value(ob1.get_obs_by_addr $mysql_leader_ip_port);
+
+ob_connect(conn_mysql_15, $mysql_leader_obs, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_mysql_15;
+set @@session.ob_query_timeout = 1000000000;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select tokenize("中国", "ik");
+
+connection conn_sys;
+set ob_global_debug_sync = 'reset';
+set ob_global_debug_sync = 'now broadcast continue_signal_background';
+sleep 3;
+
+connection conn_mysql_15;
+select count(*) from oceanbase.__ft_dict_ik_utf8;
+select count(*) from oceanbase.__ft_stopword_ik_utf8;
+select count(*) from oceanbase.__ft_quantifier_ik_utf8;
+
+select count(*) from  oceanbase.__all_virtual_table where 
+    index_status = 2 and data_table_id = (select table_id from oceanbase.__all_virtual_table where table_name = 't');
+
+connection conn_sys;
+drop tenant mysql;
+purge recyclebin;

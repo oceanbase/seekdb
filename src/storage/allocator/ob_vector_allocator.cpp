@@ -16,7 +16,6 @@
 
 
 #include "ob_vector_allocator.h"
-#include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/literals/ob_literals.h"  // _ms literal(free within lib)
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -39,11 +38,39 @@ void ObVectorAllocator::init_throttle_config(int64_t &resource_limit, int64_t &t
   get_vector_mem_config(resource_limit, max_duration);
 }
 
+int64_t ObVectorAllocator::get_vector_mem_limit_percentage(common::ObServerConfig *runtime_config)
+{
+  const int64_t LOW_RESOURCE_MEMORY_LIMIT = 8 * 1024 * 1024 * 1024L; // 8G
+  const int64_t SMALL_VECTOR_LIMIT_PERCENTAGE = 40;
+  const int64_t LARGE_VECTOR_LIMIT_PERCENTAGE = 50;
+  const int64_t memory_budget = lib::get_memory_budget();
+  int64_t configured_limit_percent = 0;
+  int64_t percent = 0;
+  if (nullptr != runtime_config) {
+    configured_limit_percent = runtime_config->ob_vector_memory_limit_percentage;
+  }
+  if (configured_limit_percent != 0) {
+    percent = configured_limit_percent;
+  } else {
+    // both is default value, adjust automatically
+    if (memory_budget <= LOW_RESOURCE_MEMORY_LIMIT) {
+      percent = SMALL_VECTOR_LIMIT_PERCENTAGE;
+    } else {
+      percent = LARGE_VECTOR_LIMIT_PERCENTAGE;
+    }
+  }
+  return percent;
+}
+
 void ObVectorAllocator::get_vector_mem_config(int64_t &resource_limit, int64_t &max_duration)
 {
+  const int64_t VECTOR_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
+  const int64_t memory_budget = lib::get_memory_budget();
+  int64_t percent = 0;
   common::ObServerConfig *runtime_config = &GCONF;
   max_duration = runtime_config->writing_throttling_maximum_duration;
-  resource_limit = GMEMCONF.get_vector_memory_limit();
+  percent = get_vector_mem_limit_percentage(runtime_config);
+  resource_limit = memory_budget / 100 * percent;
 }
 
 int64_t ObVectorAllocator::hold()
@@ -140,7 +167,7 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }
@@ -180,7 +207,7 @@ void ObVectorMemContext::free(void *ptr)
   }
 }
 
-int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::TxShareThrottleTool *throttle_tool)
+int ObVectorMemContext::init(lib::MemoryContext &mem_context, share::VectorThrottleTool *throttle_tool)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mem_context) || OB_ISNULL(throttle_tool)) {
@@ -208,7 +235,7 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
+  } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->vector_throttle_tool())))) {
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }

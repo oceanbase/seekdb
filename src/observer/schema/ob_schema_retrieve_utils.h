@@ -20,6 +20,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "common/mysqlclient/ob_mysql_result.h"
+#include "share/object/ob_obj_cast.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_utils.h"
 #include "share/system_variable/ob_system_variable_alias.h"
@@ -606,7 +607,6 @@ public:
         SHARE_SCHEMA_LOG(WARN, "current index is out of range", K_(cur_idx), K(routine_infos_.count()));
       } else if (routine_param.get_routine_id() == routine_infos_.at(cur_idx_).get_routine_id()) {
         if (OB_FAIL(routine_infos_.at(cur_idx_).add_routine_param(routine_param))) {
-          SHARE_SCHEMA_LOG(WARN, "add routine param failed", K(ret), K(routine_param), K_(cur_idx));
         } else {
           is_break = true;
         }

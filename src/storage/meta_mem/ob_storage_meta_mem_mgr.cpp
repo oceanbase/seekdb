@@ -31,12 +31,6 @@ using namespace memtable;
 using namespace transaction::tablelock;
 namespace storage
 {
-namespace
-{
-constexpr double MEMORY_BUDGET_PER_EFFECTIVE_GIB =
-    static_cast<double>(4LL << 30) / 5;
-}
-
 ObStorageMetaMemStatus::ObStorageMetaMemStatus()
   : total_size_(0),
     used_size_(0),
@@ -100,7 +94,7 @@ void ObStorageMetaMemMgr::RefreshConfigTask::runTimerTask()
   ObDIActionGuard ag("RefreshConfigTask");
   int ret = OB_SUCCESS;
   const int64_t mem_limit = 2 * GCONF._storage_meta_memory_limit_percentage;
-  if (OB_FAIL(set_meta_obj_memory_limit(mem_limit))) {
+  if (OB_FAIL(lib::set_meta_obj_limit(mem_limit))) {
   }
 }
 
@@ -2091,10 +2085,8 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   const int64_t config_mem_percentage =
       2 * GCONF._storage_meta_memory_limit_percentage;
   const int64_t memory_budget = lib::get_memory_budget();
-  // Preserve the effective-memory tablet scale after increasing the automatic
-  // memory budget from 50% to 80%.
-  const int64_t config_constraint = memory_budget
-      / MEMORY_BUDGET_PER_EFFECTIVE_GIB * config_tablet_per_gb;
+  // Preserve the historical 2 GiB sizing scale with the new logical memory budget.
+  const int64_t config_constraint = memory_budget / (512.0 * 1024 * 1024 /* 512MB */) * config_tablet_per_gb;
   const int64_t memory_constraint = memory_budget * (config_mem_percentage / 100.0) /
                                      (200.0 * 1024 * 1024 /* 200MB */) *
                                      DEFAULT_TABLET_CNT_PER_GB;
@@ -2121,7 +2113,7 @@ int ObStorageMetaMemMgr::ObT3MResourceLimitCalculatorHandler::
   const int64_t memory_constraint_formula_inverse =
       cal_num * (200.0 * 1024 * 1024 /* 200MB */) / DEFAULT_TABLET_CNT_PER_GB / (config_mem_percentage / 100.0);
   const int64_t config_constraint_formula_inverse =
-      cal_num * MEMORY_BUDGET_PER_EFFECTIVE_GIB / config_tablet_per_gb;
+      cal_num * (512.0 * 1024 * 1024 /* 512MB */) / config_tablet_per_gb;
   // Set into MinPhyResourceResult
   const int64_t minimum_physics_needed = std::max(memory_constraint_formula_inverse, config_constraint_formula_inverse);
   LOG_INFO("t3m resource limit calculator, cal_min_phy_resource_needed", K(num),

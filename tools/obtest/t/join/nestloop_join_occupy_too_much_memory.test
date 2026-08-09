@@ -1,0 +1,79 @@
+# owner: bin.lb
+# owner group: sql
+#
+# Nestloop join occupy too much memory.
+#
+# See:
+# 
+#
+
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+
+let $ip = deploy_get_value(ob1.z1.obs0.ip);
+let $port = deploy_get_value(ob1.z1.obs0.mysql_port);
+
+connect(conn1,$ip,root@obtest,,test,$port);
+connect(conn2,$ip,root@obtest,,test,$port);
+connect(conn3,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+create table t1 (k bigint primary key, v bigint);
+create table t2 (k bigint primary key, v bigint);
+
+let $i = 0;
+while ($i < 100)
+{
+  eval insert into t1 (k, v) values ($i, $i);
+  inc $i;
+}
+
+let $i = 1;
+while ($i < 10)
+{
+  eval insert into t1 select k + 100 * $i, v from t1 where k < 100;
+  inc $i;
+}
+
+let $i = 1;
+while ($i < 10)
+{
+  eval insert into t1 select k + 1000 * $i, v from t1 where k < 1000;
+  inc $i;
+}
+
+insert into t2 select k, v from t1;
+
+let $i = 1;
+while ($i < 50)
+{
+  eval insert into t1 select k + 10000 * $i, v from t1 where k < 10000;
+  inc $i;
+}
+
+let $i = 1;
+while ($i < 50)
+{
+  eval insert into t2 select k + 10000 * $i, v from t2 where k < 10000;
+  inc $i;
+}
+
+set ob_query_timeout = 200000000;
+send select /*+use_nl(t1 t2) */ count(*) from t1, t2 where t1.k = t2.k;
+
+connection conn3;
+
+--disable_query_log
+alter system refresh memory stat;
+--enable_query_log
+sleep 2;
+select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
+sleep 2;
+select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
+sleep 5;
+select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
+
+connection conn1;
+reap;
+select sum(hold) < 10000000 from __all_virtual_memory_info where mod_name = 'OB_TABLE_SCAN_ITER';
+

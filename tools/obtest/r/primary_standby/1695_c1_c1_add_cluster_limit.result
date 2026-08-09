@@ -1,0 +1,33 @@
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0);
+ob4=OBI(cluster=1, leaderob=ob1, init_unit_cpu=0, proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set merger_check_interval='10s';
+ob4.reset;
+ob4.deploy;
+ob4.bootstrap;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ERROR HY000: Add cluster not allowed. Actions: CHECK TENANT GTS CONFIG
+set recyclebin = on;
+drop tenant tt;
+ERROR HY000: Add cluster not allowed. Actions: CHECK TENANT GTS CONFIG
+purge recyclebin;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_partition_info where tenant_id = $tenant_id, 0, 200;
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ERROR HY000: set tenant time service not gts not allowed
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql alter system remove cluster '$cluster_name' cluster_id = $cluster_id;
+ob5=OBI(cluster=1, leaderob=ob1, init_unit_cpu=0, proxy_num=0);
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BLOCK_GARBAGE_COLLECTOR wait_for continue_signal';
+create table t4(c1 int primary key);
+drop table t4;
+ob5.reset;
+ob5.deploy;
+ob5.bootstrap;
+ERROR HY000: Add cluster not allowed. Actions: NEED OFFLINE GARBAGE REPLICA
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';

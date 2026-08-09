@@ -1073,6 +1073,7 @@ SQL_PRIVATE_HEADERS = [
     "optimizer/ob_log_window_function.h",
     "optimizer/ob_opt_cost_model_parameter.h",
     "optimizer/ob_opt_est_cost_model_vector.h",
+    "optimizer/ob_opt_est_parameter_normal.h",
     "optimizer/ob_opt_est_parameter_vector.h",
     "optimizer/ob_raw_expr_add_to_context.h",
     "optimizer/ob_raw_expr_get_hash_value.h",

@@ -16,7 +16,6 @@
  
 
 #include "ob_kvcache_pre_warmer.h"
-#include "share/config/ob_server_config.h"
 
 namespace oceanbase
 {
@@ -145,15 +144,15 @@ void ObDataBlockCachePreWarmer::update_rest()
 
 void ObDataBlockCachePreWarmer::inner_update_rest()
 {
-  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
-  rest_size_ = cache_memory_limit / 100 * warm_size_percentage_;
-  calculate_base_percentage(cache_memory_limit);
+  const int64_t memory_budget = lib::get_memory_budget();
+  rest_size_ = memory_budget / 100 * warm_size_percentage_;
+  calculate_base_percentage(memory_budget);
   update_step_ = 0;
 }
 
-void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t cache_memory_limit)
+void ObDataBlockCachePreWarmer::calculate_base_percentage(const int64_t memory_budget)
 {
-  base_percentage_ = cache_memory_limit > 0 ? 50 : 0;
+  base_percentage_ = memory_budget > 0 ? 50 : 0;
 }
 
 bool ObDataBlockCachePreWarmer::warm_block_for_memory(const int64_t level)

@@ -64,8 +64,7 @@ class ObILogReplayService
 public:
   virtual int is_replay_done(const palf::LSN &end_lsn, bool &is_done) = 0;
   virtual int is_submit_task_clear(bool &is_clear) = 0;
-  virtual int enable_local_replay(const palf::LSN &begin_lsn,
-                                  const share::SCN &base_scn) = 0;
+  virtual int enable_local_replay(const palf::LSN &begin_lsn) = 0;
   virtual int disable_local_replay() = 0;
 };
 /*
@@ -97,8 +96,7 @@ public:
   int block_submit_log();
   int unblock_submit_log();
   int disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
+  int enable_local_replay(const palf::LSN &begin_lsn);
   int is_replay_done(const palf::LSN &end_lsn,
                      bool &is_done);
   int is_submit_task_clear(bool &is_clear);

@@ -47,6 +47,7 @@ class ObTransService;
 class ObITxLogAdapter;
 class ObTxCreateArg;
 class ObLSTxCtxIterator;
+class ObTxLogCbPoolMgr;
 }
 
 namespace storage
@@ -177,6 +178,8 @@ public:
   virtual share::SCN get_ls_weak_read_ts();
   int check_in_leader_serving_state(bool& bool_ret);
   int set_max_replay_commit_version(share::SCN commit_version);
+  transaction::ObTxLogCbPoolMgr *get_log_cb_pool_mgr();
+
   // check tx ls blocked
   int check_tx_blocked(bool &tx_blocked) const;
 private:

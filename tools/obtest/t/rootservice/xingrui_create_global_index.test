@@ -1,0 +1,198 @@
+# CASE_OWNER:
+#    @xingrui.cwh
+# CASE_DESC:
+#    测试索引构建相关语法
+
+ob1=OBI(cluster=1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 2, memory_size '5G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+sleep 10;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_tenant, ob1.z1.obs0, root@tenant_1, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_tenant;
+use test;
+
+# case 1: 索引相关基本语法
+create table tt (c1 int primary key, c2 int, c3 varchar(20));
+# hash
+eval create index idx1 on tt (c1) global partition by hash(c1) partitions 2;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx1", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# range columns
+eval create index idx2 on tt (c1) global partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx2", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+eval create index idx3 on tt (c1, c2) global partition by range columns (c1, c2) (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx3", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# range
+eval create index idx4 on tt (c1) global partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx4", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+eval create index idx5 on tt (c1, c2) global partition by range (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx5", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# key
+eval create index idx6 on tt (c1, c2) global partition by key(c1) partitions 2;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx6%", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 不允许c3作为range分区列
+--error 1659
+eval create index idx7 on tt (c3) global partition by range (c3) (PARTITION p0 VALUES LESS THAN (1990));
+
+# 在c3列上建前缀索引
+eval create index idx8 on tt (c2, c3(3)) global partition by hash(c2) partitions 2;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx8", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 不允许给局部索引指定分区方式
+--error 1235 
+eval create index idx9 on tt (c3(3)) local partition by hash(c3) partitions 2;
+
+# 创建一个unique索引
+eval create unique index idx10 on tt (c2, c3(3)) global partition by hash(c2) partitions 2;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx10", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个local索引
+eval create index idx11 on tt (c3(3)) local;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx11", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个global索引, 但存储上是local方式的，索引自身没有partition
+eval create index idx12 on tt (c3(3)) global;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx12", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个local unique索引
+eval create unique index idx13 on tt (c3(3)) local;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx13", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个单range分区的全局索引
+eval create index idx14 on tt (c2) partition by range (c2) (partition p0 values less than(10));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx14", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个单hash分区的全局索引
+eval create index idx15 on tt (c2) partition by hash (c2) partitions 1;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx15", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建一个range分区，分区列不是前缀，报错
+--error 1235
+eval create index idx16 on tt (c1, c2) global partition by range (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+
+# 创建key分区，分区列是c2列，没毛病
+eval create index idx17 on tt (c1, c2) global partition by key(c2) partitions 2;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx6%", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# 创建key分区，storing c3，分区列c3，报错
+--error 1503
+eval create index idx18 on tt (c1, c2) global storing(c3) partition by key(c3) partitions 2;
+
+# 创建range分区，storing c3, 分区列c3，报错
+--error 1503
+eval create index idx19 on tt (c1) global storing(c2) partition by range (c2) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+
+# 全局索引不支持二级分区
+--error 1235
+eval create index idx20 on tt (c1) global partition by hash(c1) subpartition by range columns (c1) subpartition template (SUBPARTITION p0 VALUES LESS THAN (1990)) partitions 2;
+
+# 创建一个range分区，分区列不是前缀，报错
+--error 1235
+eval create index idx21 on tt (c1, c2, c3) global partition by range columns (c2, c1) (PARTITION p0 VALUES LESS THAN (1990, 1990), partition p1 values less than (2000, 2000));
+
+# range columns
+eval create index idx22 on tt (c1, c2) global partition by range columns (c1) (PARTITION p0 VALUES LESS THAN (1990), partition p1 values less than (2000));
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx3", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+create table tt2 (c1 int primary key, c2 int) partition by key (c1) partitions 2;
+eval create index idx23 on tt2 (c2) global;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx23", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+echo "$count";
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+#create table test_alter_table_banliu_tab1 (c1 int primary key, col2 int, col1_cmp int, col2_cmp int) partition by key(c1) partitions 2;
+#alter table test_alter_table_banliu_tab1 change column col2_cmp col__2_cmp int, add unique index idx24(col__2_cmp);
+#let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx24", table_id, 1);
+#let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+#echo "$count";
+#alter table test_alter_table_banliu_tab1 add c3 int, add index idx25(c3);
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+#
+#let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx25", table_id, 1);
+#let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.cdb_ob_table_locations where table_id = $table_id and role='LEADER', c, 1);
+#echo "$count";
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where tenant_id = $tenant_id and table_type = 5 and index_status != 2, 0, 30;
+
+# case 2: truncate table with global index
+# fix bug: 
+
+# 构造建表带全局索引的场景，此时全局索引有partition（索引缺省是local，主表是分区表的场合，全局索引不为local storage，有partition）
+create table table_with_global_index(c1 int primary key, c2 int, index global_index(c2) global) partition by hash(c1) partitions 2;
+
+let $orig_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = "table_with_global_index", table_id, 1);
+let $orig_index_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where data_table_id = $orig_table_id, table_id, 1);
+
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $orig_table_id, 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $orig_index_id, 3, 5;
+
+# 触发truncate
+truncate table table_with_global_index;
+
+let $new_table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = "table_with_global_index", table_id, 1);
+let $new_index_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where data_table_id = $new_table_id, table_id, 1);
+
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $new_table_id, 6, 5;
+ob1.check_until_timeout select count(*) from oceanbase.cdb_ob_table_locations where table_id = $new_index_id, 3, 5;
+ob1.mysql_p select table_id, table_name, table_type, index_type from oceanbase.__all_virtual_table where table_id in ("$new_table_id", "$new_index_id") order by table_id asc;

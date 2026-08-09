@@ -1,0 +1,184 @@
+# owner: shanyan.g
+# owner group: transaction
+# description: 主要测试弱一致性读原子性和因果序
+
+#--disable_query_log
+ob1=OBI(cluster=1:1:1, proxy_num=1,init_unit_cpu=5);
+ob1.reboot;
+
+#sys
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+#leader上的连接
+ob_connect(conn1, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+#follower上的连接
+ob_connect(conn2, ob1.z3.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn1;
+--disable_result_log
+drop table if exists test01;
+drop table if exists test02;
+drop table if exists test03;
+--enable_result_log
+create table test01 (c1 int primary key, c2 int);
+create table test02 (c1 int primary key, c2 int);
+create table test03 (c1 int primary key, c2 int) partition by hash(c1 % 3) partitions 3;
+#将test03的三个分区leader，强制切到不同的zone上
+#ob1.z1.obs0.switch_partition obtest:test:test03:0;
+#ob1.z2.obs0.switch_partition obtest:test:test03:1;
+#ob1.z3.obs0.switch_partition obtest:test:test03:2;
+
+connection conn_sys;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name='obtest', tenant_id, 1);
+let $ls_id0=deploy_get_value(ob1.select select ls_id  from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test01', ls_id, 1);
+let $svr_ip0=deploy_get_value(ob1.select select svr_ip from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test01', svr_ip, 1);
+let $svr_port0=deploy_get_value(ob1.select select svr_port from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test01', svr_port, 1);
+let $leader_host0=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test01', host, 1);
+let $leader0=deploy_get_value(ob1.get_obs_by_addr $leader_host0);
+let $follower_host0=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='FOLLOWER' and table_name='test01' limit 1, host, 1);
+let $follower0=deploy_get_value(ob1.get_obs_by_addr $follower_host0);
+
+let $ls_id1=deploy_get_value(ob1.select select ls_id  from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test02', ls_id, 1);
+let $leader_host1=deploy_get_value(ob1.select select concat(svr_ip,':',svr_port) as host from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id and ROLE='LEADER' and table_name='test02', host, 1);
+let $leader1=deploy_get_value(ob1.get_obs_by_addr $leader_host1);
+eval alter system switch replica leader ls=$ls_id1 server='$leader_host0';
+ob1.check_until_timeout select count(1) from CDB_OB_table_LOCATIONS where tenant_id=$tenant_id  and ROLE='LEADER' and table_name='test02' and svr_ip='$svr_ip0' and svr_port='$svr_port0', 1, 100;
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.ip);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.ip);
+let $ip2=deploy_get_value(ob1.z3.obs0.ip);
+let $port2=deploy_get_value(ob1.z3.obs0.ip);
+
+#leader上的连接
+ob_connect(conn1, $leader0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+#
+##follower上的连接
+ob_connect(conn2, $follower0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+#case1 : 单机多partition测试原子性
+#准备数据
+connection conn1;
+set autocommit=0;
+insert into test01 values(1, 1);
+insert into test01 values(2, 2);
+insert into test02 values(1, 1);
+insert into test02 values(2, 2);
+commit;
+
+begin;
+select * from test01;
+select * from test02;
+commit;
+
+#sleep一段时间，保证备机日志已经同步，并且日志已经回放完毕
+sleep 1;
+
+#check数据
+connection conn2;
+set autocommit=1;
+let $count = query_get_value(select /*+read_consistency(weak)+*/ count(1) from test.test01 join test.test02, count(1), 1);
+echo $count;
+if ($count != 4)
+{
+  if ($count != 0)
+  {
+    echo unexpected result in local transaction, maybe atomicity is violated, $count;
+  }
+}
+
+#case2 : 跨机测试原子性
+connection conn1;
+set autocommit=0;
+let $i = 0;
+while ($i < 3)
+{
+  eval insert into test03 values($i, 1);
+  inc $i;
+}
+commit;
+
+set autocommit = 1;
+select * from test03 order by c1;
+
+#sleep一段时间，保证备机日志已经同步，并且日志已经回放完毕
+sleep 1;
+
+#check数据
+connection conn2;
+set autocommit=1;
+let $count = query_get_value(select /*+read_consistency(weak)+*/ count(1) from test.test03, count(1), 1);
+echo $count;
+if ($count != 3)
+{
+  if ($count != 0)
+  {
+    echo unexpected result in distribute transaction, maybe atomicity is violated, $count;
+  }
+}
+
+#case3 : 单机测试因果序
+# (1) 在leader上，准备数据
+connection conn1;
+set autocommit=1;
+update test01 set c2 = 0 where c1 = 1;
+update test02 set c2 = 0 where c1 = 1;
+
+set autocommit=0;
+select * from test01;
+select * from test02;
+commit;
+
+#sleep一段时间，保证备机日志已经同步，并且日志已经回放完毕
+sleep 1;
+
+# (2) 在follower上, check数据
+connection conn2;
+set autocommit=1;
+let $r1 = query_get_value(select /*+read_consistency(weak)+*/ c2 from test.test02 where c1 = 1, c2, 1);
+#说明已经读取了上一个update事务的最新数据
+if ($r1 == 0)
+{
+  #备机因果序保证能读到test01的最新数据
+  let $r2 = query_get_value(select /*+read_consistency(weak)+*/ c2 from test.test01 where c1 = 1, c2, 1);
+  if ($r2 != 0)
+  {
+    echo unexpected result in local transaction, $r1, $r2;
+  }
+  if ($r2 == 0)
+  {
+    echo correct result in local transaction, $r1, $r2;
+  }
+}
+
+#case4 : 跨机测试因果序
+# (1) 在leader上，准备数据
+connection conn1;
+set autocommit=1;
+update test03 set c2 = 0 where c1 = 1;
+update test03 set c2 = 0 where c1 = 2;
+
+select * from test03 order by c1;
+
+#sleep一段时间，保证备机日志已经同步，并且日志已经回放完毕
+sleep 1;
+
+# (2) 在follower上, check数据
+connection conn2;
+set autocommit=1;
+let $r1 = query_get_value(select /*+read_consistency(weak)+*/ c2 from test.test03 where c1 = 2, c2, 1);
+#说明已经读取了上一个update事务的最新数据
+if ($r1 == 0)
+{
+  #备机因果序保证能读到test01的最新数据
+  let $r2 = query_get_value(select /*+read_consistency(weak)+*/ c2 from test.test03 where c1 = 1, c2, 1);
+  if ($r2 != 0)
+  {
+    echo unexpected result in distribute transaction, $r1, $r2;
+  }
+  if ($r2 == 0)
+  {
+    echo correct result in distribute transaction, $r1, $r2;
+  }
+}

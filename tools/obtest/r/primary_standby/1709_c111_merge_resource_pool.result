@@ -1,0 +1,41 @@
+ob1=OBI(cluster=1:1:1, node_cpu_count=64, memory_size_limit=1099511627776, proxy_num=0, ct_num=0);
+ob1.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql create resource pool pool_1 unit = 'unit_1', unit_num = 1, zone_list = ('z1');
+ob1.mysql create resource pool pool_2 unit = 'unit_1', unit_num = 1, zone_list = ('z2');
+ob1.mysql create resource pool pool_3 unit = 'unit_1', unit_num = 1, zone_list = ('z3');
+ob1.mysql alter resource pool merge ('pool_1','pool_2','pool_3') into ('pool_4');
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool1_id and zone_list = 'z1;z2;z3', 1, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = 'pool_1' and zone_list = 'z1', 0, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = 'pool_2' and zone_list = 'z2', 0, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = 'pool_3' and zone_list = 'z3', 0, 100;
+ob1.mysql create resource pool pool_5 unit = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+ob1.mysql create resource pool pool_6 unit = 'unit_1', unit_num = 1, zone_list = ('z3');
+ob1.mysql alter resource pool merge ('pool_5','pool_6') into ('pool_8');
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool1_id and zone_list = 'z1;z2;z3', 1, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = 'pool_5' and zone_list = 'z1;z2', 0, 100;
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = 'pool_6' and zone_list = 'z3', 0, 100;
+ob1.mysql create resource pool pool_9 unit = 'unit_1', unit_num = 1, zone_list = ('z1');
+alter resource pool merge ('pool_9','pool_10') into ('pool_11');
+ERROR HY000: Entry not exist
+ob1.mysql create resource pool pool_10 unit = 'unit_1', unit_num = 1, zone_list = ('z2');
+alter resource pool merge ('pool_9','pool_10','pool_10') into ('pool_11');
+ERROR HY000: merge resource pool repeat not allowed
+ob1.mysql create resource pool pool_12 unit = 'unit_1', unit_num = 1, zone_list = ('z1','z2');
+ob1.mysql create resource pool pool_13 unit = 'unit_1', unit_num = 1, zone_list = ('z2','z3');
+alter resource pool merge ('pool_12','pool_13') into ('pool_14');
+ERROR HY000: resource pool with duplicated zone not allowed
+ob1.mysql create resource pool pool_15 unit = 'unit_1', unit_num = 1, zone_list = ('z1');
+ob1.mysql create resource pool pool_16 unit = 'unit_1', unit_num = 1, zone_list = ('z2');
+create tenant tenant_1 RESOURCE_POOL_LIST = ('pool_15') set ob_tcp_invited_nodes='%';
+create tenant tenant_2 RESOURCE_POOL_LIST = ('pool_16') set ob_tcp_invited_nodes='%';
+alter resource pool merge ('pool_15','pool_16') into ('pool_17');
+ERROR HY000: pool tenant id different not allowed
+ob1.mysql create resource pool pool_18 unit = 'unit_1', unit_num = 1, zone_list = ('z1');
+ob1.mysql create resource pool pool_19 unit = 'unit_1', unit_num = 1, zone_list = ('z2');
+create tenant tenant_3 RESOURCE_POOL_LIST = ('pool_18') set ob_tcp_invited_nodes='%';
+alter resource pool merge ('pool_18','pool_19') into ('pool_20');
+ERROR HY000: pool tenant id different not allowed
+ob1.mysql alter tenant tenant_3 resource_pool_list = ('pool_18','pool_19');
+ob1.mysql alter resource pool merge ('pool_18','pool_19') into ('pool_20');
+ob1.check_until_timeout select count(*) from __all_resource_pool where resource_pool_id = $pool1_id and zone_list = 'z1;z2', 1, 100;

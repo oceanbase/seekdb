@@ -64,11 +64,10 @@ public:
       PsClosedStmt closed_stmt;
       closed_stmt.stmt_id_ = entry.first;
       closed_stmt.closed_timestamp_ = entry.second->get_last_closed_timestamp();
-      // A schema-expired ObPsStmtInfo can outlive its ObPsStmtItem: the
-      // prepare path erases the item first, while the timer removes the info
-      // later.  ps_item_ is therefore not safe to dereference here.  Use the
-      // item-and-info size snapshot copied into the info when it was built.
-      closed_stmt.reclaimable_size_ = entry.second->get_item_and_info_size() + map_entry_charge_;
+      closed_stmt.reclaimable_size_ = entry.second->get_accounted_size() + map_entry_charge_;
+      if (OB_NOT_NULL(entry.second->get_ps_item())) {
+        closed_stmt.reclaimable_size_ += entry.second->get_ps_item()->get_accounted_size();
+      }
       if (entry.second->is_expired()) {
         // for expired ps info, only evicted once;
         // use cas, because auto cache evict and flush ps cache may concurrent processing

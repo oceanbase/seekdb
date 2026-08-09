@@ -1,0 +1,486 @@
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0, locality=HZ:HZ:HZ);
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+ob1.z3.obs0.set extra_config=$extra_conf;
+ob1.reboot;
+ob1.mysql create resource unit box1 max_cpu 10, min_cpu 10, memory_size '10G', log_disk_size '30G';
+ob1.mysql create resource pool pool1 unit = 'box1', unit_num = 1;
+ob1.mysql create tenant mysql replica_num = 3,primary_zone='z1,z2,z3', resource_pool_list=('pool1') set ob_tcp_invited_nodes='%';
+ob1.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+alter system set _enable_active_txn_transfer = True;
+alter system set partition_balance_schedule_interval='11s';
+create table stu1(col1 int, col2 int, primary key(col1));
+create table stu2(col1 int, col2 int, primary key(col1));
+============= transfer empty tablet =======================
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200001	1001
+500003	stu2	NULL	200002	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1002	1001	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1002	1001	500003:500003	1	NULL	NULL	NULL	200002:0	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+============= transfer no active tx =======================
+insert into stu2 values(100, 100);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200001	1001
+500003	stu2	NULL	200002	1002
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500003:500003	1	NULL	NULL	NULL	200002:1	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+select sum(col1) from stu2;
+sum(col1)
+100
+============= transfer active tx =======================
+truncate table stu1;
+truncate table stu2;
+set autocommit=0;
+insert into stu2 values(100, 100);
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200003	1001
+500003	stu2	NULL	200004	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1002	1001	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1002	1001	500003:500003	1	NULL	NULL	NULL	200004:0	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+insert into stu1 values(400, 100);
+insert into stu2 values(500, 100);
+select sum(col1) from stu1;
+sum(col1)
+400
+select sum(col1) from stu2;
+sum(col1)
+600
+commit;
+insert into stu1 values(600, 100);
+insert into stu2 values(700, 100);
+select sum(col1) from stu1;
+sum(col1)
+1200
+select sum(col1) from stu2;
+sum(col1)
+1600
+commit;
+select sum(col1) from stu1;
+sum(col1)
+1200
+select sum(col1) from stu2;
+sum(col1)
+1600
+============= transfer A=>B B=>A  =======================
+truncate table stu1;
+truncate table stu2;
+set autocommit=0;
+insert into stu2 values(100, 100);
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200005	1001
+500003	stu2	NULL	200006	1002
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500003:500003	1	NULL	NULL	NULL	200006:0	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200005	1001
+500003	stu2	NULL	200006	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1002	1001	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1002	1001	500003:500003	1	NULL	NULL	NULL	200006:1	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+select sum(col1) from stu1;
+sum(col1)
+NULL
+select sum(col1) from stu2;
+sum(col1)
+100
+commit;
+select sum(col1) from stu1;
+sum(col1)
+200
+select sum(col1) from stu2;
+sum(col1)
+400
+commit;
+select sum(col1) from stu1;
+sum(col1)
+200
+select sum(col1) from stu2;
+sum(col1)
+400
+============= transfer switch leader  =======================
+truncate table stu1;
+truncate table stu2;
+set autocommit=0;
+insert into stu2 values(100, 100);
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200007	1001
+500003	stu2	NULL	200008	1002
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500003:500003	1	NULL	NULL	NULL	200008:0	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+ob1.mysql alter system switch replica leader ls=$stu2_ls_id server='$ip3:$port3' tenant='mysql';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200007	1001
+500003	stu2	NULL	200008	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1002	1001	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1002	1001	500003:500003	1	NULL	NULL	NULL	200008:1	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+ob1.mysql alter system switch replica leader ls=$stu2_ls_id server='$ip2:$port2';
+commit;
+commit;
+select sum(col1) from stu1;
+sum(col1)
+200
+select sum(col1) from stu2;
+sum(col1)
+400
+============= transfer rollback local  =======================
+truncate table stu1;
+truncate table stu2;
+insert into stu1 values(100, 100);
+insert into stu2 values(100, 100);
+set autocommit=0;
+insert into stu1 values(200, 100);
+set autocommit=0;
+insert into stu1 values(300, 100);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200009	1001
+500003	stu2	NULL	200010	1002
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500003:500003	1	NULL	NULL	NULL	200010:0	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200009	1001
+500003	stu2	NULL	200010	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1002	1001	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1002	1001	500003:500003	1	NULL	NULL	NULL	200010:1	1	COMPLETED	0	
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+explain basic insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+Query Plan
+============================================
+|ID|OPERATOR               |NAME           |
+--------------------------------------------
+|0 |EXCHANGE IN REMOTE     |               |
+|1 |??????EXCHANGE OUT REMOTE  |               |
+|2 |  ??????INSERT_UP          |               |
+|3 |    ??????SUBPLAN SCAN     |ANONYMOUS_VIEW1|
+|4 |      ??????TABLE FULL SCAN|stu1           |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+  1 - output(nil), filter(nil)
+  2 - output(nil), filter(nil)
+      columns([{stu2: ({stu2: (stu2.col1, stu2.col2)})}]), partitions(p0), 
+      column_values([column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.col1)], [column_conv(INT,PS:(11,0),NULL,ANONYMOUS_VIEW1.col2)]),
+      update([stu2.col2=column_conv(INT,PS:(11,0),NULL,1000)])
+  3 - output([ANONYMOUS_VIEW1.col1], [ANONYMOUS_VIEW1.col2]), filter(nil), rowset=16
+      access([ANONYMOUS_VIEW1.col1], [ANONYMOUS_VIEW1.col2])
+  4 - output([stu1.col1], [stu1.col2]), filter(nil), rowset=16
+      access([stu1.col1], [stu1.col2]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([stu1.col1]), range(MIN ; MAX)always true
+insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+commit;
+explain basic insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+Query Plan
+============================================
+|ID|OPERATOR               |NAME           |
+--------------------------------------------
+|0 |EXCHANGE IN REMOTE     |               |
+|1 |??????EXCHANGE OUT REMOTE  |               |
+|2 |  ??????INSERT_UP          |               |
+|3 |    ??????SUBPLAN SCAN     |ANONYMOUS_VIEW1|
+|4 |      ??????TABLE FULL SCAN|stu1           |
+============================================
+Outputs & filters:
+-------------------------------------
+  0 - output(nil), filter(nil)
+  1 - output(nil), filter(nil)
+  2 - output(nil), filter(nil)
+      columns([{stu2: ({stu2: (stu2.col1, stu2.col2)})}]), partitions(p0), 
+      column_values([column_conv(INT,PS:(11,0),NOT NULL,ANONYMOUS_VIEW1.col1)], [column_conv(INT,PS:(11,0),NULL,ANONYMOUS_VIEW1.col2)]),
+      update([stu2.col2=column_conv(INT,PS:(11,0),NULL,1000)])
+  3 - output([ANONYMOUS_VIEW1.col1], [ANONYMOUS_VIEW1.col2]), filter(nil), rowset=16
+      access([ANONYMOUS_VIEW1.col1], [ANONYMOUS_VIEW1.col2])
+  4 - output([stu1.col1], [stu1.col2]), filter(nil), rowset=16
+      access([stu1.col1], [stu1.col2]), partitions(p0)
+      is_index_back=false, is_global_index=false, 
+      range_key([stu1.col1]), range(MIN ; MAX)always true
+insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+commit;
+select col1,col2 from stu1;
+col1	col2
+100	100
+200	100
+300	100
+select col1,col2 from stu2;
+col1	col2
+100	1000
+200	1000
+300	100
+
+============= transfer stangby read  =======================
+truncate table stu1;
+truncate table stu2;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200011	1002
+500003	stu2	NULL	200012	1001
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500002:500002	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500002:500002	1	NULL	NULL	NULL	200011:0	1	COMPLETED	0
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+commit;
+ERROR 25000: Statement timeout occurred, please set the variable ob_query_timeout to a larger value an then restart the statement
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $mysql_tenant_id and tenant_role = 'STANDBY' and switchover_status = 'NORMAL', 1, 10;
+select * from stu1;
+col1	col2
+ALTER SYSTEM SWITCHOVER TO PRIMARY TENANT mysql;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $mysql_tenant_id and tenant_role = 'PRIMARY' and switchover_status = 'NORMAL', 1, 20;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job_history where tenant_id = $mysql_tenant_id, 1, 300;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_balance_job where tenant_id = $mysql_tenant_id, 0, 60;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_LS where tenant_id = $mysql_tenant_id and status != 'NORMAL', 0, 100;
+SELECT LS_ID, STATUS, PRIMARY_ZONE FROM oceanbase.DBA_OB_LS;
+LS_ID	STATUS	PRIMARY_ZONE
+1	NORMAL	z1;z2,z3
+1001	NORMAL	z1;z2,z3
+1002	NORMAL	z2;z1,z3
+1003	NORMAL	z3;z1,z2
+SELECT DISTINCT TABLE_ID, TABLE_NAME, PARTITION_NAME, TABLET_ID, LS_ID FROM oceanbase.DBA_OB_TABLE_LOCATIONS WHERE TABLE_ID >= 500000 ORDER BY TABLE_ID, TABLET_ID;
+TABLE_ID	TABLE_NAME	PARTITION_NAME	TABLET_ID	LS_ID
+500002	stu1	NULL	200011	1002
+500003	stu2	NULL	200012	1002
+SELECT JOB_TYPE, TARGET_UNIT_NUM, TARGET_PRIMARY_ZONE_NUM, STATUS, COMMENT, BALANCE_STRATEGY_NAME FROM oceanbase.__all_balance_job_history;
+JOB_TYPE	TARGET_UNIT_NUM	TARGET_PRIMARY_ZONE_NUM	STATUS	COMMENT	BALANCE_STRATEGY_NAME
+PARTITION_BALANCE	1	3	COMPLETED	NULL	partition balance
+SELECT task_type, src_ls, dest_ls, part_list, finished_part_list, part_count, finished_part_count, ls_group_id, status, parent_list FROM oceanbase.__all_balance_task_history;
+task_type	src_ls	dest_ls	part_list	finished_part_list	part_count	finished_part_count	ls_group_id	status	parent_list
+LS_TRANSFER	1001	1002	NULL	500003:500003	0	1	1001	COMPLETED	NULL
+SELECT src_ls, dest_ls, part_list, part_count, not_exist_part_list, lock_conflict_part_list, table_lock_tablet_list, tablet_list, tablet_count, status, result, comment FROM oceanbase.__all_transfer_task_history;
+src_ls	dest_ls	part_list	part_count	not_exist_part_list	lock_conflict_part_list	table_lock_tablet_list	tablet_list	tablet_count	status	result	comment
+1001	1002	500003:500003	1	NULL	NULL	NULL	200012:0	1	COMPLETED	0
+alter system change tenant mysql;
+DELETE FROM oceanbase.__all_balance_job_history;
+DELETE FROM oceanbase.__all_balance_task_history;
+DELETE FROM oceanbase.__all_transfer_task_history;
+alter system change tenant sys;
+commit;
+ERROR 25000: Statement timeout occurred, please set the variable ob_query_timeout to a larger value an then restart the statement
+ALTER SYSTEM SWITCHOVER TO STANDBY TENANT mysql;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $mysql_tenant_id and tenant_role = 'STANDBY' and switchover_status = 'NORMAL', 1, 20;
+res
+1
+col1	col2
+2	1

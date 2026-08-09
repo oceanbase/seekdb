@@ -1,0 +1,55 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+case 1 start
+CREATE RESOURCE UNIT test_unit MAX_CPU 1, MAX_MEMORY 1073741824, MAX_IOPS 100000, MAX_DISK_SIZE 536870912, MAX_SESSION_NUM 64;
+CREATE RESOURCE POOL test_pool UNIT = 'test_unit', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+CREATE TENANT test_tenant RESOURCE_POOL_LIST = ('test_pool') set ob_tcp_invited_nodes='%';
+alter system major freeze;
+ob1.check_version 2;
+select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = 1 and version = 2;
+merge_level
+1
+0
+select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = 1001 and version = 2;
+merge_level
+1
+case 1 finish
+case 2 start
+create table test_micro_block (pk int auto_increment, int_column int, char_column varchar(128)) compression 'none';
+create index test_micro_block_index on test_micro_block (int_column, char_column);
+insert into test_micro_block (pk, int_column, char_column) values (1, 100, 'abcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefgabcdefg');
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+update test_micro_block set int_column = 0 where pk = 1;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;
+main table pass
+index table pass
+case 2 finish
+case 3 start
+update test_micro_block set int_column = 1 where pk < 100;
+ob1.mysql alter system minor freeze;
+update test_micro_block set int_column = 2 where pk < 100;
+ob1.mysql alter system minor freeze;
+update test_micro_block set int_column = 3 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 5;
+main table pass
+case 3 finish
+case 4 start
+alter tenant sys rewrite_merge_version = 6;
+update test_micro_block set int_column = 4 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 6;
+select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = 1001 and version = 6;
+merge_level
+1
+case 4 finish
+case 5 start
+update test_micro_block set int_column = 5 where pk < 100;
+ob1.mysql alter system major freeze;
+ob1.check_version 7;
+select distinct(merge_level) from __all_virtual_partition_sstable_merge_info where tenant_id = 1001 and version = 7;
+merge_level
+0
+case 5 finish

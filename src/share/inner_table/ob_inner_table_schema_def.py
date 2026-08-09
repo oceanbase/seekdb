@@ -5917,21 +5917,7 @@ def_table_schema(
   ],  vtable_route_policy = 'local'
   )
 
-def_table_schema(
-  owner             = 'fengshuo.fs',
-  table_name        = '__all_virtual_thread',
-  table_id          = '12384',
-  table_type        = 'VIRTUAL_TABLE',
-  gm_columns        = [],
-  rowkey_columns    = [],
-  normal_columns    = [
-    ('tid',                 'int'),
-    ('tname',               'varchar:16'),
-    ('latch_wait',          'varchar:16'),
-    ('latch_hold',          'varchar:256'),
-    ('trace_id',            'varchar:40')
-                      ],  vtable_route_policy = 'local'
-  )
+# 12384: __all_virtual_thread # removed
 
 # 12385 and 12387 reserved
 
@@ -12104,9 +12090,9 @@ def_table_schema(
 
 
 
-# 21380: GV$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
+# 21380: GV$OB_THREAD # removed
 
-# 21381: V$OB_THREAD # removed (single-tenant GV/V collapse; use oceanbase.__all_virtual_thread)
+# 21381: V$OB_THREAD # removed
 
 # 21382-21383 reserved
 # 21384: DBA_OB_ZONE_STORAGE (abandoned)

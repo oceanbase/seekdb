@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_pl_user_defined_agg_function.h"
-#include "pl/ob_pl_resolver.h"
+#include "sql/pl/ob_pl_resolver.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 
@@ -58,6 +58,11 @@ int ObPlAggUdfFunction::pick_routine(ObSEArray<const ObIRoutineInfo *, 4> &routi
                                   package_guard,
                                   *exec_ctx_->get_sql_proxy(),
                                   false /*is_ps*/);
+      resolve_ctx.params_.plan_cache_ = exec_ctx_->get_plan_cache();
+      resolve_ctx.params_.pl_sql_runtime_ = exec_ctx_->get_pl_sql_runtime();
+      resolve_ctx.params_.pl_engine_ = exec_ctx_->get_pl_engine();
+      resolve_ctx.params_.srs_provider_ = exec_ctx_->get_srs_provider();
+      resolve_ctx.params_.lob_read_service_ = exec_ctx_->get_lob_read_service();
       OZ (ObResolverUtils::pick_routine(resolve_ctx, mock_exec_expr, routine_infos, routine_info));
     }
   }
@@ -85,7 +90,6 @@ int ObPlAggUdfFunction::init(ObSQLSessionInfo *session_info,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(session_info), K(allocator), K(exec_ctx), K(ret));
   } else if (OB_FAIL(params_type_.assign(params_type))) {
-    LOG_WARN("failed to assign params type", K(ret));
   } else {
     session_info_ = session_info;
     allocator_ = allocator;
@@ -93,9 +97,7 @@ int ObPlAggUdfFunction::init(ObSQLSessionInfo *session_info,
     type_id_ = type_id;
     result_type_ = result_type;
     if (OB_FAIL(process_init_pl_agg_udf(pl_obj))) {
-      LOG_WARN("failed process init pl agg udf", K(ret));
     } else {
-      LOG_TRACE("succeed to process init", K(type_id), K(params_type), K(result_type), K(pl_obj));
     }
   }
   return ret;
@@ -110,7 +112,7 @@ int ObPlAggUdfFunction::call_pl_engine_exectue_udf(ParamStore& udf_params,
   ObSEArray<int64_t, 8> empty_subprogram_path;
   uint64_t loc = 0;
   if (OB_ISNULL(routine_info) || OB_ISNULL(session_info_) ||
-      OB_ISNULL(pl_engine = session_info_->get_pl_engine()) || OB_ISNULL(allocator_) ||
+      OB_ISNULL(pl_engine = exec_ctx_->get_pl_engine()) || OB_ISNULL(allocator_) ||
       OB_ISNULL(exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(pl_engine), K(allocator_), K(exec_ctx_),
@@ -131,16 +133,12 @@ int ObPlAggUdfFunction::call_pl_engine_exectue_udf(ParamStore& udf_params,
                                         false,
                                         true,
                                         loc))) {
-    LOG_WARN("failed to execute pl engine", K(type_id_), K(routine_info->get_routine_id()),
-                                            K(result), K(ret));
   }
   if (OB_SUCC(ret)) {//check return value validity ==> return ODCICONST.Success ==> 0
     number::ObNumber num_res;
     int64_t dst_val = 0;
     if (OB_FAIL(result.get_number(num_res))) {
-      LOG_WARN("failed to get number", K(ret));
     } else if (num_res == dst_val) {
-      LOG_TRACE("succeed to call pl engine exectue udf", K(udf_params), K(result));
     } else {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("get invalid argument for udf return", K(ret));
@@ -187,14 +185,11 @@ int ObPlAggUdfFunction::build_in_params_store(ObObjParam &pl_obj,
       pl_obj.copy_value_or_obj(param, true);
     }
     if (OB_FAIL(udf_params->push_back(param))) {
-      LOG_WARN("failed to push back param", K(ret));
     } else if (obj_params != NULL &&
                OB_FAIL(ObExprUDF::process_in_params(obj_params, param_num, params_desc,
                                                     params_type, *udf_params, *allocator_))) {
       LOG_WARN("failed to process in params", K(ret));
     } else {
-      LOG_TRACE("succeed to build in params store", K(pl_obj), K(obj_params), K(params_desc),
-                                                    K(params_type), K(udf_params));
     }
   }
   return ret;
@@ -221,11 +216,9 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(param_num), K(params_type_.count()), K(obj_params), K(ret));
   } else if (OB_FAIL(check_params_validty(obj_params, param_num, is_null_params))) {
-    LOG_WARN("failed to check params validty", K(ret));
   } else if (is_null_params) {
     /*no nothing*/
   } else if (OB_FAIL(process_obj_params(const_cast<ObObj*>(obj_params), param_num))) {
-    LOG_WARN("failed to process obj params", K(ret));
   } else {
     ObSEArray<ObUDFParamDesc, 4> params_desc;
     ObSEArray<ObUDFParamDesc, 4> all_params_desc;
@@ -237,39 +230,29 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
     param_type.set_ext();
     param_type.set_udt_id(type_id_);
     if (OB_FAIL(all_params_type.push_back(param_type))) {
-      LOG_WARN("failed to push back type", K(ret));
     } else if (OB_FAIL(all_params_desc.push_back(
         ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, 0)))) {
-      LOG_WARN("failed to push back param desc", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < params_type_.count(); ++i) {
         if (OB_FAIL(params_type.push_back(params_type_.at(i)))) {
-          LOG_WARN("failed to push back type", K(ret));
         } else if (OB_FAIL(all_params_type.push_back(params_type_.at(i)))) {
-          LOG_WARN("failed to push back type", K(ret));
         } else if (OB_FAIL(params_desc.push_back(ObUDFParamDesc()))) {
-          LOG_WARN("failed to push back params desc", K(ret));
         } else if (OB_FAIL(all_params_desc.push_back(ObUDFParamDesc()))) {
-          LOG_WARN("failed to push back params desc", K(ret));
         } else {/*do nothing*/}
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(build_in_params_store(pl_obj, true, obj_params, param_num, params_desc,
                                           params_type, udf_params))) {
-          LOG_WARN("failed to build in params store", K(ret));
         } else if (OB_ISNULL(udf_params)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(get_package_routine_info(routine_name, routine_info, all_params_type))) {
-          LOG_WARN("failed to get package routine info", K(ret));
         } else if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
-          LOG_WARN("failed to call pl engine exectue udf", K(ret));
         } else if (OB_UNLIKELY(udf_params->count() < 1)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(udf_params->count()));
         } else {
           udf_params->at(0).copy_value_or_obj(pl_obj, true);
-          LOG_TRACE("Succeed to process calc pl agg udf", K(pl_obj), K(tmp_result));
         }
       }
     }
@@ -307,13 +290,10 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
   ObSEArray<ObExprResType, 4> all_params_type;
   result.set_meta_type(result_type_);
   if (OB_FAIL(params_type.push_back(result_type_))) {
-    LOG_WARN("failed to push back type", K(ret));
   } else if (OB_FAIL(params_desc.push_back(
       ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, 0)))) {
-    LOG_WARN("failed to push back param desc", K(ret));
   } else if (OB_FAIL(build_in_params_store(pl_obj, false, &result, 1, params_desc,
                                             params_type, udf_params))) {
-    LOG_WARN("failed to build in params store", K(ret));
   } else if (OB_ISNULL(udf_params)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
@@ -330,24 +310,15 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
     param.reset();
     number.copy_value_or_obj(param, true);
     if (OB_FAIL(udf_params->push_back(param))) {
-      LOG_WARN("failed to push back obj param");
     } else if (OB_FAIL(all_params_type.push_back(param_type))) {
-      LOG_WARN("failed to push back type", K(ret));
     } else if (OB_FAIL(all_params_desc.push_back(ObUDFParamDesc()))) {
-      LOG_WARN("failed to push back param desc", K(ret));
     } else if (OB_FAIL(all_params_type.push_back(result_type_))) {
-      LOG_WARN("failed to push back type", K(ret));
     } else if (OB_FAIL(all_params_desc.push_back(
         ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, 1)))) {
-      LOG_WARN("failed to push back param desc", K(ret));
     } else if (OB_FAIL(all_params_type.push_back(flags_type))) {
-      LOG_WARN("failed to push back type", K(ret));
     } else if (OB_FAIL(all_params_desc.push_back(ObUDFParamDesc()))) {
-      LOG_WARN("failed to push back param desc", K(ret));
     } else if (OB_FAIL(get_package_routine_info(routine_name, routine_info, all_params_type))) {
-      LOG_WARN("failed to get package routine info", K(ret));
     } else if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
-      LOG_WARN("failed to call pl engine exectue udf", K(ret));
     } else if (OB_UNLIKELY(udf_params->count() < 2)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(udf_params->count()));
@@ -355,19 +326,15 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
                                             udf_params->at(1).get_collation_type(),
                                             result_type_.get_type(),
                                             result_type_.get_collation_type()))) {
-      LOG_WARN("failed to check can cast", K(ret));
     } else {
       ObObj src_obj;
       udf_params->at(1).copy_value_or_obj(src_obj, true);
       ObCastMode cast_mode = CM_NONE;
       if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session_info_, cast_mode))) {
-        LOG_WARN("failed to get default cast mode", K(ret));
       } else {
         ObCastCtx cast_ctx(allocator_, NULL, cast_mode, result_type_.get_collation_type(), NULL);
         if (OB_FAIL(ObObjCaster::to_type(result_type_.get_type(), cast_ctx, src_obj, result))) {
-          LOG_WARN("failed to cast type", K(ret));
         } else {
-          LOG_TRACE("succeed to process get pl agg udf result", K(src_obj), K(result));
         }
       }
     }

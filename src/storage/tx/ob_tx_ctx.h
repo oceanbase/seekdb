@@ -27,7 +27,7 @@
 #include "ob_tx_ctx_mds.h"
 #include <cstdint>
 #include "storage/multi_data_source/buffer_ctx.h"
-#include "storage/tx/ob_trans_submit_log_cb.h"
+#include "storage/tx/ob_tx_log_cb_define.h"
 
 
 namespace oceanbase
@@ -82,6 +82,10 @@ enum
 namespace transaction
 {
 
+const static int64_t OB_TX_MAX_LOG_CBS = 15;
+const static int64_t PREALLOC_LOG_CALLBACK_COUNT = 3;
+const static int64_t RESERVE_LOG_CALLBACK_COUNT_FOR_FREEZING = 1;
+
 template<typename T, typename fn>
 int64_t search(const ObIArray<T> &array, fn &equal_func)
 {
@@ -116,8 +120,10 @@ public:
         is_inited_(false), mt_ctx_(), reserve_allocator_("PartCtx"),
         exec_info_(reserve_allocator_),
         mds_cache_(reserve_allocator_),
+        has_extra_log_cb_group_(false),
         has_async_index_redo_(false),
-        allocated_log_cb_count_(0)
+        reserve_log_cb_group_(true/*is_reserve*/),
+        extra_cb_group_list_()
   { /*reset();*/ }
   ~ObTxCtx() { destroy(); }
   void destroy();
@@ -197,7 +203,7 @@ private:
   ON_DEMAND_TO_STRING_KV_(K_(session_id),
                           K_(part_trans_action),
                           K_(pending_write),
-                          K_(allocated_log_cb_count),
+                          K(extra_cb_group_list_.get_size()),
                           K(busy_cbs_.get_size()),
                           K(ctx_tx_data_),
                           K(create_ctx_scn_),
@@ -485,10 +491,14 @@ protected:
   virtual int update_local_max_commit_version_(const share::SCN &commit_version);
 private:
 
+  int init_log_cbs_(const ObTransID &tx_id);
+  int extend_log_cbs_(ObTxLogCb *&log_cb);
+  int extend_log_cb_group_();
+  void reset_log_cb_list_(common::ObDList<ObTxLogCb> &cb_list);
   void reset_log_cbs_();
-  int prepare_log_cb_(ObTxLogCb *&log_cb);
-  int get_log_cb_(ObTxLogCb *&log_cb);
-  int return_log_cb_(ObTxLogCb *log_cb);
+  int prepare_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb);
+  int get_log_cb_(const bool need_final_cb, ObTxLogCb *&log_cb);
+  int return_log_cb_(ObTxLogCb *log_cb, bool release_final_cb = false);
   int get_max_submitting_log_info_(palf::LSN &lsn, share::SCN &log_ts);
   int get_prev_log_lsn_(const ObTxLogBlock &log_block, ObTxPrevLogType &prev_log_type, palf::LSN &lsn);
   int set_start_scn_in_commit_log_(ObTxCommitLog &commit_log);
@@ -593,6 +603,7 @@ private:
   static const int64_t END_STMT_SLEEP_US = 10 * 1000; // 10ms
   static const int64_t MAX_END_STMT_RETRY_TIMES = 100;
   static const uint64_t MAX_PREV_LOG_IDS_COUNT = 1024;
+  static const bool NEED_FINAL_CB = true;
 private:
   bool is_inited_;
   memtable::ObMemtableCtx mt_ctx_;
@@ -626,10 +637,13 @@ private:
   // runtime_state_ is volatile
   ObTxRuntimeState runtime_state_;
 
+  bool has_extra_log_cb_group_;
   // Set when DML writes to a table that has async indexes.
   // Propagated to ObTxLogBlockHeader::HAS_ASYNC_INDEX for Change Stream fast filtering.
   bool has_async_index_redo_;
-  int64_t allocated_log_cb_count_;
+  ObTxLogCbGroup reserve_log_cb_group_;
+  TxLogCbGroupList extra_cb_group_list_;
+  common::ObDList<ObTxLogCb> free_cbs_;
   common::ObDList<ObTxLogCb> busy_cbs_;
 
   ObSpinLock log_cb_lock_;
@@ -681,6 +695,10 @@ private:
 
   // ========================================================
 };
+
+// reserve log callback for freezing and other two log callbacks for normal
+STATIC_ASSERT(OB_TX_MAX_LOG_CBS >= PREALLOC_LOG_CALLBACK_COUNT &&
+    PREALLOC_LOG_CALLBACK_COUNT >= (RESERVE_LOG_CALLBACK_COUNT_FOR_FREEZING + 2), "log callback is not enough");
 
 #if defined(__x86_64__)
 /* uncomment this block to error messaging real size

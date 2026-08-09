@@ -1,0 +1,33 @@
+# CASE_OWNER:
+#    @fanfangzhou.ffz
+# CASE_DESC:
+#    test parallel ddl conflict scene
+#
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz);
+ob1.reboot;
+
+
+let $rs = ob1.z1.obs0;
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,test,$rs_mysql_port);
+
+# case 1: bugfix:53429313
+alter system set debug_sync_timeout = '1000s';
+set ob_global_debug_sync = 'BEFORE_SEND_PARALLEL_CREATE_TABLE wait_for signal execute 1';
+sleep 10;
+
+set @@session.foreign_key_checks = off;
+set @@session.ob_query_timeout = 100000000;
+send create table t1(c1 int primary key, c2 int, foreign key (c2) references t2(c1));
+
+connect (conn_sys_1,$rs_ip,admin@sys,admin,test,$rs_mysql_port);
+
+create table t2(c1 int primary key);
+
+set ob_global_debug_sync = 'now signal signal';
+
+connection conn_sys;
+reap;
+

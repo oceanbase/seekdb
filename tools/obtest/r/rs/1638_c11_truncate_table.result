@@ -1,0 +1,28 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.z1.obs0.set extra_config=__schema_split_mode=true;
+ob2.z1.obs0.set extra_config=__schema_split_mode=true;
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system add cluster '$cluster_name' cluster_id = 2;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+create database db;
+use db;
+create table test(c1 int primary key, c2 int);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 13;
+ob2.mysql_p select count(*) from oceanbase.__all_table where table_name = 'test';
+count(*)
+0
+ob2.mysql_p select count(*) from oceanbase.__all_database where database_name = 'db';
+count(*)
+0
+truncate table test;
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 13;
+ob2.mysql_p select count(*) from oceanbase.__all_table where table_name = 'test';
+count(*)
+0
+ob2.mysql_p select count(*) from oceanbase.__all_database where database_name = 'db';
+count(*)
+0
+alter table test partition by range(c1)(partition p0 values less than (maxvalue));
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $schema_version, 1, 13;

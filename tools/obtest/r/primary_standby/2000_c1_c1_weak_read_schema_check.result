@@ -1,0 +1,57 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table t1 (c1 int primary key, c2 int);
+ob2.mysql alter system set balancer_idle_time='10s';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql alter system set data_copy_concurrency = 60;
+ob2.mysql alter system set server_data_copy_out_concurrency = 30;
+ob2.mysql alter system set server_data_copy_in_concurrency = 30;
+replace into t1 (c1, c2) values (1,2),(3,4),(5,6);
+select * from t1;
+c1	c2
+1	2
+3	4
+5	6
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = 1001, $partition_cnt, 120;
+ob2.check_until_timeout select current_scn > $now from v\$ob_cluster,1,120;
+set ob_read_consistency='weak';
+select * from t1;
+c1	c2
+1	2
+3	4
+5	6
+ob2.mysql set ob_global_debug_sync = 'BEFORE_PROCESS_USER_SCHEMA wait_for continue_signal';
+alter table t1 add column c3 int default 100;
+select * from t1;
+c1	c2	c3
+1	2	100
+3	4	100
+5	6	100
+replace into t1 values (100, 100, 100);
+select * from t1;
+c1	c2	c3
+1	2	100
+3	4	100
+5	6	100
+100	100	100
+ob2.check_until_timeout select min_log_service_ts > $t1_new_clog_ts from __all_virtual_partition_info where table_id=$t1_id, 1, 120;
+ob2.check_until_timeout select min_replay_engine_ts = $t1_new_clog_ts from __all_virtual_partition_info where table_id=$t1_id, 1, 120;
+select * from t1;
+c1	c2
+1	2
+3	4
+5	6
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob2.check_until_timeout select current_scn > $now from v\$ob_cluster,1,120;
+set ob_read_consistency='weak';
+select * from t1;
+c1	c2	c3
+1	2	100
+3	4	100
+5	6	100
+100	100	100

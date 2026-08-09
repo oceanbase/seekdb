@@ -1,0 +1,76 @@
+# owner: msy164651
+# description: 测试主备库生成各种任务的时候，主备库切换成功，任务执行应该失败掉,目前rs这边只能测试在执行阶段失败掉
+# 打点，禁止任务调度，在切换成备库之后，任务失败掉
+# case 1: 生成补副本，副本类型转换任务，然后把主库切成备库，然后这部分任务失败掉
+# case 2：在备库上生成迁移unit任务，是不需要成员变更的，生成的迁移任务，在切换为主库之后，失败掉
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+ob1.reboot;
+ob2.reboot;
+#创建租户，并确定备库同步上去，并且zone list是3个
+ob1.mysql set @@global.ob_query_timeout=30000000;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_3 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2', 'z3');
+ob1.mysql CREATE TENANT tt3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1', locality = 'f@z1, f@z2' set ob_tcp_invited_nodes='%';
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 30;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+sleep 3;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+let $balance_count = deploy_get_value(ob2.select select count(*) c from __all_virtual_server_event_history where module like '%balance%' and event = 'tenant_balance_started', c, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt3', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_root_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 120;
+let $balance_count = deploy_get_value(ob2.select select count(*) c from __all_virtual_server_event_history where module like '%balance%' and event = 'tenant_balance_started', c, 1);
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 30;
+
+#禁掉主备库的任务执行
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_REBALANCE_TASK_EXECUTE wait_for continue_signal';
+ob2.mysql alter system set debug_sync_timeout = '100000s';
+ob2.mysql set ob_global_debug_sync = 'BEFORE_REBALANCE_TASK_EXECUTE wait_for continue_signal';
+#case 1
+#补副本任务
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt3', tenant_id, 1);
+let $src = deploy_get_value(ob1.z1.obs0.get_addr); 
+let $dest = deploy_get_value(ob1.z3.obs0.get_addr);
+let $table_id = deploy_get_value(ob1.select select table_id from __all_root_table where tenant_id = $tenant_id, table_id, 1);
+ob1.mysql alter system copy replica partition_id '0%4@$table_id' source '$src' destination '$dest'; 
+#类型转换任务
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $table_id = deploy_get_value(ob1.select select table_id from __all_root_table where tenant_id = $tenant_id, table_id, 1);
+ob1.mysql alter system change replica partition_id='0%50@$table_id' server =  '$src' change replica_type = 'L';
+#确定任务队列里面有这种任务
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'ADD_REPLICA', 1, 20;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'TYPE_TRANSFORM', 1, 20;
+let $add_count = deploy_get_value(ob1.select select count(*) as c from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'ADD_REPLICA', c, 1);
+let $tranf_count = deploy_get_value(ob1.select select count(*) as c from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'TYPE_TRANSFORM', c, 1);
+# case 1：unit迁移可以成功，从主库拷贝来的副本的成员列表没有变化
+let $resource_id = deploy_get_value(ob2.select select resource_pool_id from oceanbase.__all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $unit_id = deploy_get_value(ob2.select select unit_id from oceanbase.__all_unit where resource_pool_id = $resource_id, unit_id, 1);
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_unit where unit_id = $unit_id and zone = 'z1', addr,1);
+let $dest = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_server where zone = 'z1' and concat(svr_ip,":",svr_port) not in (select concat(svr_ip,":",svr_port) from __all_unit where unit_id = $unit_id),addr,1);
+ob2.mysql alter system migrate unit $unit_id destination '$dest';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'MIGRATE_UNIT', job_id, 1);
+ob2.check_until_timeout select count(*) > 0 from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'MIGRATE_REPLICA', 1, 20;
+let $migrate_count = deploy_get_value(ob2.select select count(*) as c from oceanbase.__all_virtual_rebalance_task_stat where task_type = 'MIGRATE_REPLICA', c, 1);
+
+#主备库切换
+
+ob1.force_stop;
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql set ob_global_debug_sync = 'now signal continue_signal';
+#检查迁移任务失败
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_event_history where value4 != '0' and event = 'finish_migrate_replica', $migrate_count, 20;
+

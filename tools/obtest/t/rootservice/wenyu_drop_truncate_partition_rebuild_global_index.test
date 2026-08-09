@@ -1,0 +1,62 @@
+# CASE_OWNER:
+#    @wenyu.ffz
+# CASE_DESC:
+#    校验drop/truncate partition走ddl task
+
+ob1=OBI(cluster=1:1,proxy_num=0);
+source include/mini_ob_config.inc;
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+#create tenant
+eval CREATE RESOURCE UNIT unit_2 MAX_CPU 2, MEMORY_SIZE '4G';
+eval CREATE RESOURCE POOL pool_2 UNIT = 'unit_2', UNIT_NUM = 1;
+eval CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+alter system set debug_sync_timeout = '10000s';
+
+ob_connect(conn_mysql1, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql2, ob1.z1.obs0, root@mysql, ,test, , USE_MYSQL_CONNECTOR);
+
+create table t1 (col1 int, col2 int) partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+create unique index wenyu_index_i1 on t1(col1) global;
+show create table t1;
+connection conn_sys;
+select table_name, table_id, index_status  from __all_virtual_table where table_name like '%wenyu_index%';
+set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for signal execute 2';
+
+connection conn_mysql1;
+send alter table t1 truncate partition p1;
+connection conn_mysql2;
+sleep 5;
+--replace_regex /DELETING_[0-9]*/DELETING/g
+show create table t1;
+
+connection conn_sys;
+select table_name,table_id, index_status  from __all_virtual_table where tenant_id = 1002 and table_name like '%wenyu_index_i1%';
+select tenant_id, object_id, target_object_id, ddl_type from __all_virtual_ddl_task_status;
+
+set ob_global_debug_sync = 'now signal signal';
+set ob_global_debug_sync = 'now signal signal';
+
+connection conn_mysql1;
+reap;
+
+connection conn_sys;
+select table_name,table_id, index_status  from __all_virtual_table where table_name like '%wenyu_index_i1%';
+sleep 1;
+ob1.check_until_timeout select count(*) from __all_virtual_obj_lock, 0, 5;
+
+connection conn_mysql1;
+drop table t1;
+#make sure truncate partition deal with tablet obj lock in ddl task right
+ob1.check_until_timeout select count(*) from __all_virtual_obj_lock, 0, 5;
+
+--error 1235
+CREATE TABLE tbl1(col1 INT, col2 VARCHAR(18), col3 JSON, primary key (col1),
+   INDEX idx1((CAST(col3->'$.ipcode' AS UNSIGNED ARRAY))) GLOBAL
+) partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));
+
+--error 1235
+CREATE TABLE tbl2(col1 INT, col2 VARCHAR(18), col3 DATE, PRIMARY KEY (col1), FULLTEXT INDEX idx2(col2) GLOBAL)
+partition by range(col1) (partition p1 values less than(1), partition p2 values less than(2));

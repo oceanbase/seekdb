@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+export LD_LIBRARY_PATH=/usr/local/staf/lib/:$LD_LIBRARY_PATH
+
+java -Duserid=$(id -u) -cp jar/mytest-1.4-SNAPSHOT-jar-with-dependencies.jar com.etao.mytest.deploy.Deploy  $@

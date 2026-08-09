@@ -152,6 +152,7 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "ob_simple_batch.h",
     "ob_snapshot_table_proxy.h",
     "ob_sql_client_decorator.h",
+    "ob_standby_source_util.h",
     "ob_structured_event_logger.h",
     "ob_sys_time_zone_util.h",
     "ob_table_access_helper.h",

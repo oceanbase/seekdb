@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_RELEASE_DDL_KV wait_for signal execute 10000';
+count(*)
+3
+ob1.mysql set ob_global_debug_sync = 'BEFORE_RELEASE_DDL_KV clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal';
+Field	Type	Null	Key	Default	Extra
+c1	int(11)	YES		NULL	
+c2	int(11)	YES	MUL	NULL	
+c1	c2
+1	1

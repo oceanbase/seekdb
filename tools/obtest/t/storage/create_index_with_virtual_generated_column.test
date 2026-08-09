@@ -1,0 +1,34 @@
+# owner: chenqun
+# owner group: storage
+# description:this case is use for create index test
+#
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+#ob1.mysql alter resource pool obtestpool unit_num 2;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,admin@obtest,admin,oceanbase,$port);
+connect (conn2,$ip,root@sys,,oceanbase,$port);
+connection conn1;
+
+use test;
+create table t1(c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int);
+
+insert into t1(c1, c3) values('test', 2);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+
+create index i1 on t1(c2);
+
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where tenant_id=1001 and table_name like '%i1%', 2, 120;
+select /*+ index(t1 i1) */ * from t1 where c2='est';
+
+

@@ -406,7 +406,7 @@ int ObVectorIndexUtil::parser_params_from_string(
               ret = OB_NOT_SUPPORTED;
               LOG_WARN("not support vector index nbits value", K(ret), K(int_value), K(new_param_value));
             }
-          }
+          }  
         } else if (new_param_name == "PRUNE") {
           if (new_param_value == "FALSE") {
             param.prune_ = false;
@@ -692,14 +692,14 @@ int ObVectorIndexUtil::cast_vector_array_str_to_float_array_binary(ObIAllocator 
     vector_type.type_id_ = ObNestedType::OB_VECTOR_TYPE;
     vector_type.element_type_ = &elem_type;
     vector_type.dim_cnt_ = dim;
-
+    
     ObIArrayType *vector_array = nullptr;
     ObVectorF32Data vector_data;
     ObArrayData<float> arr_data(allocator);
     vector_data.set_array_data(&arr_data);
-    vector_data.set_element_type(ObFloatType);
+    vector_data.set_element_type(ObFloatType);      
     vector_array = &vector_data;
-
+            
     ObString vector_array_str_copy = vector_array_str;
     if (OB_FAIL(ObArrayCastUtils::string_cast_vector(allocator, vector_array_str_copy, vector_array, &vector_type, false))) {
     } else {
@@ -715,13 +715,13 @@ int ObVectorIndexUtil::cast_vector_array_str_to_float_array_binary(ObIAllocator 
           LOG_USER_ERROR(OB_ERR_INVALID_VECTOR_DIM, dim, real_dim);
         } else if (OB_FAIL(ob_write_string(allocator, temp_vec, output_vec))) {
         }
-      }
+      } 
     }
   }
   return ret;
 }
 
-int ObVectorIndexUtil::get_vector_from_vector_array_string(ObIAllocator &allocator,
+int ObVectorIndexUtil::get_vector_from_vector_array_string(ObIAllocator &allocator, 
                                                           const ObString &vector_array_str,
                                                           const ObString &param_str,
                                                           ObString &output_vec)
@@ -788,14 +788,14 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     vector_type.type_id_ = ObNestedType::OB_VECTOR_TYPE;
     vector_type.element_type_ = &elem_type;
     vector_type.dim_cnt_ = param.dim_;
-
+    
     ObIArrayType *vector_array = nullptr;
     ObVectorF32Data vector_data;
     ObArrayData<float> arr_data(allocator);
     vector_data.set_array_data(&arr_data);
-    vector_data.set_element_type(ObFloatType);
+    vector_data.set_element_type(ObFloatType);      
     vector_array = &vector_data;
-
+            
     // Use string_cast_vector to parse the vector string
     if (OB_FAIL(ObArrayCastUtils::string_cast_vector(allocator, result, vector_array, &vector_type, false))) {
     } else {
@@ -1123,7 +1123,7 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
           (old_vec_param.type_ != ObVectorIndexAlgorithmType::VIAT_HNSW && old_vec_param.type_ != ObVectorIndexAlgorithmType::VIAT_HNSW_SQ)) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("it must be rebuild from hnsw <==> hnsw_sq now", K(ret), K(new_vec_param), K(old_vec_param));
-      }
+      } 
       if (OB_SUCC(ret)) {
         new_type_is_set = true;
       }
@@ -1155,7 +1155,7 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
     }
 
     if (OB_FAIL(ret)) {
-    } else if (new_vec_param.m_ != 0 || new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) {
+    } else if (new_vec_param.m_ != 0 || new_vec_param.type_ == ObVectorIndexAlgorithmType::VIAT_IPIVF) { 
       // m is reset
     } else if (OB_FAIL(databuff_printf(not_set_params_str, OB_MAX_TABLE_NAME_LENGTH, pos, ", M=%ld", old_vec_param.m_))) {
     }
@@ -1217,7 +1217,7 @@ int ObVectorIndexUtil::construct_rebuild_index_param(
       LOG_WARN("unexpected setting of vector index param, extra_info_actual_size can not be set", K(ret),
                K(new_vec_param), K(old_vec_param));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supproted change extra_info_actual_size param");
-    } else if (new_vec_param.extra_info_max_size_ != old_vec_param.extra_info_max_size_) {
+    } else if (new_vec_param.extra_info_max_size_ != old_vec_param.extra_info_max_size_) {  
       // extra_info_max_size changed
       if (old_vec_param.extra_info_max_size_ == 0 && new_vec_param.extra_info_max_size_ > 0) {
         ret = OB_NOT_SUPPORTED;
@@ -1319,7 +1319,7 @@ int ObVectorIndexUtil::check_distance_algorithm_match(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-
+  
   const int64_t vector_index_column_cnt = 1;
   is_match = false;
 
@@ -1496,12 +1496,12 @@ bool ObVectorIndexUtil::should_set_max_lob_inrow_threshold_for_async_index(
       && ObVectorIndexUtil::is_sync_mode_async(index_params, true /* is_hnsw_heap_table */);
 }
 
-int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_table_schema, ObSchemaGetterGuard &schema_guard,
+int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_table_schema, ObSchemaGetterGuard &schema_guard, 
     bool &has_vec_index)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   has_vec_index = false;
 
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -1512,7 +1512,7 @@ int ObVectorIndexUtil::check_table_has_vector_index(const ObTableSchema &data_ta
       } else if (OB_ISNULL(index_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
-      } else if (index_table_schema->is_vec_index()) {
+      } else if (index_table_schema->is_vec_index()) {  
         has_vec_index = true;
       }
     }
@@ -1525,7 +1525,7 @@ int ObVectorIndexUtil::check_table_has_vector_of_fts_index(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   has_fts_index = false;
   has_vec_index = false;
 
@@ -1554,7 +1554,7 @@ int ObVectorIndexUtil::check_has_extra_info(const ObTableSchema &data_table_sche
 
   has_extra_info = false;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count() && !has_extra_info; ++i) {
@@ -1600,7 +1600,7 @@ int ObVectorIndexUtil::determine_vid_type(const ObTableSchema &table_schema, ObD
 }
 
 int ObVectorIndexUtil::check_need_vid(
-  const ObTableSchema &table_schema,
+  const ObTableSchema &table_schema, 
   bool &need_vid)
 {
   int ret = OB_SUCCESS;
@@ -1619,7 +1619,7 @@ int ObVectorIndexUtil::check_column_has_vector_index(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   is_column_has_vector_index = false;
 
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
@@ -2001,7 +2001,7 @@ int ObVectorIndexUtil::check_rowkey_cid_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16>simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -2043,9 +2043,9 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
-
+  
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard), K(data_table_schema));
@@ -2077,9 +2077,9 @@ int ObVectorIndexUtil::check_hybrid_embedded_vec_cid_table_readable(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
-
+  
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard), K(data_table_schema));
@@ -2121,7 +2121,7 @@ int ObVectorIndexUtil::get_right_index_tid_in_rebuild(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16>simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
 
   ObIndexType next_index_type = index_type;
@@ -2265,7 +2265,7 @@ int ObVectorIndexUtil::get_vector_index_tid(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !share::schema::is_vec_index(index_type) || !data_table_schema.is_user_table()) {
@@ -2324,7 +2324,7 @@ int ObVectorIndexUtil::get_vector_index_tid(
             LOG_WARN("unexpected col_schema, is nullptr", K(ret), K(j), KPC(index_table_schema));
           } else if (!(is_hybrid_vec_index(index_type)) && !col_schema->is_vec_hnsw_vector_column()) {
             // only need vec_vector column, here skip other column.
-            // for hybrid index, chunk column id are not persisted
+            // for hybrid index, chunk column id are not persisted 
           } else if (OB_FAIL(has_same_cascaded_col_id(data_table_schema, *col_schema, col_id, has_same_col_id))) {
           } else if (has_same_col_id) {
             tid = simple_index_infos.at(i).table_id_;
@@ -2345,7 +2345,7 @@ int ObVectorIndexUtil::get_vector_index_tids(share::schema::ObSchemaGetterGuard 
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   if (OB_ISNULL(schema_guard) || !share::schema::is_local_vec_ivf_index(index_type) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard), K(index_type), K(data_table_schema));
@@ -2515,7 +2515,7 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
 
   inc_tid = OB_INVALID_ID;
   vbitmap_tid = OB_INVALID_ID;
@@ -2586,7 +2586,7 @@ int ObVectorIndexUtil::get_latest_avaliable_index_tids_for_hnsw(
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
         } else if (!(index_table_schema->get_index_type() == INDEX_TYPE_VEC_INDEX_ID_LOCAL
-                   || index_table_schema->get_index_type() == INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL
+                   || index_table_schema->get_index_type() == INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL 
                    || index_table_schema->get_index_type() == INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL)) {
           // skip if index_table_schema is not 4, 5, 6 index table
         } else if (!index_table_schema->can_read_index() || !index_table_schema->is_index_visible()) {
@@ -2642,7 +2642,7 @@ int ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   tid = OB_INVALID_ID;
 
   if (OB_ISNULL(schema_guard) || !share::schema::is_vec_index(index_type) || !data_table_schema.is_user_table()) {
@@ -2830,10 +2830,10 @@ int ObVectorIndexUtil::get_hybrid_embedded_vector_tid_check_valid(
   uint64_t &tid)
 {
   int ret = OB_SUCCESS;
-
+  
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
   tid = OB_INVALID_ID;
-
+  
   if (OB_ISNULL(schema_guard) || !share::schema::is_vec_index(index_type) || !data_table_schema.is_user_table() || OB_INVALID_ID == embedded_col_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard), K(index_type), K(data_table_schema));
@@ -2846,7 +2846,7 @@ int ObVectorIndexUtil::get_hybrid_embedded_vector_tid_check_valid(
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("index table schema should not be null", K(ret), K(simple_index_infos.at(i).table_id_));
       } else if (!index_table_schema->is_vec_index()) {
-        // skip none vector index
+        // skip none vector index 
       } else if (index_table_schema->get_index_type() != index_type) {
         // skip not spec index type
       } else if (!index_table_schema->can_read_index()) {
@@ -2929,7 +2929,7 @@ int ObVectorIndexUtil::get_vector_index_param(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   param_filled = false;
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
     ret = OB_INVALID_ARGUMENT;
@@ -3425,7 +3425,7 @@ int ObVectorIndexUtil::check_index_param(
       }
     }
 
-    if (OB_SUCC(ret) && ! type_hnsw_bq_is_set
+    if (OB_SUCC(ret) && ! type_hnsw_bq_is_set 
         && (refine_type_is_set || (refine_k_is_set && !type_sindi_is_set)
             || bq_use_fht_is_set || bq_bits_query_set)) {
       ret = OB_NOT_SUPPORTED;
@@ -3664,7 +3664,7 @@ int ObVectorIndexUtil::check_index_param(
     } else if (is_sparse_vec) {
       if (!type_sindi_is_set || !distance_is_set) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unexpected setting of vector index param, distance or type has not been set",
+        LOG_WARN("unexpected setting of vector index param, distance or type has not been set", 
           K(ret), K(distance_is_set), K(type_sindi_is_set));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "the vector index params of distance or type not set is");
       } else {
@@ -4553,17 +4553,17 @@ int ObVectorIndexUtil::get_dbms_vector_job_info(common::ObISQLClient &sql_client
 
 
 int ObVectorIndexUtil::check_rename_rebuild_confilt(
-    share::schema::ObSchemaGetterGuard &schema_guard,
+    share::schema::ObSchemaGetterGuard &schema_guard, 
     common::ObMySQLTransaction &trans,
     rootserver::ObDDLService &ddl_service,
-    const ObTableSchema &origin_table_schema,
+    const ObTableSchema &origin_table_schema, 
     const ObString &ori_index_name)
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *orig_index_schema = nullptr;
   obcall::ObDropIndexArg tmp_drop_arg;
-
-
+  
+  
   tmp_drop_arg.index_name_ = ori_index_name;
   if (OB_FAIL(ddl_service.get_index_schema_by_name(origin_table_schema.get_table_id(),
                                       origin_table_schema.get_database_id(),
@@ -4592,7 +4592,7 @@ int ObVectorIndexUtil::check_table_exist(
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
   bool is_exist = false;
-
+  
   const int64_t database_id = data_table_schema.get_database_id();
   const int64_t data_table_id = data_table_schema.get_table_id();
   ObString index_table_name;
@@ -4625,7 +4625,7 @@ int ObVectorIndexUtil::check_vec_aux_index_deleted(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-
+  
   bool delta_buffer_table_is_valid = false;
   bool index_id_table_is_valid = false;
   bool snapshot_table_is_valid = false;
@@ -4685,7 +4685,7 @@ int ObVectorIndexUtil::check_vector_index_by_column_name(
   int ret = OB_SUCCESS;
   const int64_t data_table_id = table_schema.get_table_id();
   const int64_t database_id = table_schema.get_database_id();
-
+  
 
   bool is_hnsw = false;
   bool vid_rowkey_table_is_valid = false;
@@ -4936,7 +4936,7 @@ bool ObVectorIndexUtil::is_match_index_column_name(
 int ObVectorIndexUtil::get_rebuild_drop_index_id_and_name(share::schema::ObSchemaGetterGuard &schema_guard, obcall::ObDropIndexArg &arg)
 {
   int ret = OB_SUCCESS;
-
+  
   const uint64_t old_index_id = arg.table_id_;
   const uint64_t new_index_id = arg.index_table_id_;
   const ObString old_index_name = arg.index_name_;
@@ -5016,7 +5016,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
   int ret = OB_SUCCESS;
   const share::schema::ObTableSchema *data_table_schema = nullptr;
   ObSEArray<const ObSimpleTableSchemaV2 *, OB_MAX_AUX_TABLE_PER_MAIN_TABLE> indexs;
-
+  
   const uint64_t index_table_id = index_table_schema.get_table_id();
   const ObString &index_name = index_table_schema.get_table_name_str();
 
@@ -5077,7 +5077,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           }
         } else if (share::schema::is_vec_index_id_type(info.index_type_)) {
           // Get table 4 by index name
-          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
+          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_index_id_table) {
           // The main table may contain multiple table 4s, but here we only take the table 4 that satisfies the index_name string,
           // If we do not check if it has already been obtained, then during the loop, it will fetch the same index_schema from the main table multiple times, which does not meet the expectation. Here, we need to skip.
@@ -5097,7 +5097,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           }
         } else if (share::schema::is_vec_index_snapshot_data_type(info.index_type_)) {
           // Get table 5 by index name
-          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
+          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_snapshot_data_table) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
                                                                                  database_id,
@@ -5114,7 +5114,7 @@ int ObVectorIndexUtil::get_dropping_vec_index_invisiable_table_schema(
           }
         } else if (share::schema::is_hybrid_vec_index_embedded_type(info.index_type_)) {
           // get table 6 by index name
-          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type
+          if (!check_is_match_index_type(index_table_schema.get_index_type(), info.index_type_)) { // skip getting diff index type 
           } else if (already_get_embedded_vec_table || !index_table_schema.is_hybrid_vec_index_log_type()) {   // skip
           } else if (OB_FAIL(ObVecIndexBuilderUtil::get_vec_table_schema_by_name(schema_guard,
                                                                                  database_id,
@@ -5665,7 +5665,7 @@ int ObVectorIndexUtil::get_vector_domain_index_type(
   int ret = OB_SUCCESS;
 
   ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
-
+  
   index_type = ObIndexType::INDEX_TYPE_MAX;
 
   if (OB_ISNULL(schema_guard) || !data_table_schema.is_user_table()) {
@@ -5771,7 +5771,7 @@ bool ObVectorIndexUtil::check_vector_index_memory(
       } else if (hold_mem + estimate_memory > mem_limited_size) {
         is_satisfied = false;
       }
-      LOG_INFO("finish estimate size", K(ret), K(is_satisfied),
+      LOG_INFO("finish estimate size", K(ret), K(is_satisfied), 
         K(index_schema.get_table_name_str()), K(row_count), K(mem_limited_size), K(all_vsag_mem_used), K(hold_mem), K(bitmap_mem_used), K(estimate_memory));
     }
   }
@@ -5815,7 +5815,7 @@ bool ObVectorIndexUtil::check_ivf_vector_index_memory(ObSchemaGetterGuard &schem
       LOG_INFO("skip esitmate memory", K(ret), K(param_filled));
     } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(mem_limited_size))) {
     } else if (OB_FAIL(estimate_ivf_memory(row_count, param, construct_mem, buff_mem))) {
-    } else if (hold_mem + static_cast<int64_t>(construct_mem) > mem_limited_size) {
+    } else if (construct_mem + hold_mem > mem_limited_size) {
       is_satisfied = false;
     }
   }
@@ -5877,11 +5877,11 @@ int ObVectorIndexUtil::estimate_vector_memory_used(
                                         nullptr, /* memory ctx, use default */
                                         param.extra_info_actual_size_))) {
       LOG_WARN("failed to create vsag index.", K(ret), K(param));
-    } else if (build_type != VIAT_IPIVF && OB_FAIL(obvectorutil::create_index(index_handler,
-                                           build_type,
-                                           DATATYPE_FLOAT32,
-                                           VEC_INDEX_ALGTH[param.dist_algorithm_],
-                                           param.dim_,
+    } else if (build_type != VIAT_IPIVF && OB_FAIL(obvectorutil::create_index(index_handler, 
+                                           build_type,  
+                                           DATATYPE_FLOAT32, 
+                                           VEC_INDEX_ALGTH[param.dist_algorithm_], 
+                                           param.dim_, 
                                            build_metric,
                                            param.ef_construction_,
                                            param.ef_search_,
@@ -6240,7 +6240,7 @@ int ObVecExtraInfoObj::from_vector(
   return ret;
 }
 
-int ObVectorIndexUtil::set_vector_index_param(const ObTableSchema *&vec_index_schema,
+int ObVectorIndexUtil::set_vector_index_param(const ObTableSchema *&vec_index_schema, 
                                               ObVecIdxExtraInfo &vec_extra_info,
                                               double &selectivity,
                                               sql::ObRawExpr *&vector_expr,
@@ -6320,7 +6320,7 @@ int ObVecIdxExtraInfo::set_vec_param_info(const ObTableSchema *vec_index_schema)
       case ObIndexType::INDEX_TYPE_VEC_VID_ROWKEY_LOCAL:
       case ObIndexType::INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL:
       case ObIndexType::INDEX_TYPE_VEC_INDEX_ID_LOCAL:
-      case ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL:
+      case ObIndexType::INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL: 
       case ObIndexType::INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL:
       case ObIndexType::INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL: {
         vector_index_param_.type_ = ObVectorIndexAlgorithmType::VIAT_HNSW;

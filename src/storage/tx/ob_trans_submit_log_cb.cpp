@@ -76,18 +76,18 @@ int ObTxBaseLogCb::set_lsn(const LSN &lsn)
   return ret;
 }
 
-int ObTxLogCb::init(ObTxCtx *tx_ctx)
+int ObTxLogCb::init(ObTxLogCbGroup *group_ptr)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(tx_ctx)) {
+  if (OB_ISNULL(group_ptr)) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(tx_ctx));
-  } else if (OB_NOT_NULL(tx_ctx_)) {
+    TRANS_LOG(WARN, "invalid arguments", K(ret), KPC(group_ptr));
+  } else if (OB_NOT_NULL(group_ptr_)) {
     ret = OB_INIT_TWICE;
-    TRANS_LOG(WARN, "init ObTxLogCb twice", K(ret), KPC(tx_ctx), KPC(tx_ctx_));
+    TRANS_LOG(WARN, "init ObTxLogCb twice", K(ret), KPC(group_ptr), KPC(group_ptr_));
   } else {
-    tx_ctx_ = tx_ctx;
+    group_ptr_ = group_ptr;
   }
 
   return ret;
@@ -117,7 +117,7 @@ void ObTxLogCb::reset()
 {
   ObTxBaseLogCb::reset();
   ObDLinkBase<ObTxLogCb>::reset();
-  tx_ctx_ = nullptr;
+  group_ptr_ = nullptr;
   tx_data_guard_.reset();
   callbacks_.reset();
   is_callbacked_ = false;
@@ -164,11 +164,17 @@ int ObTxLogCb::on_success()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(tx_ctx_)) {
+  if (OB_ISNULL(group_ptr_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTxLogCb not inited", K(ret));
   } else {
-    ObTxCtx *part_ctx = tx_ctx_;
+    const int64_t bk_submit_ts = submit_ts_;
+    const int64_t bk_log_size = log_size_;
+    const bool bk_is_reserved = group_ptr_->is_reserved();
+    ObTxLogCbGroup *bk_group_ptr = group_ptr_;
+    ObTxCtx *part_ctx = group_ptr_->get_tx_ctx();
+    const ObTransID tx_id = part_ctx->get_trans_id();  
+    const share::SCN log_ts = log_ts_;  
     if (NULL == part_ctx) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "ctx is null", K(ret), KPC(part_ctx));
@@ -184,18 +190,21 @@ int ObTxLogCb::on_success()
 int ObTxLogCb::on_failure()
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(tx_ctx_)) {
+  if (OB_ISNULL(group_ptr_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTxLogCb not inited", K(*this));
   } else {
-    ObTxCtx *part_ctx = tx_ctx_;
-    ObTransID tx_id;
-    const share::SCN log_ts = log_ts_;
+    const int64_t bk_submit_ts = submit_ts_;
+    const int64_t bk_log_size = log_size_;
+    const bool bk_is_reserved = group_ptr_->is_reserved();
+    ObTxLogCbGroup *bk_group_ptr = group_ptr_;
+    ObTxCtx *part_ctx = group_ptr_->get_tx_ctx();
+    const ObTransID tx_id = part_ctx->get_trans_id();  
+    const share::SCN log_ts = log_ts_;  
     if (NULL == part_ctx) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "ctx is null", KR(ret), K(*this));
     } else {
-      tx_id = part_ctx->get_trans_id();
       if (OB_FAIL(part_ctx->on_failure(this))) {
       }
     }

@@ -1,0 +1,36 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql alter system failover to '$cluster_name' cluster_id=$cluster_id_primary;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ERROR HY000: Failover is not allowed when primary cluster [cluster_id=1] is still alive
+ob1.force_stop;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ERROR HY000: Failover is not allowed when protection level not in MAXIMUM PROTECTION or AVAILABILITY
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id_standby2 set redo_transport_options='SYNC';
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 60;
+ob1.mysql ALTER SYSTEM SET STANDBY CLUSTER TO MAXIMIZE PROTECTION;
+ob2.check_until_timeout select protection_mode from oceanbase.v\$ob_cluster, MAXIMUM PROTECTION, 30;
+ob1.force_stop;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PROTECTION	RESYNCHRONIZATION
+ERROR HY000: Failover is not allowed when protection level not in MAXIMUM PROTECTION or AVAILABILITY
+ob1.reboot;
+ob2.reboot;
+ob3.reboot;
+ob1.mysql alter system disable cluster synchronization '$cluster_name' cluster_id = $cluster_id_standby3;
+ob1.force_stop;
+ob2.mysql_p select protection_mode, protection_level from oceanbase.__all_virtual_cluster;
+protection_mode	protection_level
+MAXIMUM PERFORMANCE	MAXIMUM PERFORMANCE
+ERROR HY000: Failover is not allowed when protection level not in MAXIMUM PROTECTION or AVAILABILITY

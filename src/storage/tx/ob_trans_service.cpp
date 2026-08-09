@@ -72,7 +72,7 @@ int ObTransService::init(const ObAddr &self,
 {
   int ret = OB_SUCCESS;
   set_run_wrapper(share::server_runtime());
-
+  
   const int64_t memory_budget = lib::get_memory_budget();
   static const int64_t ONE_GB = 1024L * 1024L * 1024L;
   const int64_t whole_gb = memory_budget / ONE_GB;
@@ -107,7 +107,7 @@ int ObTransService::init(const ObAddr &self,
   } else if (OB_FAIL(read_only_checker_.init())) {
   } else {
     self_ = self;
-
+    
     trans_id_service_ = trans_id_service;
     schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
@@ -399,14 +399,13 @@ int ObTransService::register_mds_into_tx(ObTxDesc &tx_desc,
   if (OB_SUCC(ret)) {
     do {
       ret = register_mds_into_ctx_(tx_desc, type, buf, buf_len, seq_no, register_flag);
-      if ((OB_EAGAIN == ret || is_id_not_ready_err(ret))
-          && ObTimeUtil::current_time() >= tx_desc.expire_ts_) {
+      if (OB_EAGAIN == ret && ObTimeUtil::current_time() >= tx_desc.expire_ts_) {
         ret = OB_TIMEOUT;
         TRANS_LOG(WARN, "register tx data timeout", KR(ret), K(tx_desc), K(type));
-      } else if (OB_EAGAIN == ret || is_id_not_ready_err(ret)) {
+      } else if (OB_EAGAIN == ret) {
         ob_usleep(1000);
       }
-    } while (OB_EAGAIN == ret || is_id_not_ready_err(ret));
+    } while (OB_EAGAIN == ret);
 
     if (OB_TMP_FAIL(collect_tx_exec_result(tx_desc, tx_result))) {
     }

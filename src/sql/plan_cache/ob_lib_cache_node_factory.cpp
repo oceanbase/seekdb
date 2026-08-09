@@ -35,7 +35,7 @@ int ObLCNodeFactory::create_cache_node(ObLibCacheNameSpace ns,
   int ret = OB_SUCCESS;
   lib::MemoryContext entity = NULL;
   ObMemAttr mem_attr;
-
+  
   mem_attr.ctx_id_ = ObCtxIds::PLAN_CACHE_CTX_ID;
   if (OB_ISNULL(lib_cache_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -62,7 +62,7 @@ void ObLCNodeFactory::destroy_cache_node(ObILibCacheNode* node)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(node) && OB_NOT_NULL(lib_cache_)) {
-    lib_cache_->release_cache_node_memory_account(*node);
+    lib_cache_->release_cache_node(*node);
   }
   if (OB_NOT_NULL(node) && OB_FAIL(node->before_cache_evicted())) {
     LOG_WARN("failed to process before_cache_evicted", K(ret));

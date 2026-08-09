@@ -1611,7 +1611,7 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
                                           bool &is_allowed)
 {
   int ret = OB_SUCCESS;
-
+  
 
   is_allowed = true;
 
@@ -1622,9 +1622,9 @@ int ObTableLockService::check_op_allowed_(const uint64_t table_id,
     // table lock not support virtual table/sys table(not in white list) etc.
     is_allowed = false;
   } else {
-    bool write_enabled = false;
-    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
-    } else if (!write_enabled) {
+    bool is_primary = true;
+    if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
+    } else if (!is_primary) {
       is_allowed = false;
     }
   }
@@ -2015,7 +2015,7 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
                                           ObSimpleTableSchemaV2 *&table_schema)
 {
   int ret = OB_SUCCESS;
-
+  
 
   if (OB_UNLIKELY(ctx.is_alone_tablet_lock_task() || ctx.is_obj_lock_task())) {
     ret = OB_INVALID_ARGUMENT;

@@ -1,8 +1,9 @@
 # These parameters are permanently valid
-base-dir=/var/lib/seekdb
-data-dir=/var/lib/seekdb/store
-redo-dir=/var/lib/seekdb/store/redo
+base-dir=/var/lib/oceanbase
+data-dir=/var/lib/oceanbase/store
+redo-dir=/var/lib/oceanbase/store/redo
 
 # These parameters are valid only during initialization
 port=2881
 cpu_count=4
+memory_budget=2G

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_service_sql_impl.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/ob_share_util.h"
 // TODO, move basic structs to ob_schema_struct.h
 #include "observer/schema/ob_schema_retrieve_utils.h"
 #include "sql/resolver/ob_resolver_utils.h"
@@ -165,9 +166,7 @@ int ObSchemaServiceSQLImpl::retrieve_schema_version(T &result, int64_t &schema_v
     EXTRACT_INT_FIELD_MYSQL_SKIP_RET(result, "myport", myport, int32_t);
     // end debug
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to get schema_version: ", K(ret));
     } else {
-      LOG_TRACE("retrieve schema, ", "newest schema_version", schema_version, "host", static_cast<const char*>(svr_ip), K(myport));
       //check if this is only one
       if (OB_ITER_END != (ret = result.next())) {
         LOG_WARN("fail to get all table schema. iter quit. ", K(ret));
@@ -180,11 +179,14 @@ int ObSchemaServiceSQLImpl::retrieve_schema_version(T &result, int64_t &schema_v
   return ret;
 }
 
-ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl()
+ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl(
+    ObIMaxIdCache *max_id_cache,
+    ObMySQLProxy &ddl_sql_proxy,
+    ObMultiVersionSchemaService &schema_service)
     : mysql_proxy_(NULL),
       last_operation_schema_version_(OB_INVALID_VERSION),
       database_service_(*this),
-      table_service_(*this),
+      table_service_(*this, schema_service),
       user_service_(*this),
       priv_service_(*this),
       outline_service_(*this),
@@ -200,6 +202,8 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl()
       ai_model_service_(*this),
       cluster_schema_status_(ObClusterSchemaStatus::NORMAL_STATUS),
       schema_service_(NULL),
+      max_id_cache_(max_id_cache),
+      ddl_sql_proxy_(&ddl_sql_proxy),
       object_ids_mutex_(),
       tablet_ids_mutex_(),
       sequence_id_()
@@ -229,7 +233,8 @@ int ObSchemaServiceSQLImpl::init(
   if (OB_ISNULL(sql_proxy)
       || OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ptr is null", K(ret), KP(sql_proxy), KP(schema_service));
+    LOG_WARN("invalid schema service runtime", K(ret), KP(sql_proxy),
+             KP(schema_service));
   } else {
     mysql_proxy_ = sql_proxy;
     schema_service_ = schema_service;
@@ -250,7 +255,6 @@ int ObSchemaServiceSQLImpl::get_all_core_table_schema(ObTableSchema &table_schem
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObInnerTableSchema::all_core_table_schema(table_schema))) {
-    LOG_WARN("all_core_table_schema failed", K(ret));
   }
   return ret;
 }
@@ -274,14 +278,12 @@ int ObSchemaServiceSQLImpl::get_core_table_schema(
     LOG_WARN("not core table", KR(ret), K(table_id), K(schema_status));
   } else if (OB_ALL_CORE_TABLE_TID == table_id) {
     if (OB_FAIL(get_all_core_table_schema(core_table_schema))) {
-      LOG_WARN("get all core table schema failed", KR(ret), K(table_id), K(schema_status));
     }
   } else {
     ObArray<ObTableSchema> core_schemas;
     const ObTableSchema *target_schema = NULL;
     if (OB_FAIL(get_core_table_schemas_at_version(
             sql_client, schema_status, schema_version, core_schemas))) {
-      LOG_WARN("get core table schemas failed", KR(ret), K(table_id), K(schema_status));
     } else {
       FOREACH_CNT_X(core_schema, core_schemas, OB_SUCC(ret)) {
         if (OB_ISNULL(core_schema)) {
@@ -297,7 +299,6 @@ int ObSchemaServiceSQLImpl::get_core_table_schema(
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("core table schema not found", KR(ret), K(table_id), K(schema_status));
         } else if (OB_FAIL(core_table_schema.assign(*target_schema))) {
-          LOG_WARN("assign core table schema failed", KR(ret), K(table_id), K(schema_status));
         }
       }
     }
@@ -305,7 +306,6 @@ int ObSchemaServiceSQLImpl::get_core_table_schema(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(alloc_table_schema(core_table_schema, allocator, table_schema))) {
-      LOG_WARN("alloc core table schema failed", KR(ret), K(table_id), K(schema_status));
     } else {
       LOG_INFO("get core table schema succeed", K(table_id), K(table_schema->get_table_name_str()));
     }
@@ -336,16 +336,13 @@ int ObSchemaServiceSQLImpl::get_core_table_schemas_at_version(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid schema version", KR(ret), K(schema_version));
   } else if (OB_FAIL(get_core_table_priorities(sql_client, schema_status, schema_version, core_schemas))) {
-    LOG_WARN("get_core_table_priorities failed", KR(ret), K(schema_status));
   } else if (core_schemas.count() > 0) {
     if (OB_FAIL(get_core_table_columns(sql_client, schema_status, schema_version, core_schemas))) {
-      LOG_WARN("get_core_table_columns failed", KR(ret), K(schema_status));
     } else {
       // mock partition array
       for (int64_t i = 0; OB_SUCC(ret) && i < core_schemas.count(); i++) {
         ObTableSchema &core_schema = core_schemas.at(i);
         if (OB_FAIL(try_mock_partition_array(core_schema))) {
-          LOG_WARN("fail to mock partition array", KR(ret), K(core_schema));
         }
       }
     }
@@ -369,14 +366,11 @@ int ObSchemaServiceSQLImpl::get_sys_table_schemas(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("table_ids is empty", KR(ret), K(schema_status));
   } else if (OB_FAIL(sys_table_ids.assign(table_ids))) {
-    LOG_WARN("assign failed", KR(ret), K(schema_status));
   } else {
     // sys table schema get newest version
     const int64_t schema_version = INT64_MAX;
     if (OB_FAIL(get_batch_table_schema(schema_status, schema_version,
         sys_table_ids, sql_client, allocator, sys_schemas))) {
-      LOG_WARN("get_batch_table_schema failed", KR(ret), K(schema_status),
-               K(schema_version), K(table_ids));
     }
   }
   return ret;
@@ -391,7 +385,6 @@ int ObSchemaServiceSQLImpl::get_batch_table_schema(
     ObArray<ObTableSchema *> &table_schema_array)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("fetch batch table schema begin.");
   const int64_t start_ts = ObTimeUtility::current_time();
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
@@ -404,8 +397,6 @@ int ObSchemaServiceSQLImpl::get_batch_table_schema(
     // get not core table schemas from __all_table and __all_column
     if (OB_FAIL(get_not_core_table_schemas(schema_status, schema_version, table_ids,
                                            sql_client, allocator, table_schema_array))) {
-      LOG_WARN("get_not_core_table_schemas failed", K(schema_version),
-               K(table_ids), K(ret));
     }
   }
 
@@ -437,11 +428,9 @@ int ObSchemaServiceSQLImpl::gen_new_schema_version(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tsi schema version generator is null", KR(ret));
     } else if (OB_FAIL(tsi_generator->next_version(schema_version))) {
-      LOG_WARN("fail to gen next schema version", KR(ret), KPC(tsi_generator), K(lbt()));
     }
   } else {
     if (OB_FAIL(gen_runtime_new_schema_version_(refreshed_schema_version, version_cnt, schema_version))) {
-      LOG_WARN("fail to gen schema version", KR(ret), K(refreshed_schema_version));
     }
   }
   if (OB_SUCC(ret)) {
@@ -471,13 +460,10 @@ int ObSchemaServiceSQLImpl::gen_batch_new_schema_versions(const int64_t refreshe
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tsi schema version generator is null", KR(ret));
     } else if (OB_FAIL(gen_runtime_new_schema_version_(refreshed_schema_version, version_cnt, end_schema_version))) {
-      LOG_WARN("fail to gen schema version", KR(ret), K(version_cnt));
     } else {
       int64_t start_schema_version = end_schema_version -
               (version_cnt - 1) * ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
       if (OB_FAIL(tsi_generator->init(start_schema_version, end_schema_version))) {
-        LOG_WARN("fail to init schema version generator", KR(ret),
-                 K(refreshed_schema_version), K(version_cnt), K(start_schema_version), K(end_schema_version));
       } else {
         schema_version = end_schema_version;
         LOG_INFO("batch gen schema version", K(version_cnt),
@@ -505,8 +491,6 @@ int ObSchemaServiceSQLImpl::gen_runtime_new_schema_version_(const int64_t refres
     int64_t tmp_refreshed_schem_version = std::max(refreshed_schema_version_, refreshed_schema_version);
     if (OB_FAIL(gen_new_schema_version_(tmp_refreshed_schem_version,
                 gen_schema_version_, version_cnt, schema_version))) {
-      LOG_WARN("fail to gen schema version", KR(ret), K(refreshed_schema_version),
-               K(refreshed_schema_version_), K(gen_schema_version_), K(version_cnt));
     }
     gen_schema_version_ = schema_version;
   }
@@ -557,7 +541,6 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
     LOG_WARN("check inner stat fail", KR(ret), K(schema_status));
   } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                                schema_service_))) {
-    LOG_WARN("fail to get all table name", KR(ret), K(schema_status));
   } else {
     const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
     bool check_sys_variable = false;  // to avoid cyclic dependence
@@ -565,7 +548,6 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
     ObCoreTableProxy core_kv(table_name, sql_client_retry_weak);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(core_kv.load())) {
-      LOG_WARN("core_kv load failed", KR(ret), K(schema_status));
     } else {
       ObTableSchema core_schema;
       while (OB_SUCC(ret)) {
@@ -578,7 +560,6 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
             LOG_WARN("core_kv next failed", KR(ret), K(schema_status));
           }
         } else if (OB_FAIL(core_kv.get_cur_row(priority_row))) {
-          LOG_WARN("get current row failed", KR(ret), K(schema_status));
         } else if (NULL == priority_row) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL row", KR(ret), K(schema_status));
@@ -588,12 +569,10 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
           bool is_deleted = false;
           int64_t row_schema_version = OB_INVALID_VERSION;
           if (OB_FAIL(priority_row->get_int("schema_version", row_schema_version))) {
-            LOG_WARN("get schema version failed", KR(ret), K(schema_status), KPC(priority_row));
           } else if (row_schema_version > schema_version) {
             // The history row is newer than the requested schema snapshot.
           } else if (OB_FAIL(ObSchemaRetrieveUtils::fill_table_schema(
                          check_deleted, *priority_row, core_schema, is_deleted))) {
-            LOG_WARN("fill_table_schema failed", KR(ret), K(schema_status), K(check_deleted), KPC(priority_row));
           } else {
             int64_t idx = 0;
             for (; idx < temp_table_schemas.count(); ++idx) {
@@ -603,15 +582,11 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
             }
             if (idx == temp_table_schemas.count()) {
               if (OB_FAIL(temp_table_schemas.push_back(core_schema))) {
-                LOG_WARN("push back table schema failed", KR(ret), K(schema_status));
               } else if (OB_FAIL(temp_schema_versions.push_back(row_schema_version))) {
-                LOG_WARN("push back schema version failed", KR(ret), K(row_schema_version));
               } else if (OB_FAIL(temp_is_deleted.push_back(is_deleted))) {
-                LOG_WARN("push back delete flag failed", KR(ret), K(is_deleted));
               }
             } else if (row_schema_version > temp_schema_versions.at(idx)) {
               if (OB_FAIL(temp_table_schemas.at(idx).assign(core_schema))) {
-                LOG_WARN("assign table schema failed", KR(ret), K(core_schema));
               } else {
                 temp_schema_versions.at(idx) = row_schema_version;
                 temp_is_deleted.at(idx) = is_deleted;
@@ -625,7 +600,6 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
             || OB_ALL_CORE_TABLE_TID == temp_table_schemas.at(i).get_table_id()) {
           // __all_core_table is hard coded; deleted schemas are invisible at this version.
         } else if (OB_FAIL(temp_table_schema_ptrs.push_back(&temp_table_schemas.at(i)))) {
-          LOG_WARN("fail to push back table", KR(ret), K(schema_status), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -633,7 +607,6 @@ int ObSchemaServiceSQLImpl::get_core_table_priorities(
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < temp_table_schema_ptrs.count(); ++i) {
         if (OB_FAIL(core_schemas.push_back(*(temp_table_schema_ptrs.at(i))))) {
-          LOG_WARN("fail to push back table", KR(ret), K(schema_status), K(i));
         }
       }
     }
@@ -654,7 +627,6 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
   ObCoreTableProxy core_kv(OB_ALL_COLUMN_HISTORY_TNAME, sql_client_retry_weak);
   if (OB_FAIL(core_kv.load())) {
-    LOG_WARN("core_kv load failed", KR(ret), K(schema_status));
   } else {
     ObArray<ObColumnSchemaV2> latest_columns;
     ObArray<int64_t> latest_schema_versions;
@@ -669,7 +641,6 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
           LOG_WARN("core_kv next failed", KR(ret), K(schema_status));
         }
       } else if (OB_FAIL(core_kv.get_cur_row(column_row))) {
-        LOG_WARN("get current row failed", KR(ret), K(schema_status));
       } else if (NULL == column_row) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL row", KR(ret), K(schema_status));
@@ -679,13 +650,10 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
         bool is_deleted = false;
         int64_t row_schema_version = OB_INVALID_VERSION;
         if (OB_FAIL(column_row->get_int("schema_version", row_schema_version))) {
-          LOG_WARN("get schema version failed", KR(ret), K(schema_status), KPC(column_row));
         } else if (row_schema_version > schema_version) {
           // The history row is newer than the requested schema snapshot.
         } else if (OB_FAIL(ObSchemaRetrieveUtils::fill_column_schema(
                        check_deleted, *column_row, column_schema, is_deleted))) {
-          LOG_WARN("fill_column_schema failed", KR(ret),
-                   K(schema_status), K(check_deleted), KPC(column_row));
         } else {
           int64_t idx = 0;
           for (; idx < latest_columns.count(); ++idx) {
@@ -696,15 +664,11 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
           }
           if (idx == latest_columns.count()) {
             if (OB_FAIL(latest_columns.push_back(column_schema))) {
-              LOG_WARN("push back column schema failed", KR(ret), K(column_schema));
             } else if (OB_FAIL(latest_schema_versions.push_back(row_schema_version))) {
-              LOG_WARN("push back schema version failed", KR(ret), K(row_schema_version));
             } else if (OB_FAIL(latest_is_deleted.push_back(is_deleted))) {
-              LOG_WARN("push back delete flag failed", KR(ret), K(is_deleted));
             }
           } else if (row_schema_version > latest_schema_versions.at(idx)) {
             if (OB_FAIL(latest_columns.at(idx).assign(column_schema))) {
-              LOG_WARN("assign column schema failed", KR(ret), K(column_schema));
             } else {
               latest_schema_versions.at(idx) = row_schema_version;
               latest_is_deleted.at(idx) = is_deleted;
@@ -720,7 +684,6 @@ int ObSchemaServiceSQLImpl::get_core_table_columns(
           if (latest_columns.at(i).get_table_id() == core_schema->get_table_id()) {
             table_found = true;
             if (OB_FAIL(core_schema->add_column(latest_columns.at(i)))) {
-              LOG_WARN("push_back failed", KR(ret), K(schema_status));
             }
             break;
           }
@@ -800,7 +763,6 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schemas(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is NULL", KR(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::cascaded_generated_column(*not_core_schemas.at(i)))) {
-        LOG_WARN("cascaded_generated_column failed", KR(ret), KPC(not_core_schemas.at(i)));
       }
     }
     if (FAILEDx(sort_tables_partition_info(not_core_schemas))) {
@@ -827,7 +789,6 @@ int ObSchemaServiceSQLImpl::get_core_version(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
     ObGlobalStatProxy proxy(sql_client_retry_weak);
     if (OB_FAIL(proxy.get_core_schema_version(core_schema_version))) {
-      LOG_WARN("get_core_schema_version failed", K(ret));
     }
   }
   return ret;
@@ -847,7 +808,6 @@ int ObSchemaServiceSQLImpl::get_core_and_sys_version(
     sys_schema_version = OB_INVALID_VERSION;
     ObGlobalStatProxy proxy(sql_client);
     if (OB_FAIL(proxy.get_core_and_sys_schema_version(core_schema_version, sys_schema_version))) {
-      LOG_WARN("get_core_and_sys_schema_version failed", K(ret));
     }
   }
   return ret;
@@ -869,7 +829,6 @@ int ObSchemaServiceSQLImpl::get_normal_schema_version(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
     ObGlobalStatProxy proxy(sql_client_retry_weak);
     if (OB_FAIL(proxy.get_normal_schema_version(normal_schema_version))) {
-      LOG_WARN("get_normal_schema_version failed", KR(ret), K(schema_status));
     }
   }
   return ret;
@@ -891,7 +850,6 @@ int ObSchemaServiceSQLImpl::get_baseline_schema_version(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
     ObGlobalStatProxy proxy(sql_client_retry_weak);
     if (OB_FAIL(proxy.get_baseline_schema_version(baseline_schema_version))) {
-      LOG_WARN("get_baseline_schema_version failed", KR(ret), K(schema_status));
     }
   }
   return ret;
@@ -913,7 +871,6 @@ int ObSchemaServiceSQLImpl::get_table_schema_from_inner_table(
     if (is_core_table(table_id)) {
       ObArray<ObTableSchema> core_schemas;
       if (OB_FAIL(get_core_table_schemas(sql_client, schema_status, core_schemas))) {
-        LOG_WARN("get core table schemas failed", KR(ret), K(schema_status));
       } else {
         const ObTableSchema *dst_schema = NULL;
         FOREACH_CNT_X(core_schema, core_schemas, OB_SUCCESS == ret) {
@@ -926,7 +883,6 @@ int ObSchemaServiceSQLImpl::get_table_schema_from_inner_table(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("no row", K(table_id), KR(ret));
         } else if (OB_FAIL(table_schema.assign(*dst_schema))){
-          LOG_WARN("fail to assign schema", KR(ret), K(schema_status));
         }
       }
     } else {
@@ -936,15 +892,12 @@ int ObSchemaServiceSQLImpl::get_table_schema_from_inner_table(
       ObArray<ObTableSchema *> tables;
       ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
       if (OB_FAIL(table_ids.push_back(table_id))) {
-        LOG_WARN("push table_id to array failed", KR(ret), K(schema_status));
       } else if (OB_FAIL(get_batch_table_schema(schema_status, schema_version,
                                                 table_ids, sql_client, allocator, tables))) {
-        LOG_WARN("get table schema failed", KR(ret), K(schema_version), K(table_id), K(schema_status));
       } else if (tables.count() <= 0) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table array should not be empty", KR(ret), K(schema_status));
       } else if (OB_FAIL(table_schema.assign(*tables.at(0)))){
-        LOG_WARN("fail to assign schema", KR(ret), K(schema_status));
       }
     }
   }
@@ -970,7 +923,6 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
                                trans,
                                allocator,
                                tmp_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(tmp_table_schema)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("can not get table schema", KR(ret), K(table_id));
@@ -979,7 +931,6 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
                                       tmp_table_schema->get_schema_version(),
                                       trans,
                                       aux_table_metas))) {
-    LOG_WARN("fail to fetch aux tables", KR(ret), K(table_id), K(tmp_table_schema->get_schema_version()));
   } else {
     schema_version = tmp_table_schema->get_schema_version();
     FOREACH_CNT_X(tmp_aux_table_meta, aux_table_metas, OB_SUCC(ret)) {
@@ -989,7 +940,6 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
                                                           aux_table_meta.table_id_,
                                                           aux_table_meta.table_type_,
                                                           aux_table_meta.index_type_)))) {
-          LOG_WARN("fail to add simple_index_info", KR(ret), K(table_id), K(schema_version), K(aux_table_meta));
         }
       } else if (AUX_LOB_META == aux_table_meta.table_type_) {
         tmp_table_schema->set_aux_lob_meta_tid(aux_table_meta.table_id_);
@@ -999,7 +949,6 @@ int ObSchemaServiceSQLImpl::get_full_table_schema_from_inner_table(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(table_schema.assign(*tmp_table_schema))) {
-        LOG_WARN("fail to assing table schema", KR(ret), K(table_id), K(schema_version));
       }
     }
   }
@@ -1023,12 +972,9 @@ int ObSchemaServiceSQLImpl::get_db_schema_from_inner_table(
     ObArray<uint64_t> db_ids;
 
     if (OB_FAIL(db_ids.reserve(1))) {
-      LOG_WARN("fail to reserve db_ids size", KR(ret), K(schema_status));
     } else if (OB_FAIL(db_ids.push_back(database_id))) {
-      LOG_WARN("push database_id to array failed", KR(ret), K(schema_status));
     } else if (OB_FAIL(get_batch_databases(schema_status, schema_version,
                                            db_ids, sql_client, db_schema_array))) {
-      LOG_WARN("get database schema failed", KR(ret), K(schema_version), K(database_id), K(schema_status));
     } else if (db_schema_array.count() <= 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("databse array should not be empty", KR(ret), K(schema_status));
@@ -1055,15 +1001,12 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_from_inner_table(
     ObArray<uint64_t> mock_fk_parent_table_ids;
     ObArray<ObMockFKParentTableSchema> mock_fk_parent_tables;
     if (OB_FAIL(mock_fk_parent_table_ids.push_back(table_id))) {
-      LOG_WARN("push table_id to array failed", KR(ret), K(schema_status));
     } else if (OB_FAIL(get_batch_mock_fk_parent_tables(schema_status, schema_version,
         mock_fk_parent_table_ids, sql_client, mock_fk_parent_tables))) {
-      LOG_WARN("get table schema failed", KR(ret), K(schema_version), K(mock_fk_parent_table_ids), K(schema_status));
     } else if (mock_fk_parent_tables.count() <= 0) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table array should not be empty", KR(ret), K(schema_status));
     } else if (OB_FAIL(mock_fk_parent_table_schema.assign(mock_fk_parent_tables.at(0)))){
-      LOG_WARN("fail to assign schema", KR(ret), K(schema_status));
     }
   }
   return ret;
@@ -1107,9 +1050,7 @@ int ObSchemaServiceSQLImpl::get_sys_variable(
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", K(ret));
   } else if (OB_FAIL(fetch_sys_variable_version(client, schema_status, schema_version, fetch_version))) {
-    LOG_WARN("fetch sys variable version failed", K(ret));
   } else if (OB_FAIL(fetch_sys_variable(client, schema_status, fetch_version, sys_variable))) {
-    LOG_WARN("fail to fetch sys variable", K(ret), K(schema_version));
   }
   return ret;
 }
@@ -1142,7 +1083,6 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable(
         LOG_WARN("failed to get_system_variable", K(lower_case_name), K(ret));
       }
     } else if (OB_FAIL(var_lower_case.get_int(var_value))) {
-      LOG_WARN("failed to get int", K(var_lower_case), K(ret));
     } else if (var_value <= OB_NAME_CASE_INVALID || var_value >= OB_NAME_CASE_MAX) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid var value", K(var_value), K(ret));
@@ -1162,7 +1102,6 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable(
           LOG_WARN("failed to get runtime system variable", K(ret), K(read_only_name));
         }
       } else if (OB_FAIL(var_read_only.get_int(var_value))) {
-        LOG_WARN("failed to get int", K(ret), K(var_read_only));
       } else {
         sys_variable.set_read_only(0 != var_value);
       }
@@ -1200,18 +1139,13 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
                                  " FROM %s where name = '%.*s' and schema_version <= %ld",
                                  OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                  var_name.length(), var_name.ptr(), schema_version))) {
-        LOG_WARN("append sql failed", K(var_name), K(ret));
       } else if (OB_FAIL(sql.append(" order by schema_version desc;"))) {
-        LOG_WARN("append sql failed", K(var_name), K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result.", K(var_name), K(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get system variable", K(var_name), K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_obj(*result, allocator, out_var_obj))) {
-        LOG_WARN("fail to retrieve system variable obj", K(ret), K(var_name));
       }
     }
   }
@@ -1224,9 +1158,7 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
       if (OB_FAIL(sql.assign_fmt("SELECT data_type, value, 0 as is_deleted FROM %s where name = '%.*s';",
                                 OB_ALL_SYS_VARIABLE_TNAME,
                                 var_name.length(), var_name.ptr()))) {
-        LOG_WARN("append sql failed", K(var_name), K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result.", K(var_name), K(ret));
@@ -1237,7 +1169,6 @@ int ObSchemaServiceSQLImpl::get_system_variable(const ObRefreshSchemaStatus &sch
           LOG_WARN("fail to get system variable", K(var_name), K(ret));
         }
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable_obj(*result, allocator, out_var_obj))) {
-        LOG_WARN("fail to retrieve system variable obj", K(ret), K(var_name));
       }
     }
   }
@@ -1302,7 +1233,6 @@ int ObSchemaServiceSQLImpl::get_all_db_privs(ObISQLClient &client,
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail");
   } else if (OB_FAIL(fetch_db_privs(client, schema_status, schema_version, schema_array))) {
-    LOG_WARN("fetch db_privs failed", K(ret));
   }
 
   return ret;
@@ -1320,7 +1250,6 @@ int ObSchemaServiceSQLImpl::get_all_table_privs(ObISQLClient &client,
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail");
   } else if (OB_FAIL(fetch_table_privs(client, schema_status, schema_version, schema_array))) {
-    LOG_WARN("fetch table privileges failed", K(ret));
   }
 
   return ret;
@@ -1338,7 +1267,6 @@ int ObSchemaServiceSQLImpl::get_all_routine_privs(ObISQLClient &client,
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
   } else if (OB_FAIL(fetch_routine_privs(client, schema_status, schema_version, schema_array))) {
-    LOG_WARN("fetch routine privileges failed", K(ret));
   }
 
   return ret;
@@ -1355,7 +1283,6 @@ int ObSchemaServiceSQLImpl::get_all_column_privs(ObISQLClient &client,
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
   } else if (OB_FAIL(fetch_column_privs(client, schema_status, schema_version, schema_array))) {
-    LOG_WARN("fetch column privileges failed", K(ret));
   }
   return ret;
 }
@@ -1372,7 +1299,6 @@ int ObSchemaServiceSQLImpl::get_all_obj_mysql_privs(ObISQLClient &client,
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail", KR(ret));
   } else if (OB_FAIL(fetch_obj_mysql_privs(client, schema_status, schema_version, schema_array))) {
-    LOG_WARN("fetch object privileges failed", K(ret));
   }
 
   return ret;
@@ -1394,7 +1320,6 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
   
   DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
   if (OB_FAIL(fetch_sys_variable_version(sql_client, schema_status, schema_version, fetch_version))) {
-    LOG_WARN("fail to fetch simple sys variable version", K(ret), K(schema_version));
   } else if (OB_INVALID_VERSION == fetch_version) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid version", K(ret), K(schema_version), K(fetch_version));
@@ -1405,16 +1330,12 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
                                  OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID,
                                  fetch_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY NAME DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("read all system variable failed", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable(*result, sys_variable_schema))) {
-        LOG_WARN("retrieve runtime system variable failed", K(ret));
       }
     }
   }
@@ -1428,14 +1349,11 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
       if (OB_FAIL(sql.append_fmt("select *, 0 as is_deleted, 0 as schema_version from %s where 0=%lu %% 1",
                                  OB_ALL_SYS_VARIABLE_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("read all system variable failed", K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_system_variable(*result, sys_variable_schema))) {
-        LOG_WARN("retrieve runtime system variable failed", K(ret));
       }
     }
   }
@@ -1446,8 +1364,6 @@ int ObSchemaServiceSQLImpl::get_sys_variable_schema(
       ObSysVarClassType sys_var_id = ObSysVariables::get_sys_var_id(i);
       const ObSysVarSchema *sys_var = NULL;
       if (OB_FAIL(sys_variable_schema.get_sysvar_schema(sys_var_id, sys_var))) {
-        LOG_WARN("fail to get current sys_var", KR(ret), K(schema_status),
-                 K(schema_version), K(sys_var_id));
       } else if (OB_ISNULL(sys_var)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sys_var is null", KR(ret), K(sys_var_id),
@@ -1483,13 +1399,10 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
     if (INT64_MAX == schema_version) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_SQL, OB_ALL_COLUMN_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", KR(ret));
       } else {
         if (NULL != table_ids && table_ids_size > 0) {
           if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-            LOG_WARN("append sql failed", KR(ret));
           } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-            LOG_WARN("sql append table ids failed", KR(ret));
           }
         }
         if (FAILEDx(sql.append_fmt(" ORDER BY TABLE_ID, COLUMN_ID"))) {
@@ -1499,21 +1412,16 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
     } else {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_HISTORY_SQL, OB_ALL_COLUMN_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", KR(ret));
       } else {
         if (NULL != table_ids && table_ids_size > 0) {
           if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-            LOG_WARN("append sql failed", KR(ret));
           } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-            LOG_WARN("sql append table ids failed", KR(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, COLUMN_ID, SCHEMA_VERSION"))) {
-          LOG_WARN("append sql failed", KR(ret));
         }
       }
     }
@@ -1522,12 +1430,10 @@ int ObSchemaServiceSQLImpl::fetch_all_column_info(
       const bool check_deleted = (INT64_MAX != schema_version);
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", KR(ret), K(sql));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_schema(check_deleted, *result, table_schema_array))) {
-        LOG_WARN("failed to retrieve all column schema", KR(ret));
       }
     }
   }
@@ -1572,7 +1478,6 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info_ignore_inner_table(
                                                  sql_client, table_schema_array,
                                                  &non_inner_tables.at(0),
                                                  non_inner_tables.count()))) {
-      LOG_WARN("fetch all constraint info failed", K(schema_version), K(ret));
     }
   }
   return ret;
@@ -1621,7 +1526,6 @@ int ObSchemaServiceSQLImpl::fetch_aux_tables(
       LOG_WARN("check inner stat fail", K(ret));
     } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                                  schema_service_))) {
-      LOG_WARN("fail to get all table name", K(ret));
     } else {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append_fmt(FETCH_INDEX_SQL_FORMAT,
@@ -1631,14 +1535,11 @@ int ObSchemaServiceSQLImpl::fetch_aux_tables(
                                  table_name,
                                  table_name,
                                  schema_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(sql), K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_aux_tables(*result, aux_tables))) {
-        LOG_WARN("failed to retrieve aux tables", K(ret));
       }
     }
   }
@@ -1664,13 +1565,10 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (INT64_MAX == schema_version) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_SQL, OB_ALL_CONSTRAINT_TNAME))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql failed", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table ids failed", KR(ret));
             }
           }
           if (FAILEDx(sql.append_fmt(" ORDER BY TABLE_ID, CONSTRAINT_ID"))) {
@@ -1680,33 +1578,26 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
       } else {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql failed", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table ids failed", KR(ret));
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-            LOG_WARN("append sql failed", KR(ret));
           } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, CONSTRAINT_ID, SCHEMA_VERSION"))) {
-            LOG_WARN("append sql failed", KR(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
         const bool check_deleted = (INT64_MAX != schema_version);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_constraint(check_deleted, *result, table_schema_array))) {
-          LOG_WARN("failed to retrieve all constraint schema", KR(ret));
         }
       }
     }
@@ -1728,7 +1619,6 @@ int ObSchemaServiceSQLImpl::fetch_all_constraint_info(
                         schema_status,
                         table_schema->get_table_id(), schema_version,
                         sql_client, *iter))) {
-              LOG_WARN("failed to fetch constraint column info", KR(ret));
             }
           }
         }
@@ -1760,13 +1650,10 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
       if (INT64_MAX == schema_version) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_PART_SQL, OB_ALL_PART_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql faield", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table is failed", KR(ret));
             }
           }
           if (FAILEDx(sql.append_fmt(" ORDER BY TABLE_ID, PART_ID"))) {
@@ -1776,33 +1663,27 @@ int ObSchemaServiceSQLImpl::fetch_all_part_info(
       } else {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_PART_HISTORY_SQL, OB_ALL_PART_HISTORY_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql_append_ids_and_truncate_version(schema_status, table_ids, table_ids_size, schema_version, sql))) {
-              LOG_WARN("sql append table is failed", KR(ret));
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-            LOG_WARN("append sql failed", KR(ret));
           } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID, PART_ID, SCHEMA_VERSION"))) {
-            LOG_WARN("append sql failed", KR(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
-        LOG_TRACE("fetch all part history", KR(ret), K(sql));
         const bool check_deleted = (INT64_MAX != schema_version);
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
-        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(check_deleted, *result, range_part_tables))) {
-          LOG_WARN("failed to retrieve all column schema", KR(ret));
+        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(
+            check_deleted, *result, range_part_tables))) {
         } else { }//do nothing
       }
     }
@@ -1832,13 +1713,10 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
       if (INT64_MAX == schema_version) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_DEF_SUBPART_SQL, OB_ALL_DEF_SUB_PART_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("Failed to append all part", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql failed", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table ids failed", KR(ret));
             }
           }
           if (FAILEDx(sql.append_fmt(" ORDER BY table_id, sub_part_id"))) {
@@ -1848,13 +1726,10 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
       } else {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_DEF_SUBPART_HISTORY_SQL, OB_ALL_DEF_SUB_PART_HISTORY_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql failed", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table ids failed", KR(ret));
             }
           }
         }
@@ -1862,21 +1737,17 @@ int ObSchemaServiceSQLImpl::fetch_all_def_subpart_info(
           if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld"
                                      " ORDER BY table_id, sub_part_id, schema_version",
                                      schema_version))) {
-            LOG_WARN("append sql failed", KR(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
-        LOG_TRACE("fetch all def subpart history", KR(ret), K(sql));
         const bool check_deleted = (INT64_MAX != schema_version);
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_def_subpart_info(check_deleted, *result, range_subpart_tables))) {
-          LOG_WARN("failed to retrieve all column schema", KR(ret));
         } else { }//do nothing
       }
     }
@@ -1906,13 +1777,10 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
       if (INT64_MAX == schema_version) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_SUB_PART_SQL, OB_ALL_SUB_PART_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("Failed to append all part", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-              LOG_WARN("append sql failed", KR(ret));
             } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-              LOG_WARN("sql append table ids failed", KR(ret));
             }
           }
           if (FAILEDx(sql.append_fmt(" ORDER BY table_id, part_id, sub_part_id"))) {
@@ -1922,11 +1790,9 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
       } else {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_SUB_PART_HISTORY_SQL, OB_ALL_SUB_PART_HISTORY_TNAME,
                                    OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else {
           if (NULL != table_ids && table_ids_size > 0) {
             if (OB_FAIL(sql_append_ids_and_truncate_version(schema_status, table_ids, table_ids_size, schema_version, sql))) {
-              LOG_WARN("sql append table is failed", KR(ret));
             }
           }
         }
@@ -1934,21 +1800,17 @@ int ObSchemaServiceSQLImpl::fetch_all_subpart_info(
           if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld"
                                      " ORDER BY table_id, part_id, sub_part_id, schema_version",
                                      schema_version))) {
-            LOG_WARN("append sql failed", KR(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
-        LOG_TRACE("fetch all subpart history", KR(ret), K(sql));
         const bool check_deleted = (INT64_MAX != schema_version);
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_subpart_info(check_deleted, *result, range_subpart_tables))) {
-          LOG_WARN("failed to retrieve all column schema", KR(ret));
         } else { }//do nothing
       }
     }
@@ -1992,7 +1854,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
       } else if (table_schema->is_user_partition_table()) {
         if (PARTITION_LEVEL_ONE <= table_schema->get_part_level()) {
           if (OB_FAIL(part_tables.push_back(TableTrunc(table_id, table_schema->get_truncate_version())))) {
-              LOG_WARN("Failed to push back table id", K(ret));
           } else {
             batch_part_num += table_schema->get_part_option().get_part_num();
             if (batch_part_num >= MAX_BATCH_PART_NUM) {
@@ -2001,7 +1862,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("cnt is invalid", K(ret), K(cnt), K(i));
               } else if (OB_FAIL(part_idxs.push_back(cnt - 1))) {
-                LOG_WARN("fail to push back part_idx", K(ret), K(table_id));
               } else {
                 LOG_INFO("part num reach limit", K(ret), K(i),
                          K(table_id), K(batch_part_num), K(cnt));
@@ -2014,7 +1874,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
             && PARTITION_LEVEL_TWO == table_schema->get_part_level()
             && table_schema->has_sub_part_template_def()) {
           if (OB_FAIL(def_subpart_tables.push_back(table_id))) {
-              LOG_WARN("Failed to push back table id", K(ret));
           } else {
             batch_def_subpart_num += table_schema->get_sub_part_option().get_part_num();
             if (batch_def_subpart_num >= MAX_BATCH_PART_NUM) {
@@ -2023,7 +1882,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("cnt is invalid", K(ret), K(cnt), K(i));
               } else if (OB_FAIL(def_subpart_idxs.push_back(cnt - 1))) {
-                LOG_WARN("fail to push back def_subpart_idx", K(ret), K(table_id));
               } else {
                 LOG_INFO("subpart num reach limit", K(ret), K(i),
                          K(table_id), K(batch_def_subpart_num), K(cnt));
@@ -2035,7 +1893,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
         if (OB_SUCC(ret)
             && PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
           if (OB_FAIL(subpart_tables.push_back(TableTrunc(table_id, table_schema->get_truncate_version())))) {
-              LOG_WARN("Failed to push back table id", K(ret));
           } else {
             //FIXME:(yanmu.ztl) use precise total partition num instead
             batch_subpart_num += (table_schema->get_part_option().get_part_num() * 100);
@@ -2045,7 +1902,6 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("cnt is invalid", K(ret), K(cnt), K(i));
               } else if (OB_FAIL(subpart_idxs.push_back(cnt - 1))) {
-                LOG_WARN("fail to push back subpart_idx", K(ret), K(table_id));
               } else {
                 LOG_INFO("subpart num reach limit", K(ret), K(i),
                          K(table_id), K(batch_subpart_num), K(cnt));
@@ -2063,21 +1919,18 @@ int ObSchemaServiceSQLImpl::gen_batch_fetch_array(
       int64_t idx_cnt = part_idxs.count();
       if (cnt > 0 && (0 == idx_cnt || cnt - 1 != part_idxs.at(idx_cnt - 1))) {
         if (OB_FAIL(part_idxs.push_back(cnt - 1))) {
-          LOG_WARN("fail to push back part_idx", K(ret), K(cnt));
         }
       }
       cnt = def_subpart_tables.count();
       idx_cnt = def_subpart_idxs.count();
       if (OB_SUCC(ret) && cnt > 0 && (0 == idx_cnt || cnt - 1 != def_subpart_idxs.at(idx_cnt - 1))) {
         if (OB_FAIL(def_subpart_idxs.push_back(cnt - 1))) {
-          LOG_WARN("fail to push back def_subpart_idx", K(ret), K(cnt));
         }
       }
       cnt = subpart_tables.count();
       idx_cnt = subpart_idxs.count();
       if (OB_SUCC(ret) && cnt > 0 && (0 == idx_cnt || cnt - 1 != subpart_idxs.at(idx_cnt - 1))) {
         if (OB_FAIL(subpart_idxs.push_back(cnt - 1))) {
-          LOG_WARN("fail to push back subpart_idx", K(ret), K(cnt));
         }
       }
     }
@@ -2109,13 +1962,8 @@ int ObSchemaServiceSQLImpl::fetch_all_partition_info(
     if (OB_FAIL(gen_batch_fetch_array(table_schema_array, table_ids, table_ids_size,
                                       part_tables, subpart_tables, def_subpart_tables,
                                       part_idxs, def_subpart_idxs, subpart_idxs))) {
-      LOG_WARN("fail to gen batch fetch array", K(ret),
-               K(schema_status), K(schema_version));
     } else {
       LOG_TRACE("table_ids:", K(table_ids_size), "table_ids", ObArrayWrap<uint64_t>(table_ids, table_ids_size));
-      LOG_TRACE("part_tables:", K(part_tables), K(part_idxs));
-      LOG_TRACE("subpart_tables:", K(subpart_tables), K(subpart_idxs));
-      LOG_TRACE("def_subpart_tables:", K(def_subpart_tables), K(def_subpart_idxs));
     }
 
     //fetch part info
@@ -2129,7 +1977,6 @@ int ObSchemaServiceSQLImpl::fetch_all_partition_info(
                                         sql_client, table_schema_array,
                                         &part_tables.at(start_idx),
                                         part_cnt))) {
-          LOG_WARN("fetch all part info failed", K(schema_version), K(ret));
         }
       }
     }
@@ -2145,7 +1992,6 @@ int ObSchemaServiceSQLImpl::fetch_all_partition_info(
                                                    sql_client, table_schema_array,
                                                    &def_subpart_tables.at(start_idx),
                                                    part_cnt))) {
-          LOG_WARN("fetch all def subpart info failed", K(schema_version), K(ret));
         }
       }
     }
@@ -2161,7 +2007,6 @@ int ObSchemaServiceSQLImpl::fetch_all_partition_info(
                                            sql_client, table_schema_array,
                                            &subpart_tables.at(start_idx),
                                            part_cnt))) {
-          LOG_WARN("fetch all subpart info failed", K(schema_version), K(ret));
         }
       }
     }
@@ -2182,7 +2027,6 @@ int ObSchemaServiceSQLImpl::sort_tables_partition_info(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema is null", K(ret));
     } else if (OB_FAIL(sort_table_partition_info(*table))) {
-      LOG_WARN("fail to sort table partition info", K(ret), KPC(table), K(i));
     }
   }
   return ret;
@@ -2197,7 +2041,6 @@ int ObSchemaServiceSQLImpl::fetch_runtime_info(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(construct_runtime_schema_(runtime_schema_array))) {
-    LOG_WARN("fail to construct runtime schema", KR(ret), K(schema_version));
   }
   return ret;
 }
@@ -2207,10 +2050,12 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
 {
   int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
-    LOG_WARN("fail to generate server runtime schema", KR(ret));
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
   } else if (OB_FAIL(runtime_schema_array.push_back(runtime_schema))) {
-    LOG_WARN("fail to push back", KR(ret), K(runtime_schema));
   }
   return ret;
 }
@@ -2221,8 +2066,11 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
   int ret = OB_SUCCESS;
   ObSimpleServerRuntimeSchema simple_runtime_schema;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
-    LOG_WARN("fail to generate server runtime schema", KR(ret));
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
   } else {
     
     simple_runtime_schema.set_schema_version(runtime_schema.get_schema_version());
@@ -2232,9 +2080,7 @@ int ObSchemaServiceSQLImpl::construct_runtime_schema_(
     simple_runtime_schema.set_in_recyclebin(runtime_schema.is_in_recyclebin());
     simple_runtime_schema.set_gmt_modified(0); // not used
     if (OB_FAIL(simple_runtime_schema.set_runtime_name(runtime_schema.get_runtime_name()))) {
-      LOG_WARN("fail to set runtime name", KR(ret));
     } else if (OB_FAIL(runtime_schema_array.push_back(simple_runtime_schema))) {
-      LOG_WARN("fail to push back", KR(ret), K(simple_runtime_schema));
     }
   }
   return ret;
@@ -2245,8 +2091,11 @@ int ObSchemaServiceSQLImpl::construct_schema_version_his_val_(
 {
   int ret = OB_SUCCESS;
   ObServerRuntimeSchema runtime_schema;
-  if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(runtime_schema))) {
-    LOG_WARN("fail to generate default runtime schema", KR(ret));
+  if (OB_ISNULL(mysql_proxy_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("mysql proxy is null", KR(ret));
+  } else if (OB_FAIL(ObShareUtil::gen_default_server_runtime_schema(
+      *mysql_proxy_, runtime_schema))) {
   } else {
     version_his_val.is_deleted_ = false;
     version_his_val.min_version_ = runtime_schema.get_schema_version();
@@ -2479,33 +2328,26 @@ int ObSchemaServiceSQLImpl::fetch_all_database_info(
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_DATABASE_HISTORY_SQL, OB_ALL_DATABASE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else {
       if (NULL != db_ids && db_ids_size > 0) {
         if (OB_FAIL(sql.append_fmt(" AND database_id IN "))) {
-          LOG_WARN("append sql failed", K(ret));
         } else if (OB_FAIL(sql_append_pure_ids(schema_status, db_ids, db_ids_size, sql))) {
-          LOG_WARN("sql append database ids failed");
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY DATABASE_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_database_schema(*result, db_schema_array))) {
-        LOG_WARN("failed to retrieve all database schema", K(ret));
       }
     }
   }
@@ -2535,47 +2377,37 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
     const char *table_name = NULL;
     if (OB_FAIL(ObSchemaUtils::get_all_table_name(table_name,
                                                   schema_service_))) {
-      LOG_WARN("fail to get all table name", K(ret), K(1UL));
     } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_SQL,
                                       table_name,
                                       OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (NULL != table_ids && table_ids_size > 0) {
         if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-          LOG_WARN("append sql failed", K(ret));
         } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-          LOG_WARN("sql append table ids failed");
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("append sql failed", K(ret));
       }
     }
   } else {
     const char *table_name = NULL;
     if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                           schema_service_))) {
-      LOG_WARN("fail to get all table name", KR(ret));
     } else {
       if (NULL == table_ids || table_ids_size == 0) {
         if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
                                           table_name,
                                           OB_INVALID_RUNTIME_ID))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-          LOG_WARN("append sql failed", KR(ret));
         } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID DESC, SCHEMA_VERSION DESC"))) {
-          LOG_WARN("append sql failed", KR(ret));
         }
       } else {
         ObSqlString table_id_list;
         for (int64_t i = 0; OB_SUCC(ret) && i < table_ids_size; i++) {
           if (OB_FAIL(table_id_list.append_fmt("%srow(%lu)", 0 == i ? "" : ", ", table_ids[i]))) {
-            LOG_WARN("append str failed", KR(ret));
           }
         }
         if (FAILEDx(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY,
@@ -2592,12 +2424,10 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
       ObMySQLResult *result = NULL;
       const bool check_deleted = (INT64_MAX != schema_version);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_schema(check_deleted, *result, allocator, table_schema_array))) {
-        LOG_WARN("failed to retrieve all table schema:", K(check_deleted), K(ret));
       }
     }
   }
@@ -2615,10 +2445,9 @@ int ObSchemaServiceSQLImpl::fetch_new_object_ids(const int64_t object_cnt,
     LOG_WARN("proxy is NULL", KR(ret));
   } else {
     lib::ObMutexGuard mutex_guard(object_ids_mutex_);
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_id( OB_MAX_USED_OBJECT_ID_TYPE,
         max_object_id, UINT64_MAX/*initial value should exist*/, object_cnt))) {
-      LOG_WARN("fail to fetch object id", KR(ret), K(object_cnt));
     }
   }
   return ret;
@@ -2640,10 +2469,9 @@ int ObSchemaServiceSQLImpl::fetch_new_tablet_ids(const uint64_t size,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("proxy is NULL", KR(ret));
   } else {
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_ids(
         OB_MAX_USED_NORMAL_ROWID_TABLE_TABLET_ID_TYPE, min_tablet_id, size))) {
-      LOG_WARN("get new tablet id failed", KR(ret));
     }
   }
   return ret;
@@ -2685,9 +2513,8 @@ int ObSchemaServiceSQLImpl::fetch_new_schema_id_(const enum ObMaxIdType max_id_t
     LOG_WARN("proxy is NULL");
   } else {
     lib::ObMutexGuard mutex_guard(object_ids_mutex_);
-    ObMaxIdFetcher id_fetcher(*mysql_proxy_);
+    ObMaxIdFetcher id_fetcher(*mysql_proxy_, max_id_cache_);
     if (OB_FAIL(id_fetcher.fetch_new_max_id( max_id_type, new_schema_id))) {
-      LOG_WARN("get new schema id failed", K(ret), K(max_id_type));
     }
   }
   return ret;
@@ -2719,9 +2546,7 @@ int ObSchemaServiceSQLImpl::get_increment_schema_operations(
                                  OB_ALL_DDL_OPERATION_TNAME,
                                  base_version,
                                  new_schema_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -2737,7 +2562,6 @@ int ObSchemaServiceSQLImpl::get_increment_schema_operations(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid table operation type: ", K(schema_operation), K(ret));
           } else {
-            LOG_DEBUG("schema operation:", K(schema_operation));
             if (OB_FAIL(schema_operations.push_back(schema_operation))) {
               LOG_WARN("failed to push back operation", K(ret));
               will_break = true;
@@ -2780,14 +2604,12 @@ int ObSchemaServiceSQLImpl::check_sys_schema_change(
               "AND SCHEMA_VERSION <= %lu AND OPERATION_TYPE > %d AND OPERATION_TYPE < %d "
               "AND TABLE_ID IN (", OB_ALL_DDL_OPERATION_TNAME, schema_version, new_schema_version,
               OB_DDL_TABLE_OPERATION_BEGIN, OB_DDL_TABLE_OPERATION_END))) {
-        LOG_WARN("append_fmt failed", K(ret));
       } else {
         // no need to change table_id
         for (int64_t i = 0; OB_SUCC(ret) && i < sys_table_ids.count(); ++i) {
           if (OB_FAIL(sql.append_fmt("%s%lu%s", (0 == i) ? "" : ",",
                       sys_table_ids.at(i),
                       (sys_table_ids.count() - 1 == i) ? ")" : ""))) {
-            LOG_WARN("append_fmt failed", K(ret));
           }
         }
       }
@@ -2796,7 +2618,6 @@ int ObSchemaServiceSQLImpl::check_sys_schema_change(
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get_result failed", K(ret));
@@ -2832,7 +2653,6 @@ int ObSchemaServiceSQLImpl::fetch_schema_version(
                          OB_ALL_DDL_OPERATION_TNAME);
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       LOG_WARN("execute sql failed", K(sql), K(ret));
       // Unittest cases use MySQL as oceanbase, and host_ip()/rpc_port() is not supported in MySQL.
@@ -2842,9 +2662,7 @@ int ObSchemaServiceSQLImpl::fetch_schema_version(
         LOG_WARN("return mysql error code, try to read again", K(ret));
         sql.reuse();
         if (OB_FAIL(sql.append_fmt("SELECT MAX(schema_version) as version FROM %s", OB_ALL_DDL_OPERATION_TNAME))) {
-          LOG_WARN("fail to append sql", K(ret));
         } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         }
       }
     }
@@ -2854,9 +2672,7 @@ int ObSchemaServiceSQLImpl::fetch_schema_version(
         LOG_WARN("fail to get result. ", K(ret));
       } else {
         int64_t end_time = ::oceanbase::common::ObTimeUtility::current_time();
-        LOG_TRACE("get_schema_version time.", "cost us", end_time - begin_time);
         if (OB_FAIL(retrieve_schema_version(*result, schema_version))) {
-          LOG_WARN("failed to retrive schema version: ", K(sql), K(ret));
         }
       }
     }
@@ -2876,7 +2692,6 @@ int ObSchemaServiceSQLImpl::get_runtime_schemas(
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail");
   } else if (OB_FAIL(fetch_runtime_schemas(sql_client, schema_version, schema_array))) {
-    LOG_WARN("fetch runtime schemas failed", K(ret));
   }
   LOG_INFO("get runtime schemas finish", K(ret));
   return ret;
@@ -2998,17 +2813,14 @@ int ObSchemaServiceSQLImpl::sql_append_pure_ids(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sql.append("("))) {
-      LOG_WARN("append sql failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
         if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ",
                                    ids[i].table_id_))) {
-          LOG_WARN("append sql failed", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append(")"))) {
-          LOG_WARN("append sql failed", K(ret));
         }
       }
     }
@@ -3031,17 +2843,14 @@ int ObSchemaServiceSQLImpl::sql_append_pure_ids(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sql.append("("))) {
-      LOG_WARN("append sql failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
         if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ",
                                    ids[i]))) {
-          LOG_WARN("append sql failed", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append(")"))) {
-          LOG_WARN("append sql failed", K(ret));
         }
       }
     }
@@ -3065,7 +2874,6 @@ int ObSchemaServiceSQLImpl::sql_append_ids_and_truncate_version(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sql.append(" AND ("))) {
-      LOG_WARN("append sql failed", KR(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ids_size; ++i) {
         if (ids[i].truncate_version_ > schema_version) {
@@ -3074,12 +2882,10 @@ int ObSchemaServiceSQLImpl::sql_append_ids_and_truncate_version(
         } else if (OB_FAIL(sql.append_fmt("%s(table_id = %lu AND schema_version >= %ld)", 0 == i ? "" : "OR ",
                                    ids[i].table_id_,
                                    ids[i].truncate_version_))) {
-          LOG_WARN("append sql failed", KR(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append(")"))) {
-          LOG_WARN("append sql failed", KR(ret));
         }
       }
     }
@@ -3103,7 +2909,6 @@ int ObSchemaServiceSQLImpl::get_runtime_schemas(
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail");
   } else if (OB_FAIL(fetch_runtime_info(schema_version, sql_client, runtime_info_array))) {
-    LOG_WARN("fetch runtime info failed", K(schema_version), K(ret));
   }
   LOG_INFO("get runtime info finish", K(schema_version), K(ret));
   return ret;
@@ -3119,7 +2924,6 @@ int ObSchemaServiceSQLImpl::get_batch_databases(
   int ret = OB_SUCCESS;
   
   db_schema_array.reserve(db_ids.count());
-  LOG_DEBUG("fetch batch database schema begin.");
   if (!check_inner_stat()) {
     ret = OB_NOT_INIT;
     LOG_WARN("check inner stat fail");
@@ -3139,7 +2943,6 @@ int ObSchemaServiceSQLImpl::get_batch_databases(
       }
       if (OB_FAIL(fetch_all_database_info(schema_status, schema_version,
           sql_client, db_schema_array, &db_ids.at(begin), end - begin))) {
-        LOG_WARN("fetch all database info failed", K(ret), K(schema_version));
       }
       begin = end;
     }
@@ -3158,7 +2961,6 @@ int ObSchemaServiceSQLImpl::get_batch_outlines(
   int ret = OB_SUCCESS;
   
   outline_info_array.reserve(outline_ids.count());
-  LOG_DEBUG("fetch batch outlines begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3178,7 +2980,6 @@ int ObSchemaServiceSQLImpl::get_batch_outlines(
     }
     if (OB_FAIL(fetch_all_outline_info(schema_status, schema_version, sql_client, outline_info_array,
         &outline_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all outline info failed", K(schema_version), K(ret));
     }
     begin = end;
   }
@@ -3196,7 +2997,6 @@ int ObSchemaServiceSQLImpl::get_batch_routines(
   int ret = OB_SUCCESS;
   
   routine_info_array.reserve(routine_ids.count());
-  LOG_DEBUG("fetch batch routines begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3216,10 +3016,8 @@ int ObSchemaServiceSQLImpl::get_batch_routines(
     }
     if (OB_FAIL(fetch_all_routine_info(schema_status, schema_version, sql_client, routine_info_array,
         &routine_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all routine info failed", K(schema_version), K(ret));
     } else if (OB_FAIL(fetch_all_routine_param_info(schema_status, schema_version, sql_client,
         routine_info_array, &routine_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all routine param info failed", K(ret));
     }
     begin = end;
   }
@@ -3237,7 +3035,6 @@ int ObSchemaServiceSQLImpl::get_batch_users(
   int ret = OB_SUCCESS;
   
   user_info_array.reserve(user_ids.count());
-  LOG_DEBUG("fetch batch users begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3257,7 +3054,6 @@ int ObSchemaServiceSQLImpl::get_batch_users(
     }
     if (OB_FAIL(fetch_all_user_info(schema_status,schema_version, sql_client, user_info_array,
         &user_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all user privileges info failed", K(schema_version), K(ret));
     }
     begin = end;
   }
@@ -3283,43 +3079,35 @@ int ObSchemaServiceSQLImpl::fetch_all_outline_info(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OUTLINE_HISTORY_SQL,
                                OB_ALL_OUTLINE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != outline_keys && outlines_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND outline_id IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < outlines_size; ++i) {
           const uint64_t outline_id = outline_keys[i];
           if (OB_FAIL(sql.append_fmt("%s%lu",
                                      0 == i ? "" : ", ",
                                      outline_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
     } else { }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY OUTLINE_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_outline_schema(*result, outline_array))) {
-        LOG_WARN("Failed to retrieve outline infos", K(ret));
       }
     }
   }
@@ -3335,7 +3123,6 @@ int ObSchemaServiceSQLImpl::get_batch_packages(const ObRefreshSchemaStatus &sche
   int ret = OB_SUCCESS;
   
   package_info_array.reserve(package_ids.count());
-  LOG_DEBUG("fetch batch packages begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3355,7 +3142,6 @@ int ObSchemaServiceSQLImpl::get_batch_packages(const ObRefreshSchemaStatus &sche
     }
     if (OB_FAIL(fetch_all_package_info(schema_status, schema_version, sql_client, package_info_array,
         &package_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all package info failed", K(schema_version), K(ret));
     }
     begin = end;
   }
@@ -3373,7 +3159,6 @@ int ObSchemaServiceSQLImpl::get_batch_mock_fk_parent_tables(
   int ret = OB_SUCCESS;
   
   mock_fk_parent_table_schema_array.reserve(mock_fk_parent_table_ids.count());
-  LOG_DEBUG("fetch batch mock_fk_parent_table begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3392,7 +3177,6 @@ int ObSchemaServiceSQLImpl::get_batch_mock_fk_parent_tables(
     }
     if (OB_FAIL(fetch_all_mock_fk_parent_table_info(schema_status, schema_version, sql_client, mock_fk_parent_table_schema_array,
         &mock_fk_parent_table_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all mock_fk_parent_table info failed", K(schema_version), K(ret));
     }
     begin = end;
   }
@@ -3409,7 +3193,6 @@ int ObSchemaServiceSQLImpl::get_batch_triggers(const ObRefreshSchemaStatus &sche
   int ret = OB_SUCCESS;
   
   trigger_info_array.reserve(trigger_ids.count());
-  LOG_DEBUG("fetch batch triggers begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -3429,7 +3212,6 @@ int ObSchemaServiceSQLImpl::get_batch_triggers(const ObRefreshSchemaStatus &sche
     }
     if (OB_FAIL(fetch_all_trigger_info(schema_status, schema_version, sql_client, trigger_info_array,
         &trigger_ids.at(begin), end - begin))) {
-      LOG_WARN("fetch all trigger info failed", K(schema_version), K(ret));
     }
     begin = end;
   }
@@ -3453,41 +3235,33 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_info(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_HISTORY_SQL, OB_ALL_ROUTINE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != routine_ids && routine_ids_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND ROUTINE_ID IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < routine_ids_size; ++i) {
           const uint64_t routine_id = routine_ids[i];
           if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", routine_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
     } else { }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY ROUTINE_ID ASC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_routine_schema(*result, routine_array))) {
-        LOG_WARN("Failed to retrieve routine infos", K(ret));
       }
     }
   }
@@ -3509,40 +3283,32 @@ int ObSchemaServiceSQLImpl::fetch_all_routine_param_info(const ObRefreshSchemaSt
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_PARAM_HISTORY_SQL, OB_ALL_ROUTINE_PARAM_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != object_ids && object_ids_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND ROUTINE_ID IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < object_ids_size; ++i) {
           const uint64_t routine_id = object_ids[i];
           if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", routine_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
     } else { }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY ROUTINE_ID ASC, SEQUENCE ASC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_routine_param_schema(*result, routine_infos))) {
-        LOG_WARN("Failed to retrieve routine infos", K(ret));
       }
     }
   }
@@ -3566,43 +3332,35 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_USER_HISTORY_SQL, OB_ALL_USER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (!is_full_schema) {
       if (OB_FAIL(sql.append_fmt(" AND user_id IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < users_size; ++i) {
           const uint64_t user_id = user_keys[i];
           if (OB_FAIL(sql.append_fmt("%s%lu",
                                      0 == i ? "" : ", ",
                                      user_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
     } else { }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(" ORDER BY USER_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_user_schema(*result, user_array))) {
-        LOG_WARN("Failed to retrieve user infos", K(ret));
       } else if (!is_full_schema && user_array.count() != users_size) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Failed to retrieve user infos", K(ret), K(user_array.count()), K(users_size));
@@ -3616,7 +3374,6 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
               true /*this case grantees fetch role ids*/,
               user_keys,
               users_size))) {
-        LOG_WARN("failed to fetch_role_grantee_map_info", K(ret));
       } else if (OB_FAIL(fetch_role_grantee_map_info(schema_status,
               schema_version,
               sql_client,
@@ -3624,13 +3381,11 @@ int ObSchemaServiceSQLImpl::fetch_all_user_info(
               false /*this case roles fetch grantee ids*/,
               user_keys,
               users_size))) {
-        LOG_WARN("failed to fetch_role_grantee_map_info", K(ret));
       } else if (OB_FAIL(fetch_trigger_list(schema_status,
                                             user_array.at(0).get_user_id(),
                                             schema_version,
                                             sql_client,
                                             user_array.at(0)))) {
-        LOG_WARN("fetch trigger list failed", K(ret));
       }
     }
   }
@@ -3656,20 +3411,16 @@ int ObSchemaServiceSQLImpl::fetch_all_package_info(
     if (OB_FAIL(
         sql.append_fmt(FETCH_ALL_PACKAGE_HISTORY_SQL, OB_ALL_PACKAGE_HISTORY_TNAME,
         OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != package_keys && packages_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND PACKAGE_ID IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < packages_size; ++i) {
           const uint64_t package_id = package_keys[i];
           if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", package_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
@@ -3677,21 +3428,17 @@ int ObSchemaServiceSQLImpl::fetch_all_package_info(
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(
           sql.append(" ORDER BY PACKAGE_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_package_schema(*result, package_array))) {
-        LOG_WARN("Failed to retrieve package infos", K(ret));
       }
     }
   }
@@ -3717,20 +3464,16 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
     if (OB_FAIL(
         sql.append_fmt(FETCH_ALL_TRIGGER_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
         OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != trigger_keys && triggers_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND TRIGGER_ID IN ("))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < triggers_size; ++i) {
           const uint64_t trigger_id = trigger_keys[i];
           if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", trigger_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         }
       }
@@ -3738,21 +3481,17 @@ int ObSchemaServiceSQLImpl::fetch_all_trigger_info(
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(
           sql.append(" ORDER BY TRIGGER_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_trigger_schema(*result, trigger_array))) {
-        LOG_WARN("Failed to retrieve trigger infos", K(ret));
       }
     }
   }
@@ -3781,30 +3520,25 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
     bool is_need_inc_fetch = false; // control generation logic of sql
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROLE_GRANTEE_MAP_HISTORY_SQL, OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME,
                                1UL))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (!is_full_schema) {
       for (int64_t i = 0; OB_SUCC(ret) && i < users_size; ++i) {
         const uint64_t user_id = ObSchemaUtils::get_extract_schema_id(user_keys[i]);
         if (is_fetch_role) {
           if (!is_need_inc_fetch) {
             if (OB_FAIL(sql.append_fmt(" AND grantee_id IN (%lu", user_id))) {
-              LOG_WARN("append sql failed", K(ret), K(user_id));
             } else {
               is_need_inc_fetch = true;
             }
           } else if (OB_FAIL(sql.append_fmt(", %lu", user_id))) {
-            LOG_WARN("append sql failed", K(ret), K(i), K(user_id));
           }
         } else {
           {
             if (!is_need_inc_fetch) {
               if (OB_FAIL(sql.append_fmt(" AND role_id IN (%lu", user_id))) {
-                LOG_WARN("append sql failed", K(ret), K(user_id));
               } else {
                 is_need_inc_fetch = true;
               }
             } else if (OB_FAIL(sql.append_fmt(", %lu", user_id))) {
-              LOG_WARN("append sql failed", K(ret), K(i), K(user_id));
             }
           }
         }
@@ -3812,7 +3546,6 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
       if (OB_SUCC(ret)) {
         if (is_need_inc_fetch) {
           if (OB_FAIL(sql.append(")"))) {
-            LOG_WARN("append sql failed", K(ret));
           }
         } else {
           // reset sql if no schema objects need to be fetched from inner table.
@@ -3823,22 +3556,18 @@ int ObSchemaServiceSQLImpl::fetch_role_grantee_map_info(
 
     if (OB_SUCC(ret) && !sql.empty()) {
       if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(sql.append(is_fetch_role ? " ORDER BY GRANTEE_ID DESC, ROLE_ID DESC, SCHEMA_VERSION DESC"
                                    : " ORDER BY ROLE_ID DESC, GRANTEE_ID DESC, SCHEMA_VERSION DESC"))) {
-        LOG_WARN("sql append failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && !sql.empty()) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fail to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(*result, is_fetch_role, user_array))) {
-        LOG_WARN("Failed to retrieve user infos", K(ret));
       }
     }
 
@@ -3855,7 +3584,6 @@ int ObSchemaServiceSQLImpl::fetch_runtime_schemas(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(construct_runtime_schema_(schema_array))) {
-    LOG_WARN("fail to construct runtime schema", KR(ret));
   }
   return ret;
 }
@@ -3877,13 +3605,11 @@ int ObSchemaServiceSQLImpl::fetch_sys_variable_version(
                                "FROM %s WHERE schema_version <= %ld",
                                OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                schema_version))) {
-      LOG_WARN("append sql failed", K(ret), K(sql));
     } else {
       const int64_t snapshot_timestamp = schema_status.snapshot_timestamp_;
       bool check_sys_variable = false;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_PARAMETER(sql_client, snapshot_timestamp, check_sys_variable);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -3934,24 +3660,19 @@ int ObSchemaServiceSQLImpl::fetch_tables(
     ObTimeoutCtx ctx;
     if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                           schema_service_))) {
-      LOG_WARN("fail to get all table name", K(ret));
     } else if (!is_increase_schema) {
       const char *tname = OB_ALL_TABLE_HISTORY_TNAME;
       if (OB_FAIL(set_refresh_full_schema_timeout_ctx_(sql_client, tname, ctx))) {
-        LOG_WARN("fail to set refresh full schema timeout ctx", KR(ret), "tname", tname);
       } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_FULL_SCHEMA,
                                  table_name, table_name,
                                  schema_version,
                                  OB_ALL_CORE_TABLE_TID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY table_id DESC, schema_version DESC"))) {
-        LOG_WARN("append sql failed", KR(ret));
       }
     } else {
       ObSqlString table_id_list;
       for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; i++) {
         if (OB_FAIL(table_id_list.append_fmt("%srow(%lu)", 0 == i ? "" : ", ", schema_keys[i].table_id_))) {
-          LOG_WARN("append sql failed", KR(ret));
         }
       }
       if (FAILEDx(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY,
@@ -3966,12 +3687,10 @@ int ObSchemaServiceSQLImpl::fetch_tables(
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         const bool check_deleted = true; // not used
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_schema(check_deleted, *result, allocator, schema_array))) {
-          LOG_WARN("failed to retrieve table schema", K(ret));
         }
       }
     }
@@ -3991,9 +3710,7 @@ int ObSchemaServiceSQLImpl::fetch_tables(
         LOG_WARN("schema is null", KR(ret), K(i));
       } else if (FALSE_IT(table_id = table->get_table_id())) {
       } else if (OB_FAIL(table_ids.push_back(table_id))) {
-        LOG_WARN("fail to push back table_id", KR(ret), K(table_id));
       } else if (OB_FAIL(tables.push_back(table))) {
-        LOG_WARN("fail to push back table schema", KR(ret), K(table_id));
       }
     }
     if (OB_SUCC(ret) && table_ids.count() > 0) {
@@ -4007,18 +3724,12 @@ int ObSchemaServiceSQLImpl::fetch_tables(
         if (OB_FAIL(fetch_all_partition_info(
                     schema_status, schema_version, sql_client,
                     tables, &table_ids.at(begin), end - begin))) {
-          LOG_WARN("Failed to fetch all partition info",
-                   KR(ret), K(schema_status), K(schema_version), K(begin), K(end));
         } else if (OB_FAIL(fetch_foreign_key_array_for_simple_table_schemas(
                    schema_status, schema_version, sql_client,
                    tables, &table_ids.at(begin), end - begin))) {
-          LOG_WARN("Failed to fetch foreign key array info for simple table schemas",
-                   KR(ret), K(schema_status), K(schema_version), K(begin), K(end));
         } else if (OB_FAIL(fetch_constraint_array_for_simple_table_schemas(
                    schema_status, schema_version, sql_client,
                    tables, &table_ids.at(begin), end - begin))) {
-          LOG_WARN("Failed to fetch constraint array info for simple table schemas",
-                   KR(ret), K(schema_status), K(schema_version), K(begin), K(end));
         } else {
           begin = end;
           end = min(begin + BATCH_FETCH_NUM, table_ids.count());
@@ -4111,36 +3822,28 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_MOCK_FK_PARENT_TABLE_HISTORY_SQL, OB_ALL_MOCK_FK_PARENT_TABLE_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (NULL != schema_keys && schema_key_size > 0) {
         if (OB_FAIL(sql.append_fmt(" AND mock_fk_parent_table_id in ("))) {
-          LOG_WARN("append failed", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < schema_key_size; ++i) {
             const uint64_t mock_fk_parent_table_id = schema_keys[i];
             if (OB_FAIL(sql.append_fmt("%s%lu", 0 == i ? "" : ", ", mock_fk_parent_table_id))) {
-              LOG_WARN("append sql failed", K(ret), K(i));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(sql.append(")"))) {
-              LOG_WARN("append sql failed", K(ret));
             }
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-          LOG_WARN("append sql failed", K(ret));
         } else if (OB_FAIL(sql.append(" ORDER BY mock_fk_parent_table_id desc, schema_version desc"))) {
-          LOG_WARN("sql append failed", K(ret));
         } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema(*result, schema_array))) {
-          LOG_WARN("failed to retrieve mock_fk_parent_table schema", K(ret));
         }
       }
     }
@@ -4150,7 +3853,6 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
     for (int64_t i = orig_cnt; OB_SUCC(ret) && i < schema_array.count(); ++i) {
       if (OB_FAIL(fetch_mock_fk_parent_table_column_info(
                   schema_status, schema_version, sql_client, schema_array.at(i)))) {
-        LOG_WARN("failed to fetch mock_table column info", K(ret), K(schema_array.at(i)));
       }
     }
   }
@@ -4160,7 +3862,6 @@ int ObSchemaServiceSQLImpl::fetch_all_mock_fk_parent_table_info(
       if (OB_FAIL(fetch_foreign_key_info(
           schema_status, schema_array.at(i).get_mock_fk_parent_table_id(),
           schema_version, sql_client, schema_array.at(i)))) {
-        LOG_WARN("Failed to fetch foreign key info", K(ret), K(schema_array.at(i)));
       }
     }
   }
@@ -4183,22 +3884,16 @@ int ObSchemaServiceSQLImpl::fetch_mock_fk_parent_table_column_info(
     if (OB_FAIL(sql.append_fmt(COMMON_SCHEMA_SQL,
                                OB_ALL_MOCK_FK_PARENT_TABLE_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(
       " AND mock_fk_parent_table_id = %lu AND schema_version <= %ld",
       mock_fk_parent_table.get_mock_fk_parent_table_id(),
       schema_version))) {
-      LOG_WARN("append table_id and mock_fk_parent_table_id and schema version",
-               K(ret), K(mock_fk_parent_table.get_mock_fk_parent_table_id()), K(schema_version));
     } else if (OB_FAIL(sql.append(" ORDER BY parent_column_id asc, schema_version desc"))) {
-      LOG_WARN("sql append failed", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result. ", K(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(*result, mock_fk_parent_table))) {
-      LOG_WARN("failed to retrieve foreign key column info", K(ret), K(mock_fk_parent_table));
     }
   }
   return ret;
@@ -4222,29 +3917,22 @@ int ObSchemaServiceSQLImpl::fetch_db_privs(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_DB_PRIV_HISTORY_SQL,
                                OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_DB_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append db priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append(" ORDER BY user_id desc, \
                              BINARY database_name desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_db_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve db priv", K(ret));
       }
     }
 
@@ -4269,29 +3957,22 @@ int ObSchemaServiceSQLImpl::fetch_sys_privs(
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_SYS_PRIV_HISTORY_SQL,
                                OB_ALL_SYSAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (grantee_id) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_SYS_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append sys priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append(
         " ORDER BY grantee_id desc, priv_id desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_sys_priv_schema(*result,
                                                                          schema_array))) {
-        LOG_WARN("failed to retrieve sys priv", K(ret));
       }
     }
 
@@ -4316,30 +3997,23 @@ int ObSchemaServiceSQLImpl::fetch_table_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_PRIV_HISTORY_SQL, OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/table_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name, \
                                         BINARY table_name) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_TABLE_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append table priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append(" ORDER BY user_id desc, \
                              BINARY database_name desc, BINARY table_name desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve table priv schema", K(ret));
       }
     }
 
@@ -4364,16 +4038,12 @@ int ObSchemaServiceSQLImpl::fetch_routine_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_ROUTINE_PRIV_HISTORY_SQL, OB_ALL_ROUTINE_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/routine_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (user_id, BINARY database_name, \
                                         BINARY routine_name, routine_type) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_ROUTINE_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append routine priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4381,14 +4051,11 @@ int ObSchemaServiceSQLImpl::fetch_routine_privs(
       if (OB_FAIL(sql.append(" ORDER BY user_id desc," \
                              "BINARY database_name desc, BINARY routine_name desc, " \
                              "routine_type desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_routine_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve routine priv schema", K(ret));
       }
     }
 
@@ -4413,15 +4080,11 @@ int ObSchemaServiceSQLImpl::fetch_obj_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (obj_id, objtype, col_id, grantor_id, \
                                         grantee_id) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_OBJ_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append obj priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -4429,14 +4092,11 @@ int ObSchemaServiceSQLImpl::fetch_obj_privs(
       if (OB_FAIL(sql.append(" ORDER BY obj_id desc, objtype desc, col_id desc,\
                               grantor_id desc, grantee_id desc, priv_id desc,\
                               schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_obj_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve obj priv schema", K(ret));
       }
     }
 
@@ -4461,27 +4121,20 @@ int ObSchemaServiceSQLImpl::fetch_obj_mysql_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_OBJ_MYSQL_PRIV_HISTORY_SQL, OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                               OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       if (OB_FAIL(sql.append_fmt(" AND (user_id, obj_name, obj_type) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_OBJ_MYSQL_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append obj priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append(" ORDER BY user_id desc, obj_name desc, obj_type desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve obj priv schema", K(ret));
       }
     }
   }
@@ -4504,28 +4157,21 @@ int ObSchemaServiceSQLImpl::fetch_column_privs(
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_PRIV_HISTORY_SQL, OB_ALL_COLUMN_PRIVILEGE_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (NULL != schema_keys && schema_key_size > 0) {
       // database_name/routine_name is case sensitive
       if (OB_FAIL(sql.append_fmt(" AND (priv_id) in"))) {
-        LOG_WARN("append failed", K(ret));
       } else if (OB_FAIL(SQL_APPEND_COLUMN_PRIV_ID(schema_keys, schema_key_size, sql))) {
-        LOG_WARN("sql append column priv id failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append(" ORDER BY priv_id desc, schema_version desc"))) {
-        LOG_WARN("sql append failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_priv_schema(*result, schema_array))) {
-        LOG_WARN("failed to retrieve column priv schema", K(ret));
       }
     }
   }
@@ -4548,13 +4194,11 @@ int ObSchemaServiceSQLImpl::get_table_schema(
   if (is_core_table(table_id)) {
     if (OB_FAIL(get_core_table_schema(
             schema_status, table_id, schema_version, sql_client, allocator, table_schema))) {
-      LOG_WARN("get core table schema failed", K(ret), K(table_id));
     }
   } else {
     // normal_table
     if (OB_FAIL(get_not_core_table_schema(schema_status, table_id, schema_version,
                                           sql_client, allocator, table_schema))) {
-      LOG_WARN("get not core table schema failed", K(ret), K(table_id));
     } else {
       LOG_INFO("get not core table schema succeed",
                K(schema_status), K(table_id), K(table_schema->get_table_name_str()));
@@ -4584,11 +4228,8 @@ int ObSchemaServiceSQLImpl::get_not_core_table_schema(
     LOG_WARN("invalid schema_version", K(schema_version), K(ret));
   } else if (OB_FAIL(fetch_table_info(schema_status, table_id, schema_version,
                                       sql_client, allocator, table_schema))) {
-    LOG_WARN("fetch all table info failed", K(table_id),
-             K(schema_version), K(ret));
   } else if (OB_FAIL(fetch_column_info(schema_status, table_id, schema_version,
                                        sql_client, table_schema))) {
-    LOG_WARN("Failed to fetch column info", K(ret));
   } else if (!is_schema_fetch_dependency
              && OB_FAIL(fetch_partition_info(schema_status, table_id, schema_version,
                                              sql_client, table_schema))) {
@@ -4631,28 +4272,22 @@ int ObSchemaServiceSQLImpl::fetch_table_info(
     LOG_WARN("check inner stat fail", K(ret));
   } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                                schema_service_))) {
-    LOG_WARN("fail to get all table name", K(ret));
   } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
                                     table_name,
                                     OB_INVALID_RUNTIME_ID))) {
-    LOG_WARN("append sql failed", K(ret));
   } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld order by schema_version desc limit 1",
                                     table_id,
                                     schema_version))) {
-    LOG_WARN("append table_id and schema_version failed", K(ret), K(table_id),
-             K(schema_version));
   } else {
     const bool check_deleted = true;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObMySQLResult *result = NULL;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_schema(check_deleted, *result, allocator, table_schema))) {
-        LOG_WARN("failed to retrieve all table schema:", K(check_deleted), K(ret));
       }
     }
   }
@@ -4674,22 +4309,18 @@ int ObSchemaServiceSQLImpl::fetch_column_info(const ObRefreshSchemaStatus &schem
     
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_COLUMN_HISTORY_SQL, OB_ALL_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
                                       " ORDER BY TABLE_ID, COLUMN_ID, SCHEMA_VERSION",
                                       table_id,
                                       schema_version))) {
-      LOG_WARN("append sql failed", K(ret));
     } else {
       const bool check_deleted = true;
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(sql), K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_schema(check_deleted, *result, table_schema))) {
-        LOG_WARN("failed to retrieve all column schema", K(check_deleted), K(ret));
       }
     }
   }
@@ -4712,22 +4343,18 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
       
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", KR(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld"
                                         " ORDER BY table_id, constraint_id, schema_version",
                                         table_id,
                                         schema_version))) {
-        LOG_WARN("append sql failed", KR(ret));
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", KR(ret), K(sql));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_constraint(check_deleted, *result, table_schema))) {
-          LOG_WARN("failed to retrieve all constraint schema", KR(ret));
         }
       }
     }
@@ -4739,7 +4366,6 @@ int ObSchemaServiceSQLImpl::fetch_constraint_info(
     if (OB_FAIL(fetch_constraint_column_info(
                 schema_status, table_id, schema_version,
                 sql_client, *iter))) {
-      LOG_WARN("failed to fetch constraint column info", KR(ret));
     }
   }
   return ret;
@@ -4761,21 +4387,16 @@ int ObSchemaServiceSQLImpl::fetch_constraint_column_info(const ObRefreshSchemaSt
 
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_CONSTRAINT_COLUMN_HISTORY_SQL, OB_ALL_CONSTRAINT_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", KR(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND constraint_id = %lu AND schema_version <= %ld "
                                       " ORDER BY table_id, constraint_id, column_id, schema_version desc",
                                       table_id,
                                       cst->get_constraint_id(),
                                       schema_version))) {
-      LOG_WARN("append table_id and foreign key id and schema version",
-               KR(ret), K(table_id), K(cst->get_constraint_id()), K(schema_version));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result. ", KR(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_constraint_column_info(*result, cst))) {
-      LOG_WARN("failed to retrieve constraint column info", KR(ret), K(cst->get_constraint_name_str()));
     }
   }
 
@@ -4795,14 +4416,9 @@ int ObSchemaServiceSQLImpl::fetch_partition_info(
     LOG_WARN("Table schme should not be NULL", K(ret));
   } else if (OB_FAIL(fetch_part_info(schema_status, table_id,
                                      schema_version, sql_client, table_schema))) {
-    LOG_WARN("fail to fetch part info", K(ret), K(schema_status),
-             K(table_id), K(schema_version));
   } else if (OB_FAIL(fetch_sub_part_info(schema_status, table_id,
                                          schema_version, sql_client, table_schema))) {
-    LOG_WARN("fail to fetch sub part info", K(ret), K(schema_status),
-             K(table_id), K(schema_version));
   } else if (OB_FAIL(sort_table_partition_info(*table_schema))) {
-    LOG_WARN("fail to sort table partition info", K(ret), KPC(table_schema));
   }
   return ret;
 }
@@ -4821,14 +4437,10 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info(
     LOG_WARN("invalid table_schema", KR(ret), K(table_schema));
   } else {
     if (OB_FAIL(try_mock_partition_array(table_schema))) {
-      LOG_WARN("fail to mock partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
-      LOG_WARN("failed to sort partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(table_schema))) {
-      LOG_WARN("failed to sort subpartition array", KR(ret), K(table_schema));
     }
   }
-  LOG_TRACE("fetch partition info", KR(ret), K(table_schema));
   return ret;
 }
 
@@ -4846,7 +4458,6 @@ int ObSchemaServiceSQLImpl::try_mock_partition_array(
              && PARTITION_LEVEL_ONE == table_schema.get_part_level()) {
     // only mock vtable's partition array after 4.0
     if (OB_FAIL(table_schema.mock_list_partition_array())) {
-      LOG_WARN("fail to mock list partition array", KR(ret), K(table_schema));
     }
   }
   // to prevent one/two level table's partition array is empty
@@ -4888,24 +4499,20 @@ int ObSchemaServiceSQLImpl::fetch_part_info(
       //fetch part info
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_PART_HISTORY_SQL, OB_ALL_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND schema_version >= %ld AND schema_version <= %ld",
                                         schema_id,
                                         schema->get_truncate_version(),
                                         schema_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY table_id, part_id, schema_version"))) {
-        LOG_WARN("Failed to append fmt", K(ret));
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(ret), K(sql));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(sql), K(ret));
-        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(check_deleted, *result, schema))) {
-          LOG_WARN("failed to retrieve all part info", K(check_deleted), K(ret));
+        } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_part_info(
+            check_deleted, *result, schema))) {
         }
       }
     }
@@ -4940,22 +4547,18 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_DEF_SUBPART_HISTORY_SQL, OB_ALL_DEF_SUB_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu and schema_version <= %ld "
                                         " ORDER BY table_id, sub_part_id, schema_version",
                                         schema_id,
                                         schema_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(sql), K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_def_subpart_info(check_deleted, *result, schema))) {
-          LOG_WARN("failed to retrieve all subpart info", K(check_deleted), K(ret));
         } else { }//do nothing
       }
     }
@@ -4966,23 +4569,19 @@ int ObSchemaServiceSQLImpl::fetch_sub_part_info(
       sql.reuse();
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_SUB_PART_HISTORY_SQL, OB_ALL_SUB_PART_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND table_id = %lu AND schema_version >= %ld AND schema_version <= %ld "
                  " ORDER BY table_id, part_id, sub_part_id, schema_version",
                  schema_id,
                  schema->get_truncate_version(),
                  schema_version))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         const bool check_deleted = true;
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(sql), K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_subpart_info(check_deleted, *result, schema))) {
-          LOG_WARN("failed to retrieve all subpart info", K(check_deleted), K(ret));
         } else { }//do nothing
       }
     }
@@ -5051,9 +4650,7 @@ int ObSchemaServiceSQLImpl::delete_recycle_object(const ObRecycleObject &recycle
                                recycle_object.get_object_name().length(),
                                recycle_object.get_object_name().ptr(),
                                recycle_object.get_type()))) {
-      LOG_WARN("assign_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
@@ -5086,18 +4683,14 @@ int ObSchemaServiceSQLImpl::fetch_recycle_object(const ObString &object_name,
                                  object_name.length(),
                                  object_name.ptr(),
                                  recycle_obj_type))) {
-        LOG_WARN("append sql failed", K(ret),
-                 K(object_name), K(recycle_obj_type));
       } else {
         DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_recycle_object(*result,
                                                                           recycle_objs))) {
-          LOG_WARN("failed to retrieve recycle_object", K(ret));
         }
       }
     }
@@ -5125,19 +4718,16 @@ int ObSchemaServiceSQLImpl::fetch_expire_recycle_objects(const int64_t expire_ti
                                    OB_ALL_RECYCLEBIN_TNAME,
                                    1UL,
                                    expire_time))) {
-          LOG_WARN("append sql failed", K(ret), K(expire_time));
         }
       }
       if (OB_SUCC(ret)) {
         DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get result.", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_recycle_object(*result,
                                                                           recycle_objs))) {
-          LOG_WARN("failed to retrieve recycle object", K(ret));
         }
       }
     }
@@ -5163,22 +4753,18 @@ int ObSchemaServiceSQLImpl::fetch_recycle_objects_of_db(const uint64_t database_
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_RECYCLEBIN_SQL_WITH_CONDITION,
                                  OB_ALL_RECYCLEBIN_TNAME,
                                  1UL))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND database_id = %ld AND (type = %d OR type = %d)",
                                         ObSchemaUtils::get_extract_schema_id(database_id),
                                         ObRecycleObject::TABLE,
                                         ObRecycleObject::VIEW))) {
-        LOG_WARN("append sql failed", K(ret), K(database_id));
       } else {
         DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get result.", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_recycle_object(*result,
                                                   recycle_objs))) {
-          LOG_WARN("failed to retrieve recycle object", K(ret));
         }
       }
     }
@@ -5214,21 +4800,17 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
       const char *history_table_name = NULL;
       if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(history_table_name,
                                                             schema_service_))) {
-        LOG_WARN("fail to get all table name", K(ret));
       } else if (OB_FAIL(sql.append_fmt(FETCH_RECYCLE_TABLE_OBJECT, history_table_name,
                                  1UL,
                                  ObSchemaUtils::get_extract_schema_id(table_id),
                                  schema_version, table_name.ptr()))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get result.", K(ret));
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("fail to get next", K(table_id), K(table_name), K(schema_version));
         } else {
           ObString orig_table_name;
           uint64_t orig_database_id = OB_INVALID_ID;
@@ -5239,11 +4821,8 @@ int ObSchemaServiceSQLImpl::construct_recycle_table_object(
             recycle_object.set_database_id(orig_database_id);
             recycle_object.set_table_id(table_id);
             if (OB_FAIL(recycle_object.set_type_by_table_schema(table))) {
-              LOG_WARN("fail to set type", K(ret), K(table));
             } else if (OB_FAIL(recycle_object.set_object_name(table_name))) {
-              LOG_WARN("fail to set object name", K(ret), K(table_name));
             } else if (OB_FAIL(recycle_object.set_original_name(orig_table_name))) {
-              LOG_WARN("fail to set orignal name", K(ret), K(orig_table_name));
             }
           }
           if (OB_FAIL(ret)) {
@@ -5290,16 +4869,13 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
                                  1UL,
                                  ObSchemaUtils::get_extract_schema_id(database_id),
                                  schema_version, database_name.ptr()))) {
-        LOG_WARN("append sql failed", K(ret));
       } else {
         DEFINE_SQL_CLIENT_RETRY_WEAK(sql_client);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get result.", K(ret));
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("fail to get next", K(database_id), K(database_name), K(schema_version));
         } else {
           ObString orig_database_name;
           EXTRACT_VARCHAR_FIELD_MYSQL(*result, "database_name", orig_database_name);
@@ -5310,9 +4886,7 @@ int ObSchemaServiceSQLImpl::construct_recycle_database_object(
             recycle_object.set_database_id(database_id);
             recycle_object.set_type(ObRecycleObject::DATABASE);
             if (OB_FAIL(recycle_object.set_object_name(database_name))) {
-              LOG_WARN("fail to set object name", K(ret), K(database_name));
             } else if (OB_FAIL(recycle_object.set_original_name(orig_database_name))) {
-              LOG_WARN("fail to set orignal name", K(ret), K(orig_database_name));
             }
           }
 
@@ -5353,22 +4927,16 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_HISTORY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
                                  OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("failed to append sql", K(table_id), K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND (child_table_id = %lu OR parent_table_id = %lu)",
                                         table_id,
                                         table_id))) {
-        LOG_WARN("failed to append sql", K(table_id), K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
-        LOG_WARN("failed to append sql", K(schema_version), K(ret));
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY foreign_key_id desc, schema_version desc"))) {
-        LOG_WARN("Failed to append fmt", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(sql), K(ret));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_foreign_key_info(*result, table_schema))) {
-        LOG_WARN("failed to retrieve foreign key info", K(ret));
       }
     }
   }
@@ -5377,7 +4945,6 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_info(
     for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_count; i++) {
       ObForeignKeyInfo &foreign_key_info = table_schema.get_foreign_key_infos().at(i);
       if (OB_FAIL(fetch_foreign_key_column_info(schema_status, schema_version, sql_client, foreign_key_info))) {
-        LOG_WARN("failed to fetch foreign key column info", K(foreign_key_info), K(ret));
       }
     }
   }
@@ -5399,19 +4966,14 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_column_info(
     DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_FOREIGN_KEY_COLUMN_HISTORY_SQL, OB_ALL_FOREIGN_KEY_COLUMN_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("append sql failed", K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND foreign_key_id = %lu AND schema_version <= %ld ORDER BY position ASC, schema_version DESC",
                foreign_key_info.foreign_key_id_,
                schema_version))) {
-      LOG_WARN("append table_id and foreign key id and schema version",
-               K(ret), K(foreign_key_info.foreign_key_id_), K(schema_version));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result. ", K(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(*result, foreign_key_info))) {
-      LOG_WARN("failed to retrieve foreign key column info", K(ret), K(foreign_key_info));
     }
   }
   return ret;
@@ -5436,22 +4998,15 @@ int ObSchemaServiceSQLImpl::fetch_foreign_key_array_for_simple_table_schemas(
       // FIXME: The following SQL will cause full table scan, which it's poor performance when the amount of table data is large.
       if (OB_FAIL(sql.append_fmt(FETCH_TABLE_ID_AND_NAME_FROM_ALL_FOREIGN_KEY_SQL, OB_ALL_FOREIGN_KEY_HISTORY_TNAME,
                          OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND child_table_id IN "))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-        LOG_WARN("sql append table ids failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
-        LOG_WARN("failed to append sql", K(ret), K(schema_version));
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY child_table_id desc, foreign_key_id desc, schema_version desc"))) {
-        LOG_WARN("Failed to append fmt", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(*result, table_schema_array))) {
-        LOG_WARN("failed to retrieve simple foreign key info", K(ret));
       }
     }
   }
@@ -5474,22 +5029,16 @@ int ObSchemaServiceSQLImpl::fetch_trigger_list(const ObRefreshSchemaStatus &sche
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     if (OB_FAIL(sql.append_fmt(FETCH_ALL_TRIGGER_ID_HISTORY_SQL, OB_ALL_TRIGGER_HISTORY_TNAME,
                                OB_INVALID_RUNTIME_ID))) {
-      LOG_WARN("failed to append sql", K(table_id), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND base_object_id = %lu",
                                       table_id))) {
-      LOG_WARN("failed to append sql", K(table_id), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
-      LOG_WARN("failed to append sql", K(schema_version), K(ret));
     } else if (OB_FAIL(sql.append_fmt(" ORDER BY trigger_id desc, schema_version desc"))) {
-      LOG_WARN("Failed to append fmt", K(ret));
     } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-      LOG_WARN("failed to execute sql", K(sql), K(ret));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", K(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_trigger_list(*result,
                                                                     schema.get_trigger_list()))) {
-      LOG_WARN("failed to retrieve trigger list", K(ret));
     } else {
       LOG_DEBUG("TRIGGER", K(schema.get_trigger_list()));
     }
@@ -5514,22 +5063,15 @@ int ObSchemaServiceSQLImpl::fetch_constraint_array_for_simple_table_schemas(cons
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
       if (OB_FAIL(sql.append_fmt(FETCH_TABLE_ID_AND_CST_NAME_FROM_ALL_CONSTRAINT_HISTORY_SQL, OB_ALL_CONSTRAINT_HISTORY_TNAME,
                          OB_INVALID_RUNTIME_ID))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
-        LOG_WARN("sql append table ids failed", K(ret));
       } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
-        LOG_WARN("failed to append sql", K(ret), K(schema_version));
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY table_id desc, constraint_id desc, schema_version desc"))) {
-        LOG_WARN("Failed to append fmt", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_simple_constraint_info(*result, table_schema_array))) {
-        LOG_WARN("failed to retrieve simple constraint info", K(ret));
       }
     }
   }
@@ -5552,9 +5094,7 @@ int ObSchemaServiceSQLImpl::can_read_schema_version(
     int64_t normal_schema_version = OB_INVALID_VERSION;
     ObISQLClient &sql_client = *mysql_proxy_;
     if (OB_FAIL(get_core_version(sql_client, schema_status, core_schema_version))) {
-      LOG_WARN("failed to get core schema version", KR(ret), K(schema_status));
     } else if (OB_FAIL(get_normal_schema_version(sql_client, schema_status, normal_schema_version))) {
-      LOG_WARN("failed to get normal schema version", KR(ret), K(schema_status));
     } else if (expected_version > core_schema_version
                && expected_version > normal_schema_version) {
       ret = OB_SCHEMA_EAGAIN;
@@ -5590,17 +5130,13 @@ int ObSchemaServiceSQLImpl::get_ori_schema_version(
       ret = sql.append_fmt("SELECT ori_schema_version FROM %s WHERE table_id = %lu",
                            OB_ALL_ORI_SCHEMA_VERSION_TNAME, table_id);
       if (OB_FAIL(ret)) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get last_schema_version", K(ret));
       } else {
         EXTRACT_INT_FIELD_MYSQL(*result, "ori_schema_version", ori_schema_version, int64_t);
-        LOG_TRACE("Get last_schema_version", K(ori_schema_version), K(table_id));
         int tmp_ret = OB_SUCCESS;
         if (0 >= ori_schema_version) {
           ret = OB_ERR_UNEXPECTED;
@@ -5625,7 +5161,6 @@ int ObSchemaServiceSQLImpl::get_batch_sys_variables(
   UNUSED(sql_client);
   int ret = OB_SUCCESS;
   sys_variable_array.reserve(sys_variable_keys.count());
-  LOG_DEBUG("fetch batch sys variables begin.");
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(schema_version), K(ret));
@@ -5641,9 +5176,7 @@ int ObSchemaServiceSQLImpl::get_batch_sys_variables(
       } else {
         tmp_schema.reset();
         if (OB_FAIL(fetch_sys_variable(sql_client, schema_status, key->schema_version_, tmp_schema))) {
-          LOG_WARN("fail to fetch sys variable", K(ret), KPC(key));
         } else if (OB_FAIL(sys_variable_array.push_back(tmp_schema))) {
-          LOG_WARN("fail to push back", K(ret), K(tmp_schema));
         }
       }
     }
@@ -5689,13 +5222,11 @@ int ObSchemaServiceSQLImpl::construct_schema_version_history(
           LOG_WARN("check inner stat fail", K(ret));
         } else if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name,
                                                                      schema_service_))) {
-          LOG_WARN("fail to get all table name", K(ret));
         } else if (OB_FAIL(sql.append_fmt(CONSTRUCT_TABLE_SCHEMA_VERSION_HISTORY_SQL1,
                                      table_name,
                                      OB_INVALID_RUNTIME_ID,
                                      schema_id,
                                      snapshot_version, MAX_CACHED_VERSION_CNT))) {
-          LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
         }
         break;
       }
@@ -5705,7 +5236,6 @@ int ObSchemaServiceSQLImpl::construct_schema_version_history(
                                    OB_INVALID_RUNTIME_ID,
                                    schema_id,
                                    snapshot_version, MAX_CACHED_VERSION_CNT))) {
-          LOG_WARN("append failed", K(ret), K(schema_id), K(snapshot_version));
         }
         break;
       }
@@ -5721,19 +5251,16 @@ int ObSchemaServiceSQLImpl::construct_schema_version_history(
     if (OB_SUCC(ret)) {
       if (SERVER_RUNTIME_SCHEMA == schema_type) {
         if (OB_FAIL(construct_schema_version_his_val_(version_his_val))) {
-          LOG_WARN("fail to construct schema version history value", KR(ret), K(snapshot_version));
         } else {
           version_his_val.snapshot_version_ = snapshot_version;
         }
       } else {
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result. ", K(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_schema_version(*result, version_his_val))) {
-          LOG_WARN("failed to retrieve schema version", K(ret));
         } else {
           version_his_val.snapshot_version_ = snapshot_version;
         }
@@ -5753,7 +5280,6 @@ int ObSchemaServiceSQLImpl::init_sequence_id_by_sys_leader_epoch(const int64_t s
   } else {
     SpinWLockGuard guard(rw_lock_);
     if (OB_FAIL(sequence_id_.init_by_sys_leader_epoch(sys_leader_epoch))) {
-      LOG_WARN("fail to init sequence_id by sys leader epoch", KR(ret), K(sys_leader_epoch));
     }
   }
   return ret;
@@ -5786,7 +5312,6 @@ int ObSchemaServiceSQLImpl::get_refresh_schema_info(ObRefreshSchemaInfo &schema_
   SpinRLockGuard guard(rw_lock_);
   schema_info.reset();
   if (OB_FAIL(schema_info.assign(schema_info_))) {
-    LOG_WARN("fail to assign schema_info", K(ret), K(schema_info_));
   } else {}
   return ret;
 }
@@ -5951,9 +5476,7 @@ int ObSchemaServiceSQLImpl::get_schema_version_by_timestamp(
       if (OB_FAIL(sql.assign_fmt("SELECT MAX(schema_version) as schema_version FROM %s "
                                  "WHERE schema_version <= %ld AND operation_type = %d",
                                  OB_ALL_DDL_OPERATION_TNAME, timestamp, OB_DDL_END_SIGN))) {
-        LOG_WARN("fail to append sql", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret));
@@ -6005,12 +5528,9 @@ int ObSchemaServiceSQLImpl::sort_table_partition_info_v2(
     LOG_WARN("invalid table_schema", KR(ret), K(table_schema));
   } else {
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_partition_array(table_schema))) {
-      LOG_WARN("failed to sort partition array", KR(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaServiceSQLImpl::sort_subpartition_array(table_schema))) {
-      LOG_WARN("failed to sort subpartition array", KR(ret), K(table_schema));
     }
   }
-  LOG_TRACE("fetch partition info", KR(ret), K(table_schema));
   return ret;
 }
 
@@ -6025,7 +5545,6 @@ int ObSchemaServiceSQLImpl::get_table_latest_schema_versions(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_ids));
   } else if (OB_FAIL(table_schema_versions.reserve(table_ids.count()))) {
-    LOG_WARN("reserve failed", KR(ret), "count", table_ids.count());
   } else {
     int64_t start_idx = 0;
     int64_t end_idx = min(MAX_IN_QUERY_PER_TIME, table_ids.count());
@@ -6036,8 +5555,6 @@ int ObSchemaServiceSQLImpl::get_table_latest_schema_versions(
           start_idx,
           end_idx,
           table_schema_versions))) {
-        LOG_WARN("fail to fetch table latest schema versions",
-            KR(ret), K(table_ids), K(start_idx), K(end_idx));
       } else {
         start_idx = end_idx;
         end_idx = min(start_idx + MAX_IN_QUERY_PER_TIME, table_ids.count());
@@ -6062,12 +5579,10 @@ int ObSchemaServiceSQLImpl::set_refresh_full_schema_timeout_ctx_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tname is empty", KR(ret), KP(tname));
   } else if (OB_FAIL(calc_refresh_full_schema_timeout_ctx_(sql_client, tname, timeout, row_cnt))) {
-    LOG_WARN("fail to calc refresh full schema timeout", KR(ret), "tname", tname);
   } else {
     const int64_t ori_ctx_timeout = ctx.get_timeout();
     const int64_t ori_worker_timeout = THIS_WORKER.get_timeout_ts();
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, timeout))) {
-      LOG_WARN("fail to set timeout ctx", KR(ret), K(timeout));
     }
     FLOG_INFO("[REFRESH_SCHEMA] try set refresh schema timeout ctx",
                KR(ret),
@@ -6102,7 +5617,6 @@ int ObSchemaServiceSQLImpl::fetch_table_latest_schema_versions_(
       "ROW_NUMBER() OVER (PARTITION BY table_id ORDER BY schema_version DESC) AS rn "
       "FROM %s WHERE table_id IN (",
       OB_ALL_TABLE_HISTORY_TNAME))) {
-    LOG_WARN("append fmt failed", KR(ret), K(sql));
   } else {
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
       const uint64_t table_id = table_ids.at(idx);
@@ -6110,7 +5624,6 @@ int ObSchemaServiceSQLImpl::fetch_table_latest_schema_versions_(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid table_id", KR(ret), K(table_id), K(table_ids));
       } else if (OB_FAIL(sql.append_fmt("%s%lu", start_idx == idx ? "" : ", ", table_id))) {
-        LOG_WARN("append fmt failed", KR(ret), K(idx), K(table_id), K(sql));
       }
     }
     if (FAILEDx(sql.append_fmt(")) WHERE rn = 1"))) {
@@ -6119,15 +5632,12 @@ int ObSchemaServiceSQLImpl::fetch_table_latest_schema_versions_(
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObMySQLResult *result = NULL;
         if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", KR(ret), K(sql));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get result", KR(ret));
         } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
             *result,
             table_schema_versions))) {
-          LOG_WARN("retrieve table latest schema versions failed",
-              KR(ret), K(table_ids));
         }
       } // end SMART_VAR
     }
@@ -6157,16 +5667,12 @@ int ObSchemaServiceSQLImpl::calc_refresh_full_schema_timeout_ctx_(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid tname is empty", KR(ret), KP(tname));
     } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-      LOG_WARN("fail to set default timeout", KR(ret), K(default_timeout));
     } else if (OB_FAIL(sql.assign_fmt("SELECT count(*) as count FROM %s", tname))) {
-      LOG_WARN("append sql failed", KR(ret), K(sql), "tname", tname);
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get result. ", KR(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next row", KR(ret));
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "count", row_cnt, int64_t);
       if (OB_SUCC(ret)) {
@@ -6207,7 +5713,6 @@ int ObSchemaServiceSQLImpl::retrieve_schema_id_with_name_(
     ObMySQLResult *result = NULL;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret));
@@ -6287,7 +5792,6 @@ int ObSchemaServiceSQLImpl::get_database_id(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc db_name failed", KR(ret), K(database_name));
   } else if (OB_FAIL(GSCHEMASERVICE.get_runtime_name_case_mode(name_case_mode))) {
-    LOG_WARN("fail to get runtime name case mode", KR(ret));
   } else {
     ObSqlString sql;
     const bool case_compare = (0 == database_name.case_compare(OB_SYS_DATABASE_NAME)
@@ -6297,17 +5801,12 @@ int ObSchemaServiceSQLImpl::get_database_id(
         "SELECT database_id, database_name "
         "FROM %s WHERE database_name = '%s'",
         OB_ALL_DATABASE_TNAME, db_name))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_name), "db_name", db_name);
     } else if (OB_FAIL(retrieve_schema_id_with_name_(
                sql_client, sql,
                "database_id", "database_name",
                database_name, case_compare,
                compare_with_collation, database_id))) {
-      LOG_WARN("fail to retrieve schema id with name",
-               KR(ret), K(database_name), "db_name", db_name);
     } else {
-      LOG_TRACE("get database id by name",
-               K(database_id), K(database_name), "db_name", db_name);
     }
   }
   return ret;
@@ -6356,9 +5855,7 @@ int ObSchemaServiceSQLImpl::get_table_id(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc tb_name failed", KR(ret), K(table_name));
   } else if (OB_FAIL(GSCHEMASERVICE.get_runtime_name_case_mode(name_case_mode))) {
-    LOG_WARN("fail to get runtime name case mode", KR(ret));
   } else if (OB_FAIL(ObSysTableChecker::is_sys_table_name(database_id, table_name, is_system_table))) {
-    LOG_WARN("fail to check if table is system table", KR(ret), K(database_id), K(table_name));
   } else {
     ObSqlString sql;
     ObMySQLResult *result = NULL;
@@ -6378,8 +5875,6 @@ int ObSchemaServiceSQLImpl::get_table_id(
             "ORDER BY session_id DESC",                 // case 3.1
             OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id,
             OB_ALL_TABLE_TNAME, tb_name, static_cast<int64_t>(session_id), database_id))) {
-          LOG_WARN("fail to assign sql", KR(ret), K(session_id), K(database_id),
-                   K(table_name), "tb_name", tb_name);
         }
       } else {
         if (OB_FAIL(sql.assign_fmt(
@@ -6389,8 +5884,6 @@ int ObSchemaServiceSQLImpl::get_table_id(
             "AND database_id = %lu "
             "ORDER BY session_id DESC", // case 3.1
             OB_ALL_TABLE_TNAME, tb_name, static_cast<int64_t>(session_id), database_id))) {
-          LOG_WARN("fail to assign sql", KR(ret), K(session_id), K(database_id),
-                   K(table_name), "tb_name", tb_name);
         }
       }
 
@@ -6465,10 +5958,6 @@ int ObSchemaServiceSQLImpl::get_table_id(
         schema_version = candidate_schema_version;
       }
       if (OB_SUCC(ret)) {
-        LOG_TRACE("get table id by name",
-                  K(session_id), K(database_id),
-                  K(table_name), "tb_name", tb_name,
-                  K(table_id), K(table_type), K(schema_version));
       }
     } // end SMART_VAR
   }
@@ -6513,15 +6002,11 @@ int ObSchemaServiceSQLImpl::get_index_id(
                 ") ",
                 OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id, idx_name, USER_INDEX,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, idx_name, USER_INDEX))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-              K(index_name), "idx_name", idx_name);
     }
   } else {
     if (OB_FAIL(sql.assign_fmt(
                 GET_INDEX_ID_SQL,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, idx_name, USER_INDEX))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-              K(index_name), "idx_name", idx_name);
     }
   }
   if (FAILEDx(retrieve_schema_id_with_name_(
@@ -6533,9 +6018,6 @@ int ObSchemaServiceSQLImpl::get_index_id(
              KR(ret), K(database_id),
              K(index_name), "idx_name", idx_name);
   } else {
-    LOG_TRACE("get index id by name",
-              K(database_id), K(index_id),
-              K(index_name), "idx_name", idx_name);
   }
   return ret;
 }
@@ -6572,18 +6054,12 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_id(
              "SELECT mock_fk_parent_table_id, mock_fk_parent_table_name "
              "FROM %s WHERE database_id = '%lu' AND mock_fk_parent_table_name = '%s'",
              OB_ALL_MOCK_FK_PARENT_TABLE_TNAME, database_id, tb_name))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(database_id), K(table_name), "tb_name", tb_name);
   } else if (OB_FAIL(retrieve_schema_id_with_name_(
              sql_client, sql,
              "mock_fk_parent_table_id", "mock_fk_parent_table_name",
              table_name, case_compare,
              compare_with_collation, mock_fk_parent_table_id))) {
-    LOG_WARN("fail to retrieve schema id with name",
-             KR(ret), K(database_id), K(table_name), "tb_name", tb_name);
   } else {
-    LOG_TRACE("get mock fk parent table id by name",
-              K(database_id), K(mock_fk_parent_table_id),
-              K(table_name), "tb_name", tb_name);
   }
   return ret;
 }
@@ -6618,10 +6094,7 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
         "FROM %s cst JOIN %s t ON cst.table_id = t.table_id "
         "WHERE cst.constraint_name = '%s' and t.database_id = %lu",
         OB_ALL_CONSTRAINT_TNAME, OB_ALL_TABLE_TNAME, cst_name, database_id))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-               K(constraint_name), "cst_name", cst_name);
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("fail to read", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -6664,9 +6137,6 @@ int ObSchemaServiceSQLImpl::get_constraint_id(
       }
     } // end while
     if (OB_SUCC(ret)) {
-      LOG_TRACE("get constraint id by name",
-                K(database_id), K(constraint_id),
-                K(constraint_name), "cst_name", cst_name);
     }
     } // end SMART_VAR
   }
@@ -6703,10 +6173,7 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
         "FROM %s fk JOIN %s t ON fk.child_table_id = t.table_id "
         "WHERE fk.foreign_key_name = '%s' and t.database_id = %lu",
         OB_ALL_FOREIGN_KEY_TNAME, OB_ALL_TABLE_TNAME, fk_name, database_id))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-               K(foreign_key_name), "fk_name", fk_name);
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("fail to read", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -6746,9 +6213,6 @@ int ObSchemaServiceSQLImpl::get_foreign_key_id(
       }
     } // end while
     if (OB_SUCC(ret)) {
-      LOG_TRACE("get foreign key id by name",
-                K(database_id), K(foreign_key_id),
-                K(foreign_key_name), "fk_name", fk_name);
     }
     } // end SMART_VAR
   }
@@ -6789,21 +6253,12 @@ int ObSchemaServiceSQLImpl::get_package_id(
              "AND type = %d",
              OB_ALL_PACKAGE_TNAME, database_id, pkg_name,
              package_type))) {
-    LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-             K(package_name), "pkg_name", pkg_name);
   } else if (OB_FAIL(retrieve_schema_id_with_name_(
              sql_client, sql,
              "package_id", "package_name",
              package_name, case_compare,
              compare_with_collation, package_id))) {
-    LOG_WARN("fail to retrieve schema id with name",
-             KR(ret), K(database_id),
-             K(package_name), "pkg_name", pkg_name);
   } else {
-    LOG_TRACE("get package id by name",
-              K(database_id), K(package_id),
-              K(package_type),
-              K(package_name), "pkg_name", pkg_name);
   }
   return ret;
 }
@@ -6842,10 +6297,7 @@ int ObSchemaServiceSQLImpl::get_routine_id(
                OB_ALL_ROUTINE_TNAME, database_id,
                static_cast<int64_t>(package_id)/*OB_INVALID_ID*/,
                overload, rt_name))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id),
-               K(routine_name), "rt_name", rt_name);
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("fail to read", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -6874,16 +6326,11 @@ int ObSchemaServiceSQLImpl::get_routine_id(
                      case_compare, compare_with_collation)) {
             if (OB_FAIL(routine_pairs.push_back(
                 std::make_pair(tmp_routine_id, tmp_routine_type)))) {
-              LOG_WARN("fail to push back element",
-                       KR(ret), K(tmp_routine_id), K(tmp_routine_type));
             }
           }
         }
       } // end while
       if (OB_SUCC(ret)) {
-        LOG_TRACE("get routine pairs by name",
-                  K(database_id), K(package_id), K(overload),
-                  K(routine_name), "rt_name", rt_name, K(routine_pairs));
       }
     }
     } // end SMART_VAR
@@ -6906,7 +6353,6 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), "cnt", table_ids.count());
   } else if (OB_FAIL(other_table_ids.reserve(table_ids.count()))) {
-    LOG_WARN("fail to reserve", KR(ret), "cnt", table_ids.count());
   } else {
     ObSqlString sql;
     ObMySQLResult *result = NULL;
@@ -6916,11 +6362,9 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
       const uint64_t table_id = table_ids.at(i);
       if (is_core_table(table_id)) {
         if (OB_FAIL(core_table_ids.push_back(table_id))) {
-          LOG_WARN("fail to push back core table id", KR(ret), K(table_id));
         }
       } else {
         if (OB_FAIL(other_table_ids.push_back(table_id))) {
-          LOG_WARN("fail to push back other table id", KR(ret), K(table_id));
         }
       }
     } // end for
@@ -6931,12 +6375,10 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
             "SELECT table_id, schema_version FROM %s "
             "WHERE table_id IN (",
             OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME))) {
-          LOG_WARN("fail to append sql", KR(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < core_table_ids.count(); i++) {
           if (OB_FAIL(sql.append_fmt("%lu%s", core_table_ids.at(i),
                                      core_table_ids.count() - 1 == i ? ")" : ","))) {
-            LOG_WARN("fail to append table_id", KR(ret), "table_id", core_table_ids.at(i));
           }
         } // end for
       }
@@ -6947,12 +6389,10 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
             "WHERE table_id IN (",
             core_table_ids.count() > 0 ? " UNION ALL " : "",
             OB_ALL_TABLE_TNAME))) {
-          LOG_WARN("fail to append sql", KR(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < other_table_ids.count(); i++) {
           if (OB_FAIL(sql.append_fmt("%lu%s", other_table_ids.at(i),
                                      other_table_ids.count() - 1 == i ? ")" : ","))) {
-            LOG_WARN("fail to append table_id", KR(ret), "table_id", other_table_ids.at(i));
           }
         } // end for
       }
@@ -6981,7 +6421,6 @@ int ObSchemaServiceSQLImpl::get_table_schema_versions(
           if (FAILEDx(pair.init(table_id, schema_version))) {
             LOG_WARN("fail to init pair", KR(ret), K(table_id), K(schema_version));
           } else if (OB_FAIL(versions.push_back(pair))) {
-            LOG_WARN("fail to push back pair", KR(ret), K(pair));
           }
         }
       } // end while
@@ -7011,13 +6450,11 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_versions(
           "SELECT mock_fk_parent_table_id, schema_version FROM %s "
           "WHERE mock_fk_parent_table_id IN (",
           OB_ALL_MOCK_FK_PARENT_TABLE_TNAME))) {
-        LOG_WARN("fail to append sql", KR(ret));
       }
 
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); i++) {
         if (OB_FAIL(sql.append_fmt("%lu%s", table_ids.at(i),
                                    table_ids.count() - 1 == i ? ")" : ","))) {
-          LOG_WARN("fail to append table_id", KR(ret), "table_id", table_ids.at(i));
         }
       } // end for
 
@@ -7045,7 +6482,6 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_versions(
           if (FAILEDx(pair.init(table_id, schema_version))) {
             LOG_WARN("fail to init pair", KR(ret), K(table_id), K(schema_version));
           } else if (OB_FAIL(versions.push_back(pair))) {
-            LOG_WARN("fail to push back pair", KR(ret), K(pair));
           }
         }
       } // end while
@@ -7084,20 +6520,17 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
                 ") ",
                 OB_ALL_VIRTUAL_CORE_ALL_TABLE_TNAME, 1UL, database_id, data_table_id, USER_INDEX,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, data_table_id, USER_INDEX))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id), K(data_table_id));
     }
   } else {
     if (OB_FAIL(sql.assign_fmt(
                 GET_INDEX_INFO_SQL,
                 OB_ALL_TABLE_TNAME, OB_INVALID_RUNTIME_ID, database_id, data_table_id, USER_INDEX))) {
-      LOG_WARN("fail to assign fmt", KR(ret), K(database_id), K(data_table_id));
     }
   }
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("fail to read", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -7124,15 +6557,12 @@ int ObSchemaServiceSQLImpl::get_table_index_infos(
         if (FAILEDx(ob_write_string(allocator, tmp_schema_name, tmp_index_name, true/*c_style*/))) {
           LOG_WARN("fail to write string", KR(ret));
         } else if (OB_FAIL(tmp_index_info.init(tmp_index_name, tmp_index_id, tmp_schema_version, tmp_index_type))) {
-          LOG_WARN("fail to init tmp index info", KR(ret), K(tmp_schema_name), K(tmp_index_id), K(tmp_schema_version));
         } else if (OB_FAIL(index_infos.push_back(tmp_index_info))) {
-          LOG_WARN("fail to push back tmp index info", KR(ret), K(tmp_schema_name));
         }
       }
     }// end while
     }// end smart_var
   }
-  LOG_TRACE("get table index name", KR(ret), K(database_id), K(data_table_id));
   return ret;
 }
 
@@ -7151,17 +6581,14 @@ int ObSchemaServiceSQLImpl::get_obj_priv_with_obj_id(
   } else if (OB_FAIL(sql.append_fmt("SELECT *, 0 as is_deleted, -1 as schema_version FROM %s "
              " WHERE obj_id = %lu AND objtype = %lu",
              OB_ALL_OBJAUTH_TNAME, obj_id, obj_type))) {
-    LOG_WARN("append sql failed", KR(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get result", KR(ret));
     } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_obj_priv_schema(*result, obj_privs))) {
-      LOG_WARN("failed to retrieve obj priv schema", KR(ret));
     }
     } // smart var end
   }
@@ -7184,14 +6611,10 @@ int ObSchemaServiceSQLImpl::fetch_ai_models(ObISQLClient &sql_client,
     ObSqlString sql;
 
     if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE 0=0", OB_ALL_AI_MODEL_HISTORY_TNAME))) {
-      LOG_WARN("failed to append_fmt to sql", K(ret), K(sql));
     } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld", schema_version))) {
-      LOG_WARN("failed to append_fmt to sql", K(ret), K(sql));
     } else if (OB_NOT_NULL(schema_keys) && schema_key_size > 0) {
       if (OB_FAIL(sql.append(" AND model_id IN"))) {
-        LOG_WARN("failed to append_fmt to sql", K(ret), K(sql));
       } else if (OB_FAIL(SQL_APPEND_SCHEMA_ID(ai_model, schema_keys, schema_key_size, sql))) {
-        LOG_WARN("failed to append ai_model id to sql", K(ret), K(sql));
       }
     }
 
@@ -7200,14 +6623,11 @@ int ObSchemaServiceSQLImpl::fetch_ai_models(ObISQLClient &sql_client,
       DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
 
       if (OB_FAIL(sql.append(" ORDER BY model_id DESC, schema_version DESC"))) {
-        LOG_WARN("failed to append_fmt to sql", K(ret), K(sql));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected NULL result", K(ret), K(sql));
       } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_ai_model_schema(*result, schema_array))) {
-        LOG_WARN("failed to ObSchemaRetrieveUtils::retrieve_ai_model_schema", K(ret), K(sql));
       }
     }
   }
@@ -7232,18 +6652,15 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
   if (column.is_generated_column()) {
     if (column.get_cur_default_value().is_null()) {
       if (OB_FAIL(column.get_orig_default_value().get_string(col_def))) {
-        LOG_WARN("get orig default value failed", K(ret));
       }
     } else {
       if (OB_FAIL(column.get_cur_default_value().get_string(col_def))) {
-        LOG_WARN("get cur default value failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
           root_expr_type, columns_names))) {
-        LOG_WARN("get generated column expr failed", K(ret));
       } else if (T_FUN_SYS_VEC_IVF_CENTER_ID == root_expr_type) {
         column.add_column_flag(GENERATED_VEC_IVF_CENTER_ID_COLUMN_FLAG);
       } else if (T_FUN_SYS_VEC_IVF_CENTER_VECTOR == root_expr_type ||
@@ -7295,7 +6712,6 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
           column.add_column_flag(MULTIVALUE_INDEX_GENERATED_COLUMN_FLAG);
         }
       } else {
-        LOG_DEBUG("succ to resolve_generated_column_info", K(col_def), K(root_expr_type), K(columns_names), K(table_schema));
       }
     }
     if (OB_SUCC(ret) && resolve_dependencies && !column.is_doc_id_column() && (table_schema.is_table()
@@ -7305,16 +6721,13 @@ int ObSchemaRetrieveUtils::cascaded_generated_column(ObTableSchema &table_schema
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get column schema failed", K(columns_names.at(i)));
         } else if (OB_FAIL(column.add_cascaded_column_id(col_schema->get_column_id()))) {
-          LOG_WARN("add cascaded column id failed", K(ret));
         } else if (col_schema->get_udt_set_id() > 0) {
           ObSEArray<ObColumnSchemaV2 *, 1> hidden_cols;
           if (OB_FAIL(table_schema.get_column_schema_in_same_col_group(col_schema->get_column_id(), col_schema->get_udt_set_id(), hidden_cols))) {
-            LOG_WARN("get column schema in same col group failed", K(ret), K(col_schema->get_udt_set_id()));
           } else {
             for (int i = 0; i < hidden_cols.count() && OB_SUCC(ret); i++) {
               uint64_t cascaded_column_id = hidden_cols.at(i)->get_column_id();
               if (OB_FAIL(column.add_cascaded_column_id(cascaded_column_id))) {
-                LOG_WARN("add cascaded column id to generated column failed", K(ret), K(cascaded_column_id));
               }
             }
           }
@@ -7335,13 +6748,20 @@ int ObSchemaRetrieveUtils::add_column_to_table_schema(ObColumnSchemaV2 &column, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cascaded_generated_column(table_schema, column, false))) {
-    LOG_WARN("cascaded generated column failed", K(ret));
   } else if (OB_FAIL(table_schema.add_column(column))) {
-    LOG_WARN("add column to table schema failed", K(ret));
   }
   return ret;
 }
 
 }//namespace schema
 }//namespace share
+
+namespace query
+{
+int sort_table_partition_info(share::schema::ObTableSchema &table_schema)
+{
+  return share::schema::ObSchemaServiceSQLImpl::sort_table_partition_info_v2(table_schema);
+}
+}//namespace query
+
 }//namespace oceanbase

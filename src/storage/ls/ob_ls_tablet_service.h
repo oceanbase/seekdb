@@ -154,9 +154,6 @@ public:
       const uint64_t data_format_version,
       ObTabletHandle &tablet_handle,
       const share::ObForkTabletInfo &fork_info = share::ObForkTabletInfo());
-  int replace_tablet_for_physical_restore(
-      const ObTabletMeta &tablet_meta,
-      const ObStorageSchema &storage_schema);
   int rollback_remove_tablet(
       const common::ObTabletID &tablet_id);
 

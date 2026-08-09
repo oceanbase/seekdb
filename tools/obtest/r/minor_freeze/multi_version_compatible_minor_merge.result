@@ -1,0 +1,46 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+'case 1:'
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	ocean	base
+2	2	2	ocean	base
+3	3	3	ocean	base
+4	4	4	ocean	base
+5	5	5	ocean	base
+6	6	6	ocean	base
+7	7	7	ocean	base
+8	8	8	ocean	base
+9	9	9	ocean	base
+'case:2'
+ob1.mysql alter system set enable_multi_version_minor_merge = true;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	space	base
+2	2	2	space	base
+3	3	3	space	base
+4	4	4	space	base
+5	5	5	space	base
+6	6	6	space	base
+7	7	7	space	base
+8	8	8	space	base
+9	9	9	space	base
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+pk1	pk2	pk3	f1	f2
+1	1	1	space	invincible
+2	2	2	space	invincible
+3	3	3	space	invincible
+4	4	4	space	invincible
+5	5	5	space	invincible
+6	6	6	space	invincible
+7	7	7	space	invincible
+8	8	8	space	invincible
+9	9	9	space	invincible

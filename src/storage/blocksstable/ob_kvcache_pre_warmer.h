@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+ 
 #ifndef OCEANBASE_COMMON_KVCACHE_PRE_WARMER_H_
 #define OCEANBASE_COMMON_KVCACHE_PRE_WARMER_H_
 
@@ -44,7 +44,7 @@ public:
 protected:
   void update_rest();
   void inner_update_rest();
-  virtual void calculate_base_percentage(const int64_t cache_memory_limit);
+  virtual void calculate_base_percentage(const int64_t memory_budget);
   virtual int do_reserve_kvpair(
       const blocksstable::ObMicroBlockDesc &micro_block_desc,
       int64_t &kvpair_size);

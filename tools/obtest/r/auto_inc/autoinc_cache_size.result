@@ -1,0 +1,77 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql_root alter system set enable_auto_leader_switch = True;
+create database db primary_zone = 'z1';
+create table db.t1(c1 int primary key auto_increment, c2 int);
+ob1.z1.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+alter database db primary_zone = 'z2';
+set global auto_increment_cache_size = 100;
+ob1.z2.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select sequence_value from  oceanbase.__all_sequence_v2 where (sequence_key, column_id) in (('1100611139453777','16'));
+sequence_value
+1000101
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+alter database db primary_zone = 'z3';
+ob1.z3.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+1000101	0
+1000102	1
+alter database db primary_zone = 'z1';
+set global auto_increment_cache_size = 1;
+ob1.z1.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+1000101	0
+1000102	1
+1000201	0
+1000202	1
+insert into db.t1(c1, c2) values(2000000, 0);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+1000101	0
+1000102	1
+1000201	0
+1000202	1
+2000000	0
+alter database db primary_zone = 'z1';
+ob1.z1.obs0
+insert into db.t1(c1, c2) values(NULL, 0), (NULL, 1);
+select * from db.t1;
+c1	c2
+1	0
+2	1
+1000001	0
+1000002	1
+1000101	0
+1000102	1
+1000201	0
+1000202	1
+2000000	0
+2000002	0
+2000003	1

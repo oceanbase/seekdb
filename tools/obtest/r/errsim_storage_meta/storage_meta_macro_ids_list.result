@@ -1,0 +1,16 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set errsim_storage_meta_macro_ids_threshold=1;
+ob1.check_until_timeout select value from __all_virtual_sys_parameter_stat where name like '%errsim_storage_meta_macro_ids_threshold%', 1, 480;
+create table test(id int primary key, v1 int, v2 int, v3 char(256), v4 char(256), v5 char(256), v6 char(256), v7 char(256), v8 char(256), v9 char(256), v10 char(256), v11 char(256), v12 char(256), index i1(v1, v2)) compression='none';
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_table_mgr where linked_block_count > 0 and (tenant_id, ls_id, tablet_id) in (select tenant_id, ls_id, tablet_id from __all_virtual_tablet_to_ls where (tenant_id, table_id) in (select tenant_id, table_id from __all_virtual_table where table_name = 'test' and tenant_id = 1)), 1, 480;
+ob1.mysql alter system set errsim_storage_meta_macro_ids_threshold=0;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_table_mgr where linked_block_count > 0 and (tenant_id, ls_id, tablet_id) in (select tenant_id, ls_id, tablet_id from __all_virtual_tablet_to_ls where (tenant_id, table_id) in (select tenant_id, table_id from __all_virtual_table where table_name = 'test' and tenant_id = 1)), 1, 480;
+ob1.mysql alter system set errsim_storage_meta_macro_ids_threshold=1;
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(*) > 0 from __all_virtual_table_mgr where linked_block_count > 0 and (tenant_id, ls_id, tablet_id) in (select tenant_id, ls_id, tablet_id from __all_virtual_tablet_to_ls where (tenant_id, table_id) in (select tenant_id, table_id from __all_virtual_table where table_name = 'test' and tenant_id = 1)), 1, 480;

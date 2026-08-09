@@ -1,0 +1,45 @@
+# owner: yongle.xh
+# owner group: storage
+# description: this case is use for test_macro_block_writer_leak
+#
+
+--disable_query_log
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2, init_unit_num=1);
+ob1.z1.obs0.set extra_config=mark_and_sweep_interval='2s';
+ob1.reboot;
+
+#设置灰度切主的时间为0, 关闭自动切主，关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+ob1.mysql alter system set merge_thread_count=64;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+create table test(id int primary key, v1 int, v2 int, index i1(v1, v2)) compression='none';
+
+# prepare data
+--disable_query_log
+let $table_size = 0;
+let $i=0;
+while($i < 200)
+{
+  eval insert into test values($i, $i, $i);
+  inc $i;
+}
+--enable_query_log
+
+ob1.mysql set ob_global_debug_sync = 'BEFORE_MAIN_SSTBALE_FINISH_TASK wait_for signal1';
+ob1.mysql alter system major freeze;
+sleep 10;
+ob1.mysql alter system set macro_block_builder_errsim_flag=4;
+sleep 3;
+ob1.mysql set ob_global_debug_sync = 'now signal signal1';
+ob1.z1.obs0.check_log_until_success -c "macro_block_builder_errsim_flag=4";
+ob1.mysql alter system set macro_block_builder_errsim_flag=0;
+ob1.check_version 2;
+sleep 3;
+ob1.mysql_p select hold_count from oceanbase.__all_virtual_macro_block_marker_status;
+

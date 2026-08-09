@@ -1,0 +1,33 @@
+# owner: yangjiali.yjl
+# owner group: storage
+# ----------------------------------------------------------------------
+# Test of DISK AUTO EXTEND
+# ----------------------------------------------------------------------
+ob1=OBI(cluster=1, proxy_num=0, init_unit_cpu=2);
+ob1.z1.obs0.set extra_config=datafile_size='1G';
+ob1.reboot;
+set global max_allowed_packet=60000000;
+set global ob_sql_work_area_percentage=80;
+#
+# Set datafile_size,datafile_next,datafile_maxsize
+#
+alter system set datafile_size='1G';
+alter system set datafile_next='1G';
+alter system set datafile_maxsize='20G';
+alter system set _datafile_usage_upper_bound_percentage=5;
+create table if not exists auto_extend_table(c1 longtext, c2 longtext, c3 longtext, c4 longtext);
+#
+# insert auto_extend_table of longtext 16M per row, total 256M
+#
+set session ob_trx_timeout=1000000000000;
+set session ob_query_timeout=1000000000000;
+insert into auto_extend_table(c1, c2, c3, c4) values(repeat('aabbccdd',524288), repeat('aabbccdd',524288), repeat('aabbccdd',524288), repeat('aabbccdd',524288));
+alter system set merger_check_interval = '10s';
+disk size has extended.
+alter system set datafile_next = '0M';
+alter system set datafile_maxsize = '0M';
+alter system set _datafile_usage_upper_bound_percentage=90;
+drop table auto_extend_table;
+# ----------------------------------------------------------------------
+# Test of disk auto extend end.
+# ----------------------------------------------------------------------

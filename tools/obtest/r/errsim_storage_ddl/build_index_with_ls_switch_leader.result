@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_WRITE_DDL_PREPARE_LOG wait_for signal1 execute 10000';
+ob1.mysql set ob_global_debug_sync = 'AFTER_REMOTE_WRITE_DDL_PREPARE_LOG wait_for signal2 execute 10000';
+ob1.mysql alter tenant mysql set primary_zone='z2';
+ob1.mysql alter tenant sys set primary_zone='z3';
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and zone = 'z3', 1, 60;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_WRITE_DDL_PREPARE_LOG clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal1';
+ob1.mysql set ob_global_debug_sync = 'AFTER_REMOTE_WRITE_DDL_PREPARE_LOG clear';
+ob1.mysql set ob_global_debug_sync = 'now signal signal2';
+ob1.mysql_p select sum(checksum) from oceanbase.__all_virtual_ddl_checksum group by table_id, column_id order by table_id, column_id;
+sum(checksum)
+19095879236
+15043384061
+19095879236
+15043384061

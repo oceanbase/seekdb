@@ -611,10 +611,12 @@ class ObRangeSliceIdCalc : public ObSliceIdxCalc
   {
   public:
      explicit Compare(const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-                      const ObIArray<ObSortFieldCollation> *sort_collations)
+                      const ObIArray<ObSortFieldCollation> *sort_collations,
+                      const common::ObDatumAccessContext *access_ctx)
        : ret_(common::OB_SUCCESS),
          sort_cmp_funs_(sort_cmp_funs),
-         sort_collations_(sort_collations)
+         sort_collations_(sort_collations),
+         access_ctx_(access_ctx)
     {}
      bool operator()(const ObPxTabletRange::DatumKey &l,
                     const ObPxTabletRange::DatumKey &r);
@@ -622,6 +624,7 @@ class ObRangeSliceIdCalc : public ObSliceIdxCalc
      int ret_;
      const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
      const ObIArray<ObSortFieldCollation> *sort_collations_;
+     const common::ObDatumAccessContext *access_ctx_;
   };
 public:
   ObRangeSliceIdCalc(ObIAllocator &alloc,
@@ -757,12 +760,9 @@ public:
     if (popular_values_hash && popular_values_hash->count() > 3) {
       // popular value is not ususally not large. 2x the hash bucket size for better performance
       if (OB_FAIL(popular_values_map_.create(popular_values_hash->count() * 2, "PopValBkt", "PopValNode"))) {
-        SQL_LOG(WARN, "fail create popular values map", K(ret), K(popular_values_hash->count()));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_hash_->count(); ++i) {
           if (OB_FAIL(popular_values_map_.set_refactored(popular_values_hash_->at(i), 0))) {
-            SQL_LOG(WARN, "fail init popular values map",
-                    K(ret), K(i), K(popular_values_hash->count()));
           }
         }
       }
@@ -887,14 +887,20 @@ private:
                      const ObIArray<ObSortFieldCollation> *sort_collations)
       : ret_(common::OB_SUCCESS),
         sort_cmp_funs_(sort_cmp_funs),
-        sort_collations_(sort_collations)
+        sort_collations_(sort_collations),
+        access_ctx_(nullptr)
     {}
+    void set_access_ctx(const common::ObDatumAccessContext *access_ctx)
+    {
+      access_ctx_ = access_ctx;
+    }
     bool operator()(const ObPxTabletRange::DatumKey &l,
                     const ObPxTabletRange::DatumKey &r);
   public:
     int ret_;
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
     const ObIArray<ObSortFieldCollation> *sort_collations_;
+    const common::ObDatumAccessContext *access_ctx_;
   };
   int build_partition_range_channel_map(
       common::hash::ObHashMap<int64_t, PartitionRangeChannelInfo *> &part_range_channel_map);

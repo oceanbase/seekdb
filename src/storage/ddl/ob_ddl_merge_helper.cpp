@@ -37,7 +37,7 @@ namespace oceanbase
 namespace storage
 {
 
-int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
+int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator, 
                                         const ObDirectLoadType direct_load_type,
                                         ObIDDLMergeHelper *&helper)
 {
@@ -137,20 +137,20 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
                                                ObIArray<ObDDLSliceRange> &slice_ranges)
 {
   int ret = OB_SUCCESS;
-
+  
   int64_t merge_slice_idx = 0;
   bool for_major = false;
 
   slice_ranges.reset();
   hash::ObHashSet<int64_t> slice_idxes;
-  ObTabletHandle tablet_handle;
+  ObTabletHandle tablet_handle; 
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   ObArray<const ObSSTable*> ddl_sstables;
 
   ObArray<ObDDLKVHandle> frozen_ddl_kvs;
   const ObSSTable *first_major_sstable = nullptr;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
-
+  
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
   ObDDLTabletContext::MergeCtx *merge_ctx = nullptr;
@@ -195,7 +195,7 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
       LOG_WARN("ddl complete not take effect", K(ret), K(user_data));
     }
   }
-
+  
   /* freeze & get frozen ddl kvs */
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
@@ -207,7 +207,7 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
     }
   } else if (ddl_merge_param.start_scn_ < tablet_handle.get_obj()->get_tablet_meta().ddl_start_scn_) {
     ret = OB_TASK_EXPIRED;
-    LOG_WARN("ddl task expired, skip it", K(ret), K(ddl_merge_param),
+    LOG_WARN("ddl task expired, skip it", K(ret), K(ddl_merge_param), 
             "new_start_scn", tablet_handle.get_obj()->get_tablet_meta().ddl_start_scn_);
   } else if (OB_FALSE_IT(ddl_kv_query_param.ddl_kv_type_ = ObDDLKVType::DDL_KV_FULL)) {
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(
@@ -304,7 +304,7 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
                                      ObDDLTabletMergeDagParamV2 &merge_param,
                                      const int64_t start_slice_idx,
                                      const int64_t end_slice_idx)
-{
+{ 
   int ret = OB_SUCCESS;
   ObTabletHandle tablet_handle;
   ObArray<ObSSTable*> ddl_sstables;
@@ -344,14 +344,14 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
                                                                             ddl_sstable_iter,
                                                                             ddl_sstables))) {
     } else if (FALSE_IT(ddl_dump_table_cnt = ddl_sstables.count())) {
-    } else if (OB_FAIL(ObDDLMergeTaskUtils::get_ddl_tables_from_ddl_kvs(merge_ctx->ddl_kv_handles_,
-                                                   start_slice_idx,
+    } else if (OB_FAIL(ObDDLMergeTaskUtils::get_ddl_tables_from_ddl_kvs(merge_ctx->ddl_kv_handles_, 
+                                                   start_slice_idx, 
                                                    merge_param.for_major_ ? INT64_MAX : end_slice_idx,
                                                    ddl_sstables))) {
-    } else if (OB_FAIL(ObDDLMergeTaskUtils::get_sorted_meta_array(*tablet_handle.get_obj(),
-                                                                  ddl_param,
+    } else if (OB_FAIL(ObDDLMergeTaskUtils::get_sorted_meta_array(*tablet_handle.get_obj(), 
+                                                                  ddl_param, 
                                                                   tablet_param->storage_schema_,
-                                                                  ddl_sstables,
+                                                                  ddl_sstables, 
                                                                   tablet_handle.get_obj()->get_rowkey_read_info(),
                                                                   arena, tmp_metas))) {
     } else if (OB_FAIL(ObDDLMergeTaskUtils::check_idempodency(tmp_metas, sorted_metas, &write_stat))) {
@@ -380,11 +380,11 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
 
   LOG_INFO("sn ddl merge helper merge slice", KR(ret), K(ddl_sstables.count()), K(ddl_param));
 
-  /* !!! notice !!!
+  /* !!! notice !!! 
    * sstable meta info rely on previous ddl dump sstable if exist
    * rember to using dump sstable instead of mem table as first ddl sstabe
    */
-  ObTableHandleV2 sstable_handle;
+  ObTableHandleV2 sstable_handle; 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObTabletDDLUtil::create_ddl_sstable(*(tablet_handle.get_obj()),
                                                            ddl_param,
@@ -405,7 +405,7 @@ int ObIDDLMergeHelper::prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge
 {
   int ret = OB_SUCCESS;
   ObTabletID tablet_id;
-  ObWriteTabletParam *tablet_param = nullptr;
+  ObWriteTabletParam *tablet_param = nullptr;  
   if (!merge_param.is_valid() || !is_supported_direct_load_type(merge_param.direct_load_type_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(merge_param));
@@ -535,17 +535,17 @@ int ObSNDDLMergeHelperV2::get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param)
 int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_param)
 {
   int ret = OB_SUCCESS;
-
+ 
   ObTabletID target_tablet_id;
   ObWriteTabletParam *tablet_param = nullptr;
-
+  
   ObTabletHandle tablet_handle;
   ObSSTable *major_sstable = nullptr;
   ObDDLKvMgrHandle ddl_kv_mgr_handle;
   ObTablesHandleArray slice_sstable_array;
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   const ObSSTable *first_major_sstable = nullptr;
-
+  
   if (!merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(merge_param));
@@ -566,10 +566,10 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
   } else if (OB_FAIL(ObDDLMergeTaskUtils::build_sstable(merge_param, slice_sstable_array, major_sstable)))  {
   } else if (OB_FAIL(ObDDLMergeTaskUtils::update_tablet_table_store(merge_param, slice_sstable_array, major_sstable))) {
   }
-
+  
   /* report check sum */
   if (OB_FAIL(ret)) {
-  } else if (merge_param.for_major_ &&
+  } else if (merge_param.for_major_ && 
              !merge_param.for_replay_ &&
              !merge_param.for_lob_ &&
              OB_FAIL(ObDDLStorageUtil::report_ddl_checksum_from_major_sstable(target_tablet_id,
@@ -577,7 +577,7 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,
                                                                        merge_param.ddl_task_param_.data_format_version_))) {
-    LOG_WARN("failed to report ddl checksum", K(ret), K(merge_param));
+    LOG_ERROR("failed to report ddl checksum", K(ret), K(merge_param));
   }
 
   /* release ddl kv when build major sstable */

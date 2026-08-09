@@ -1,0 +1,129 @@
+# owner: yanmu.ztl
+# owner group: rs
+# description:
+# 测试alter table带索引的情况, 以下是目前索引实现的一些限制：
+# 1) 目前索引表不支持二级分区；
+# 2) 目前索引表支持hash/key/range/range columns
+# 3) 局部非前缀索引不能是唯一索引
+# 4) 不支持全局非前缀索引(hash/key分区无全局非前缀索引一说)
+# 
+#
+# TODO: 由于异步创建局部索引立即生效的实现不完全，通过手工触发合并观察到局部索引是生效的，为避免case执行时间过长，
+#       此处暂时不检查局部索引生效的情况
+# case说明：
+# case 1: 创建全局普通索引
+# case 2: 创建全局唯一索引
+# case 3: 创建全局索引，但存储方式为local
+# case 4: 创建局部索引
+ob1=OBI(cluster=1:1:1, init_unit_cpu=1, proxy_num=0, ct_num=0, locality=hz:hz:hz);
+ob1.reboot;
+
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+
+let $cpu = 2;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,admin@sys,admin,oceanbase,$rs_mysql_port);
+connect (conn_1,$rs_ip,admin@sys,admin,test,$rs_mysql_port);
+
+let $basic_part_columns = tenant_id, table_id, part_id, part_name, high_bound_val, b_high_bound_val;
+let $basic_column_columns = tenant_id, table_id, column_id, column_name, is_hidden, collation_type, orig_default_value;
+connection conn_1;
+use test;
+
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add index idx(c1, c2) global;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+connection conn_1;
+drop table tt;
+
+create table tt(c1 int primary key, c2 int, c3 varchar(20)) partition by hash(c1) partitions 2;
+alter table tt add index idx(c1, c2) local;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+connection conn_1;
+drop table tt;
+
+# 非unique
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add index idx(c1, c2) global;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+connection conn_1;
+drop table tt;
+
+# unique
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add unique index idx(c1, c2) global;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+connection conn_1;
+drop table tt;
+
+# case 4: 局部索引, 局部索引不支持分区方式
+# 非unique
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add index idx(c1, c2) local;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+connection conn_1;
+drop table tt;
+
+# unique
+create table tt(c1 int primary key, c2 int, c3 varchar(20));
+alter table tt add unique index idx(c1, c2) local;
+connection conn_sys;
+let $table_id = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name like "%idx", table_id, 1);
+let $count = deploy_get_value(ob1.select select count(*) c from oceanbase.__all_tenant_meta_table where table_id = $table_id and role = 1, c, 1);
+echo "partition num: $count";
+eval select $basic_table_columns from oceanbase.__all_virtual_table where table_id = $table_id;
+eval select $basic_part_columns from oceanbase.__all_virtual_part where table_id = $table_id;
+eval select $basic_column_columns from oceanbase.__all_virtual_column where table_id = $table_id;
+connection conn_1;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table where table_id = "$table_id" and index_status = 2, 1, 120;
+drop table tt;

@@ -1,0 +1,52 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+create table t1 (x int, y int);
+create table t2 (x int, y int);
+insert into t1 values(1, 1);
+insert into t2 values(1, 1);
+select * from t1;
+x	y
+1	1
+select * from t2;
+x	y
+1	1
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+begin;
+insert into t1 values(2, 2);
+insert into t2 values(2, 2);
+update t1 set y = 120 where x = 1;
+ob1.z3.obs0.force_stop;
+begin;
+update t1 set y = 110 where x = 1;
+commit;
+select * from t1;
+x	y
+1	110
+select * from t2;
+x	y
+1	1
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+ob1.z3.start;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+begin;
+select /*+read_consistency(weak)+*/ * from t1;
+x	y
+1	110
+select /*+read_consistency(weak)+*/ * from t2;
+x	y
+1	1
+ob1.z3.obs0.force_stop;
+select count(*) from __all_virtual_trans_stat;
+count(*)
+0
+select * from t1;
+x	y
+1	110
+select * from t2;
+x	y
+1	1
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;

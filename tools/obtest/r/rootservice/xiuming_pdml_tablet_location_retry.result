@@ -1,0 +1,30 @@
+ob1=OBI(cluster=1:1,proxy_num=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set _transfer_start_trans_timeout = '60s';
+CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE '2G';
+CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1;
+CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+create table t1 (c1 int);
+create table t2 (c1 int);
+insert into t1 values (1);
+insert into t2 values (1);
+SELECT TABLE_NAME, LS_ID, ZONE, TABLET_ID FROM oceanbase.dba_ob_table_locations where table_type = 'user table' and role = 'leader';
+TABLE_NAME	LS_ID	ZONE	TABLET_ID
+t1	1001	z1	200001
+t2	1001	z1	200002
+select * from t1;
+c1
+1
+select * from t2;
+c1
+1
+alter tenant mysql set primary_zone = 'z1,z2';
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_BALANCE_JOBS, 1, 100;
+ob1.check_until_timeout select count(*) from oceanbase.CDB_OB_BALANCE_JOB_HISTORY, 1, 100;
+ob1.mysql_p select task_type, src_ls,dest_ls, ls_group_id from oceanbase.CDB_OB_BALANCE_JOB_HISTORY order by create_time;
+SELECT TABLE_NAME, LS_ID, ZONE, TABLET_ID FROM oceanbase.dba_ob_table_locations where table_type = 'user table' and role = 'leader';
+TABLE_NAME	LS_ID	ZONE	TABLET_ID
+t1	1001	z1	200001
+t2	1002	z2	200002
+update /*+ ENABLE_PARALLEL_DML PARALLEL(16), log_level(DEBUG) */ t2 set c1=c1+1;

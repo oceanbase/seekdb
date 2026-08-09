@@ -15,82 +15,38 @@ else()
     ERROR_FILE _gen_parser.error)
 endif()
 if(RET AND NOT RET EQUAL 0)
-  message(FATAL_ERROR "Generate pl parser failed and check error in ${PROJECT_SOURCE_DIR}/src/pl/parser/_gen_parser.error")
+  message(FATAL_ERROR
+    "Generate pl parser failed; inspect src/pl/parser/_gen_parser.error")
 endif()
 
-ob_set_subtarget(ob_pl ALONE
-  parser/ob_pl_parser.cpp
-  parser/pl_non_reserved_keywords_mysql_mode.c
-  parser/pl_parser_base.c
-  parser/pl_parser_mysql_mode_lex.c
-  parser/pl_parser_mysql_mode_tab.c
-)
-
-ob_set_subtarget(ob_pl common
-  ob_pl.cpp
-  ob_pl_allocator.cpp
-  ob_pl_build.cpp
-  ob_pl_exception_handling.cpp
-  ob_pl_interface_pragma.cpp
-  ob_pl_interpreter.cpp
-  ob_pl_package.cpp
-  ob_pl_package_manager.cpp
-  ob_pl_package_state.cpp
-  ob_pl_package_guard.cpp
-  ob_pl_resolver.cpp
-  ob_pl_router.cpp
-  ob_pl_server_cursor.cpp
-  ob_pl_stmt.cpp
-  ob_pl_type.cpp
-  ob_pl_user_type.cpp
-  ob_pl_dependency_util.cpp
-)
-
-ob_set_subtarget(ob_pl pl_cache
-  pl_cache/ob_pl_cache.cpp
-  pl_cache/ob_pl_cache_mgr.cpp
-  pl_cache/ob_pl_cache_object.cpp
-)
-
-
-ob_set_subtarget(ob_pl sys_package
-  sys_package/ob_dbms_stats.cpp
-  sys_package/ob_dbms_scheduler_mysql.cpp
-  sys_package/ob_dbms_application.cpp
-  sys_package/ob_dbms_session.cpp
-  sys_package/ob_dbms_monitor.cpp
-  sys_package/ob_dbms_space.cpp
-  sys_package/ob_dbms_limit_calculator_mysql.cpp
-  sys_package/ob_dbms_vector_mysql.cpp
-  sys_package/ob_dbms_hybrid_vector_mysql.cpp
-  sys_package/ob_dbms_ai_service.cpp
-  sys_package/ob_dbms_index_manager.cpp
-)
-
+seekdb_apply_unity_inventory(ob_pl SEEKDB_PL_UNITY)
+seekdb_apply_standalone_inventory(ob_pl SEEKDB_PL_STANDALONE)
 ob_server_add_target(ob_pl)
 
 set(SYS_PACK_SQL_SOURCE_DIR ${PROJECT_SOURCE_DIR}/src/share/inner_table/sys_package)
-set(gen_syspack_src ${SYS_PACK_SQL_SOURCE_DIR}/syspack_source.cpp)
-set(SYS_PACK_RELEASE_DIR ${CMAKE_BINARY_DIR}/syspack_release CACHE PATH "The path to the system package release directory")
+set(SYS_PACK_CODEGEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/syspack_codegen)
+set(gen_syspack_src ${SYS_PACK_CODEGEN_DIR}/syspack_source.cpp)
+set(SYS_PACK_RELEASE_DIR ${CMAKE_BINARY_DIR}/syspack_release CACHE PATH
+  "The path to the system package release directory")
 set(SYS_PACK_RELEASE_STAMP ${SYS_PACK_RELEASE_DIR}/.stamp)
-file(GLOB SQL_FILES "${SYS_PACK_SQL_SOURCE_DIR}/*.sql")
-
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+file(GLOB SQL_FILES CONFIGURE_DEPENDS "${SYS_PACK_SQL_SOURCE_DIR}/*.sql")
 
 add_custom_command(
   OUTPUT ${gen_syspack_src} ${SYS_PACK_RELEASE_STAMP}
+  COMMAND ${CMAKE_COMMAND} -E remove_directory ${SYS_PACK_CODEGEN_DIR}
+  COMMAND ${CMAKE_COMMAND} -E make_directory ${SYS_PACK_CODEGEN_DIR}
   COMMAND ${CMAKE_COMMAND} -E make_directory ${SYS_PACK_RELEASE_DIR}
-  COMMAND ${Python3_EXECUTABLE} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py -rd ${SYS_PACK_RELEASE_DIR}
+  COMMAND ${CMAKE_COMMAND} -E copy
+    ${SQL_FILES} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py
+    ${SYS_PACK_CODEGEN_DIR}
+  COMMAND ${Python3_EXECUTABLE} ${SYS_PACK_CODEGEN_DIR}/syspack_codegen.py
+    -rd ${SYS_PACK_RELEASE_DIR}
   COMMAND ${CMAKE_COMMAND} -E touch ${SYS_PACK_RELEASE_STAMP}
   DEPENDS ${SQL_FILES} ${SYS_PACK_SQL_SOURCE_DIR}/syspack_codegen.py
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  COMMENT "Generating wrapped syspack source files"
-)
-
-add_custom_target(generate_syspack_source ALL
-  DEPENDS ${gen_syspack_src}
-)
-set_source_files_properties(generate_syspack_source PROPERTIES GENERATED TRUE)
+  COMMENT "Generating wrapped syspack source files")
+add_custom_target(generate_syspack_source ALL DEPENDS ${gen_syspack_src})
+set_source_files_properties(${gen_syspack_src} PROPERTIES GENERATED TRUE)
 ob_set_subtarget(syspack_source ALONE ${gen_syspack_src})
 ob_server_add_target(syspack_source)
 add_dependencies(syspack_source generate_syspack_source)

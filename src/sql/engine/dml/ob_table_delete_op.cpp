@@ -96,13 +96,10 @@ int ObTableDeleteOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_rescan())) {
-    LOG_WARN("table modify rescan failed", K(ret));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each failed", K(ret));
   } else if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("open table for each failed", K(ret));
   }
   return ret;
 }
@@ -112,14 +109,12 @@ int ObTableDeleteOp::inner_open()
   int ret = OB_SUCCESS;
   //execute delete with das
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
-    LOG_WARN("open child operator failed", K(ret));
   } else if (OB_UNLIKELY(MY_SPEC.del_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
-    LOG_WARN("inner open with das failed", K(ret));
   }
   return ret;
 }
@@ -128,7 +123,6 @@ OB_INLINE int ObTableDeleteOp::inner_open_with_das()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("init delete rtdef failed", K(ret), K(MY_SPEC.del_ctdefs_.count()));
   }
   return ret;
 }
@@ -162,20 +156,17 @@ OB_INLINE int ObTableDeleteOp::open_table_for_each()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(del_rtdefs_.allocate_array(ctx_.get_allocator(), MY_SPEC.del_ctdefs_.count()))) {
-    LOG_WARN("allocate delete rtdef failed", K(ret), K(MY_SPEC.del_ctdefs_.count()));
   }
   fk_checkers_.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < del_rtdefs_.count(); ++i) {
     DelRtDefArray &rtdefs = del_rtdefs_.at(i);
     const ObTableDeleteSpec::DelCtDefArray &ctdefs = MY_SPEC.del_ctdefs_.at(i);
     if (OB_FAIL(rtdefs.allocate_array(ctx_.get_allocator(), MY_SPEC.del_ctdefs_.at(i).count()))) {
-      LOG_WARN("allocate delete rtdefs failed", K(ret), K(MY_SPEC.del_ctdefs_.at(i).count()));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < del_rtdefs_.at(i).count(); ++j) {
       ObDelRtDef &del_rtdef = rtdefs.at(j);
       const ObDelCtDef &del_ctdef = *ctdefs.at(j);
       if (OB_FAIL(ObDMLService::init_del_rtdef(dml_rtctx_, del_rtdef, del_ctdef))) {
-        LOG_WARN("failed to init del rtdef", K(ret));
       }
     }
     if (OB_SUCC(ret) && !rtdefs.empty()) {
@@ -221,9 +212,7 @@ OB_INLINE int ObTableDeleteOp::calc_tablet_loc(const ObDelCtDef &del_ctdef,
       ObObjectID partition_id = OB_INVALID_ID;
       ObTabletID tablet_id;
       if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
-        LOG_WARN("calc part and tablet id by expr failed", K(ret));
       } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
-        LOG_WARN("extended tablet loc failed", K(ret));
       }
     }
   } else {
@@ -255,15 +244,12 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
       ObDMLModifyRowNode modify_row(this, &del_ctdef, &del_rtdef, ObDmlEventType::DE_DELETING);
       bool is_skipped = false;
       if (OB_FAIL(ObDMLService::process_delete_row(del_ctdef, del_rtdef, is_skipped, *this))) {
-        LOG_WARN("process delete row failed", K(ret));
       } else if (OB_UNLIKELY(is_skipped)) {
         //this row has been skipped, so can not write to DAS buffer(include its global index)
         //so need to break this loop
         break;
       } else if (OB_FAIL(calc_tablet_loc(del_ctdef, del_rtdef, tablet_loc))) {
-        LOG_WARN("calc partition key failed", K(ret));
       } else if (OB_FAIL(ObDMLService::delete_row(del_ctdef, del_rtdef, tablet_loc, dml_rtctx_, modify_row.old_row_))) {
-        LOG_WARN("insert row with das failed", K(ret));
       } else if (need_after_row_process(del_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else {
@@ -273,7 +259,6 @@ OB_INLINE int ObTableDeleteOp::delete_row_to_das()
     if (OB_SUCC(ret)) {
       int64_t delete_rows = is_skipped ? 0 : 1;
       if (OB_FAIL(merge_implict_cursor(delete_rows, 0, 0, 0))) {
-        LOG_WARN("merge implict cursor failed", K(ret));
       }
     }
   }
@@ -292,7 +277,6 @@ int ObTableDeleteOp::write_rows_post_proc(int last_errno)
     }
     if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
       if (OB_FAIL(check_delete_affected_row())) {
-        LOG_WARN("check delete affected row failed", K(ret));
       }
     }
   }
@@ -344,7 +328,6 @@ int ObTableDeleteOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each failed", K(ret));
   }
   int close_ret = ObTableModifyOp::inner_close();
   return (OB_SUCCESS == ret) ? close_ret : ret;

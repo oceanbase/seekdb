@@ -43,11 +43,6 @@ DEF_PARAM(_datafile_usage_upper_bound_percentage, INT, OB_CLUSTER_PARAMETER, "90
         "the percentage of disk space usage upper bound to trigger datafile extend. Range: [5,99] in integer",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
-DEF_PARAM(enable_rpc_service, BOOL, OB_CLUSTER_PARAMETER, "False",
-        "specifies whether the standby gRPC service is enabled. "
-        "Enabling takes effect dynamically; disabling takes effect after restart. "
-        "Value: True: enabled False: disabled",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_rpc_tls, BOOL, OB_CLUSTER_PARAMETER, "False",
         "specifies whether mutual TLS (mTLS) is enabled for inter-node RPC communication. "
         "When True, certificates must exist in the wallet directory. "
@@ -72,30 +67,13 @@ DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
 DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 targets 80% of cgroup or physical memory while reserving at least 1G "
-        "for the system when possible. The minimum automatic value is 1G. Range: 0, [1G,).",
+        "0 means max(1G, 40% of physical memory). Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
-        "deprecated compatibility parameter. The configured value is accepted and persisted, "
-        "but is ignored by memory sizing and memory control. Range: 0, [1G,).",
+        "legacy compatibility parameter. A nonzero value takes precedence and sets the effective "
+        "memory_budget to half of its value. Set it to 0 to use memory_budget. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
-        common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
-        "the maximum memory used by KV cache. 0 derives the limit from memory_budget. "
-        "The automatic value is min(1T, 40% of memory_budget). "
-        "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by Memstore. 0 derives the limit from memory_budget. "
-        "The automatic value is 50% of memory_budget. "
-        "Range: [0M,).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by the vector module. 0 derives the limit from memory_budget. "
-        "The automatic value is 50% of memory_budget. "
-        "Range: [0M,).",
-        ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of CPU\\'s in the system. "
         "If this parameter is set to zero, the number will be set according to sysconf; "
@@ -282,6 +260,9 @@ DEF_PARAM(undo_retention, INT, OB_CLUSTER_PARAMETER, "1800", "[0, 4294967295]",
 DEF_PARAM(_mvcc_gc_using_min_txn_snapshot, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies enable mvcc gc using active txn snapshot",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_rowsets_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "specifies whether vectorized sql execution engine is activated",
+         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_rowsets_target_maxsize, INT, OB_CLUSTER_PARAMETER, "524288", "[262144, 8388608]",
         "the size of the memory reserved for vectorized sql engine. Range: [262144, 8388608]",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -421,7 +402,7 @@ DEF_PARAM(_temporary_file_io_area_size, INT, OB_CLUSTER_PARAMETER, "1", "[0, 50)
          "memory buffer size of temporary files, as a percentage of total server runtime memory. "
          "Range: [0, 50), percentage",
          ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_storage_meta_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "13", "[0, 50)",
+DEF_PARAM(_storage_meta_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "20", "[0, 50)",
          "maximum memory for storage metadata, as a percentage of total server runtime memory. "
          "Range: [0, 50), percentage, 0 means no limit to storage meta memory",
          ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -969,7 +950,7 @@ DEF_PARAM(_ob_sqlstat_enable, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disabl
 
 DEF_PARAM(_enable_inner_session_mgr, BOOL, OB_CLUSTER_PARAMETER, "True", "enable/disable inner session mgr",
          ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False",
+DEF_PARAM(_enable_trace_tablet_leak, BOOL, OB_CLUSTER_PARAMETER, "False", 
         "enable t3m tablet leak checker. The default value is False",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 DEF_PARAM(_inlist_rewrite_threshold, INT, OB_CLUSTER_PARAMETER, "1000", "[1, 2147483647]"
@@ -1025,7 +1006,7 @@ DEF_PARAM(max_partition_num, INT, OB_CLUSTER_PARAMETER, "8192", "[8192, 65536]",
 DEF_PARAM(json_document_max_depth, INT, OB_CLUSTER_PARAMETER, "100", "[100,1024]",
         "maximum nesting depth allowed in a JSON document",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)",
+DEF_PARAM(_multimodel_memory_trace_level, INT, OB_CLUSTER_PARAMETER, "0", "[0,100)", 
         "Multi-mode memory tracking mechanism",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_query_record_size_limit, INT, OB_CLUSTER_PARAMETER, "65536", "[0, 67108864] in integer",
@@ -1077,10 +1058,10 @@ DEF_PARAM(_enable_ddl_worker_isolation, BOOL, OB_CLUSTER_PARAMETER, "False",
          "a switch controling ddl thread isolation",
          ObParameterAttr(Section::ROOT_SERVICE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// Kept only for compatibility with tools that still set this retired parameter.
-DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0", "[0, 100)",
-        "Deprecated compatibility parameter. The configured value is accepted and persisted, "
-        "but is ignored by vector memory sizing and memory control.",
+DEF_PARAM(ob_vector_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "0",
+        "[0,100)",
+        "Used to control the upper limit percentage of memory resources that the vector_index module can use. Range:[0, 100)."
+        "The system will adjust automatically if ob_vector_memory_limit_percentage set to 0(by default).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_BOOL(vector_index_memory_saving_mode, OB_CLUSTER_PARAMETER, "True",
         "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild.",
@@ -1100,8 +1081,8 @@ DEF_PARAM(_partition_wise_plan_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
 DEF_PARAM(_enable_adaptive_auto_dop, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Enable or disable adaptive auto dop feature.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(query_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "32", "[0,100]",
-        "the percentage of server runtime memory that can be used by a single SQL. The default value is 32. Range: [0,100]",
+DEF_PARAM(query_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "50", "[0,100]",
+        "the percentage of server runtime memory that can be used by a single SQL. The default value is 50. Range: [0,100]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_ndv_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "True",
@@ -1164,13 +1145,9 @@ DEF_PARAM(server_create_time, INT, OB_CLUSTER_PARAMETER, "0", "[1,)",
         "default: 0 (invalid timestamp), Range: [1,)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::READONLY));
 
-DEF_PARAM(log_restore_source, STR, OB_CLUSTER_PARAMETER, "",
-        "standby log source in ip:rpc_port form",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-
-// Persisted boot role and restart preparation state.
-// format: "active_role:pending_role:transition_status:cutover_scn"
-// example: "PRIMARY:INVALID:NORMAL:0"
+// Persisted server role and switchover state.
+// format: "server_role:switchover_status"
+// example: "PRIMARY:NORMAL" or "STANDBY:SWITCHING TO PRIMARY"
 DEF_PARAM(server_role_info, STR, OB_CLUSTER_PARAMETER, "",
-        "server role state, format: active_role:pending_role:transition_status:cutover_scn",
+        "server role state, format: server_role:switchover_status",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

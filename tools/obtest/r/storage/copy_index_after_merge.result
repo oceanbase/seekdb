@@ -1,0 +1,41 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql set ob_global_debug_sync = 'MERGE_PARTITION_TASK wait_for continue_signal_2 execute 1000000';
+ob1.z1.restart;
+ob1.check_until_timeout select status from oceanbase.__all_server where zone='z1', active, 60;
+ob1.check_until_timeout select with_rootserver from oceanbase.__all_server where zone='z1', 1, 60;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_auto_leader_switch=true;
+ob1.mysql alter system suspend merge;
+ob1.mysql alter tenant obtest primary_zone='z1';
+ob1.z1.obs0.mysql set ob_global_debug_sync = 'BEFORE_LOCAL_INDEX_COPY_BUILD_INDEX_DATA wait_for continue_signal_1 execute 1000000';
+ob1.check_until_timeout select count(*) from __all_local_index_status where tenant_id != 1, 1, 30;
+z1
+ob1.mysql alter system resume merge zone='z1';
+ob1.mysql alter system major freeze;
+ob1.z1.check_version 2;
+ob1.check_until_timeout select count(*) from __all_virtual_table_mgr where table_type=1 and table_id=$table_id and index_id=$index_id, 2, 60;
+ob1.z1.obs0.mysql set ob_global_debug_sync = 'BEFORE_LOCAL_INDEX_COPY_BUILD_INDEX_DATA  clear';
+ob1.z1.obs0.mysql set ob_global_debug_sync = 'now signal continue_signal_1';
+ob1.check_until_timeout select index_status from oceanbase.__all_virtual_table where data_table_id=$table_id, 2, 120;
+ob1.mysql set ob_global_debug_sync = 'MERGE_PARTITION_TASK clear';
+ob1.mysql set ob_global_debug_sync = 'now broadcast continue_signal_2';
+ob1.mysql alter system resume merge;
+ob1.check_version 2;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+pk1	pk2	pk3	f1	f2
+1	1	1	abc	def
+2	2	2	abc	def
+3	3	3	abc	def
+4	4	4	abc	def
+5	5	5	abc	def
+6	6	6	abc	def
+7	7	7	abc	def
+8	8	8	abc	def
+9	9	9	abc	def
+ob1.mysql_p select count(*) from oceanbase.__all_virtual_server_event_history where module='balancer' and event like '%finish%' and value1 like "%$table_id%" and value4 != 0;
+count(*)
+0

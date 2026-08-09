@@ -102,7 +102,7 @@
 #define OB_STRXFRM_LEVEL5          0x00000010
 #define OB_STRXFRM_LEVEL6          0x00000020
 #define OB_STRXFRM_LEVEL_ALL       0x0000003F
-#define OB_STRXFRM_NLEVELS         6
+#define OB_STRXFRM_NLEVELS         6         
 
 #define OB_STRXFRM_PAD_WITH_SPACE  0x00000040
 #define OB_STRXFRM_PAD_TO_MAXLEN   0x00000080
@@ -126,14 +126,14 @@
 #define OB_STRXFRM_REVERSE_LEVEL6  0x00200000
 #define OB_STRXFRM_REVERSE_SHIFT   16
 
-#define	_MY_U	01
-#define	_MY_L	02
-#define	_MY_NMR	04
-#define	_MY_SPC	010
-#define	_MY_PNT	020
-#define	_MY_CTR	040
-#define	_MY_B	0100
-#define	_MY_X	0200
+#define	_MY_U	01	  
+#define	_MY_L	02	  
+#define	_MY_NMR	04	
+#define	_MY_SPC	010	
+#define	_MY_PNT	020	
+#define	_MY_CTR	040	
+#define	_MY_B	0100	
+#define	_MY_X	0200	
 
 #define ob_toupper(s, c) (unsigned char)((s)->to_upper[(unsigned char)(c)])
 #define ob_tolower(s, c) (unsigned char)((s)->to_lower[(unsigned char)(c)])
@@ -325,7 +325,7 @@ typedef struct ObCollationHandler
             size_t *prefix_len);
   // wildcard comparison, for LIKE
   int     (*wildcmp)(const struct ObCharsetInfo *,
-		     const char *str,const char *str_end,
+  		     const char *str,const char *str_end,
                      const char *wildstr,const char *wildend,
                      int escape,int w_one, int w_many);
 
@@ -630,7 +630,7 @@ size_t ob_strnxfrm_unicode_full_bin(const ObCharsetInfo *cs,
                              const unsigned char *src, size_t srclen, unsigned int flags, bool *is_valid_unicode);
 
 
-bool ob_like_range_generic(const ObCharsetInfo *cs, const char *ptr, size_t ptr_length,
+bool ob_like_range_generic(const ObCharsetInfo *cs, const char *ptr, size_t ptr_length, 
 #ifdef _WIN32
                               pchar escape, pchar w_one, pchar w_many,
 #else

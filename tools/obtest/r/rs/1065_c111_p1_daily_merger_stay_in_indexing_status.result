@@ -1,0 +1,18 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set merger_check_interval = '10s';
+ob1.mysql create resource pool p1 unit = 'sys_unit_config', unit_num = 1;
+ob1.mysql create tenant t1 replica_num = 3, primary_zone = 'z1', resource_pool_list('p1') set ob_tcp_invited_nodes='%';
+ob1.create_client;
+set ob_global_debug_sync = 'OBSERVICE_GET_LEADER_CANDIDATES wait_for x execute 1000';
+ob1.z1.obs0.mysql set debug_sync = 'now signal x';
+alter system major freeze;
+ob1.check_version 2;
+select zone, value, info from oceanbase.__all_zone where name = 'merge_status' order by zone;
+zone	value	info
+	0	IDLE
+z1	0	IDLE
+z2	0	IDLE
+z3	0	IDLE

@@ -85,6 +85,7 @@ void ObTxLoopWorker::destroy()
 void ObTxLoopWorker::reset()
 {
   last_tx_gc_ts_ = 0;
+  last_log_cb_pool_adjust_ts_ = 0;
   last_runtime_config_refresh_ts_ = 0;
   stop_flag_ = true;
 }
@@ -96,6 +97,7 @@ void ObTxLoopWorker::runTimerTask()
   int64_t time_used = 0;
   lib::set_thread_name("TxLoopWorker");
   bool can_gc_tx = false;
+  bool can_adjust_log_cb_pool =  false;
 
   start_time_us = ObTimeUtility::current_time();
     // tx gc, interval = 5s
@@ -105,6 +107,13 @@ void ObTxLoopWorker::runTimerTask()
       can_gc_tx = true;
     }
     
+    if (common::ObClockGenerator::getClock() - last_log_cb_pool_adjust_ts_
+        > TX_LOG_CB_POOL_ADJUST_INTERVAL) {
+      TRANS_LOG(INFO, "try to adjust log cb pool");
+      last_log_cb_pool_adjust_ts_ = common::ObClockGenerator::getClock();
+      can_adjust_log_cb_pool = true;
+    }
+
     // Refresh transaction runtime configuration.
     if (common::ObClockGenerator::getClock() -
           last_runtime_config_refresh_ts_ > LOOP_INTERVAL /*5s*/) {
@@ -112,7 +121,7 @@ void ObTxLoopWorker::runTimerTask()
       last_runtime_config_refresh_ts_ = common::ObClockGenerator::getClock();
     }
 
-  (void)maintain_tx_state_(can_gc_tx);
+  (void)maintain_tx_state_(can_gc_tx, can_adjust_log_cb_pool);
 
     // TODO shanyan.g
     // 1) We use max(max_commit_ts, gts_cache) as read snapshot,
@@ -123,9 +132,11 @@ void ObTxLoopWorker::runTimerTask()
   time_used = ObTimeUtility::current_time() - start_time_us;
   UNUSED(time_used);
   can_gc_tx = false;
+  can_adjust_log_cb_pool = false;
 }
 
-int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc)
+int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc,
+                                      bool can_adjust_log_cb_pool)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -175,6 +186,9 @@ int ObTxLoopWorker::maintain_tx_state_(bool can_tx_gc)
     // ignore ret
     (void)cur_ls_ptr->get_tx_svr()->check_all_readonly_tx_clean_up();
 
+    if (can_adjust_log_cb_pool) {
+      do_log_cb_pool_adjust_(cur_ls_ptr);
+    }
   }
 
   return ret;
@@ -261,6 +275,15 @@ void ObTxLoopWorker::update_max_commit_ts_()
       txs->get_tx_version_mgr().update_max_commit_ts(snapshot, false);
     }
   } while (OB_EAGAIN == ret);
+}
+
+void ObTxLoopWorker::do_log_cb_pool_adjust_(ObLS *ls_ptr)
+{
+  int ret = OB_SUCCESS;
+  int64_t active_tx_cnt = 0;
+  (void)ls_ptr->get_tx_svr()->get_active_tx_count(active_tx_cnt);
+  if (OB_FAIL(ls_ptr->get_tx_svr()->get_log_cb_pool_mgr()->adjust_log_cb_pool(active_tx_cnt))) {
+  }
 }
 
 }

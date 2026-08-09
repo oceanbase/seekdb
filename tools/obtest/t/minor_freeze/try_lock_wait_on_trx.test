@@ -1,0 +1,77 @@
+# owner: jingyan.kfy
+# owner group: transaction
+# description: 锁等待
+
+--disable_query_log
+ob1=OBI(cluster=1:1, proxy_num=0, init_unit_cpu=2);
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='info';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(conn0,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn_obtest,$ip0,root@obtest,,test,$sql_port0);
+
+connection conn_obtest;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+sleep 2;
+
+# 测试用连接
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+connect(conn2,$ip0,root@obtest,,test,$sql_port0);
+connect(conn3,$ip0,root@obtest,,test,$sql_port0);
+
+connection conn1;
+create table t2(a int primary key, b int, unique key u_idx(b));
+
+insert into t2 (a, b) values (1, 1), (2, 2), (3, 3);
+
+# <----------------------- 事务执行 -------------------------->
+
+# select for update
+connection conn1;
+begin;
+select * from t2 where a=1 for update;
+
+# check trx awaken after trans end
+connection conn2;
+send select /*+log_level(debug) */ * from t2 where a=1 for update;
+
+
+# <----------------------- 冻结并转储 -------------------------->
+
+connection conn0;
+alter system minor freeze;
+let $tid = deploy_get_value(ob1.select select table_id v from oceanbase.__all_virtual_table where table_name='t2', v, 1);
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and table_type=0 and is_active=0, 0, 300;
+
+ob1.z1.obs0.check_log_until_success "memtable destroyed.*$tid";
+sleep 10;
+
+# <----------------------- 事务执行 -------------------------->
+
+connection conn3;
+--error 1205
+select * from t2 where a=1 for update nowait;
+# wait on rowlock with sstable
+send select /*+log_level(debug) */ * from t2 where a=1 for update;
+
+sleep 3;
+
+connection conn1;
+commit;
+
+connection conn2;
+reap;
+
+connection conn3;
+reap;

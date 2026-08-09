@@ -1,0 +1,54 @@
+# owner: jingyan.kfy
+# owner group: transaction
+# description:
+# 测试点：insert ignore回滚行前触发事务搬迁
+##
+
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+sleep 2;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+create table t1 (id1 int primary key, id2 int, id3 int);
+create unique index u_index on t1(id2);
+create unique index u_index2 on t1(id3);
+
+set ob_query_timeout=500000000000000;
+set ob_trx_timeout=500000000000000;
+insert into t1 values(1, 1, 1);
+insert into t1 values(2, 2, 2);
+
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for later timeout 1000000000';
+sleep 2;
+
+send insert ignore into t1 values(3, 3, 2);
+
+connection conn2;
+ob1.mysql alter system minor freeze;
+sleep 2;
+
+ob1.mysql set ob_global_debug_sync = 'NOW signal later';
+
+connection conn1;
+reap;
+commit;
+
+#数据验证 : 查询主表
+select * from t1;
+#查询索引表
+select /*+index(t1 u_index)*/* from t1;
+select /*+index(t1 u_index2)*/* from t1;
+
+#合并通过
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

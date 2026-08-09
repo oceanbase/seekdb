@@ -1,0 +1,31 @@
+[public]
+app_name = $app_name
+base_dir = $base_dir
+#----
+ob_user = admin
+ob_password = admin
+ob_port = $ob_port
+load_table_timeout = 3600
+load_table_concurrency = 10
+start_load_table_retry = 10
+#----
+java_home = $java_home
+hadoop_home = $hadoop_home
+hadoop_conf_dir = $hadoop_conf_dir
+#----
+hdfs_name = $hdfs_name
+hdfs_data_dir = $hdfs_data_dir
+hdfs_conf_dir = $hdfs_conf_dir
+keep_hadoop_data_days = 3
+
+[import_server]
+port = $port
+log_level = debug
+
+[ob_instances]
+obi_count= $obi_count
+obi0_rs_vip= $obi0_rs_vip
+obi0_rs_port= $obi0_rs_port
+
+obi1_rs_vip= $obi1_rs_vip
+obi1_rs_port= $obi1_rs_port

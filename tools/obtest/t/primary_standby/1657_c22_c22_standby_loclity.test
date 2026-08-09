@@ -1,0 +1,162 @@
+# owner: msy164651
+# description: 测试备库localit限制,
+# 主备库的locality限制比较多，先禁掉这部分case
+# 主库设计locality为F,R@z1
+# case 1: 手动给备库加一个R,L副本失败,和副本类型转换
+# case 2：对备库locality变更，变更成功之后，加一个F，可以检测到多余副本删除掉 
+# case 3: 主备库切换，然后下掉新备库的一个R副本，停掉新备库的负载均衡，把主库切换为备库，备库failover为主库，任务可以继续执行
+# case 4: 对新主库上做一次类型转换，在类型转换没有完成之前没有办法进行负载均衡
+# case 5：在备库上下掉L副本
+ob1=OBI(cluster=1,proxy_num=0);
+ob2=OBI(cluster=1:1:1,leaderob=ob1,proxy_num=0);
+ob1.force_stop;
+ob2.force_stop;
+ob1.reboot;
+ob2.reboot;
+ob1.mysql set @@global.ob_query_timeout = 30000000;
+
+#创建租户，并确定备库同步上去，并且zone list是3个
+ob_connect(conn1, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn1;
+alter system set balancer_idle_time = '10s';
+alter system set debug_sync_timeout = '100000s';
+CREATE RESOURCE POOL pool_1 UNIT = 'sys_unit_config', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tt RESOURCE_POOL_LIST = ('pool_1'), locality='f@z1',primary_zone='z1' set ob_tcp_invited_nodes='%';
+sleep 3;
+ob_connect(tt_conn, ob1.z1.obs0, root@tt, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection tt_conn;
+create database db;
+use db;
+create table t1(c1 int primary key,c2 int) partition by hash (c1) partitions 10;
+insert into t1 values(1,1),(2,2),(3,3);
+#判断备库同步完成
+let $primary_schema_version = deploy_get_value(ob1.select select max(schema_version) as s from oceanbase.__all_ddl_operation, s, 1);
+ob2.check_until_timeout select count(*) from oceanbase.__all_ddl_operation where schema_version = $primary_schema_version, 1, 90;
+ob_connect(conn2, ob2.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn2;
+alter system set balance_blacklist_failure_threshold = 0;
+alter system set debug_sync_timeout = '100000s';
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+let $tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'tt', tenant_id, 1);
+let $partition_cnt = deploy_get_value(ob1.select select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and replica_type = 0 and zone = 'z1', c, 1);
+ob2.check_until_timeout select count(*) c from __all_virtual_meta_table where tenant_id = $tenant_id and zone = 'z1', $partition_cnt, 240;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#case 1
+ob2.mysql set @@global.ob_query_timeout = 30000000;
+connection conn2;
+alter tenant tt set locality = 'F@z1,F@z2,L@z3';
+#alter tenant tt set locality = 'f@z1,f@z2,f@z3';
+let $job_id = 0;
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id >$job_id, job_id, 1);
+ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+alter tenant tt set locality = 'F@z1,F@z2';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id >$job_id, job_id, 1);
+ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+alter tenant tt set locality = 'F@z1,F@z2,F@z3';
+let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id >$job_id, job_id, 1);
+ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+#alter tenant tt set locality = 'F@z1,F@z2';
+#let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_id >$job_id, job_id, 1);
+#ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+connection conn2;
+set ob_global_debug_sync = 'AFTER_TENANT_BALANCE_GATHER_STAT wait_for continue_signal';
+alter system set enable_rebalance = false;
+alter system set enable_rereplication = false;
+alter system remove balance task;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rereplication' and value ='True', 0,5;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rebalance' and value ='True', 0,5;
+
+let $table_id = deploy_get_value(ob2.select select table_id from oceanbase.__all_virtual_table where table_name = 't1', table_id, 1);
+let $src = deploy_get_value(ob2.select select concat(svr_ip,":",svr_port) addr from __all_virtual_meta_table where table_id = $table_id and partition_id = 0 and zone = 'z3', addr,1);
+--disable_query_log
+eval alter system change replica partition_id = '0%100@$table_id' server = '$src' change replica_type = 'L';
+eval alter system change replica partition_id = '1%100@$table_id' server = '$src' change replica_type = 'R';
+--enable_query_log
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $table_id and partition_id = 0 and replica_type = 5,1,100;
+ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_meta_table where table_id = $table_id and partition_id = 1 and replica_type = 16,1,100;
+--disable_query_log
+eval alter system drop replica partition_id = '0%100@$table_id' server = '$src';
+eval alter system drop replica partition_id = '1%100@$table_id' server = '$src';
+--enable_query_log
+# case 2：对备库locality变更，变更成功之后，手动加一个F副本，可以检测到多余副本删除掉
+#let $dest = deploy_get_value(ob2.z3.obs0.get_addr);
+#--disable_query_log
+#eval alter system copy replica partition_id '0%100@$table_id' source '$src' destination '$dest';
+#--enable_query_log
+#ob2.check_until_timeout select count(*) from __all_virtual_meta_table where table_id = $table_id and zone = 'z3', 0, 100;
+# case 3: 主备库切换，然后下掉新备库的一个R副本，停掉新备库的负载均衡，把主库切换为备库，备库failover为主库，任务可以继续执行
+# TODO 切换过程禁掉了负载均衡任务，这个case测试不会通过，先禁掉
+connection conn2;
+alter system set enable_rebalance = true;
+alter system set enable_rereplication = true;
+set ob_global_debug_sync = 'now signal continue_signal';
+connection conn1;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 90;
+alter system commit to switchover to physical standby;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 90;
+ob2.mysql alter system commit to switchover to primary;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#set ob_global_debug_sync = 'AFTER_TENANT_BALANCE_GATHER_STAT wait_for continue_signal';
+#alter system set enable_rebalance = false;
+#alter system set enable_rereplication = false;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rereplication' and value ='True', 0,5;
+#ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rebalance' and value ='True', 0,5;
+#alter system remove balance task;
+#sleep 10;
+#alter tenant tt set locality = 'f@z1';
+#ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#ob2.mysql alter system commit to switchover to physical standby;
+#ob1.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+#connection conn1;
+#let $job_id = deploy_get_value(ob1.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_status = 'INPROGRESS', job_id, 1);
+#alter system set enable_rebalance = true;
+#alter system set enable_rereplication = true;
+#set ob_global_debug_sync = 'now signal continue_signal';
+#ob1.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+#ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+# case 4: 主备库切换，对新主库上做一次类型转换，在类型转换没有完成之前没有办法进行负载均衡
+# 2276版本上已经不在查询是否有负载均衡任务了，去掉这个case
+#alter system commit to switchover to physical standby;
+#ob2.mysql alter system commit to switchover to primary;
+connection conn2;
+#ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 10;
+#set ob_global_debug_sync = 'AFTER_TENANT_BALANCE_GATHER_STAT wait_for continue_signal';
+#alter system set enable_rebalance = false;
+#alter system set enable_rereplication = false;
+#alter system remove balance task;
+#ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rereplication' and value ='True', 0,5;
+#ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter_stat where name = 'enable_rebalance' and value ='True', 0,5;
+#alter tenant tt set locality = 'f@z1,f@z2';
+#--error 4179
+#alter system commit to switchover to physical standby;
+#let $job_id = deploy_get_value(ob2.select select job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY' and job_status = 'INPROGRESS', job_id, 1);
+#alter system set enable_rebalance = true;
+#alter system set enable_rereplication = true;
+#set ob_global_debug_sync = 'now signal continue_signal';
+#connection conn2;
+#ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+alter system commit to switchover to physical standby;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 100;
+ob1.mysql alter system commit to switchover to primary;
+connection tt_conn;
+use test;
+create table t11(c1 int primary key, c2 int) partition by hash (c1) partitions 10;
+#在备库上有L副本的情况下，可以同步完成
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 100;
+#等新主库推一次schema version,备库之前作为主库执行了ddl操作，可能会导致备库上的schema version偏大
+sleep 10;
+# case 5：在备库上下掉L副本
+connection conn2;
+alter tenant tt set locality = 'f@z1,f@z2,f@z3';
+let $job_id = deploy_get_value(ob2.select select max(job_id) as job_id from oceanbase.__all_admin_job where job_type = 'ALTER_TENANT_LOCALITY', job_id, 1);
+alter system set enable_rebalance = true;
+alter system set enable_rereplication = true;
+connection conn2;
+ob2.check_until_timeout select job_status from oceanbase.__all_admin_job where job_id = $job_id, SUCCESS, 100;
+
+
+

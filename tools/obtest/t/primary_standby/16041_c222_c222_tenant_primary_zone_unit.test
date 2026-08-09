@@ -1,0 +1,97 @@
+#rs
+#msy
+#验证主备库创建租户的同步
+#租户1.备库快照接入，unit_num = 1, primary zone 为z3,z2;z1
+#租户2.备库快照接入，unit_num = 2，primary zone 为z2;z3,z1
+#租户3.备库快照接入，unit_num = 1，primary zone 为z1，只在z1上有副本
+#租户4.备库快照接入，unit_num = 2，primary zone 为z2，只在z2上有副本
+#上述情况下，正常创建4个租户。
+#租户9，unit_num = 2，备库宕机z2的一台机器，primary_zone为z1
+#租户10，unit_num = 1，宕机z2的所有机器，primary zone设置为z3，
+#租户10，unit_num = 1，宕机z2的所有机器，primary zone设置为z2，
+ob1=OBI(cluster=2:2:2, proxy_num = 0);
+ob2=OBI(cluster=2:2:2, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob1.mysql alter system set resource_soft_limit=800;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+ob_connect(conn1, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn1;
+eval CREATE RESOURCE UNIT unit MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM 64, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+CREATE RESOURCE POOL pool_1 UNIT = 'unit', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2','z3');
+CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z3,z2;z1';
+
+CREATE RESOURCE POOL pool_2 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z1', 'z2','z3');
+CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone='z2;z3,z1';
+
+CREATE RESOURCE POOL pool_3 UNIT = 'unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tenant_3 RESOURCE_POOL_LIST = ('pool_3'), primary_zone='z1';
+
+CREATE RESOURCE POOL pool_4 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z2');
+CREATE TENANT tenant_4 RESOURCE_POOL_LIST = ('pool_4'), primary_zone='z2';
+
+alter system major freeze;
+sleep 50;
+ob1.check_version 2;
+ob2.reboot;
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set resource_soft_limit=800;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 5, 100;
+
+ob2.mysql_p select tenant_id, primary_zone, locality from oceanbase.__all_tenant;
+ob2.mysql_p select tenant_id, unit_count, name, zone_list from oceanbase.__all_resource_pool;
+
+connection conn1;
+CREATE RESOURCE POOL pool_5 UNIT = 'unit', UNIT_NUM = 1, ZONE_LIST = ('z1', 'z2','z3');
+CREATE TENANT tenant_5 RESOURCE_POOL_LIST = ('pool_5'), primary_zone='z3,z2;z1';
+
+CREATE RESOURCE POOL pool_6 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z1', 'z2','z3');
+CREATE TENANT tenant_6 RESOURCE_POOL_LIST = ('pool_6'), primary_zone='z2;z3,z1';
+
+CREATE RESOURCE POOL pool_7 UNIT = 'unit', UNIT_NUM = 1, ZONE_LIST = ('z1');
+CREATE TENANT tenant_7 RESOURCE_POOL_LIST = ('pool_7'), primary_zone='z1';
+
+CREATE RESOURCE POOL pool_8 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z2');
+CREATE TENANT tenant_8 RESOURCE_POOL_LIST = ('pool_8'), primary_zone='z2';
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 9, 100;
+
+ob2.mysql_p select tenant_id, primary_zone, locality from oceanbase.__all_tenant;
+ob2.mysql_p select tenant_id, unit_count, name, zone_list from oceanbase.__all_resource_pool;
+
+ob2.z2.obs0.force_stop;
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0, 5, 30;
+CREATE RESOURCE POOL pool_9 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z3');
+CREATE TENANT tenant_9 RESOURCE_POOL_LIST = ('pool_9'), primary_zone='z3';
+CREATE RESOURCE POOL pool_10 UNIT = 'unit', UNIT_NUM = 1, ZONE_LIST = ('z3');
+CREATE TENANT tenant_10 RESOURCE_POOL_LIST = ('pool_10'), primary_zone='z3';
+
+###创建租户不会成功
+sleep 10;
+
+ob2.mysql_p select tenant_id, primary_zone, locality from oceanbase.__all_tenant;
+ob2.mysql_p select tenant_id, unit_count, name, zone_list from oceanbase.__all_resource_pool;
+
+ob2.z2.obs1.force_stop;
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_server where start_service_time > 0, 4, 30;
+
+CREATE RESOURCE POOL pool_11 UNIT = 'unit', UNIT_NUM = 2, ZONE_LIST = ('z3', 'z2');
+CREATE TENANT tenant_11 RESOURCE_POOL_LIST = ('pool_11'), primary_zone='z2';
+
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 12, 100;
+ob2.mysql_p select tenant_id, primary_zone, locality from oceanbase.__all_tenant;
+ob2.mysql_p select tenant_id, unit_count, name, zone_list from oceanbase.__all_resource_pool;
+
+

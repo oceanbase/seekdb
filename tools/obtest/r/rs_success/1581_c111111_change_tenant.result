@@ -1,0 +1,330 @@
+ob1=OBI(cluster=1:1:1:1:1:1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz:hz:hz:hz:hz:hz);
+ob1.z4.obs0.set status=disable;
+ob1.z5.obs0.set status=disable;
+ob1.z6.obs0.set status=disable;
+ob1.reboot;
+ob1.z4.add;
+ob1.z4.start_zone;
+ob1.z4.obs0.set status=enable;
+ob1.z4.obs0.start;
+ob1.z5.add;
+ob1.z5.start_zone;
+ob1.z5.obs0.set status=enable;
+ob1.z5.obs0.start;
+ob1.z6.add;
+ob1.z6.start_zone;
+ob1.z6.obs0.set status=enable;
+ob1.z6.obs0.start;
+ob1.z4.obs0.add;
+ob1.z5.obs0.add;
+ob1.z6.obs0.add;
+ob1.check_until_timeout select count(*) from oceanbase.__all_server where zone in ('z4', 'z5', 'z6') and (status != "active" or start_service_time <= 0), 0, 120;
+ob1.mysql alter system set resource_soft_limit=800;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set enable_auto_leader_switch = 'false';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set enable_rereplication = 'false';
+ob1.mysql alter system set balancer_idle_time = '10s';
+ob1.mysql alter system set server_data_copy_out_concurrency = 20;
+ob1.mysql alter system set server_data_copy_in_concurrency = 20;
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1','z2','z3');
+ob1.mysql CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1,z2,z3', locality='F@z1,F@z2,F@z3' set ob_tcp_invited_nodes='%';
+ob1.mysql CREATE RESOURCE POOL pool_2 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z4','z5','z6');
+ob1.mysql CREATE TENANT tenant_2 RESOURCE_POOL_LIST = ('pool_2'), primary_zone = 'z4,z5,z6', locality='F@z4,F@z5,F@z6' set ob_tcp_invited_nodes='%', read_only='on';
+use test;
+create table t1_1(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create database db1;
+use db1;
+create table t1_2(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+use test;
+create table t2_1(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create database db2;
+use db2;
+create table t2_2(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create user sys_user_1;
+create user sys_user_2;
+create user sys_user_3;
+create user sys_user_4;
+grant super on *.* to sys_user_2, sys_user_4;
+grant select on test.* to sys_user_1, sys_user_2;
+grant select on *.* to sys_user_3, sys_user_4;
+use oceanbase;
+ERROR 42000: Access denied for user 'sys_user_1'@'%' to database 'oceanbase'
+alter system change tenant tenant_1;
+ERROR 42000: Access denied for user 'sys_user_1'@'%' to database 'oceanbase'
+use oceanbase;
+ERROR 42000: Access denied for user 'sys_user_2'@'%' to database 'oceanbase'
+alter system change tenant tenant_1;
+ERROR 42000: Access denied for user 'sys_user_2'@'%' to database 'oceanbase'
+use oceanbase;
+alter system change tenant tenant_1;
+select count(*) as cnt from __all_tenant_meta_table where tenant_id = '1001';
+cnt
+12
+use oceanbase;
+alter system change tenant tenant_1;
+select count(*) as cnt from __all_tenant_meta_table where tenant_id = '1001';
+cnt
+12
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1001, 50003, 1000);
+ERROR 42000: INSERT command denied to user 'sys_user_4'@'%' for table '__all_tenant_gc_partition_info'
+update __all_tenant_gc_partition_info set partition_id = null where 1 = 1;
+ERROR 42000: UPDATE command denied to user 'sys_user_4'@'%' for table '__all_tenant_gc_partition_info'
+delete from __all_tenant_gc_partition_info where 1 = 1;
+ERROR 42000: DELETE command denied to user 'sys_user_4'@'%' for table '__all_tenant_gc_partition_info'
+alter system change tenant sys;
+ERROR 42501: Access denied
+alter system change tenant tenant_1;
+select count(*) as cnt from __all_tenant_meta_table where tenant_id = '1001';
+cnt
+12
+alter system change tenant tenant_2;
+select * from db2.t2_2;
+ERROR 42000: Access denied for user 'admin'@'%' to database 'db2'
+insert into db2.t2_2(c1, c2) values (1,1);
+ERROR 42000: Access denied for user 'admin'@'%' to database 'db2'
+replace into db2.t2_2(c1, c2) values (2,2);
+ERROR 42000: Access denied for user 'admin'@'%' to database 'db2'
+update db2.t2_2 set c1 = 100 where 1 = 1;
+ERROR 42000: Access denied for user 'admin'@'%' to database 'db2'
+delete from db2.t2_2 where 1 = 1;
+ERROR 42000: Access denied for user 'admin'@'%' to database 'db2'
+use mysql;
+ERROR HY000: tenant changed, access non oceanbase database not allowed
+use db2;
+ERROR 42000: Unknown database 'db2'
+alter system report replica;
+ERROR 0A000: tenant changed, statement not supported
+create table t1_3(c1 int primary key, c2 int);
+ERROR 0A000: tenant changed, statement not supported
+select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = '1002';
+cnt
+0
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1000
+update __all_tenant_gc_partition_info set partition_id = 1000 + 1 where table_id = 50003;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1001
+replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000 + 2);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1001
+1002	50003	1002
+delete from __all_tenant_gc_partition_info where table_id = 50003;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+show databases;
+Database
+oceanbase
+information_schema
+mysql
+test
+db2
+show tenant;
+Current_tenant_name
+tenant_2
+show create database oceanbase;
+Database	Create Database
+oceanbase	CREATE DATABASE `oceanbase` DEFAULT CHARACTER SET = utf8mb4 REPLICA_NUM = 3
+show warnings;
+Level	Code	Message
+show errors;
+Level	Code	Message
+show variables like "ob_query_timeout";
+Variable_name	Value
+ob_query_timeout	10000000
+show engines;
+Engine	Support	Comment	Transactions	Savepoints
+OceanBase	YES	Supports transactions	YES	NO
+show privileges;
+Privilege	Context	Comment
+Alter	Tables	To alter the table
+Create	Databases,Tables,Indexes	To create new databases and tables
+Create user	Server Admin	To create new users
+Create view	Tables	To create new views
+Delete	Tables	To delete existing rows
+Drop	Databases,Tables	To drop databases, tables, and views
+Grant option	Databases,Tables,Functions,Procedures	To give to other users those privileges you possess
+Index	Tables	To create or drop indexes
+Insert	Tables	To insert data into tables
+Process	Server Admin	To view the plain text of currently executing queries
+Select	Tables	To retrieve rows from table
+Show databases	Server Admin	To see all databases with SHOW DATABASES
+Show view	Tables	To see views with SHOW CREATE VIEW
+Super	Server Admin	To use KILL thread, SET GLOBAL, CHANGE MASTER, etc.
+Update	Tables	To update existing rows
+Usage	Server Admin	No privileges - allow connect only
+show recyclebin;
+OBJECT_NAME	ORIGINAL_NAME	TYPE	CREATETIME
+show charset;
+Charset	Description	Default collation	Maxlen
+binary	Binary pseudo charset	binary	1
+utf8mb4	UTF-8 Unicode	utf8mb4_general_ci	4
+gbk	GBK charset	gbk_chinese_ci	2
+utf16	UTF-16 Unicode	utf16_general_ci	2
+gb18030	GB18030 charset	gb18030_chinese_ci	4
+show collation;
+Collation	Charset	Id	Default	Compiled	Sortlen
+utf8mb4_general_ci	utf8mb4	45	Yes	Yes	1
+utf8mb4_bin	utf8mb4	46		Yes	1
+binary	binary	63	Yes	Yes	1
+gbk_chinese_ci	gbk	28	Yes	Yes	1
+gbk_bin	gbk	87		Yes	1
+utf16_general_ci	utf16	54	Yes	Yes	1
+utf16_bin	utf16	55		Yes	1
+utf8mb4_unicode_ci	utf8mb4	224		Yes	1
+utf16_unicode_ci	utf16	101		Yes	1
+gb18030_chinese_ci	gb18030	248	Yes	Yes	1
+gb18030_bin	gb18030	249		Yes	1
+show status like "Threads_connected";
+Variable_name	Value
+Threads_connected	2
+show grants;
+Grants for admin@%
+GRANT ALL PRIVILEGES ON *.* TO 'admin' WITH GRANT OPTION
+show create tenant tenant_2;
+Tenant	Create Tenant
+tenant_2	CREATE TENANT tenant_2 charset=utf8mb4, replica_num=3, zone_list('z4', 'z5', 'z6'), primary_zone='z4,z5,z6', locality='FULL{1}@z4, FULL{1}@z5, FULL{1}@z6', resource_pool_list('pool_2'), read only
+select 1+1;
+1+1
+2
+select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = '1';
+cnt
+0
+set @@global.ob_query_timeout = 20000000;
+set @@session.ob_query_timeout = 30000000;
+set @a = 1;
+alter system change tenant tenant_1;
+select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = '1001';
+cnt
+0
+show GLOBAL variables like "ob_query_timeout";
+Variable_name	Value
+ob_query_timeout	10000000
+show SESSION variables like "ob_query_timeout";
+Variable_name	Value
+ob_query_timeout	30000000
+select @a;
+@a
+1
+select @b;
+@b
+NULL
+set @@session.ob_query_timeout = 40000000;
+set @@global.ob_query_timeout = 50000000;
+set @a = 2;
+show GLOBAL variables like "ob_query_timeout";
+Variable_name	Value
+ob_query_timeout	50000000
+show SESSION variables like "ob_query_timeout";
+Variable_name	Value
+ob_query_timeout	40000000
+select @a;
+@a
+2
+set @@session.ob_query_timeout = 10;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+ERROR HY000: Timeout
+set @@session.ob_query_timeout = 10000000;
+set @@global.ob_query_timeout = 10000000;
+alter system change tenant sys;
+select count(*) as cnt from oceanbase.__all_tenant_gc_partition_info where tenant_id = '1';
+cnt
+0
+begin;
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000);
+alter system change tenant tenant_1;
+ERROR HY000: change tenant which has active transaction not allowed
+rollback;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+begin;
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000);
+alter system change tenant tenant_1;
+ERROR HY000: change tenant which has active transaction not allowed
+commit;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+1002	50003	1000
+delete from __all_tenant_gc_partition_info where table_id = 50003;
+alter system change tenant tenant_1;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+begin;
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000);
+update __all_tenant_gc_partition_info set partition_id = 1000 + 1 where table_id = 50003;
+replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000 + 2);
+commit;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1001
+1002	50003	1002
+delete from __all_tenant_gc_partition_info where table_id = 50003;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+begin;
+insert into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1000
+update __all_tenant_gc_partition_info set partition_id = 1000 + 1 where table_id = 50003;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1001
+replace into __all_tenant_gc_partition_info(tenant_id, table_id, partition_id) values (1002, 50003, 1000 + 2);
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+1002	50003	1001
+1002	50003	1002
+rollback;
+select tenant_id, table_id, partition_id from oceanbase.__all_tenant_gc_partition_info;
+tenant_id	table_id	partition_id
+0	50001	0
+0	50001	1
+0	50002	0
+0	50002	1
+use oceanbase;

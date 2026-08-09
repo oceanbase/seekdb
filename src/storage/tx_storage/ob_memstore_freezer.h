@@ -198,6 +198,8 @@ public:
   // get the memstore used
   // get the memstore limit.
   int get_memstore_limit(int64_t &mem_limit);
+  // get the memstore limit percentage
+  static int64_t get_memstore_limit_percentage();
   // this is used to check if the runtime's memstore is out at user side.
   int check_memstore_full(bool &is_out_of_mem);
   // this is used for internal check rather than user side.
@@ -271,6 +273,7 @@ private:
   // @param[in] rollback_freeze_cnt, reduce the runtime's freeze count by 1, if true.
   int unset_freezing_(const bool rollback_freeze_cnt);
   static int64_t get_freeze_trigger_percentage_();
+  static int64_t get_memstore_limit_percentage_();
   int async_freeze_(const ObMemstoreFreezeArg &arg);
   int post_freeze_request_(const storage::ObFreezeType freeze_type,
                            const int64_t try_frozen_version);

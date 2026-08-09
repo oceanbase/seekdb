@@ -82,10 +82,8 @@ struct ObKVEntryTraverseOp
       PL_CACHE_LOG(WARN, "invalid argument",
       K(key_value_list_), K(entry.first), K(entry.second), K(ret));
     } else if (OB_FAIL(check_entry_match(entry, is_match))) {
-      PL_CACHE_LOG(WARN, "failed to check entry match", K(ret));
     } else if (is_match) {
       if (OB_FAIL(key_value_list_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
-        PL_CACHE_LOG(WARN, "fail to push back key", K(ret));
       } else {
         entry.second->inc_ref_count();
         total_mem_used_ += entry.second->get_mem_size();
@@ -228,10 +226,21 @@ public:
 
   ObPlanCache();
   virtual ~ObPlanCache();
-  static int server_module_init(ObPlanCache* &plan_cache);
+  static int server_module_init(
+      ObPlanCache *&plan_cache,
+      query::ObIPlanCacheAccessService &access_service);
   static void server_module_stop(ObPlanCache * &plan_cache);
-  int init(int64_t hash_bucket);
+  int init(
+      int64_t hash_bucket,
+      query::ObIPlanCacheAccessService &access_service);
   bool is_inited() { return inited_; }
+  query::ObIPlanCacheAccessService &access_service() const
+  {
+    OB_ASSERT_MSG(
+        nullptr != access_service_,
+        "plan-cache access service is not initialized");
+    return *access_service_;
+  }
 
   static int check_can_do_insert_opt(common::ObIAllocator &allocator,
                                      ObPlanCacheCtx &pc_ctx,
@@ -302,34 +311,35 @@ public:
   void set_mem_high_pct(int64_t pct) { ATOMIC_STORE(&mem_high_pct_, pct); }
   void set_mem_low_pct(int64_t pct) { ATOMIC_STORE(&mem_low_pct_, pct); }
 
-  uint64_t inc_mem_used(uint64_t mem_delta)
+  int64_t get_managed_used() const { return ATOMIC_LOAD(&managed_used_); }
+  void inc_managed_used(const int64_t mem_delta)
   {
-    SQL_PC_LOG(DEBUG, "before inc mem_used", K(mem_used_));
-    return ATOMIC_FAA((uint64_t*)&mem_used_, mem_delta);
-  };
-  uint64_t dec_mem_used(uint64_t mem_delta)
-  {
-    SQL_PC_LOG(DEBUG, "before dec mem_used, mem_used", K(mem_used_));
-    int64_t old_val = 0;
-    int64_t new_val = 0;
-    do {
-      old_val = ATOMIC_LOAD(&mem_used_);
-      if (old_val <= 0) {
-        return 0;
-      }
-      new_val = (static_cast<uint64_t>(old_val) > mem_delta) ? (old_val - static_cast<int64_t>(mem_delta)) : 0;
-    } while (!ATOMIC_BCAS(&mem_used_, old_val, new_val));
-    return static_cast<uint64_t>(old_val);
-  };
-
-  int64_t get_mem_used() const
-  {
-    lib::ObLabel label;
-    label = ObNewModIds::OB_SQL_PLAN_CACHE;
-    return mem_used_ + get_label_hold(label);
+    if (mem_delta > 0) {
+      ATOMIC_FAA(&managed_used_, mem_delta);
+    }
   }
+  void dec_managed_used(const int64_t mem_delta)
+  {
+    if (mem_delta > 0) {
+      int64_t old_value = ATOMIC_LOAD(&managed_used_);
+      int64_t new_value = 0;
+      do {
+        new_value = old_value > mem_delta ? old_value - mem_delta : 0;
+      } while (!ATOMIC_BCAS(&managed_used_, old_value, new_value));
+      if (OB_UNLIKELY(old_value < mem_delta)) {
+        SQL_PC_LOG_RET(WARN, OB_ERR_UNEXPECTED,
+            "plan cache managed memory accounting underflow",
+            K(mem_delta), K(old_value));
+      }
+    }
+  }
+  void account_cache_object(ObILibCacheObject &cache_obj);
+  void refresh_cache_node(ObILibCacheNode &cache_node);
+  void release_cache_object(ObILibCacheObject &cache_obj);
+  void release_cache_node(ObILibCacheNode &cache_node);
+
+  int64_t get_mem_used() const { return get_managed_used(); }
   int64_t get_mem_hold() const;
-  int64_t get_label_hold(lib::ObLabel &label) const;
   int64_t get_bucket_num() const { return bucket_num_; }
 
   // access count related
@@ -358,7 +368,7 @@ public:
   void set_host(common::ObAddr &addr) { host_ = addr; }
   
   int64_t get_runtime_memory() const {
-    return lib::get_allocator_memory_limit();
+    return lib::get_memory_budget();
   }
   
   common::ObIAllocator *get_pc_allocator() { return &inner_allocator_; }
@@ -430,7 +440,7 @@ private:
   bool calc_evict_num(int64_t &plan_cache_evict_num);
 
   int batch_remove_cache_node(const LCKeyValueArray &to_evict);
-  bool is_reach_memory_limit() { return get_mem_hold() > get_mem_limit(); }
+  bool is_reach_memory_limit() { return get_managed_used() > get_mem_limit(); }
   int construct_plan_cache_key(ObPlanCacheCtx &plan_ctx, ObLibCacheNameSpace ns);
   static int construct_plan_cache_key(ObSQLSessionInfo &session,
                                       ObLibCacheNameSpace ns,
@@ -447,11 +457,12 @@ private:
   const static int64_t SLICE_SIZE = 1024; //1k
 private:
   bool inited_;
+  query::ObIPlanCacheAccessService *access_service_;
   
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage
   int64_t mem_low_pct_;                      // low water mark percentage
-  int64_t mem_used_;                         // mem used now
+  int64_t managed_used_;
   int64_t bucket_num_;
   lib::MemoryContext root_context_;
   common::ObMalloc inner_allocator_;
@@ -476,7 +487,6 @@ int ObPlanCache::foreach_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse cache obj map");
   }
   return ret;
 }
@@ -486,7 +496,6 @@ int ObPlanCache::foreach_alloc_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_alloc_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse alloc cache obj map");
   }
   return ret;
 }

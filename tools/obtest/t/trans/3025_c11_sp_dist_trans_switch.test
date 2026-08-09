@@ -1,0 +1,118 @@
+#
+#owner: shanyan.g 
+#owner group: transaction
+# 测试点：单分区事务切换为分布式事务
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+
+connection conn1;
+## case:检查表结构
+create table sp_trans_test(id1 int, id2 int);
+desc sp_trans_test;
+insert into sp_trans_test values(1, 1);
+insert into sp_trans_test values(1, 2);
+insert into sp_trans_test values(1, 3);
+sleep 5;
+
+####################################
+##测试mini_sp_trans，autocommit=1的单partition只读事务
+set @@session.tx_read_only=1;
+select * from sp_trans_test;
+select * from sp_trans_test;
+
+##测试sp_trans，包括以下几种情况:
+#case1 : autocommit=1，单partition读写事务
+set autocommit=1;
+set @@session.tx_read_only=0;
+insert into sp_trans_test values(1, 4);
+select *from sp_trans_test;
+
+#case2 : autocommit=0, 单partition多条只读或者读写语句
+set autocommit=0;
+set @@session.tx_read_only=0;
+begin;
+select * from sp_trans_test;
+insert into sp_trans_test values(1, 5);
+select count(1) from sp_trans_test;
+insert into sp_trans_test values(1, 6);
+insert into sp_trans_test values(1, 7);
+select count(1) from sp_trans_test;
+commit;
+select *from sp_trans_test;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+
+create table sp_trans_test2(id1 int, id2 int);
+desc sp_trans_test2;
+
+##测试sp_trans转化成分布式事务的场景(sp_trans->dist_trans)
+#case1:
+set autocommit=0;
+set @@session.tx_read_only=0;
+begin;
+select * from sp_trans_test;
+insert into sp_trans_test2 values(1, 8);
+insert into sp_trans_test values(1, 9);
+select * from sp_trans_test2;
+commit;
+
+#case2:
+begin;
+insert into sp_trans_test values(1, 10);
+insert into sp_trans_test2 values(1, 11);
+select * from sp_trans_test2;
+select * from sp_trans_test;
+commit;
+
+#case3:
+begin;
+select * from sp_trans_test;
+insert into sp_trans_test values(1, 12);
+insert into sp_trans_test2 values(1, 13);
+select * from sp_trans_test2;
+commit;
+select *from sp_trans_test;
+select *from sp_trans_test2;
+ob1.mysql alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+
+#测试sp_trans转换为带全局索引的分布式事务
+#create table gidx_t (c1 int, c2 int, c3 int, c4 int, primary key (c1)) partition by hash(c1) partitions 4;
+#create index gkey on gidx_t(c2,c3) global;
+#insert into gidx_t values (1,1,1,1),(2,2,2,2),(3,3,3,3),(4,4,4,4);
+
+#case 1 : 第一条语句为select语句
+#alter system set syslog_level="DEBUG";
+#sleep 4;
+#begin;
+#insert into sp_trans_test values(10, 10);
+#update gidx_t set c3 = c2 + 1 where c2 + c3 > 3;
+#commit;
+#alter system set syslog_level="INFO";
+#sleep 4;
+
+#case 2 : 第一条语句为非select语句
+#begin;
+#insert into sp_trans_test values(11, 11);
+#update gidx_t set c3 = c2 + 2 where c2 + c3 > 4;
+#insert into sp_trans_test2 values(12, 12);
+#commit;
+
+#select *from sp_trans_test;
+#select *from sp_trans_test2;
+#select *from gidx_t;
+#alter system major freeze;
+#ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+
+drop table sp_trans_test;
+drop table sp_trans_test2;
+#drop table gidx_t;

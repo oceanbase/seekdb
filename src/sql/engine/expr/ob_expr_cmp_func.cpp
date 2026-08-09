@@ -237,10 +237,11 @@ struct RuntimeTCCmp
                  const ObDatum &l_datum,
                  const ObDatum &r_datum,
                  const ObDatumCmpFuncType &cmp_func,
+                 const ObDatumAccessContext *access_ctx,
                  const ObCmpOp &cmp_op) const
   {
     int cmp_ret = 0;
-    int ret = cmp_func(l_datum, r_datum, cmp_ret);
+    int ret = cmp_func(l_datum, r_datum, cmp_ret, access_ctx);
     if (OB_FAIL(ret)) {
       LOG_WARN("fail to compare", K(ret));
     } else {
@@ -321,9 +322,14 @@ int ObTCRelationFunc::eval(const ObExpr &expr,
   if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
     LOG_WARN("get type-class comparison function failed", K(ret));
   } else {
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_func<RuntimeTCCmp>(
-        expr, ctx, expr_datum, cmp_func, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<RuntimeTCCmp>(
+          expr, ctx, expr_datum, cmp_func, access_ctx, cmp_op);
+    }
   }
   return ret;
 }
@@ -335,9 +341,14 @@ int ObTCRelationFunc::eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   if (OB_FAIL(get_runtime_tc_cmp_func(expr, cmp_func))) {
     LOG_WARN("get type-class comparison function failed", K(ret));
   } else {
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    ret = def_relational_eval_batch_func<RuntimeTCCmp>(
-        BATCH_EVAL_FUNC_ARG_LIST, cmp_func, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<RuntimeTCCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, cmp_func, access_ctx, cmp_op);
+    }
   }
   return ret;
 }

@@ -28,7 +28,6 @@ int ObGranuleTaskInfo::assign(const ObGranuleTaskInfo &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     if (OB_FAIL(ranges_.assign(other.ranges_))) {
-      LOG_WARN("assign ranges failed", K(ret));
     } else {
       tablet_loc_ = other.tablet_loc_;
       task_id_ = other.task_id_;

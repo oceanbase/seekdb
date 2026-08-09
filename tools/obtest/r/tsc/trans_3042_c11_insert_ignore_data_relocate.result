@@ -1,0 +1,30 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5,init_unit_num=1);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '100s';
+create table t1 (id1 int primary key, id2 int, id3 int);
+create unique index u_index on t1(id2);
+create unique index u_index2 on t1(id3);
+set ob_query_timeout=500000000000000;
+set ob_trx_timeout=500000000000000;
+insert into t1 values(1, 1, 1);
+insert into t1 values(2, 2, 2);
+ob1.mysql set ob_global_debug_sync = 'DELAY_INDEX_WRITE wait_for later timeout 1000000000';
+insert ignore into t1 values(3, 3, 2);
+ob1.mysql alter system minor freeze;
+ob1.mysql set ob_global_debug_sync = 'NOW signal later';
+commit;
+select * from t1;
+id1	id2	id3
+1	1	1
+2	2	2
+select /*+index(t1 u_index)*/* from t1;
+id1	id2	id3
+1	1	1
+2	2	2
+select /*+index(t1 u_index2)*/* from t1;
+id1	id2	id3
+1	1	1
+2	2	2
+ob1.mysql alter system major freeze;
+ob1.check_version 2;

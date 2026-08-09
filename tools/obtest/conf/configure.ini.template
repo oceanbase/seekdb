@@ -1,0 +1,118 @@
+## hosts for observer
+1.obs_hosts=10.101.192.90,10.101.161.29,100.69.196.172
+2.obs_hosts=10.101.192.90,10.101.161.29,100.69.196.172
+3.obs_hosts=10.101.192.90,10.101.161.29,100.69.196.172
+4.obs_hosts=10.101.192.90,10.101.161.29,100.69.196.172
+ct_hosts = 10.101.162.29
+
+# 多集群配置, 对于备份恢复来说需要第二个集群是恢复的目标集群。
+#2:1.obs_hosts=10.244.4.64,100.69.196.172
+#2:2.obs_hosts=10.244.4.64,100.69.196.172
+#2:3.obs_hosts=10.244.4.64,100.69.196.172
+
+# 设置网卡名字
+dev=bond0
+
+# ob静态数据目录配置
+data_path = /data/1
+
+# clog等目录配置
+clog_path = /data/1
+
+# ob工作目录配置
+workdir = ~/
+
+# 内存配置
+memory_size_limit=8G
+
+# cpu配置
+#node_cpu_count = 16
+
+# 是否收集core文件
+save_core=0
+
+# 是否收集日志文件，默认收集在obtest/collected_log
+save_log=1
+
+# 启动case前，是否清空环境(配置中所有机器)
+cleanup=1
+##配置是否需要统计覆盖率 with_coverage=1时，每个case结束都会stop obs
+with_coverage=0
+# configserver配置
+#configServer=***
+
+# 数据盘大小配置
+disk_avail_space=50G
+# 日志盘大小配置
+log_disk_size = 100G
+
+# server日志级别配置info/trace/debug
+server_log_level=info
+
+# mockserver所在路径
+mock_server_path=/home/hudson/obtest_1.0/mockobserver
+
+## 增加配置项portOffest,用于配置端口号的偏移,默认为0;
+# port_offset will be replaced by ak obtest, don't modify the following line
+port_offset=0
+# 用于配置端口的起始
+#port_base=3000
+##use_ob_connector 为1走javaclient，为0走jdbc
+use_ob_connector = 1
+##是否走ps协议,1为走ps，0为不走ps
+ps = 0
+
+
+# 备份恢复的agentserver节点,如果是单机测试建议ob1、ob2和agent都在同一个节点上，可以直接用本地磁盘测试备份恢复。
+agent_hosts = 100.81.182.8
+
+# 0: 表示oss备份. 1: 表示文件系统备份. 2: 表示cos备份.
+backup_restore_mode=1
+restore_delay=15000
+
+# the directory used by local filesystem backup
+file_dir = /home/yongle.xh/backup/
+# for nfs backup_backup_dest
+file_dir_1 = /home/yongle.xh/backup_backup/
+
+# oss备份恢复的配置，如果是文件系统的不需要改这个
+#注意oss_bucket只支持写桶名，不支持后面加子目录
+oss_bucket=oss://yongle-test
+oss_host=oss-cn-hangzhou-zmf.aliyuncs.com
+oss_id=fake_oss_id
+oss_key=fake_oss_key
+# for oss backup_backup_dest
+#注意oss_bucket_1只支持写桶名，不支持后面加子目录
+oss_bucket_1=oss://yongle-test
+oss_host_1=oss-cn-hangzhou-zmf.aliyuncs.com
+oss_id_1=fake_oss_id
+oss_key_1=fake_oss_key
+
+# cos备份恢复的配置
+#注意cos_bucket只支持写桶名，不支持后面加子目录
+cos_bucket=cos://backup-1304745170
+cos_host=cos.ap-nanjing.myqcloud.com
+cos_id=fake_cos_id
+cos_key=fake_cos_key
+cos_appid=fake_cos_appid
+# for cos backup backup
+#注意cos_bucket_1只支持写桶名，不支持后面加子目录
+cos_bucket_1=cos://backup-1304745170
+cos_host_1=cos.ap-nanjing.myqcloud.com
+cos_id_1=fake_cos_id
+cos_key_1=fake_cos_key
+cos_appid_1=fake_cos_appid
+
+# arbitration server ip list
+# If you want to deploy mutil arb servers, you should provide ip list.
+1.asvr_hosts=10.101.192.90,10.101.192.90
+# arbitration server port list
+# If you want to deploy mutil arb servers, you should provide port list.
+# asvr_port=12399,12400
+# arbitration server work dir
+# asvr_work_dir=/home/debin.jdb/work/
+
+# 共享存储部署集群设置的配置
+#ob_startup_mode=shared_storage
+# extra_tenant_params for create tenant or restore tenant
+#extra_tenant_params=ob_compaction_schedule_interval = '3s',compaction_low_thread_score = 100,compaction_mid_thread_score = 100,compaction_high_thread_score = 100,merger_check_interval = '10s',storage_high_thread_score = 100

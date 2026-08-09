@@ -46,7 +46,7 @@ ObMajorMergeProgressChecker::ObMajorMergeProgressChecker(
       tablet_status_map_(), table_compaction_map_(), fts_group_array_(),
       ckm_validator_(stop_, tablet_status_map_,
                      table_compaction_map_, idx_ckm_validate_array_, validator_statistics_,
-                     finish_tablet_ids_, uncompact_info_, fts_group_array_),
+                     finish_tablet_ids_, finish_tablet_ckm_array_, uncompact_info_, fts_group_array_),
       uncompact_info_(), total_time_guard_(), validator_statistics_(), batch_size_mgr_() {}
 
 int ObMajorMergeProgressChecker::init(
@@ -63,6 +63,7 @@ int ObMajorMergeProgressChecker::init(
   } else {
     idx_ckm_validate_array_.set_attr(ObMemAttr("RSCompCkmPair"));
     finish_tablet_ids_.set_attr(ObMemAttr("RSCompTabIds"));
+    finish_tablet_ckm_array_.set_attr(ObMemAttr("RSCompCkmArray"));
     sql_proxy_ = &sql_proxy;
     schema_service_ = &schema_service;
     merge_info_mgr_ = &merge_info_mgr;
@@ -144,6 +145,7 @@ int ObMajorMergeProgressChecker::clear_cached_info()
   table_ids_.reset();
   idx_ckm_validate_array_.reset();
   finish_tablet_ids_.reset();
+  finish_tablet_ckm_array_.reset();
   progress_.reset();
   ckm_validator_.clear_cached_info();
   loop_cnt_ = 0;
@@ -637,6 +639,7 @@ int ObMajorMergeProgressChecker::check_index_and_rest_table()
     }
   }
   (void) ckm_validator_.batch_update_report_scn();
+  (void) ckm_validator_.batch_write_tablet_ckm();
   return ret;
 }
 
@@ -872,6 +875,9 @@ int ObMajorMergeProgressChecker::deal_with_validated_table(
       if (OB_TMP_FAIL(ckm_validator_.push_finish_tablet_ids_with_update(
           table_id, table_ckm.get_tablet_ids()))) {
       }
+      if (OB_TMP_FAIL(ckm_validator_.push_tablet_ckm_items_with_update(
+          table_ckm.get_ckm_items()))) {
+      }
     }
     if (OB_TMP_FAIL(set_table_compaction_info_status(table_id, ObTableCompactionInfo::VERIFIED))) {
     }
@@ -963,7 +969,7 @@ int ObMajorMergeProgressChecker::get_idx_ckm_and_validate(
     if (OB_SUCC(ret) || OB_TABLE_NOT_EXIST == ret) {
       (void) deal_with_validated_table(index_table_id, 0 /*finish_index_cnt*/, index_table_ckm);
 #ifdef ERRSIM
-      if (EN_SPECIAL_INDEX_TABLE_VERIFY && index_table_ckm.get_table_schema()->should_not_validate_data_index_ckm()) {
+      if (EN_SPECIAL_INDEX_TABLE_VERIFY && index_table_ckm.get_table_schema()->should_not_validate_data_index_ckm()) { 
         SERVER_EVENT_ADD("storage_engine", "special_index_table_verify",
           "index_table_id", index_table_id,
           "data_table_id", data_table_ckm.get_table_id());

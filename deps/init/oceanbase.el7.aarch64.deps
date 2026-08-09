@@ -8,6 +8,17 @@ os=7
 arch=aarch64
 repo=http://mirrors.oceanbase.com/oceanbase/community/stable/el/7/aarch64/
 
+#RANGE_IF_BUSINESS
+[target-obdeploy]
+os=7
+arch=aarch64
+repo=https://ob-yum.oceanbase-dev.com/7/aarch64/test/ob-deploy/
+
+[target-obshell]
+os=7
+arch=aarch64
+repo=https://ob-yum.oceanbase-dev.com/7/aarch64/test/obshell/
+#RANGE_END
 
 [deps]
 devdeps-gtest-1.8.0-312026021311.el7.aarch64.rpm
@@ -28,7 +39,7 @@ devdeps-roaringbitmap-croaring-3.0.0-42024042816.el7.aarch64.rpm
 devdeps-vsag-abiv1-1.1.0-1752026041310.el7.aarch64.rpm
 devdeps-fast-float-6.1.3-42024112122.el7.aarch64.rpm
 devdeps-sqlite-abiv1-3.38.1-72026031815.el7.aarch64.rpm
-devdeps-jemalloc-5.3.1-32026080717.el7.aarch64.rpm
+devdeps-jemalloc-5.3.1-22026072411.el7.aarch64.rpm
 
 [tools]
 obdevtools-binutils-2.30-12022100413.el7.aarch64.rpm
@@ -38,12 +49,25 @@ obdevtools-cmake-3.30.3-52024111819.el7.aarch64.rpm
 obdevtools-flex-2.5.35-12022100417.el7.aarch64.rpm
 obdevtools-gcc-12.3.0-32024122017.el7.aarch64.rpm
 obdevtools-llvm-17.0.6-202026032415.el7.aarch64.rpm
+#RANGE_IF_BUSINESS
+ob-sanity-1.0.0-182026021018.el7.aarch64.rpm
+#RANGE_END
 
 [tools-deps]
-obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
-#obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
+#RANGE_IF_BUSINESS
+obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=obshell
+#RANGE_ELSE
+#obshell-4.4.1.1-32026031914.el7.aarch64.rpm target=community
+##obshell-4.5.0.0-12026050816.el7.aarch64.rpm target=community
+#RANGE_END
 
 [test-utils]
-ob-deploy-4.1.0-2.el7.aarch64.rpm target=community
-obclient-2.2.2-1.el7.aarch64.rpm target=community
-libobclient-2.2.2-3.el7.aarch64.rpm target=community
+#RANGE_IF_BUSINESS
+ob-deploy-4.1.x-190.el7.aarch64.rpm target=obdeploy
+obclient-2.2.3-20230515141610.el7.aarch64.rpm
+libobclient-2.2.3-20230512140006.el7.aarch64.rpm
+#RANGE_ELSE
+#ob-deploy-4.1.0-2.el7.aarch64.rpm target=community
+#obclient-2.2.2-1.el7.aarch64.rpm target=community
+#libobclient-2.2.2-3.el7.aarch64.rpm target=community
+#RANGE_END

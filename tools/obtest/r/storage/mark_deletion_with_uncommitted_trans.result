@@ -1,0 +1,50 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+set global ob_trx_idle_timeout = 100000000000;
+alter system set minor_compact_trigger = 10;
+alter system set syslog_io_bandwidth_limit = '100G';
+use test;
+create table mark_deletion_with_uncom(c1 int primary key, c2 int);
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+delete from test.mark_deletion_with_uncom;
+begin;
+insert into test.mark_deletion_with_uncom values (77,77);
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+set ob_log_level = 'DEBUG';
+select * from test.mark_deletion_with_uncom;
+c1	c2
+77	77
+set ob_log_level = 'INFO';
+rollback;
+ob1.z1.obs0.count_log "RangeSkip: skip range.*rowkey.*299";
+0
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+delete from test.mark_deletion_with_uncom;
+begin;
+insert into test.mark_deletion_with_uncom values (88,88);
+delete from test.mark_deletion_with_uncom;
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+set ob_log_level = 'DEBUG';
+select * from test.mark_deletion_with_uncom;
+c1	c2
+set ob_log_level = 'INFO';
+rollback;
+ob1.z1.obs0.count_log "RangeSkip: skip range.*rowkey.*299";
+0
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+delete from test.mark_deletion_with_uncom;
+alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active = 0, 0, 180;
+set ob_log_level = 'DEBUG';
+select * from test.mark_deletion_with_uncom;
+c1	c2
+set ob_log_level = 'INFO';
+ob1.z1.obs0.check_log_until_success "RangeSkip: skip range.*rowkey.*499.*gap_size=400";

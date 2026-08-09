@@ -1,0 +1,14 @@
+t/storage_ha/backup_data/1005_backup_ddl_sstable.test
+t/storage_ha_sn_only/restore/1005_restore_from_multi_backup_set.test
+t/storage_ha/restore/2503_multi_sw_fo.test
+t/storage_ha/restore/1018_restore_with_ls_switch_leader_at_restore_minor.test
+t/storage_ha/restore/2508_restore_to_active_trans.test
+t/storage_ha_sn_only/restore/1025_sstable_with_sec_meta_index_restore.test
+t/storage_ha/restore/3102_standby_backup_and_restore.test
+t/storage_ha_sn_only/restore/1024_ddl_sstable_restore.test
+t/storage_ha/restore/2506_restore_with_multi_column_table.test
+t/storage_ha_sn_only/restore/1020_restore_multiple_major_sstables.test
+t/storage_ha_sn_only/restore/2001_major_freeze_twice_and_mview_push_refresh_scn.test
+t/storage_ha_sn_only/backup_data/1013_backup_during_auto_split.test
+t/storage_ha_sn_only/restore/6000_migrate_after_quick_restore.test
+t/storage_ha/restore/3101_migration_during_restore_and_transfer.test

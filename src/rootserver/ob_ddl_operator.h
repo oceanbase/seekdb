@@ -22,6 +22,7 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/string/ob_string.h"
 #include "lib/string/ob_sql_string.h"
+#include "query/ddl/ob_ddl_schema_service.h"
 #include "share/schema/ob_ddl_sql_service.h"
 #include "share/ob_rpc_struct.h"
 
@@ -82,7 +83,7 @@ class ObDropForeignKeyArg;
 namespace rootserver
 {
 
-class ObDDLOperator
+class ObDDLOperator : public query::ObIColumnSchemaWriter
 {
 public:
   ObDDLOperator(share::schema::ObMultiVersionSchemaService &schema_service,
@@ -188,7 +189,7 @@ public:
                                 common::ObIArray<share::schema::ObPartition*> &part_array);
   int insert_single_column(common::ObMySQLTransaction &trans,
                            const share::schema::ObTableSchema &new_table_schema,
-                           share::schema::ObColumnSchemaV2 &new_column);
+                           share::schema::ObColumnSchemaV2 &new_column) override;
   int delete_single_column(common::ObMySQLTransaction &trans,
                            const int64_t new_schema_version,
                            share::schema::ObTableSchema &new_table_schema,
@@ -804,7 +805,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
   new_object_name.reset();
   if (OB_FAIL(new_object_name.append_fmt("__recycle_$_%ld",
                                         schema.get_schema_version()))) {
-    RS_LOG(WARN, "append new object name failed", K(ret), K(schema));
   }
   return ret;
 }

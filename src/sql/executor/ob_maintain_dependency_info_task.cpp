@@ -140,8 +140,8 @@ int ObMaintainObjDepInfoTask::process()
   int64_t last_version = 0;
   share::schema::ObSchemaGetterGuard schema_guard;
   SMART_VAR(obcall::ObDependencyObjDDLArg, dep_obj_info_arg) {
-
-
+    
+    
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
     OZ (gctx_.schema_service_->async_refresh_schema(last_version));
     OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
@@ -293,9 +293,10 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
                                                      sql::ObMaintainDepInfoTaskQueue &task_queue)
 {
   int ret = OB_SUCCESS;
-  bool write_enabled = false;
-  if (OB_FAIL(share::ObShareUtil::is_server_write_enabled(write_enabled))) {
-  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || !write_enabled)) {
+  share::ObServerRole::Role server_role;
+  bool is_standby = false;
+  if (OB_FAIL(share::ObShareUtil::check_if_server_role_is_standby(is_standby))) {
+  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
     if (OB_INVALID_ID != dep_obj_id) {
       OZ (task_queue.erase_view_id_from_set(dep_obj_id));
     }

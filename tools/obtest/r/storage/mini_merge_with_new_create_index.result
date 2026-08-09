@@ -1,0 +1,28 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob1.mysql alter system suspend merge;;
+create table t1(c1 int primary key, c2 int, c3 int);
+insert into t1 values(1,1,1), (2,2,2), (3,3,3);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where index_id = $tid and table_type = 7, 1, 300;
+ob1.mysql alter system major freeze;
+insert into t1 values(4,4,4), (5,5,5);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where index_id = $tid and table_type = 7, 2, 300;
+insert into t1 values(6,6,6), (7,7,7);
+ob1.mysql alter system minor freeze;
+ob1.check_until_timeout select count(1) from oceanbase.__all_virtual_table_mgr where index_id = $tid and table_type = 7, 3, 300;
+ob1.check_until_timeout select last_replay_log_ts from __all_virtual_partition_info where table_id = $tid, $endts, 300;
+ob1.mysql set ob_global_debug_sync = 'BEFORE_BUILD_LOCAL_INDEX wait_for continue_signal execute 1000000';
+create index i2 on t1(c2) local;
+mini_cnt : '0' ,  index_id: '1100611139453778'
+mini_cnt : '0' ,  index_id: '1100611139453778'
+mini_cnt : '0' ,  index_id: '1100611139453778'
+mini_cnt : '0' ,  index_id: '1100611139453778'
+mini_cnt : '0' ,  index_id: '1100611139453778'
+mini_cnt : '0' ,  index_id: '1100611139453778'
+ob1.mysql set ob_global_debug_sync = 'now signal continue_signal';
+ob1.mysql set ob_global_debug_sync = 'BEFORE_BUILD_LOCAL_INDEX clear';
+ob1.check_until_timeout select count(1) as c from oceanbase.__all_virtual_table_mgr where table_type = 0 and is_active=0, 0, 300;

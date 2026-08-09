@@ -1,0 +1,245 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.mysql create resource unit t1_unit max_cpu=5,min_memory='10G',max_memory='10G',max_disk_size='100G',max_iops=1000,max_session_num=1000;
+ob1.mysql create resource pool t1_pool unit = 't1_unit', unit_num = 1, zone_list= ("z1","z2");
+ob1.mysql create tenant t1 replica_num 1, resource_pool_list ('t1_pool') set ob_tcp_invited_nodes='%';
+create database r primary_zone 'z1';
+create database l primary_zone 'z2';
+use r;
+create table t (c1 int primary key, c2 int);
+insert into t (c1, c2) values (1, 1);
+create table t1 (c1 int primary key, c2 int);
+insert into t1 (c1, c2) values (1, 1);
+create table t2 (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+use l;
+create table t (c1 int primary key, c2 int);
+insert into t (c1, c2) values (1, 1);
+create table t1 (c1 int primary key, c2 int);
+insert into t1 (c1, c2) values (1, 1);
+create table t2 (c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+explain update r.t set c2 = 2 where c1 in (select c1 from r.t1);
+Query Plan
+=============================================
+|ID|OPERATOR            |NAME|EST. ROWS|COST|
+---------------------------------------------
+|0 |EXCHANGE IN REMOTE  |    |1        |73  |
+|1 | EXCHANGE OUT REMOTE|    |1        |73  |
+|2 |  UPDATE            |    |1        |73  |
+|3 |   NESTED-LOOP JOIN |    |1        |72  |
+|4 |    TABLE SCAN      |t1  |1        |36  |
+|5 |    TABLE GET       |t   |1        |36  |
+=============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil)
+  1 - output(nil), filter(nil)
+  2 - output(nil), filter(nil), table_columns([{t: ({t: (t.c1, t.c2)})}]),
+      update([t.c2=?])
+  3 - output([t.c1], [t.c2], [?]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  4 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  5 - output([t.c2], [t.c1]), filter(nil), 
+      access([t.c2], [t.c1]), partitions(p0)
+
+explain update l.t set c2 = 2 where c1 in (select c1 from l.t1);
+Query Plan
+==========================================
+|ID|OPERATOR         |NAME|EST. ROWS|COST|
+------------------------------------------
+|0 |UPDATE           |    |1        |73  |
+|1 | NESTED-LOOP JOIN|    |1        |72  |
+|2 |  TABLE SCAN     |t1  |1        |36  |
+|3 |  TABLE GET      |t   |1        |36  |
+==========================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil), table_columns([{t: ({t: (t.c1, t.c2)})}]),
+      update([t.c2=?])
+  1 - output([t.c1], [t.c2], [?]), filter(nil), 
+      conds(nil), nl_params_([t1.c1])
+  2 - output([t1.c1]), filter(nil), 
+      access([t1.c1]), partitions(p0)
+  3 - output([t.c2], [t.c1]), filter(nil), 
+      access([t.c2], [t.c1]), partitions(p0)
+
+explain update r.t2 set c2 = 2;
+Query Plan
+==============================================
+|ID|OPERATOR           |NAME|EST. ROWS|COST  |
+----------------------------------------------
+|0 |EXCHANGE IN DISTR  |    |200000   |323720|
+|1 | EXCHANGE OUT DISTR|    |200000   |323720|
+|2 |  UPDATE           |    |200000   |323720|
+|3 |   TABLE SCAN      |t2  |200000   |123720|
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil)
+  1 - output(nil), filter(nil)
+  2 - output(nil), filter(nil), table_columns([{t2: ({t2: (t2.c1, t2.c2)})}]),
+      update([t2.c2=?])
+  3 - output([t2.c1], [t2.c2], [?]), filter(nil), 
+      access([t2.c1], [t2.c2]), partitions(p[0-1])
+
+explain update r.t2 set c1 = 2;
+Query Plan
+=================================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST  |
+-------------------------------------------------
+|0 |MULTI PARTITION UPDATE|    |200000   |342652|
+|1 | EXCHANGE IN DISTR    |    |200000   |142652|
+|2 |  EXCHANGE OUT DISTR  |    |200000   |123720|
+|3 |   TABLE SCAN         |t2  |200000   |123720|
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil), table_columns([{t2: ({t2: (t2.c1, t2.c2)})}]),
+      update([t2.c1=?])
+  1 - output([t2.c1], [t2.c2], [?]), filter(nil)
+  2 - output([t2.c1], [t2.c2]), filter(nil)
+  3 - output([t2.c1], [t2.c2]), filter(nil), 
+      access([t2.c1], [t2.c2]), partitions(p[0-1])
+
+explain update l.t2 set c2 = 2;
+Query Plan
+==============================================
+|ID|OPERATOR           |NAME|EST. ROWS|COST  |
+----------------------------------------------
+|0 |EXCHANGE IN DISTR  |    |200000   |323720|
+|1 | EXCHANGE OUT DISTR|    |200000   |323720|
+|2 |  UPDATE           |    |200000   |323720|
+|3 |   TABLE SCAN      |t2  |200000   |123720|
+==============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil)
+  1 - output(nil), filter(nil)
+  2 - output(nil), filter(nil), table_columns([{t2: ({t2: (t2.c1, t2.c2)})}]),
+      update([t2.c2=?])
+  3 - output([t2.c1], [t2.c2], [?]), filter(nil), 
+      access([t2.c1], [t2.c2]), partitions(p[0-1])
+
+explain update l.t2 set c1 = 2;
+Query Plan
+=================================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST  |
+-------------------------------------------------
+|0 |MULTI PARTITION UPDATE|    |200000   |342652|
+|1 | EXCHANGE IN DISTR    |    |200000   |142652|
+|2 |  EXCHANGE OUT DISTR  |    |200000   |123720|
+|3 |   TABLE SCAN         |t2  |200000   |123720|
+=================================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil), table_columns([{t2: ({t2: (t2.c1, t2.c2)})}]),
+      update([t2.c1=?])
+  1 - output([t2.c1], [t2.c2], [?]), filter(nil)
+  2 - output([t2.c1], [t2.c2]), filter(nil)
+  3 - output([t2.c1], [t2.c2]), filter(nil), 
+      access([t2.c1], [t2.c2]), partitions(p[0-1])
+
+explain update r.t set c2 = 2 where c1 in (select c1 from l.t);
+Query Plan
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MULTI PARTITION UPDATE|    |1        |73  |
+|1 | NESTED-LOOP JOIN     |    |1        |72  |
+|2 |  EXCHANGE IN DISTR   |    |1        |37  |
+|3 |   EXCHANGE OUT DISTR |    |1        |36  |
+|4 |    TABLE SCAN        |t   |1        |36  |
+|5 |  TABLE GET           |t   |1        |36  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil), table_columns([{t: ({t: (t.c1, t.c2)})}]),
+      update([t.c2=?])
+  1 - output([t.c1], [t.c2], [?]), filter(nil), 
+      conds(nil), nl_params_([t.c1])
+  2 - output([t.c2], [t.c1]), filter(nil)
+  3 - output([t.c2], [t.c1]), filter(nil)
+  4 - output([t.c2], [t.c1]), filter(nil), 
+      access([t.c2], [t.c1]), partitions(p0)
+  5 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+
+update r.t set c2 = 2 where c1 in (select c1 from l.t);
+select * from r.t;
+c1	c2
+1	2
+explain delete from r.t where c1 in (select c1 from l.t);
+Query Plan
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MULTI PARTITION DELETE|    |1        |73  |
+|1 | NESTED-LOOP JOIN     |    |1        |72  |
+|2 |  EXCHANGE IN DISTR   |    |1        |37  |
+|3 |   EXCHANGE OUT DISTR |    |1        |36  |
+|4 |    TABLE SCAN        |t   |1        |36  |
+|5 |  TABLE GET           |t   |1        |36  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output(nil), filter(nil), table_columns([{t: ({t: (t.c1, t.c2)})}])
+  1 - output([t.c1], [t.c2]), filter(nil), 
+      conds(nil), nl_params_([t.c1])
+  2 - output([t.c1], [t.c2]), filter(nil)
+  3 - output([t.c1], [t.c2]), filter(nil)
+  4 - output([t.c1], [t.c2]), filter(nil), 
+      access([t.c1], [t.c2]), partitions(p0)
+  5 - output([t.c1]), filter(nil), 
+      access([t.c1]), partitions(p0)
+
+delete from r.t where c1 in (select c1 from l.t);
+select * from r.t;
+c1	c2
+explain insert into r.t select * from l.t;
+Query Plan
+===============================================
+|ID|OPERATOR              |NAME|EST. ROWS|COST|
+-----------------------------------------------
+|0 |MULTI PARTITION INSERT|    |1        |37  |
+|1 | TABLE SCAN           |t   |1        |36  |
+===============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), 
+      columns([{t: ({t: (t.c1, t.c2)})}]), partitions(p0)
+  1 - output([t.c1], [t.c2]), filter(nil), 
+      access([t.c1], [t.c2]), partitions(p0)
+
+insert into r.t select * from l.t;
+select * from r.t;
+c1	c2
+1	1
+explain insert into l.t select * from r.t;
+Query Plan
+=============================================
+|ID|OPERATOR            |NAME|EST. ROWS|COST|
+---------------------------------------------
+|0 |INSERT              |    |1        |37  |
+|1 | EXCHANGE IN DISTR  |    |1        |37  |
+|2 |  EXCHANGE OUT DISTR|    |1        |36  |
+|3 |   TABLE SCAN       |t   |1        |36  |
+=============================================
+
+Outputs & filters: 
+-------------------------------------
+  0 - output([t.c1], [t.c2]), filter(nil), 
+      columns([{t: ({t: (t.c1, t.c2)})}]), partitions(p0)
+  1 - output([t.c1], [t.c2]), filter(nil)
+  2 - output([t.c1], [t.c2]), filter(nil)
+  3 - output([t.c1], [t.c2]), filter(nil), 
+      access([t.c1], [t.c2]), partitions(p0)
+

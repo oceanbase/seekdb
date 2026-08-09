@@ -78,6 +78,13 @@ int ObLSMeta::set_start_restore_state()
   return ls_persistent_state_.start_restore();
 }
 
+int ObLSMeta::set_finish_restore_state()
+{
+  ObReentrantWLockGuard update_guard(update_lock_);
+  ObReentrantWLockGuard guard(rw_lock_);
+  return ls_persistent_state_.finish_restore();
+}
+
 int ObLSMeta::set_remove_state()
 {
   ObReentrantWLockGuard update_guard(update_lock_);
@@ -96,7 +103,7 @@ ObLSMeta &ObLSMeta::operator=(const ObLSMeta &other)
   ObReentrantRLockGuard guard(other.rw_lock_);
   ObReentrantWLockGuard guard_myself(rw_lock_);
   if (this != &other) {
-
+    
     ls_persistent_state_ = other.ls_persistent_state_;
     clog_base_lsn_ = other.clog_base_lsn_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
@@ -113,7 +120,7 @@ void ObLSMeta::reset()
 {
   ObReentrantWLockGuard update_guard(update_lock_);
   ObReentrantWLockGuard guard(rw_lock_);
-
+  
   clog_base_lsn_.reset();
   clog_checkpoint_scn_ = ObScnRange::MIN_SCN;
   restore_status_ = ObRestoreStatus::Status::RESTORE_STATUS_MAX;
@@ -209,17 +216,17 @@ int ObLSMeta::set_restore_status(const int64_t ls_epoch, const ObRestoreStatus &
   } else {
     ObLSMeta tmp(*this);
     tmp.restore_status_ = restore_status;
-    if (restore_status.is_none() && !tmp.ls_persistent_state_.is_normal_state()
-        && OB_FAIL(tmp.ls_persistent_state_.finish_restore())) {
-      LOG_WARN("failed to switch tmp ls meta to finish restore state", KR(ret), K(tmp));
-    } else if (OB_FAIL(write_slog_(ls_epoch, tmp))) {
+    if (OB_FAIL(write_slog_(ls_epoch, tmp))) {
     } else {
       ObReentrantWLockGuard guard(rw_lock_);
-      ls_persistent_state_ = tmp.ls_persistent_state_;
-      ObRestoreStatus original_status = restore_status_;
-      restore_status_ = restore_status;
-      FLOG_INFO("succeed to set ls restore status", "original status",
-                original_status, "current status", restore_status);
+      if (restore_status.is_none() && OB_FAIL(set_finish_restore_state())) {
+        LOG_WARN("set finish restore state failed", KR(ret));
+      } else {
+        ObRestoreStatus original_status = restore_status_;
+        restore_status_ = restore_status;
+        FLOG_INFO("succeed to set ls restore status", "original status",
+                  original_status, "current status", restore_status);
+      }
     }
   }
   return ret;
@@ -287,36 +294,6 @@ int ObLSMeta::get_saved_info(ObLSSavedInfo &saved_info)
   return ret;
 }
 
-int ObLSMeta::update_for_physical_restore(
-    const int64_t ls_epoch,
-    const ObLSMeta &source_meta)
-{
-  int ret = OB_SUCCESS;
-  ObReentrantWLockGuard update_guard(update_lock_);
-  if (OB_FAIL(check_can_update_())) {
-    LOG_WARN("ls meta cannot update for physical restore", K(ret), K(*this));
-  } else if (!source_meta.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid source ls meta for physical restore", K(ret), K(source_meta));
-  } else {
-    ObLSMeta tmp(*this);
-    tmp.replayable_point_ = source_meta.replayable_point_;
-    tmp.tablet_change_checkpoint_scn_ = source_meta.tablet_change_checkpoint_scn_;
-    tmp.all_id_meta_.update_all_id_meta(source_meta.all_id_meta_);
-    if (OB_FAIL(write_slog_(ls_epoch, tmp))) {
-      LOG_WARN("failed to persist physical restore ls meta", K(ret), K(ls_epoch), K(tmp));
-    } else {
-      ObReentrantWLockGuard guard(rw_lock_);
-      replayable_point_ = tmp.replayable_point_;
-      tablet_change_checkpoint_scn_ = tmp.tablet_change_checkpoint_scn_;
-      all_id_meta_.update_all_id_meta(tmp.all_id_meta_);
-      LOG_INFO("updated ls meta for physical restore",
-          K(ls_epoch), K(source_meta), "local_meta", *this);
-    }
-  }
-  return ret;
-}
-
 
 int ObLSMeta::build_saved_info(const int64_t ls_epoch)
 {
@@ -365,8 +342,7 @@ int ObLSMeta::clear_saved_info(const int64_t ls_epoch)
 
 int ObLSMeta::init(
     const ObRestoreStatus &restore_status,
-    const SCN &create_scn,
-    const palf::LSN &clog_base_lsn)
+    const SCN &create_scn)
 {
   int ret = OB_SUCCESS;
   if (!restore_status.is_valid()) {
@@ -375,7 +351,7 @@ int ObLSMeta::init(
   } else {
     ls_persistent_state_ = ObLSPersistentState::State::LS_INIT;
     clog_checkpoint_scn_ = create_scn;
-    clog_base_lsn_ = clog_base_lsn;
+    clog_base_lsn_.val_ = PALF_INITIAL_LSN_VAL;
     restore_status_ = restore_status;
   }
   return ret;

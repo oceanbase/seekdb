@@ -1,0 +1,108 @@
+# owner: yunxing.cyx
+# owner group: transaction
+# description: trans internal rollbacked when session
+#              idle time greate than ob_trx_idle_timeout
+#              and need user rollback transaction explicitly
+# 
+
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=2);
+#ob1.z1.obs0.set extra_config=_enable_fast_commit=true;
+#ob1.z2.obs0.set extra_config=_enable_fast_commit=true;
+ob1.reboot;
+
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql alter system set syslog_level='info';
+
+let $ip0=deploy_get_value(ob1.z1.obs0.ip);
+let $port0=deploy_get_value(ob1.z1.obs0.port);
+let $sql_port0=deploy_get_value(ob1.z1.obs0.mysql_port);
+let $ip1=deploy_get_value(ob1.z2.obs0.ip);
+let $port1=deploy_get_value(ob1.z2.obs0.port);
+let $sql_port1=deploy_get_value(ob1.z2.obs0.mysql_port);
+
+connect(sys,$ip0,root@sys,,oceanbase,$sql_port0);
+connect(conn1,$ip0,root@obtest,,test,$sql_port0);
+
+--disable_warnings
+connection sys;
+alter system set enable_auto_leader_switch = false;
+--enable_warnings
+
+connection conn1;
+--disable_abort_on_error
+set global ob_query_timeout = 100000000000;
+set global ob_trx_timeout = 100000000000;
+set global ob_trx_idle_timeout = 2000000;
+use test;
+
+connect(conn2,$ip0,root@obtest,,test,$sql_port0);
+connection conn2;
+create table t0(a int primary key);
+create table t1(a int) partition by hash(a) partitions 4;
+insert into t0 values(0);
+insert into t1 values(0),(1),(2),(3);
+
+# case 1: read only trans will success
+connection conn2;
+begin;
+select 1, * from t0;
+sleep 7;
+select 2, * from t0;
+commit;
+select 3, * from t0;
+select "END_CASE_1" as FLAG;
+
+# case 2: single part trans
+connection conn2;
+begin;
+insert into t0 values(1);
+sleep 7;
+select 1, * from t0;
+insert into t0 values(2);
+commit;
+select 2, * from t0;
+select "END_CASE_2" as FLAG;
+
+# case 3: multi part trans
+connection conn2;
+begin;
+insert into t1 value(1);
+insert into t1 value(2);
+sleep 7;
+select 1, * from t1;
+insert into t1 values(3);
+commit;
+select "END_CASE_3" as FLAG;
+
+# case 4: implicit commit
+connection conn2;
+begin;
+insert into t0 values(10);
+sleep 7;
+begin;
+select 1,* from t0;
+select "END_CASE_4" as FLAG;
+
+# case 5: rollback will not disconnect
+connection conn2;
+begin;
+insert into t0 values(10);
+sleep 7;
+select 1,* from t0;
+rollback;
+select 2,* from t0;
+select "END_CASE_5" as FLAG;
+
+# case 6: swith partition leader, sp trans convert to dist trans
+connection conn2;
+begin;
+insert into t0 values(11);
+ob1.z2.obs0.switch_partition obtest:test:t0;
+sleep 7;
+select 1, * from t0;
+commit;
+select 2, * from t0;
+select "END_CASE_6" as FLAG;

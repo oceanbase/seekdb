@@ -47,6 +47,10 @@ inline int usleep(useconds_t usec) {
 #include "lib/allocator/ob_malloc.h"
 #include "lib/time/ob_clock_generator.h"
 
+#ifdef __APPLE__
+#include <sys/types.h>  // includes BSD type definitions
+using uint = unsigned int;
+#endif
 #define FALSE_IT(stmt) ({ (stmt); false; })
 #define OB_FALSE_IT(stmt) ({ (stmt); false; })
 
@@ -590,17 +594,6 @@ inline int64_t get_phy_mem_size()
 #endif
 }
 
-// Returns the finite memory limit of the current cgroup, or 0 when no finite
-// limit can be found. The path arguments are primarily useful for inspecting a
-// different procfs view and for tests.
-int64_t get_cgroup_memory_limit(
-    const char *proc_cgroup_path = "/proc/self/cgroup",
-    const char *proc_mountinfo_path = "/proc/self/mountinfo");
-
-// Returns the smaller of physical memory and the current cgroup memory limit.
-// On platforms without cgroups this is the same as get_phy_mem_size().
-int64_t get_effective_memory_size();
-
 int64_t get_level1_dcache_size();
 
 int64_t get_level1_icache_size();
@@ -672,7 +665,7 @@ int wild_compare(const ObString &str, const ObString &wild_str, const bool str_i
 ///wild char
 ///param [in] count count of arguments
 ///param [in] ... strings of needed to compute sort value
-uint64_t get_sort(uint32_t count, ...);
+uint64_t get_sort(uint count, ...);
 
 ///@brief Get the sort value.
 ///param [in] str string needed to compute sort value

@@ -1,0 +1,14 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+create table t1(id1 int, id2 int) partition by hash(id1 % 3000) partitions 3000;
+count(1)
+2999
+count(1)
+2999
+count(1)
+499
+count(1)
+0
+drop table t1;

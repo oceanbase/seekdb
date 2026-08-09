@@ -1,0 +1,70 @@
+#rs
+#zbf
+#A集群启动，B集群快照接入；
+#A集群宕机，B集群failover成主库
+#C集群接入，同步
+#B C集群切换
+#A集群重新接入
+ob1=OBI(cluster=1, proxy_num = 0);
+ob2=OBI(cluster=1, proxy_num = 0, leaderob=ob1);
+
+ob1.reboot;
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn_sys;
+let $case_index = 1;
+let $unit_num = 1;
+let $locality = 'f@z1';
+let $zone_list = 'z1';
+source include/create_tenant_1.inc;
+ob_connect(conn1, ob1.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn1;
+create table t1(c1 int primary key, c2 int, c3 int);
+create index il on t1(c2);
+create index il1 on t1(c3) local;
+create table t2222(c1 int primary key, c2 int);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+ob2.reboot;
+ob2.check_until_timeout select count(*) from oceanbase.__all_tenant, 2, 100;
+ob2.mysql_p select column_value from oceanbase.__all_core_table where table_name like "%global%" and column_name = 'standby_snapshot_frozen_version';
+ob_connect(conn2, ob2.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn2;
+source include/standby_ddl.inc;
+ob2.mysql set global ob_query_timeout = 100000000;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+let $case_index = 2;
+source include/create_tenant_1.inc;
+ob1.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+let $cluster_name = deploy_get_value(ob2.select select info from oceanbase.__all_zone where name = 'cluster', info, 1);
+let $cluster_id = deploy_get_value(ob2.select select value from oceanbase.__all_virtual_sys_parameter_stat where name = 'cluster_id', value, 1);
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+ob2.check_version 3;
+#A集群宕机
+ob1.force_stop;
+ob2.mysql alter system set _mini_merge_concurrency = 16;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '3s';
+ob2.mysql set global ob_query_timeout = 600000000;
+ob2.mysql alter system ACTIVATE PHYSICAL STANDBY CLUSTER;
+ob2.mysql alter system set _mini_merge_concurrency = 3;
+ob2.mysql alter system set _ob_minor_merge_schedule_interval = '20s';
+
+ob_connect(conn21, ob2.z1.obs0, root@tenant_1, ,test, , USE_OB_CONNECTOR);
+connection conn21;
+create table t2(c1 int primary key, c2 int, c3 int);
+create database msy;
+
+ob2.check_until_timeout select value from oceanbase.__all_zone where name='last_merged_version' and zone='', 4, 300;
+#C集群接入
+ob3=OBI(cluster=1, proxy_num = 0, leaderob=ob2);
+ob3.reboot;
+ob_connect(conn3, ob3.z1.obs0, root@sys, ,oceanbase, , USE_OB_CONNECTOR);
+connection conn3;
+source include/standby_ddl.inc;
+ob2.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO STANDBY, 600;
+ob2.mysql alter system commit to switchover to physical standby;
+ob3.check_until_timeout select switchover_status from oceanbase.v\$ob_cluster, TO PRIMARY, 30;
+ob3.mysql alter system commit to switchover to primary;
+#存在failover info信息
+ob3.mysql_p select count(*) from oceanbase.__all_failover_info;
+ob3.mysql_p select count(*) from oceanbase.__all_virtual_cluster_failover_info;

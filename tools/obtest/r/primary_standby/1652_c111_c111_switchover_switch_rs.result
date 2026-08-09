@@ -1,0 +1,25 @@
+ob1=OBI(cluster=1:1, proxy_num = 0);
+ob2=OBI(cluster=1:1, proxy_num = 0, leaderob=ob1);
+ob1.reboot;
+ob2.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = 'False';
+ob1.z1.obs0.switch_rs;
+ob1.z1.obs0.check_leader sys:oceanbase:__all_core_table;
+set ob_query_timeout=20000000;
+use test;
+create table t1(c1 int primary key, c2 int);
+ob1.z2.obs0.switch_rs;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+ob1.z1.obs0.switch_rs;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+ob1.mysql alter system COMMIT TO SWITCHOVER TO PHYSICAL STANDBY;
+ob2.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO PRIMARY', 1, 60;
+ob2.mysql alter system COMMIT TO SWITCHOVER TO PRIMARY;
+ob1.z2.obs0.switch_rs;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_core_meta_table where role = 1 and svr_ip='$ip' and svr_port='$port', 1, 30;
+ob2.mysql alter system major freeze;
+ob2.check_version 2;
+ob1.check_version 2;
+ob1.z2.obs0.count_log 'two leader exist in config_url, check it!!';
+0

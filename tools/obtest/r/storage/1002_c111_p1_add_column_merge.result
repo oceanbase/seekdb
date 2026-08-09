@@ -1,0 +1,13 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=1);
+ob1.reboot;
+use test;
+case start
+create table test_micro_block (pk int primary key, int_column int, char_column varchar(128)) compression 'none';
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+alter table test_micro_block add column new_column int default 0;
+ob1.mysql alter system major freeze;
+ob1.check_version 3;
+update test_micro_block set int_column = 1 where pk = 0;
+ob1.mysql alter system major freeze;
+ob1.check_version 4;

@@ -1320,12 +1320,12 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
     LOG_WARN("invalid parameter", K(session), K(ret));
   } else if (OB_FAIL(session->get_collation_connection(coll_type))) {
   } else {
-
+    
     int32_t no_sp_len = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(coll_type,
                                                                           str_val.ptr(),
                                                                           str_val.length()));
     ObString val_no_sp(no_sp_len, str_val.ptr());
-	ObTZMapWrap tz_map_wrap;
+  	ObTZMapWrap tz_map_wrap;
     ObTimeZoneInfoManager *tz_info_mgr = NULL;
     if (OB_FAIL(OTTZ_MGR.get_timezone(tz_map_wrap, tz_info_mgr))) {
     } else if (OB_ISNULL(tz_info_mgr)) {
@@ -1669,7 +1669,7 @@ int ObSysVarOnCheckFuncs::check_and_convert_collation_not_null(ObExecContext &ct
         ObCollationType cstype = static_cast<ObCollationType>(out_val.get_int());
         if (!ObCharset::is_valid_collation(cstype)) {
           ret = OB_ERR_UNKNOWN_CHARSET;
-          LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, in_val.get_string().length(), in_val.get_string().ptr());
+          LOG_USER_ERROR(OB_ERR_UNKNOWN_CHARSET, in_val.get_string().length(), in_val.get_string().ptr()); 
         } else if(ObCharset::get_charset(cstype)->mbminlen > 1) {
           ret = OB_ERR_WRONG_VALUE_FOR_VAR;
           LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR,
@@ -1880,7 +1880,7 @@ int ObSysVarOnCheckFuncs::check_default_lob_inrow_threshold(sql::ObExecContext &
   } else {
     out_val = in_val;
   }
-  return ret;
+  return ret; 
 }
 
 bool ObSysVarOnCheckFuncs::can_set_trans_var(ObSetVar::SetScopeType scope,
@@ -2661,7 +2661,7 @@ int ObPreProcessSysVars::change_initial_value()
                                                ObSpecialSysVarValues::server_port_int_str_))) {
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_PORT,
                                                ObSpecialSysVarValues::server_port_int_str_))) {
-  } else
+  } else 
    if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_SOCKET,
                                                ObSpecialSysVarValues::server_socket_file_str_))) {
   } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_SOCKET,

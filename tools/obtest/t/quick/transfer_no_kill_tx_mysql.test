@@ -1,0 +1,251 @@
+#########################################
+#owner:       lana.lgx handora.qc
+#owner group: transaction
+#description: transfer support active tx move
+# 测试点:
+#  transfer不杀事务专用测试case
+#########################################
+
+ob1=OBI(cluster=1:1:1, proxy_num=0, init_unit_cpu=0, locality=HZ:HZ:HZ);
+
+let $extra_conf = "cpu_count=16,memory_budget='100G',stack_size='1536K',cache_wash_threshold='1G',enable_async_syslog=false,_private_buffer_size='16K',_fast_commit_callback_count='1',log_disk_size='150G'";
+ob1.z1.obs0.set extra_config=$extra_conf;
+ob1.z2.obs0.set extra_config=$extra_conf;
+ob1.z3.obs0.set extra_config=$extra_conf;
+sleep 3;
+ob1.reboot;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+
+ob1.mysql create resource unit box1 max_cpu 10, min_cpu 10, memory_size '10G', log_disk_size '30G';
+ob1.mysql create resource pool pool1 unit = 'box1', unit_num = 1;
+ob1.mysql create tenant mysql replica_num = 3,primary_zone='z1,z2,z3', resource_pool_list=('pool1') set ob_tcp_invited_nodes='%';
+
+ob1.check_until_timeout select count(*) c from oceanbase.__all_server where start_service_time <= 0 or status = "inactive", 0, 120;
+
+## get ob1 z1 ip1 and port1
+let $ip1 = deploy_get_value(ob1.z1.obs0.ip);
+let $port1 = deploy_get_value(ob1.z1.obs0.port);
+
+## get ob1 z2 ip2 and port2
+let $ip2 = deploy_get_value(ob1.z2.obs0.ip);
+let $port2 = deploy_get_value(ob1.z2.obs0.port);
+
+## get ob1 z3 ip3 and port3
+let $ip3 = deploy_get_value(ob1.z3.obs0.ip);
+let $port3 = deploy_get_value(ob1.z3.obs0.port);
+
+let $mysql_tenant_id = deploy_get_value(ob1.select select tenant_id from oceanbase.__all_tenant where tenant_name = 'mysql', tenant_id, 1);
+ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql1, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_mysql2, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+
+connection conn_sys;
+alter system set _enable_active_txn_transfer = True;
+# create table
+connection conn_mysql;
+alter system set partition_balance_schedule_interval='11s';
+create table stu1(col1 int, col2 int, primary key(col1));
+create table stu2(col1 int, col2 int, primary key(col1));
+let $stu1_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='stu1', table_id, 1);
+let $stu1_ls_id = deploy_get_value(ob1.select select ls_id from __all_virtual_tablet_to_ls where table_id='$stu1_table_id', ls_id, 1);
+
+let $stu2_table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='stu2', table_id, 1);
+let $stu2_ls_id = deploy_get_value(ob1.select select ls_id from __all_virtual_tablet_to_ls where table_id='$stu2_table_id', ls_id, 1);
+
+--echo ============= transfer empty tablet =======================
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+--echo ============= transfer no active tx =======================
+connection conn_mysql;
+insert into stu2 values(100, 100);
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+connection conn_mysql;
+select sum(col1) from stu2;
+
+--echo ============= transfer active tx =======================
+connection conn_mysql;
+truncate table stu1;
+truncate table stu2;
+# tx1
+connection conn_mysql1;
+set autocommit=0;
+insert into stu2 values(100, 100);
+# tx2
+connection conn_mysql2;
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql1;
+insert into stu1 values(400, 100);
+insert into stu2 values(500, 100);
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+commit;
+
+connection conn_mysql2;
+insert into stu1 values(600, 100);
+insert into stu2 values(700, 100);
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+commit;
+
+connection conn_mysql;
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+
+--echo ============= transfer A=>B B=>A  =======================
+connection conn_mysql;
+truncate table stu1;
+truncate table stu2;
+# tx1
+connection conn_mysql1;
+set autocommit=0;
+insert into stu2 values(100, 100);
+# tx2
+connection conn_mysql2;
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql1;
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+commit;
+
+connection conn_mysql2;
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+commit;
+
+connection conn_mysql;
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+
+--echo ============= transfer switch leader  =======================
+connection conn_mysql;
+truncate table stu1;
+truncate table stu2;
+# tx1
+connection conn_mysql1;
+set autocommit=0;
+insert into stu2 values(100, 100);
+# tx2
+connection conn_mysql2;
+set autocommit=0;
+insert into stu1 values(200, 100);
+insert into stu2 values(300, 100);
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_sys;
+ob1.mysql alter system switch replica leader ls=$stu2_ls_id server='$ip3:$port3';
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_sys;
+ob1.mysql alter system switch replica leader ls=$stu2_ls_id server='$ip2:$port2';
+connection conn_mysql1;
+commit;
+
+connection conn_mysql2;
+commit;
+
+connection conn_mysql;
+select sum(col1) from stu1;
+select sum(col1) from stu2;
+
+--echo ============= transfer rollback local  =======================
+connection conn_mysql;
+truncate table stu1;
+truncate table stu2;
+insert into stu1 values(100, 100);
+insert into stu2 values(100, 100);
+
+# tx1
+ob_connect(conn_mysql20, ob1.z3.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql20
+set autocommit=0;
+insert into stu1 values(200, 100);
+# tx2
+ob_connect(conn_mysql21, ob1.z3.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
+connection conn_mysql21
+set autocommit=0;
+insert into stu1 values(300, 100);
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql20;
+explain basic insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+commit;
+connection conn_mysql21;
+explain basic insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+insert into stu2 select * from stu1 ON DUPLICATE KEY UPDATE col2=1000;
+commit;
+select col1,col2 from stu1;
+select col1,col2 from stu2;
+
+
+--echo ============= transfer stangby read  =======================
+connection conn_mysql;
+truncate table stu1;
+truncate table stu2;
+
+--disable_query_log
+connection conn_mysql;
+# insert randvlaue
+commit;
+set autocommit = 0;
+let $rand_v = query_get_value(SELECT FLOOR(RAND() * 10000 + RAND() * 10000 + RAND() * 10000) as C1, C1, 1);
+eval insert into stu1 values($rand_v, 1);
+insert into stu2 values(1, 1);
+
+# before prepare
+connection conn_sys;
+# get tenant_id and tx_id
+let $mysql_tenant_id = query_get_value(select tenant_id from __all_tenant where tenant_name = 'mysql', tenant_id, 1);
+let $tx_id = query_get_value(select transaction_id from __all_virtual_sql_audit where query_sql like '%values($rand_v, 1)%' and TENANT_ID = $mysql_tenant_id, transaction_id, 1);
+# construct err reject code to control this transaction state
+let $err_rej = query_get_value(select $tx_id * 10000 + $mysql_tenant_id as res, res, 1);
+# get tx_id
+let $tx_id = query_get_value(select transaction_id from __all_virtual_sql_audit where query_sql like '%values($rand_v, 1)%' and TENANT_ID = $mysql_tenant_id, transaction_id, 1);
+# construct err reject code to control this transaction state
+let $err_rej = query_get_value(select $tx_id * 10000 + $mysql_tenant_id as res, res, 1);
+--enable_query_log
+
+# do transfer
+connection conn_mysql1;
+source t/quick/include/transfer_verify_balance_and_transfer_task_finished.inc;
+
+connection conn_mysql;
+--error 4012
+commit;
+
+connection conn_sys;
+ALTER SYSTEM SWITCHOVER TO STANDBY TENANT mysql;
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_tenant_info where tenant_id = $mysql_tenant_id and tenant_role = 'STANDBY' and switchover_status = 'NORMAL', 1, 20;
+
+--disable_query_log
+connection conn_mysql2;
+eval select col1 = $rand_v as res from stu1;
+select * from stu2;
+--enable_query_log

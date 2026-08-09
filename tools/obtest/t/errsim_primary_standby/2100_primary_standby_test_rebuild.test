@@ -1,0 +1,144 @@
+# owner: debin.jdb
+# owner group: clog
+# description: 测试备库副本rebuild的场景
+
+ob1=OBI(cluster=2,proxy_num=0);
+ob2=OBI(cluster=2,leaderob=ob1,proxy_num=0);
+
+ob1.reboot;
+sleep 5;
+ob2.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+let $case_index = 1;
+
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 2, ZONE_LIST = ('z1');
+ob1.mysql CREATE TENANT tt1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone='z1' set ob_tcp_invited_nodes='%';
+
+sleep 3;
+ob_connect(conn_ob1_sys, ob1.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+ob_connect(conn_ob2_sys, ob2.z1.obs0, root@sys,, oceanbase,, USE_MYSQL_CONNECTOR);
+
+# connect方式需要首先获取该租户所在的server
+let $tt1_leader=deploy_get_value(ob1.get_leader tt1:oceanbase:__all_table:0);
+let $tt1_leader_ip=deploy_get_value($tt1_leader.ip);
+let $tt1_leader_port=deploy_get_value($tt1_leader.port);
+let $tt1_leader_sql_port=deploy_get_value($tt1_leader.mysql_port);
+
+connect (conn_ob1_tt1, $tt1_leader_ip, root@tt1,,test, $tt1_leader_sql_port);
+# ob_connect指定的observer上必须存在该tenant，否则会报错
+# ob_connect(conn_ob1_tt1, ob1.z1.obs0, root@tt1,, test,, USE_MYSQL_CONNECTOR);
+connection conn_ob1_tt1;
+# 新建一张表
+create table t1(c1 int, c2 int);
+sleep 5;
+# 保证tt1租户上的用户表和系统表不在一台server上
+let $tid=deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+
+connection conn_ob1_sys;
+alter system set enable_rebalance=false;
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+alter system set balancer_idle_time='10s';
+
+ob1.mysql alter tenant tt1 set variables ob_tcp_invited_nodes='%';
+
+connection conn_ob2_sys;
+alter system set enable_rebalance=false;
+alter system set balancer_idle_time = '10s';
+alter system set server_data_copy_out_concurrency = 30;
+alter system set server_data_copy_in_concurrency = 30;
+alter system set data_copy_concurrency = 60;
+
+ob1.check_until_timeout select count(*) from v\$ob_cluster where switchover_status='TO STANDBY', 1, 360;
+
+# 将t1迁到z1一个单独的sever上,以便仅让它自己触发rebuild.
+# 保证tt1租户上的用户表和系统表不在一台server上
+let $tenant_id=deploy_get_value(ob2.select select tenant_id from __all_tenant where tenant_name='tt1', tenant_id, 1);
+let $tid=deploy_get_value(ob2.select select table_id from __all_virtual_table where table_name='t1', table_id, 1);
+
+let $tenant_sys_host=deploy_get_value(ob2.select select distinct concat(svr_ip,':',svr_port) as host from __all_virtual_partition_table where zone='z1' and tenant_id = $tenant_id and table_id & 0xffffffffff < 10000, host, 1);
+
+let $sys_obs = deploy_get_value(ob2.get_obs_by_addr $tenant_sys_host);
+let $sys_ip=deploy_get_value($sys_obs.ip);
+let $sys_port=deploy_get_value($sys_obs.port);
+
+let $expect_host=deploy_get_value(ob2.select select concat(svr_ip,':',svr_port) as host from __all_server where zone='z1' and (svr_ip != '$sys_ip' or svr_port != $sys_port), host, 1);
+
+let $actual_host=deploy_get_value(ob2.select select concat(svr_ip,':',svr_port) as host from __all_virtual_meta_table where table_id='$tid' and zone='z1', host, 1);
+
+if($actual_host == $tenant_sys_host)
+{
+    connection conn_ob2_sys;
+    let $actual = deploy_get_value(ob2.get_obs_by_addr $actual_host);
+    let $expect = deploy_get_value(ob2.get_obs_by_addr $expect_host);
+    $actual.migrate_to $expect,tt1:test:t1;
+    sleep 5;
+    ob2.check_until_timeout select count(*) from oceanbase.__all_virtual_clog_stat where table_id=$tid and concat(svr_ip,':',svr_port) = '$expect_host', 1, 300;
+}
+
+
+let $actual_host=deploy_get_value(ob2.select select concat(svr_ip,':',svr_port) as host from __all_virtual_meta_table where table_id='$tid' and zone='z1', host, 1);
+
+# 打开配置项开关，只要落后一次转储，就会触发rebuild
+ob1.mysql alter system set _ob_enable_rebuild_on_purpose = true;
+ob2.mysql alter system set _ob_enable_rebuild_on_purpose = true;
+
+# 获取t1表的leader和follower
+let $leader=deploy_get_value(ob1.get_leader tt1:test:t1);
+let $leader_ip=deploy_get_value($leader.ip);
+let $leader_port=deploy_get_value($leader.port);
+
+let $follower_1 = deploy_get_value(ob2.get_obs_by_addr $actual_host);
+let $follower1_host=deploy_get_value($follower_1.ip);
+let $follower1_port=deploy_get_value($follower_1.port);
+
+# 阻塞leader和一个副本之间的网络
+$leader.block_net $follower_1;
+# sleep 等待生效
+sleep 5;
+
+connection conn_ob1_tt1;
+# 插入10行数据，leader和follower2形成majority，follower1未收到此日志
+let $cnt=10;
+while($cnt>0)
+{
+    eval insert into t1 values($cnt, $cnt);;
+    dec $cnt;
+}
+# 等待日志在leader和follower2形成多数派
+sleep 5;
+
+# 在leader上触发转储
+ob1.mysql alter system minor freeze server = ('$leader_ip:$leader_port');
+ob1.check_until_timeout select count(*) from oceanbase.__all_virtual_table_mgr where table_id=$tid and svr_ip = "$leader_ip" and svr_port = '$leader_port' and table_type = 0 and is_active = 0, 0, 300;
+
+# 转储完成后，再次写入10条数据
+let $cnt=10;
+while($cnt>0)
+{
+    eval insert into t1 values($cnt, $cnt);;
+    dec $cnt;
+}
+
+# 恢复网络，follower1会向leader获取日志，leader通知follower1需要执行rebuild；需要sleep 5
+$leader.clean_net $follower_1;
+sleep 5;
+
+# 确认follower1的rebuild标记为1
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where svr_ip = '$follower1_host' and svr_port = '$follower1_port' and table_id = '$tid' and is_need_rebuild = 1, 1, 120;
+
+# 等待执行
+sleep 30;
+# 确认clog已经同步
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where svr_ip = '$follower1_host' and svr_port = '$follower1_port' and table_id = '$tid' and is_in_sync = 1, 0, 120;
+
+ob2.check_until_timeout select count(*) c from oceanbase.__all_virtual_clog_stat where svr_ip = '$follower1_host' and svr_port = '$follower1_port' and table_id = '$tid' and is_need_rebuild = 1, 0, 240;
+

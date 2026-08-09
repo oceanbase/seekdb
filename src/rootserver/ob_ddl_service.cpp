@@ -16,20 +16,22 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "observer/ob_service.h"
 #include <algorithm>
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
 #include "rootserver/ob_runtime_ddl_service.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
+#include "share/rc/ob_server_runtime.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/printer/ob_schema_printer.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
 #include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/session/ob_local_session_var.h"
 #include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "share/ob_global_stat_proxy.h"
@@ -38,11 +40,11 @@
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // ObSysDDLSchedulerUtil
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_index_builder.h"
 #include "rootserver/ob_ddl_sql_generator.h"
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
-#include "src/sql/engine/px/ob_dfo.h"
 #include "share/ob_timezone_mgr.h"
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/ob_tablet_drop.h"
@@ -52,7 +54,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
-#include "storage/vector_index/ob_vector_index_sched_job_utils.h"
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
@@ -66,9 +67,12 @@
 #include "storage/ob_micro_block_format_version_helper.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 #include "share/schema/ob_schema_guard_wrapper.h"  // relocated-definition owner
+#include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_ddl_trans_controller.h"  // relocated-definition owner
 #include "share/schema/ob_part_mgr_util.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "common/ob_timeout_ctx.h"
+#include "share/ob_share_util.h"
 
 namespace oceanbase
 {
@@ -5027,9 +5031,8 @@ int ObDDLService::lock_tablets(ObMySQLTransaction &trans,
   int ret = OB_SUCCESS;
   const int64_t timeout = 0;
 
-  observer::ObInnerSQLConnection *conn = NULL;
-  if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans.get_connection()))) {
+  common::sqlclient::ObISQLConnection *conn = trans.get_connection();
+  if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
@@ -5055,13 +5058,12 @@ int ObDDLService::lock_table(ObMySQLTransaction &trans,
 
   const uint64_t table_id = table_schema.get_table_id();
   
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = trans.get_connection();
   // skip those type table for lock table
   if (!table_schema.has_tablet()
       || table_schema.is_aux_table()
       || table_schema.is_sys_table()) {
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans.get_connection()))) {
+  } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
@@ -5507,7 +5509,7 @@ int ObDDLService::create_aux_index(
       }
     }
   }
-  LOG_INFO("finish create aux index", K(ret), K(arg), K(result), "ddl_event_info", ObDDLEventInfo());
+  LOG_INFO("finish create aux index", K(ret), K(arg), K(result), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -5849,7 +5851,7 @@ int ObDDLService::alter_table_index(obcall::ObAlterTableArg &alter_table_arg,
                 }
 
                 if (OB_SUCC(ret) && is_generate_rowkey_doc) {
-                  if (OB_FAIL(ObDDLUtil::write_defensive_and_obtain_snapshot(trans,
+                  if (OB_FAIL(ObDDLTaskUtil::write_defensive_and_obtain_snapshot(trans,
                                                                              new_table_schema,
                                                                              index_schema,
                                                                              get_schema_service().get_schema_service(),
@@ -8767,7 +8769,7 @@ int ObDDLService::add_new_column_to_table_schema(
                 alter_column_schema,
                 gen_col_expr_arr,
                 alter_table_schema.get_sql_mode(),
-                &schema_checker))) {
+                &schema_checker, nullptr, nullptr))) {
       LOG_WARN("fail to check default value", K(alter_column_schema), K(ret));
     } else if (OB_FAIL(resolve_orig_default_value(alter_column_schema,
                                                   tz_info_wrap,
@@ -9098,7 +9100,7 @@ int ObDDLService::gen_alter_column_new_table_schema_offline(
                                                                         new_column_schema,
                                                                         gen_col_expr_arr,
                                                                         alter_table_schema.get_sql_mode(),
-                                                                        &schema_checker))) {
+                                                                        &schema_checker, nullptr, nullptr))) {
                     LOG_WARN("fail to check default value", KPC(alter_column_schema),K(ret));
                   }
                 }
@@ -9496,7 +9498,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                                     *alter_column_schema,
                                                                     gen_col_expr_arr,
                                                                     alter_table_schema.get_sql_mode(),
-                                                                    &schema_checker))) {
+                                                                    &schema_checker, nullptr, nullptr))) {
               LOG_WARN("fail to check default value", KPC(alter_column_schema), K(ret));
             } else if (alter_column_schema->is_primary_key_) {
               if (new_table_schema.get_rowkey_column_num() > 0) {
@@ -9638,7 +9640,7 @@ int ObDDLService::alter_table_column(const ObTableSchema &origin_table_schema,
                                                                         new_column_schema,
                                                                         gen_col_expr_arr,
                                                                         alter_table_schema.get_sql_mode(),
-                                                                        &schema_checker))) {
+                                                                        &schema_checker, nullptr, nullptr))) {
                     LOG_WARN("fail to check default value", K(new_column_schema),K(ret));
                   }
                 }
@@ -12667,7 +12669,7 @@ int ObDDLService::check_has_domain_index(
 {
   int ret = OB_SUCCESS;
   domain_index_exist = false;
-  ObLocalManagementService *local_management_service = GCTX.local_management_service_;
+  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObTableSchema *table_schema = nullptr;
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_SYS;
@@ -17371,8 +17373,8 @@ int ObDDLSQLTransaction::register_tx_data(const transaction::ObTxDataSourceType 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid connection", K(ret));
   } else {
-    observer::ObInnerSQLConnection *conn = static_cast<observer::ObInnerSQLConnection *>(isql_conn);
-    if (OB_FAIL(conn->register_multi_data_source(type, buf, buf_len))) {
+    if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
+            isql_conn, type, buf, buf_len))) {
       LOG_WARN("failed to register tx data", K(ret));
     }
   }
@@ -18716,7 +18718,7 @@ int ObDDLService::new_truncate_table(const obcall::ObTruncateTableArg &arg,
   int64_t fake_schema_version = 1000;
   ObArenaAllocator allocator("Truncate");
   int64_t start_time = ObTimeUtility::current_time();
-  observer::ObInnerSQLConnection *conn = NULL;
+  common::sqlclient::ObISQLConnection *conn = NULL;
   ObDDLSQLTransaction trans(schema_service_, need_end_signal, enable_query_stash, enable_ddl_parallel);
   ObSchemaService *schema_service = NULL;
   if (OB_FAIL(check_inner_stat())) {
@@ -18731,8 +18733,7 @@ int ObDDLService::new_truncate_table(const obcall::ObTruncateTableArg &arg,
   //runtime share lock
   } else if (OB_FAIL(trans.start(sql_proxy_, fake_schema_version, with_snapshot))) {
     LOG_WARN("failed to start trans", KR(ret));
-  } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
-                       (trans.get_connection()))) {
+  } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trans conn is NULL", KR(ret), K(arg));
   // To verify the existence of database and table
@@ -20763,7 +20764,7 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
   bool check_tmp_table_only = false; //drop temporary table
   schema_guard.set_session_id(drop_table_arg.session_id_);
   ObSchemaService *schema_service = schema_service_->get_schema_service();
-  ObTabletAutoincCacheCleaner tablet_autoinc_cleaner{};
+  ObArray<ObTabletID> tablet_autoinc_cache_ids;
 
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat error", K(ret));
@@ -20987,8 +20988,16 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
 
         if (OB_SUCC(ret)) {
           int tmp_ret = OB_SUCCESS;
-          if (OB_TMP_FAIL(tablet_autoinc_cleaner.add_table(schema_guard, *table_schema))) {
-            LOG_WARN("failed to add table to tablet autoinc cleaner", K(tmp_ret));
+          ObITabletAutoincrementAdmin *admin =
+              ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementAdmin>();
+          if (OB_ISNULL(admin)) {
+            tmp_ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("tablet autoincrement admin is null", K(tmp_ret));
+          } else if (OB_TMP_FAIL(admin->collect_table_cache_invalidation(
+                         schema_guard, *table_schema,
+                         tablet_autoinc_cache_ids))) {
+            LOG_WARN("failed to collect tablet autoincrement cache invalidation",
+                     K(tmp_ret));
           }
         }
 
@@ -21068,8 +21077,15 @@ int ObDDLService::drop_table(const ObDropTableArg &drop_table_arg, const obcall:
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_TMP_FAIL(tablet_autoinc_cleaner.commit())) {
-        LOG_WARN("failed to commit tablet autoinc cleaner", K(tmp_ret));
+      ObITabletAutoincrementAdmin *admin =
+          ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementAdmin>();
+      if (OB_ISNULL(admin)) {
+        tmp_ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("tablet autoincrement admin is null", K(tmp_ret));
+      } else if (OB_TMP_FAIL(admin->invalidate_caches(
+                     tablet_autoinc_cache_ids))) {
+        LOG_WARN("failed to invalidate tablet autoincrement caches",
+                 K(tmp_ret));
       }
     }
   }
@@ -21792,7 +21808,7 @@ int ObDDLService::drop_database(const ObDropDatabaseArg &arg,
   ObArray<uint64_t> table_ids;
   ObSchemaGetterGuard schema_guard;
   const ObDatabaseSchema *db_schema = NULL;
-  ObTabletAutoincCacheCleaner tablet_autoinc_cleaner{};
+  ObArray<ObTabletID> tablet_autoinc_cache_ids;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init");
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -21860,8 +21876,15 @@ int ObDDLService::drop_database(const ObDropDatabaseArg &arg,
       }
       if (OB_SUCC(ret)) {
         int tmp_ret = OB_SUCCESS;
-        if (OB_TMP_FAIL(tablet_autoinc_cleaner.add_database(*db_schema))) {
-          LOG_WARN("failed to add database to tablet autoinc cleaner", K(tmp_ret));
+        ObITabletAutoincrementAdmin *admin =
+            ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementAdmin>();
+        if (OB_ISNULL(admin)) {
+          tmp_ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("tablet autoincrement admin is null", K(tmp_ret));
+        } else if (OB_TMP_FAIL(admin->collect_database_cache_invalidation(
+                       *db_schema, tablet_autoinc_cache_ids))) {
+          LOG_WARN("failed to collect database autoincrement cache invalidation",
+                   K(tmp_ret));
         }
       }
     }
@@ -21887,8 +21910,14 @@ int ObDDLService::drop_database(const ObDropDatabaseArg &arg,
 
   if (OB_SUCC(ret)) {
     int tmp_ret = OB_SUCCESS;
-    if (OB_TMP_FAIL(tablet_autoinc_cleaner.commit())) {
-      LOG_WARN("failed to commit tablet autoinc cleaner", K(tmp_ret));
+    ObITabletAutoincrementAdmin *admin =
+        ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementAdmin>();
+    if (OB_ISNULL(admin)) {
+      tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("tablet autoincrement admin is null", K(tmp_ret));
+    } else if (OB_TMP_FAIL(admin->invalidate_caches(
+                   tablet_autoinc_cache_ids))) {
+      LOG_WARN("failed to invalidate tablet autoincrement caches", K(tmp_ret));
     }
   }
 
@@ -25372,7 +25401,7 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
       if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().get_ddl_epoch(ddl_epoch_tmp))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
-          if (OB_FAIL(ObDDLUtil::check_local_is_sys_leader())) {
+          if (OB_FAIL(check_local_is_sys_leader())) {
             LOG_WARN("fail to check whether the local system log is leader", KR(ret));
           } else if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().promote_ddl_epoch( ctx.get_timeout(), ddl_epoch_tmp))) {
             LOG_WARN("promote epoch fail", K(ret));
@@ -25396,8 +25425,8 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
 
   if (OB_SUCC(ret)) {
     bool enable_ddl_trans_new_lock = false;
-    observer::ObInnerSQLConnection *conn = NULL;
-    if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>(trans.get_connection()))) {
+    common::sqlclient::ObISQLConnection *conn = trans.get_connection();
+    if (OB_ISNULL(conn)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("conn_ is NULL", KR(ret));
     } else {
@@ -25666,7 +25695,7 @@ int ObDDLService::prepare_change_modify_column_online(AlterColumnSchema &alter_c
         alter_column_schema.get_cur_default_value(), tz_info_wrap,
         orig_column_schema->is_generated_column() ? &orig_column_schema->get_local_session_var() : NULL, allocator,
         new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
-        &schema_checker))) {
+        &schema_checker, nullptr, nullptr))) {
     LOG_WARN("failed to check default value", K(ret), K(alter_column_schema));
   } else if (OB_FAIL(pre_check_orig_column_schema(alter_column_schema, origin_table_schema,
                                                   update_column_name_set))) {
@@ -25918,7 +25947,7 @@ int ObDDLService::prepare_change_modify_column_offline(AlterColumnSchema &alter_
     if (OB_FAIL(ObDDLResolver::check_default_value(
           alter_column_schema.get_cur_default_value(), tz_info_wrap, &alter_table_arg.local_session_var_,
           allocator, new_table_schema, alter_column_schema, empty_expr_arr, alter_table_schema.get_sql_mode(),
-          &schema_checker))) {
+          &schema_checker, nullptr, nullptr))) {
       LOG_WARN("fail to check default value", K(alter_column_schema), K(ret));
     }
   }
@@ -26953,73 +26982,18 @@ int ObDDLService::submit_drop_lob_task_(ObMySQLTransaction &trans,
 } // end namespace rootserver
 } // end namespace oceanbase
 
-// ===== definition moved from share/schema/ob_schema_guard_wrapper.cpp =====
-// real user rootserver::ObDDLService complete type(the caller is already rootserver code that passes the pointer); declaration remains in share header(transitional state)
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObSchemaGuardWrapper::init(rootserver::ObDDLService *ddl_service)
-{
-  int ret = OB_SUCCESS;
-  if (is_local_guard_) {
-    if (OB_ISNULL(ddl_service)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("ddl_service is null", KR(ret));
-    } else {
-      if (OB_FAIL(ddl_service->get_runtime_schema_guard_with_version_in_inner_table(
-                  local_schema_guard_))) {
-        LOG_WARN("fail to get runtime schema guard with version in inner table",
-                 KR(ret));
-      } else {
-        LOG_INFO("get local schema guard success");
-      }
-    }
-  }
-  return ret;
-}
-
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/schema/ob_ddl_trans_controller.cpp(deeply RS-coupled function) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share/ob_ddl_common.cpp(omt real user) =====
-#include "observer/omt/ob_server_runtime_controller.h"
 #include "share/config/ob_runtime_config.h"  // RUNTIME_CONF(this repository keeps it in share, so it is legal)
 namespace oceanbase
 {
-namespace share
+namespace rootserver
 {
 
-int ObDDLUtil::get_sys_log_handler_role_and_proposal_id(
-    common::ObRole &role,
-    int64_t &proposal_id)
-{
-  return rootserver::ObDDLServiceLauncher::get_sys_palf_role_and_epoch(role, proposal_id);
-}
-
-int ObDDLUtil::check_local_is_sys_leader()
+int check_local_is_sys_leader()
 {
   int ret = OB_SUCCESS;
   common::ObRole role = common::INVALID_ROLE;
   int64_t proposal_id = 0;
-  if (OB_FAIL(get_sys_log_handler_role_and_proposal_id(role, proposal_id))) {
+  if (OB_FAIL(ObDDLServiceLauncher::get_sys_palf_role_and_epoch(role, proposal_id))) {
     LOG_WARN("failed to get local log role", KR(ret));
   } else if (OB_UNLIKELY(!common::is_leader_like(role))) {
     ret = OB_LS_NOT_LEADER;
@@ -27028,54 +27002,5 @@ int ObDDLUtil::check_local_is_sys_leader()
   return ret;
 }
 
-}  // namespace share
-}  // namespace oceanbase
-
-// definition moved from share/schema/ob_schema_utils.cpp: reads OMT runtime config, share must not depend upward on observer
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-// is_parallel_ddl_enable moved back to share/ob_schema_utils.cpp because its body uses only share/config.
-
-void ObDDLTransController::run1()
-{
-  ObDIActionGuard ag("DDLService", "DDLTransCtr", "detect task");
-  lib::set_thread_name("DDLTransCtr");
-  while (!has_set_stop()) {
-    bool need_refresh = false;
-    {
-      SpinWLockGuard guard(lock_);
-      need_refresh = need_refresh_;
-      need_refresh_ = false;
-    }
-    if (need_refresh) {
-      int ret = OB_SUCCESS;
-      LOG_INFO("refresh schema for server runtime");
-      if (OB_ISNULL(GCTX.local_management_service_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.local_management_service_));
-      } else {
-        int64_t published_schema_version = OB_INVALID_VERSION;
-        int64_t start_time = ObTimeUtility::current_time();
-        ObCurTraceId::init(GCONF.self_addr_);
-        ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control runtime[T_%ld]", OB_SERVER_RUNTIME_ID);
-
-        if (OB_FAIL(GCTX.local_management_service_->get_ddl_service().publish_schema_and_get_schema_version(published_schema_version))) {
-          LOG_WARN("fail to publish_schema", KR(ret));
-        } else {
-          int64_t end_time = ObTimeUtility::current_time();
-          LOG_INFO("refresh_schema", KR(ret), K(end_time - start_time), K(published_schema_version));
-        }
-      }
-    } else {
-      wait_cond_.wait();
-    }
-  }
-}
-
-}  // namespace schema
-}  // namespace share
+}  // namespace rootserver
 }  // namespace oceanbase

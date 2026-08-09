@@ -845,9 +845,6 @@ int ObTxCallbackList::update_checksum(const uint64_t checksum, const SCN checksu
     }
     checksum_ = checksum;
   }
-  batch_checksum_.set_base(checksum);
-  checksum_scn_.atomic_set(checksum_scn);
-  TRANS_LOG(INFO, "update checksum and checksum_scn", KPC(this), K(checksum), K(checksum_scn));
   return ret;
 }
 

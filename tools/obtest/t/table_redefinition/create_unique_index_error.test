@@ -1,0 +1,54 @@
+# owner: zhenjiang.xzj
+# owner group: storage
+# description:this case is use for create index test
+#
+# TODO yiren (2022-08-09), need fix this case.
+--disable_query_log
+# Notice 
+# 1. `obproxy` can not be created if specify init_unit_cpu = 1;
+# 2. Tenant `mysql` and `obtest` can not be created without init_unit_cpu=num.
+ob1=OBI(cluster=1:1:1, proxy_num=1, init_unit_cpu=2);
+ob1.reboot;
+sleep 2;
+
+ob_connect(conn_sys, ob1.proxy0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+set @@global.ob_query_timeout = 1000000000;
+ob1.mysql alter system set merger_check_interval='10s';
+ob1.mysql alter system set enable_rebalance = 'false';
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+ob1.mysql alter system set syslog_io_bandwidth_limit = '4G';
+ob1.mysql alter system set enable_async_syslog = 'false';
+
+ob_connect(conn_obtest1, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+create table t1(c1 int, c2 int);
+insert into t1 values(1,1);
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name like '%t1%', table_id, 1);
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from __all_virtual_core_meta_table where role = 1, host, 1);
+let $leader_obs = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+
+ob1.mysql alter system minor freeze;
+sleep 60;
+
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_WAIT_TRANS_END wait_for signal execute 10000';
+sleep 2;
+ob_connect(conn_obtest2, ob1.proxy0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+send create unique index i1 on t1(c2);
+sleep 2;
+
+connection conn_obtest1;
+insert into t1 values(1,1);
+
+let $table_id = deploy_get_value(ob1.select select table_id from __all_virtual_table where table_name like '%t1%', table_id, 1);
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from __all_virtual_core_meta_table where role = 1, host, 1);
+let $leader_obs = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_WAIT_TRANS_END clear';
+sleep 2;
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal';
+sleep 2;
+
+connection conn_obtest2;
+--error 1062
+reap;
+desc t1;
+select * from t1;

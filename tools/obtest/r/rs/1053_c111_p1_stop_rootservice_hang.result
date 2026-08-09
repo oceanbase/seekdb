@@ -1,0 +1,12 @@
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=0);
+ob1.reboot;
+ob1.create_client tenant=sys,user=root,passwd=,database=oceanbase;
+alter system set debug_sync_timeout = '100s';
+set ob_global_debug_sync = 'BEFORE_TRY_FREEZE_PARTITION_TABLE wait_for begin timeout 30000000';
+update __all_core_table set column_value = '2' where table_name = '__all_global_stat' and column_name = 'try_frozen_version';
+update __all_zone set value = '2' where name = 'try_frozen_version';
+ob1.z2.switch_partition sys:oceanbase:__all_core_table:0;
+ob1.z2.obs0.stop;
+select count(*) from __all_server;
+count(*)
+3

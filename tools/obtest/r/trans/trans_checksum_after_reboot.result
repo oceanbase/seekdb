@@ -1,0 +1,15 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system minor freeze server = ('$ip1:$port1');
+ob1.mysql alter system minor freeze server = ('$ip2:$port2');
+ob1.z2.obs0.force_stop;
+ob1.z2.start;
+ob1.z1.obs0.switch_partition obtest:test:b:0;
+ob1.z2.obs0.switch_partition obtest:test:b:1;
+ob1.z1.obs0.check_leader obtest:test:b:0;
+ob1.z2.obs0.check_leader obtest:test:b:1;
+ob1.mysql alter system minor freeze server = ('$ip1:$port1');
+ob1.mysql alter system minor freeze server = ('$ip2:$port2');
+ob1.z2.obs0.force_stop;
+ob1.z2.start;

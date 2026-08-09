@@ -93,33 +93,25 @@ class ObKVCacheHandle;
 struct ObKVCacheRuntimeOptions
 {
   static const int64_t DEFAULT_WASH_INTERVAL_US = 200 * 1000;
-  static const int64_t USE_MAX_CACHE_SIZE = 0;
 
   explicit ObKVCacheRuntimeOptions(
-      const int64_t wash_interval_us = DEFAULT_WASH_INTERVAL_US,
-      const int64_t cache_memory_limit = USE_MAX_CACHE_SIZE)
-      : wash_interval_us_(wash_interval_us),
-        cache_memory_limit_(cache_memory_limit)
+      const int64_t wash_interval_us = DEFAULT_WASH_INTERVAL_US)
+      : wash_interval_us_(wash_interval_us)
   {}
 
-  bool is_valid() const
-  {
-    return wash_interval_us_ > 0 && cache_memory_limit_ >= USE_MAX_CACHE_SIZE;
-  }
+  bool is_valid() const { return wash_interval_us_ > 0; }
 
   int64_t wash_interval_us_;
-  int64_t cache_memory_limit_;
 };
 
 class ObKVGlobalCache : public lib::ObICacheWasher
 {
 public:
   static const int64_t DEFAULT_ONCE_BATCH_GET_BUCKET_NUM = 10000;
-  static constexpr int64_t MAX_CACHE_SIZE = ObKVCacheStore::MAX_CACHE_SIZE;
   static ObKVGlobalCache &get_instance();
-  static int64_t default_max_cache_size() { return MAX_CACHE_SIZE; }
+  static int64_t default_max_cache_size() { return DEFAULT_MAX_CACHE_SIZE; }
   int init(const int64_t bucket_num = DEFAULT_BUCKET_NUM,
-           const int64_t max_cache_size = MAX_CACHE_SIZE,
+           const int64_t max_cache_size = DEFAULT_MAX_CACHE_SIZE,
            const int64_t block_size = lib::ACHUNK_SIZE,
            const int64_t cache_wash_interval = 0,
            const ObKVCacheRuntimeOptions &runtime_options = ObKVCacheRuntimeOptions());
@@ -127,8 +119,10 @@ public:
   void wait();
   void destroy();
   int reload_config(const ObKVCacheRuntimeOptions &runtime_options);
-  int get_suitable_bucket_num(const int64_t cache_memory_limit,
-                              int64_t &bucket_num);
+  int get_suitable_bucket_num(
+      int64_t &bucket_num,
+      const int64_t memory_limit,
+      const int64_t reserved_memory);
   int get_cache_inst_info(ObIArray<ObKVCacheInstHandle> &inst_handles);
   int get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memblock_infos);
   void print_all_cache_info();
@@ -200,6 +194,7 @@ private:
   int get_cache_id(const char *cache_name, int64_t &cache_id);
 private:
   static const int64_t DEFAULT_BUCKET_NUM = 10000000L;
+  static const int64_t DEFAULT_MAX_CACHE_SIZE = 1024LL * 1024LL * 1024LL * 1024LL;  //1T
   static const int64_t MAP_ONCE_CLEAN_RATIO = 50;  // 50 * 0.2 = 10s
   static const int64_t MAP_ONCE_REPLACE_RATIO = 100;  // 100 * 0.2 = 20s
   static const int64_t MAX_MAP_ONCE_CLEAN_NUM = 200000;  // 200K
@@ -207,13 +202,10 @@ private:
   static const int64_t MAX_MAP_ONCE_REPLACE_NUM = 100000;  // 100K
   static const int64_t TIMER_SCHEDULE_INTERVAL_US = 800 * 1000;
   static const int64_t WORKING_SET_LIMIT_PERCENTAGE = 5;
-  // Target one hash bucket per 2 KiB of KV cache capacity, then round up to
-  // one of the supported prime bucket counts below.
-  static const int64_t KVCACHE_BYTES_PER_BUCKET = 2LL << 10;
+  static const int64_t BASE_SERVER_MEMORY_FACTOR = 1LL << 30; // 1G is the start level
+  static constexpr double MAX_RESERVED_MEMORY_RATIO = 0.3;
   static const int64_t MAX_BUCKET_NUM_LEVEL = 10;
   static const int64_t bucket_num_array_[MAX_BUCKET_NUM_LEVEL];
-  static int calculate_suitable_bucket_num(const int64_t cache_memory_limit,
-                                           int64_t &bucket_num);
   static const int64_t PRINT_INTERVAL = 30 * 1000L * 1000L;
   static const int64_t MAP_WASH_CLEAN_INTERNAL = 10;
   static const int64_t MAP_REPLACE_ONCE_SKIP_COUNT = 10;

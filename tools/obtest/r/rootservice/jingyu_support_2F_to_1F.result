@@ -1,0 +1,29 @@
+ob1=OBI(cluster=2, proxy_num=0, init_unit_cpu=0);
+ob1.set extra_config=$mini_ob_config;
+ob1.reboot;
+ob1.mysql alter system set debug_sync_timeout = '1000s';
+ob1.mysql ALTER SYSTEM SET enable_rebalance = 'false';
+ob1.mysql ALTER SYSTEM SET enable_rereplication = 'true';
+=========================================================
+create mysql tenant
+=========================================================
+ob1.mysql CREATE RESOURCE UNIT unit_1 MAX_CPU 1, MEMORY_SIZE='2G';
+ob1.mysql CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, zone_list = ('z1');
+ob1.mysql CREATE TENANT mysql RESOURCE_POOL_LIST = ('pool_1'),  locality='F@z1', primary_zone='z1' set ob_tcp_invited_nodes='%';
+=========================================================
+debug sync for migrate replica not remove old one
+=========================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 1;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 1;
+===================================================
+check member_list has 2F in one zone
+===================================================
+ob1.check_until_timeout select count(*) > 0 from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and member_list like "%$z1_dst0%" and member_list like "%$z1_dst1%" and paxos_replica_number = 2, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 1, 0, 120;
+===================================================
+release debug_sync and errsim
+===================================================
+ob1.mysql alter system set_tp tp_name = ERRSIM_REPLACE_MEMBER_NOT_REMOVE_ERROR, error_code = 4016, frequency = 0;
+ob1.mysql alter system set_tp tp_name = ERRSIM_CLEAN_TASK_FROM_DRTASK_TABLE_ERROR, error_code = 4002, frequency = 0;
+ob1.check_until_timeout select count(*) > 0 from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 1, 1, 120;
+ob1.check_until_timeout select count(*) as cnt from oceanbase.CDB_OB_LS_LOCATIONS where tenant_id in ($mysql_tenant_id, $meta_tenant_id) and role = 'LEADER' and paxos_replica_number = 2, 0, 120;

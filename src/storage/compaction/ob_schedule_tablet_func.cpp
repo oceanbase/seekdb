@@ -71,7 +71,7 @@ int ObScheduleTabletFunc::schedule_tablet(
     }
     if (tablet_status_.could_schedule_new_round() && OB_TMP_FAIL(schedule_tablet_new_round(tablet_handle, false/*user_request*/))) {
       need_diagnose = true;
-      LOG_WARN("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
+      LOG_ERROR("failed to schedule tablet new round", KR(tmp_ret), K_(ls_status), K(tablet_id));
     }
     if (!tablet_status_.can_merge()) {
       need_diagnose = tablet_status_.need_diagnose();

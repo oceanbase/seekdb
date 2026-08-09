@@ -1,0 +1,49 @@
+# owner: yuanfeng
+# owner group: storage
+# description: this case is use for minor merge with index
+#
+
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+
+#设置灰度切主的时间为0,关闭自动切主,关闭自动balance
+ob1.mysql alter system set merger_switch_leader_duration_time = 0;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+ob1.mysql alter system set enable_rereplication = false;
+ob1.mysql alter system set enable_rebalance = false;
+
+ob1.create_client tenant=obtest,user=root,passwd=,database=test;
+
+create table test01 (c1 int primary key, c2 int, c3 varchar(4096), c4 varchar(4096), index(c2));
+
+#case1:插入数据，发起小版本冻结，验证主键查询和索引列查询
+echo "case 1:";
+#step 1):插入数据
+let $cnt=1;
+while($cnt < 10)
+{
+  eval insert into test.test01 values($cnt, $cnt, 'ocean', 'base');
+  inc $cnt;
+}
+
+#step 2):发起小版本冻结
+ob1.mysql alter system minor freeze;
+let $tid = deploy_get_value(ob1.select select table_id from oceanbase.__all_virtual_table where table_name = 'test01', table_id, 1);
+ob1.check_until_timeout select count(1) from __all_virtual_table_mgr where table_id=$tid and table_type=0, 3, 120;
+#step 3):验证数据正确性
+echo 'not specific version';
+select * from test.test01 where c1 = 1;
+select * from test.test01 where c1 = 2;
+select * from test.test01 where c1 = 3;
+select * from test.test01 where c2 = 1;
+select * from test.test01 where c2 = 2;
+select * from test.test01 where c2 = 3;
+
+#echo 'specific version';
+#select /*+frozen_version(2)*/* from test.test01 where c1=1;
+#select /*+frozen_version(2)*/* from test.test01 where c1=2;
+#select /*+frozen_version(2)*/* from test.test01 where c1=3;
+#select /*+frozen_version(2)*/* from test.test01 where c2=1;
+#select /*+frozen_version(2)*/* from test.test01 where c2=2;
+#select /*+frozen_version(2)*/* from test.test01 where c2=3;

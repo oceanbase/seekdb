@@ -1,0 +1,7 @@
+####初始化集群
+source include/rs_cluster.test;
+
+##reboot, bootstrap
+ob1.reboot;
+
+ob1.mysql alter system run job 'root_inspection';

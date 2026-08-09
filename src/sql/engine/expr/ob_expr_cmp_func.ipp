@@ -17,6 +17,8 @@
 #ifndef _OCEANBASE_EXPR_CMP_FUNC_IPP_H_
 #define _OCEANBASE_EXPR_CMP_FUNC_IPP_H_
 
+#include <type_traits>
+
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/ob_expr_cmp_func.h"
@@ -112,6 +114,32 @@ int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
   }
   return ret;
 }
+
+template <typename DatumFunc>
+int def_oper_cmp_func(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                      const ObDatumAccessContext *access_ctx,
+                      const ObCmpOp cmp_op)
+{
+  int cmp_ret = 0;
+  int ret = DatumFunc::cmp(l, r, cmp_ret, access_ctx);
+  if (OB_FAIL(ret)) {
+    LOG_WARN("fail to compare", K(ret));
+  } else {
+    res.set_int(get_cmp_ret(cmp_op, cmp_ret));
+  }
+  return ret;
+}
+
+template <typename DatumFunc>
+struct ObDatumCmpContextAdapter
+{
+  static int cmp(const ObDatum &l, const ObDatum &r, int &cmp_ret,
+                 const ObDatumAccessContext *access_ctx)
+  {
+    UNUSED(access_ctx);
+    return DatumFunc::cmp(l, r, cmp_ret);
+  }
+};
 
 struct ObDummyRelationalFunc
 {
@@ -210,6 +238,7 @@ struct ObNewRelationalStrFunc
     ObDatum *r = NULL;
     bool contain_null = false;
     int cmp_ret = 0;
+    const ObDatumAccessContext *access_ctx = nullptr;
     if (OB_FAIL(ObRelationalExprOperator::get_comparator_operands(
                 expr, ctx, l, r, expr_datum, contain_null))) {
       LOG_WARN("failed to eval args", K(ret));
@@ -217,6 +246,20 @@ struct ObNewRelationalStrFunc
       if (OB_ISNULL(l) || OB_ISNULL(r)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid operands", K(ret), K(l), K(r));
+      } else if constexpr (std::is_invocable_r_v<
+                               int, decltype(&T::cmp), const ObDatum &, const ObDatum &,
+                               int &, ObCollationType, bool,
+                               const ObDatumAccessContext *>) {
+        if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+          LOG_WARN("get datum access context failed", K(ret));
+        } else if (OB_FAIL(T::cmp(*l, *r, cmp_ret,
+                                  expr.args_[0]->datum_meta_.cs_type_,
+                                  WITH_END_SPACE, access_ctx))) {
+          LOG_WARN("datum compare failed", K(ret), K(*l), K(*r));
+        } else {
+          expr_datum.set_int(
+              get_cmp_ret(ObExprCmpFuncsHelper::get_cmp_op(expr.type_), cmp_ret));
+        }
       } else if (OB_FAIL(T::cmp(*l, *r, cmp_ret,
                                 expr.args_[0]->datum_meta_.cs_type_, WITH_END_SPACE))) {
         LOG_WARN("datum compare failed", K(*l), K(*r));
@@ -255,17 +298,26 @@ struct ObRelationalTextFunc<true, CS_TYPE, WITH_END_SPACE>
   struct DatumCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObDatumAccessContext *access_ctx,
                    const ObCmpOp cmp_op) const
     {
       return def_oper_cmp_func<datum_cmp::ObDatumTextCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, cmp_op);
+          res, l, r, access_ctx, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
+    int ret = OB_SUCCESS;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<DatumCmp>(
+          expr, ctx, expr_datum, access_ctx, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -290,17 +342,26 @@ struct ObRelationalTextStrFunc<true, CS_TYPE, WITH_END_SPACE>
   struct DatumCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObDatumAccessContext *access_ctx,
                    const ObCmpOp cmp_op) const
     {
       return def_oper_cmp_func<datum_cmp::ObDatumTextStringCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, cmp_op);
+          res, l, r, access_ctx, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
+    int ret = OB_SUCCESS;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<DatumCmp>(
+          expr, ctx, expr_datum, access_ctx, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -326,17 +387,26 @@ struct ObRelationalStrTextFunc<true, CS_TYPE, WITH_END_SPACE>
   struct DatumCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObDatumAccessContext *access_ctx,
                    const ObCmpOp cmp_op) const
     {
       return def_oper_cmp_func<datum_cmp::ObDatumStringTextCmp<CS_TYPE, WITH_END_SPACE>>(
-          res, l, r, cmp_op);
+          res, l, r, access_ctx, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
+    int ret = OB_SUCCESS;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<DatumCmp>(
+          expr, ctx, expr_datum, access_ctx, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -362,17 +432,26 @@ struct ObRelationalJsonFunc<true, HAS_LOB_HEADER>
   struct DatumCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObDatumAccessContext *access_ctx,
                    const ObCmpOp cmp_op) const
     {
       return def_oper_cmp_func<datum_cmp::ObDatumJsonCmp<HAS_LOB_HEADER>>(
-          res, l, r, cmp_op);
+          res, l, r, access_ctx, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
+    int ret = OB_SUCCESS;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<DatumCmp>(
+          expr, ctx, expr_datum, access_ctx, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -388,17 +467,26 @@ struct ObRelationalGeoFunc<true, HAS_LOB_HEADER>
   struct DatumCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
+                   const ObDatumAccessContext *access_ctx,
                    const ObCmpOp cmp_op) const
     {
       return def_oper_cmp_func<datum_cmp::ObDatumGeoCmp<HAS_LOB_HEADER>>(
-          res, l, r, cmp_op);
+          res, l, r, access_ctx, cmp_op);
     }
   };
 
   inline static int eval(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   {
+    int ret = OB_SUCCESS;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_func<DatumCmp>(expr, ctx, expr_datum, cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_func<DatumCmp>(
+          expr, ctx, expr_datum, access_ctx, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -517,6 +605,7 @@ struct ObRelationalExtraFunc
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
                    const ObCollationType cs_type, bool with_end_space,
+                   const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
@@ -525,11 +614,11 @@ struct ObRelationalExtraFunc
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
-      if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+      if (OB_FAIL(l_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "Lob: init left text str iter failed", K(ret), K(cs_type), K(l));
       } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
         COMMON_LOG(WARN, "Lob: get left text str iter full data failed ", K(ret), K(cs_type), K(l_instr_iter));
-      } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+      } else if (OB_FAIL(r_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "Lob: init right text str iter failed", K(ret), K(ret), K(r));
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
         COMMON_LOG(WARN, "Lob: get right text str iter full data failed ", K(ret), K(cs_type), K(r_instr_iter));
@@ -544,25 +633,32 @@ struct ObRelationalExtraFunc
 
   inline static int text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
+    int ret = OB_SUCCESS;
     bool with_end_space = false;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<TextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                   expr.args_[0]->datum_meta_.cs_type_,
-                                                   with_end_space,
-                                                   cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<TextCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, expr.args_[0]->datum_meta_.cs_type_,
+          with_end_space, *access_ctx->lob_read_options_, cmp_op);
+    }
+    return ret;
   }
 
   struct TextStrCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
                    const ObCollationType cs_type, bool with_end_space,
+                   const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObString l_data;
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter l_instr_iter(ObLongTextType, cs_type, l.get_string(), true);
-      if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+      if (OB_FAIL(l_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "Lob: init left text str iter failed", K(ret), K(cs_type), K(l));
       } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
         COMMON_LOG(WARN, "Lob: get left text str iter full data failed ", K(ret), K(cs_type), K(l_instr_iter));
@@ -577,25 +673,32 @@ struct ObRelationalExtraFunc
 
   inline static int text_str_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
+    int ret = OB_SUCCESS;
     bool with_end_space = false;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<TextStrCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                      expr.args_[0]->datum_meta_.cs_type_,
-                                                      with_end_space,
-                                                      cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<TextStrCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, expr.args_[0]->datum_meta_.cs_type_,
+          with_end_space, *access_ctx->lob_read_options_, cmp_op);
+    }
+    return ret;
   }
 
   struct StrTextCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
                    const ObCollationType cs_type, bool with_end_space,
+                   const ObLobReadOptions &lob_options,
                    const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       ObString r_data;
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER, OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter r_instr_iter(ObLongTextType, cs_type, r.get_string(), true);
-      if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+      if (OB_FAIL(r_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "Lob: init right text str iter failed", K(ret), K(ret), K(r));
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
         COMMON_LOG(WARN, "Lob: get right text str iter full data failed ", K(ret), K(cs_type), K(r_instr_iter));
@@ -610,18 +713,25 @@ struct ObRelationalExtraFunc
 
   inline static int str_text_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
+    int ret = OB_SUCCESS;
     bool with_end_space = false;
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<StrTextCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                      expr.args_[0]->datum_meta_.cs_type_,
-                                                      with_end_space,
-                                                      cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<StrTextCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, expr.args_[0]->datum_meta_.cs_type_,
+          with_end_space, *access_ctx->lob_read_options_, cmp_op);
+    }
+    return ret;
   }
 
   struct JsonCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   bool has_lob_header, const ObCmpOp cmp_op) const
+                   bool has_lob_header, const ObLobReadOptions &lob_options,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int result = 0;
@@ -630,11 +740,11 @@ struct ObRelationalExtraFunc
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER);
       ObTextStringIter l_instr_iter(ObJsonType, CS_TYPE_BINARY, l.get_string(), has_lob_header);
       ObTextStringIter r_instr_iter(ObJsonType, CS_TYPE_BINARY, r.get_string(), has_lob_header);
-      if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+      if (OB_FAIL(l_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "LobDebug: init left lob str iter failed", K(ret), K(l));
       } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
         COMMON_LOG(WARN, "LobDebug: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
-      } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+      } else if (OB_FAIL(r_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "LobDebug: init right lob str iter failed", K(ret), K(ret), K(r));
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
         COMMON_LOG(WARN, "LobDebug: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
@@ -660,17 +770,25 @@ struct ObRelationalExtraFunc
 
   inline static int json_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
+    int ret = OB_SUCCESS;
     bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<JsonCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                   has_lob_header,
-                                                   cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<JsonCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, has_lob_header,
+          *access_ctx->lob_read_options_, cmp_op);
+    }
+    return ret;
   }
 
   struct GeoCmp
   {
     int operator()(ObDatum &res, const ObDatum &l, const ObDatum &r,
-                   bool has_lob_header, const ObCmpOp cmp_op) const
+                   bool has_lob_header, const ObLobReadOptions &lob_options,
+                   const ObCmpOp cmp_op) const
     {
       int ret = OB_SUCCESS;
       int result = 0;
@@ -679,11 +797,11 @@ struct ObRelationalExtraFunc
       common::ObArenaAllocator allocator(ObModIds::OB_LOB_READER);
       ObTextStringIter l_instr_iter(ObJsonType, CS_TYPE_BINARY, l.get_string(), has_lob_header);
       ObTextStringIter r_instr_iter(ObJsonType, CS_TYPE_BINARY, r.get_string(), has_lob_header);
-      if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
+      if (OB_FAIL(l_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "LobDebug: init left lob str iter failed", K(ret), K(l));
       } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
         COMMON_LOG(WARN, "LobDebug: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
-      } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
+      } else if (OB_FAIL(r_instr_iter.init(0, &lob_options, &allocator))) {
         COMMON_LOG(WARN, "LobDebug: init right lob str iter failed", K(ret), K(ret), K(r));
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
         COMMON_LOG(WARN, "LobDebug: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
@@ -697,11 +815,18 @@ struct ObRelationalExtraFunc
 
   inline static int geo_eval_batch(BATCH_EVAL_FUNC_ARG_DECL)
   {
+    int ret = OB_SUCCESS;
     bool has_lob_header = expr.args_[0]->obj_meta_.has_lob_header();
+    const ObDatumAccessContext *access_ctx = nullptr;
     ObCmpOp cmp_op = ObExprCmpFuncsHelper::get_cmp_op(expr.type_);
-    return def_relational_eval_batch_func<GeoCmp>(BATCH_EVAL_FUNC_ARG_LIST,
-                                                  has_lob_header,
-                                                  cmp_op);
+    if (OB_FAIL(ctx.get_datum_access_ctx(access_ctx))) {
+      LOG_WARN("get datum access context failed", K(ret));
+    } else {
+      ret = def_relational_eval_batch_func<GeoCmp>(
+          BATCH_EVAL_FUNC_ARG_LIST, has_lob_header,
+          *access_ctx->lob_read_options_, cmp_op);
+    }
+    return ret;
   }
 };
 
@@ -879,12 +1004,13 @@ struct TypeExprCmpFuncIniter
         static_cast<ObObjType>(X), static_cast<ObObjType>(Y)>;
   static void init_array()
   {
+    using ContextAdapter = ObDatumCmpContextAdapter<Def>;
     init_expr_cmp_func_array(EVAL_TYPE_CMP_FUNCS[X][Y],
                              EVAL_BATCH_TYPE_CMP_FUNCS[X][Y],
                              DATUM_TYPE_CMP_FUNCS[X][Y],
                              Def::defined_ ? &EvalCmp::eval : NULL,
                              Def::defined_ ? &EvalCmp::eval_batch : NULL,
-                             Def::defined_ ? &Def::cmp : NULL,
+                             Def::defined_ ? &ContextAdapter::cmp : NULL,
                              NULL);
   }
 };
@@ -904,6 +1030,7 @@ struct TCExprCmpFuncIniter
 
   static void init_array()
   {
+    using ContextAdapter = ObDatumCmpContextAdapter<Def>;
     const ObExpr::EvalBatchFunc *batch_eval_overrides =
         (X == ObNullTC || X == ObExtendTC || Y == ObNullTC || Y == ObExtendTC)
         ? EVAL_BATCH_NULL_EXTEND_CMP_FUNCS : NULL;
@@ -912,7 +1039,7 @@ struct TCExprCmpFuncIniter
                              DATUM_TC_CMP_FUNCS[X][Y],
                              &ObTCRelationFunc::eval,
                              &ObTCRelationFunc::eval_batch,
-                             &Def::cmp,
+                             &ContextAdapter::cmp,
                              batch_eval_overrides);
   }
 };
@@ -951,9 +1078,11 @@ struct StrCmpFuncIniter<X, true>
 
   static void init_array()
   {
+    using StrContextAdapter0 = ObDatumCmpContextAdapter<StrDatumCmp<false>>;
+    using StrContextAdapter1 = ObDatumCmpContextAdapter<StrDatumCmp<true>>;
     init_str_cmp_func_array(static_cast<ObCollationType>(X));
-    DATUM_STR_CMP_FUNCS[X][0] = &StrDatumCmp<false>::cmp;
-    DATUM_STR_CMP_FUNCS[X][1] = &StrDatumCmp<true>::cmp;
+    DATUM_STR_CMP_FUNCS[X][0] = &StrContextAdapter0::cmp;
+    DATUM_STR_CMP_FUNCS[X][1] = &StrContextAdapter1::cmp;
     DATUM_TEXT_CMP_FUNCS[X][0] = &TextDatumCmp<false>::cmp;
     DATUM_TEXT_CMP_FUNCS[X][1] = &TextDatumCmp<true>::cmp;
     DATUM_TEXT_STR_CMP_FUNCS[X][0] = &TextStrDatumCmp<false>::cmp;
@@ -1053,12 +1182,13 @@ struct FixedDoubleCmpFuncIniter
   using Def = datum_cmp::ObFixedDoubleCmp<static_cast<ObScale>(X)>;
   static void init_array()
   {
+    using ContextAdapter = ObDatumCmpContextAdapter<Def>;
     init_expr_cmp_func_array(EVAL_FIXED_DOUBLE_CMP_FUNCS[X],
                              EVAL_BATCH_FIXED_DOUBLE_CMP_FUNCS[X],
                              DATUM_FIXED_DOUBLE_CMP_FUNCS[X],
                              Def::defined_ ? &ObFixedDoubleRelationFunc::eval : NULL,
                              Def::defined_ ? &ObFixedDoubleRelationFunc::eval_batch : NULL,
-                             Def::defined_ ? &Def::cmp : NULL,
+                             Def::defined_ ? &ContextAdapter::cmp : NULL,
                              NULL);
   }
 };
@@ -1070,12 +1200,13 @@ struct DecintCmpFuncIniter
                                      static_cast<ObDecimalIntWideType>(Y)>;
   static void init_array()
   {
+    using ContextAdapter = ObDatumCmpContextAdapter<Def>;
     init_expr_cmp_func_array(EVAL_DECINT_CMP_FUNCS[X][Y],
                              EVAL_BATCH_DECINT_CMP_FUNCS[X][Y],
                              DATUM_DECINT_CMP_FUNCS[X][Y],
                              Def::defined_ ? &ObDecintRelationFunc::eval : NULL,
                              Def::defined_ ? &ObDecintRelationFunc::eval_batch : NULL,
-                             Def::defined_ ? &Def::cmp : NULL,
+                             Def::defined_ ? &ContextAdapter::cmp : NULL,
                              NULL);
   }
 };

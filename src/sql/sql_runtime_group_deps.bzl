@@ -605,9 +605,6 @@ _SQL_RUNTIME_EXTRA_DEP_CONSUMERS = {
         'ob_sql_engine_expr_2',
         'ob_sql_engine_expr_7',
     ],
-    '//src/share:tenant_role_transition_interface': [
-        'ob_sql_engine_cmd_0',
-    ],
     '//src/share:unit_topology': [
         'ob_sql_code_generator_0',
         'ob_sql_common_0',

@@ -37,16 +37,16 @@ namespace sql
 int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
-
-  bool write_enabled = true;
+  
+  bool is_standby = false;
   if (OB_UNLIKELY(session.is_query_killed())) {
     ret = OB_ERR_QUERY_INTERRUPTED;
     LOG_WARN("query is killed", K(ret));
   } else if (OB_UNLIKELY(session.is_zombie())) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", K(ret));
-  } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
-  } else if (!write_enabled) {
+  } else if (OB_FAIL(ObShareUtil::check_if_server_role_is_standby( is_standby))) {
+  } else if (is_standby) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", KR(ret));
   }
@@ -197,7 +197,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       "rpc_dest", GCTX.self_addr());
     LOG_INFO("start wait ddl retry task finish", K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(error_message));
 
-    bool write_enabled = true;
+    bool is_primary_server = true;
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
       if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
@@ -231,13 +231,13 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
           }
         }
         break;
-        } else {
-          if (OB_FAIL(ret)) {
-         } else if (OB_TMP_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
-         } else if (!write_enabled) {
+      } else {
+        if (OB_FAIL(ret)) {
+        } else if (OB_TMP_FAIL(ObShareUtil::is_primary_server(is_primary_server))) {
+        } else if (!is_primary_server) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
-          LOG_WARN("server is read-only now, stop wait", K(ret));
+          LOG_WARN("server is standby now, stop wait", K(ret));
           break;
         }
         if (OB_FAIL(ret)) {

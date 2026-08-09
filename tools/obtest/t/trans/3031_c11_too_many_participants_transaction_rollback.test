@@ -1,0 +1,57 @@
+#owner: shanyan.g
+#owner group: transaction
+# 测试点：测试参与者数量非常多的场景下，事务回滚的处理，是否会出现重试
+##
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+sleep 5;
+
+#在zone1上建立连接
+let $l_ip=deploy_get_value(ob1.z1.obs0.ip);
+let $l_port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$l_ip,root@obtest,,test,$l_port);
+connect (conn2,$l_ip,root@obtest,,test,$l_port);
+connect (conn,$l_ip,root@sys,,test,$l_port);
+
+
+connection conn1;
+## 构造表
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+create table t1(id1 int, id2 int) partition by hash(id1 % 3000) partitions 3000;
+sleep 10;
+
+--disable_query_log
+let $i=1;
+while ($i < 3000)
+{
+  eval insert into t1 values($i, $i);
+  inc $i;
+}
+sleep 5;
+
+##case1:备机读全表扫描，然后事务commit/rollback
+begin;
+select /*+read_consistency(weak)+*/count(1) from t1;
+commit;
+
+##case2:全表扫描，然后事务commit/rollback
+begin;
+select count(1) from t1;
+commit;
+
+##case3:全表更新，然后事务回滚
+begin;
+update t1 set id1 = id1 + 1 where id2 > 1000;
+rollback;
+
+##case4:多分区事务，最后一条为涉及多个partition
+select count(1) from t1 where id1 > 2500;
+update t1 set id2=3100 where id1=2980 and id1< 2999;
+rollback;
+connection conn;
+select count(1) from oceanbase.__all_virtual_trans_stat;
+
+--enable_query_log
+connection conn1;
+drop table t1;

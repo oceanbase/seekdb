@@ -1,0 +1,58 @@
+ob1=OBI(cluster=1:1,proxy_num=0,init_unit_cpu=5);
+ob1.reboot;
+ob1.mysql alter system set enable_auto_leader_switch = false;
+set global max_allowed_packet=50000000;
+use test;
+set ob_query_timeout=100000000;
+create table t1(id1 int primary key, id2 int);
+create table t2(id1 int primary key, id2 longtext, id3 longtext);
+id1	id2
+1	1
+2	2
+id1	id2	id3
+1	aaaaaaaaaa	aaaaaaaaaa
+2	bbbbbbbbbb	bbbbbbbbbb
+100		
+id1	id2
+1	1
+2	2
+3	3
+4	4
+id1	length(id2)	substr(id3,1,10)
+1	10	aaaaaaaaaa
+2	10	bbbbbbbbbb
+3	10000000	aaaaaaaaaa
+4	10000000	aaaaaaaaaa
+100	0	
+id1	id2
+1	100
+2	200
+3	300
+4	400
+id1	length(id2)	substr(id3,1,10)
+1	1000	aaaaaaaaaa
+2	2000	bbbbbbbbbb
+3	3000	aaaaaaaaaa
+4	4000	aaaaaaaaaa
+100	1	
+id1	length(id2)	substr(id3,1,10)
+1	10000000	aaaaaaaaaa
+2	20000000	bbbbbbbbbb
+3	30000000	aaaaaaaaaa
+4	40000000	aaaaaaaaaa
+100	1	
+id1	length(id2)	substr(id3,1,10)
+1	10000000	aaaaaaaaaa
+2	20000000	bbbbbbbbbb
+3	30000000	aaaaaaaaaa
+4	40000000	aaaaaaaaaa
+5	10000000	aaaaaaaaaa
+100	1	
+id1	length(id2)	substr(id3,1,10)
+1	10000000	aaaaaaaaaa
+2	20000000	bbbbbbbbbb
+3	30000000	aaaaaaaaaa
+4	40000000	aaaaaaaaaa
+5	1000	aaaaaaaaaa
+6	10000000	aaaaaaaaaa
+100	1	

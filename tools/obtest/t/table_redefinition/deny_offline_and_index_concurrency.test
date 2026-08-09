@@ -1,0 +1,121 @@
+# owner: jiahua.cjh
+# owner group: storage
+# description: deny offline ddl and index operation(add/drop index) simulatenously.
+--disable_query_log
+ob1=OBI(cluster=1:1:1,proxy_num=1,init_unit_cpu=2);
+ob1.reboot;
+sleep 3;
+
+ob_connect(conn_sys, ob1.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob1.mysql alter system set debug_sync_timeout = '100000s';
+let $leader_host = deploy_get_value(ob1.select select concat(svr_ip, ':', svr_port) host from __all_virtual_core_meta_table where role = 1, host, 1);
+let $leader_obs = deploy_get_value(ob1.get_obs_by_addr $leader_host);
+ob_connect(conn_obtest1, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_obtest2, ob1.z1.obs0, root@obtest, , test, , USE_MYSQL_CONNECTOR);
+
+
+--echo ================= test create index -> offline ddl start =================
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD wait_for signal1 execute 10000';
+sleep 3;
+
+connection conn_obtest1;
+create table t1(id int, name varchar(12));
+send create index i1 on t1(id) global partition by hash(id) partitions 4;
+sleep 3;
+
+connection conn_obtest2;
+--error 1235
+alter table t1 modify name varchar(10);
+
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'CREATE_INDEX_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 3;
+
+connection conn_obtest1;
+reap;
+drop table t1;
+--echo ================= test create index -> offline ddl end =================
+
+
+--echo ================= test drop index -> offline ddl start =================
+connection conn_obtest1;
+create table t1(id int, name varchar(12));
+create index i1 on t1(id) global partition by hash(id) partitions 4;
+sleep 3;
+
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS wait_for signal1 execute 10000';
+sleep 3;
+
+connection conn_obtest1;
+send drop index i1 on t1;
+sleep 3;
+
+connection conn_obtest2;
+--error 1235
+alter table t1 modify name varchar(10);
+
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'BEFORE_UPDATE_GLOBAL_INDEX_STATUS clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 3;
+
+connection conn_obtest1;
+reap;
+drop table t1;
+--echo ================= test drop index -> offline ddl end =================
+
+
+--echo ================= test offline ddl -> add index start =================
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal1 execute 10000';
+sleep 3;
+
+connection conn_obtest1;
+create table t1(id int, name varchar(12));
+send alter table t1 modify name varchar(10);
+sleep 3;
+
+connection conn_obtest2;
+--error 4179
+create index i1 on t1(id) global partition by hash(id) partitions 4;
+
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 3;
+
+connection conn_obtest1;
+reap;
+drop table t1;
+--echo ================= test offline ddl -> add index end =================]
+
+
+--echo ================= test offline ddl -> drop index start =================
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD wait_for signal1 execute 10000';
+sleep 3;
+
+connection conn_obtest1;
+create table t1(id int, name varchar(12));
+create index i1 on t1(id) global partition by hash(id) partitions 4;
+sleep 3;
+
+send alter table t1 modify name varchar(10);
+sleep 3;
+
+connection conn_obtest2;
+--error 4179
+drop index i1 on t1;
+
+connection conn_sys;
+$leader_obs.mysql set ob_global_debug_sync = 'TABLE_REDEFINITION_REPLICA_BUILD clear';
+$leader_obs.mysql set ob_global_debug_sync = 'now signal signal1';
+sleep 3;
+
+connection conn_obtest1;
+reap;
+drop table t1;
+--echo ================= test offline ddl -> drop index end =================

@@ -20,6 +20,7 @@
 #include "share/ob_define.h"
 #include "share/ob_id_generator.h"
 #include "share/scn.h"
+#include "share/ob_server_role.h"
 namespace oceanbase
 {
 namespace common
@@ -59,13 +60,18 @@ public:
     common::ObISQLClient &client,
     const ObSqlString &sql,
     SCN &ora_rowscn);
-  // Write capability is independent from the immutable boot role.
-  static int is_server_write_enabled(bool &enabled);
+  static int get_server_role(ObServerRole::Role &server_role);
+  static int check_if_server_role_is_primary(bool &is_primary);
+  static int check_if_server_role_is_standby(bool &is_standby);
+  static int get_server_role_state(ObServerRole &server_role);
+  static int check_if_server_role_state_is_primary(bool &is_primary);
+  static int check_if_server_role_state_is_standby(bool &is_standby);
   // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
   // check_clog_disk_full_or_hang has been demoted to logservice::free function
   static int gen_default_server_runtime_schema(
       common::ObISQLClient &sql_client,
       schema::ObServerRuntimeSchema &runtime_schema);
+  static int is_primary_server(bool &is_primary);
 };
 }//end namespace share
 }//end namespace oceanbase

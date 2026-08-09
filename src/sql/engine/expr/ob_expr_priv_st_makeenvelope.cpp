@@ -115,7 +115,7 @@ int ObExprPrivSTMakeEnvelope::calc_result_typeN(
 }
 
 #if SEEKDB_ENABLE_CORE_GIS
-int ObExprPrivSTMakeEnvelope::read_args(omt::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
+int ObExprPrivSTMakeEnvelope::read_args(common::ObSrsCacheGuard &srs_guard, const ObExpr &expr, ObEvalCtx &ctx, ObSEArray<double, 4> &coords,
     ObGeoSrid &srid, bool &is_null_result, const ObSrsItem *&srs_item)
 {
   int ret = OB_SUCCESS;
@@ -164,10 +164,8 @@ int ObExprPrivSTMakeEnvelope::read_args(omt::ObSrsCacheGuard &srs_guard, const O
       LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "SRID", N_PRIV_ST_MAKEENVELOPE);
       LOG_WARN("srid input value out of range", K(ret), K(srid));
     } else if (0 != (srid = datum->get_uint32())) {
-      if (OB_FAIL(SRS_SERVICE->get_srs_guard(srs_guard))) {
-        LOG_WARN("fail to get srs guard", K(ret));
-      } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-        LOG_WARN("fail to get srs item", K(ret));
+      if (OB_FAIL(ObGeoExprUtils::get_srs_item(
+              ctx, srs_guard, srid, srs_item))) {
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null srs item", K(ret));
@@ -188,7 +186,7 @@ int ObExprPrivSTMakeEnvelope::eval_priv_st_makeenvelope(const ObExpr &expr, ObEv
   ObWkbBuffer wkb_buf(tmp_allocator);
   ObWkbBuffer res_wkb_buf(tmp_allocator);
   ObGeometry *geo = NULL;
-  omt::ObSrsCacheGuard srs_guard;
+  common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs_item = NULL;
   // rectangle point -> polygon ewkb
   if (OB_FAIL(read_args(srs_guard, expr, ctx, coords, srid, is_null_result, srs_item))) {

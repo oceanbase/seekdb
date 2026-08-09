@@ -1,0 +1,53 @@
+ob1=OBI(cluster=1, init_unit_cpu=0, proxy_num=0, ct_num=0, locality=hz);
+ob1.reboot;
+
+let $cpu = 1;
+let $memory = 1073741824;
+let $min_memory = 1073741824;
+let $disk = 536870912;
+let $iops = 100000;
+let $session = 64;
+
+let $rs = deploy_get_value(ob1.get_leader sys:oceanbase:__all_core_table:0);
+let $rs_ip = deploy_get_value($rs.ip);
+let $rs_port = deploy_get_value($rs.port);
+let $rs_mysql_port = deploy_get_value($rs.mysql_port);
+connect (conn_sys,$rs_ip,root,,oceanbase,$rs_mysql_port);
+
+connection conn_sys;
+eval CREATE RESOURCE UNIT unit_1 MAX_CPU $cpu, MAX_MEMORY $memory, MAX_IOPS $iops, MAX_DISK_SIZE $disk, MAX_SESSION_NUM $session, MIN_CPU=1, MIN_MEMORY=$min_memory, MIN_IOPS=128;
+eval CREATE RESOURCE POOL pool_1 UNIT = 'unit_1', UNIT_NUM = 1, ZONE_LIST = ('z1');
+set @@session.ob_query_timeout = 20000000;
+eval CREATE TENANT tenant_1 RESOURCE_POOL_LIST = ('pool_1'), primary_zone = 'z1', locality='F{1}@z1' set ob_tcp_invited_nodes='%',recyclebin = 'on';
+let $resource_pool_id = deploy_get_value(ob1.select select resource_pool_id from __all_resource_pool where name = 'pool_1', resource_pool_id, 1);
+let $tenant1_id = deploy_get_value(ob1.select select tenant_id from __all_tenant where tenant_name = "tenant_1", tenant_id, 1);
+sleep 10;
+
+let $obs = deploy_get_value(ob1.get_leader tenant_1:oceanbase:__all_table:0);
+let $obs_ip = deploy_get_value($obs.ip);
+let $obs_port = deploy_get_value($obs.port);
+let $obs_mysql_port = deploy_get_value($obs.mysql_port);
+connect (conn_tenant1,$obs_ip,root@tenant_1,,test,$obs_mysql_port);
+
+connection conn_tenant1;
+# create table with index
+create table table_with_global_index(c1 int primary key, c2 int, index i1 (c2)) partition by hash(c1) partitions 2;
+create table table_with_local_index(c1 int primary key, c2 int, index i1 (c2));
+# alter table add index
+create table table_add_global_index(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create table table_add_local_index(c1 int primary key, c2 int);
+alter table table_add_global_index add index i1 (c2);
+alter table table_add_local_index add index i1 (c2);
+# create index
+create table table_create_global_index(c1 int primary key, c2 int) partition by hash(c1) partitions 2;
+create table table_create_local_index(c1 int primary key, c2 int);
+create index i1 on table_create_global_index(c2);
+create index i1 on table_create_local_index(c2);
+# truncate table
+truncate table table_with_global_index;
+truncate table table_with_local_index;
+# create table like
+create table like_table_with_global_index like table_with_global_index;
+create table like_table_with_local_index like table_with_local_index;
+ob1.mysql_p select table_id, index_type from oceanbase.__all_virtual_table where tenant_id = $tenant1_id order by table_id;
+ob1.mysql_p select table_id from oceanbase.__all_virtual_ori_schema_version where tenant_id = $tenant1_id order by table_id;

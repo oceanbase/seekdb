@@ -367,18 +367,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(MemoryBudgetConfigChecker);
 };
 
-class KVCacheMemoryLimitConfigChecker
-  : public ObConfigChecker
-{
-public:
-  KVCacheMemoryLimitConfigChecker() {}
-  virtual ~KVCacheMemoryLimitConfigChecker() {}
-  bool check(const ObConfigItem &t) const;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(KVCacheMemoryLimitConfigChecker);
-};
-
 class ObConfigAuditModeChecker
   : public ObConfigChecker
 {

@@ -33,7 +33,7 @@
     <a href="https://discord.gg/74cF8vbNEs">
         <img alt="Join Discord" src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&style=flat-square" />
     </a>
-    <a href="https://docs.seekdb.ai/">
+    <a href="https://seekdb.ai">
         <img alt="Documentation" src="https://img.shields.io/badge/Docs-seekdb.ai-4285F4?style=flat-square&logo=read-the-docs&logoColor=white" />
     </a>
     <a href="https://deepwiki.com/oceanbase/seekdb">
@@ -108,7 +108,7 @@ pip install -U pyseekdb   # pyseekdb は seekdb の Python SDK です
 
 > **実測結果：1,523 QPS、並行 P99 はわずか 21.7 ms — Milvus の 10.7 倍の QPS を達成。並行数上昇時の P99 ジッターは 1.1 倍に留まります（同一ワークロードで ES / Milvus は約 10 倍）。**
 
-<sub>ソース: [`src/observer/change_stream/`](src/observer/change_stream/) · [`src/observer/vector_index/`](src/observer/vector_index/)</sub>
+<sub>ソース: [`src/share/change_stream/`](src/share/change_stream/) · [`src/share/vector_index/`](src/share/vector_index/)</sub>
 
 ### 🌿 コピーオンライトサンドボックスでエージェントが自由に探索
 
@@ -369,6 +369,7 @@ seekdb のハイブリッド検索 + マルチモデルエンジンは、従来�
 # リポジトリをクローン
 git clone https://github.com/oceanbase/seekdb.git
 cd seekdb
+source ~/.bashrc
 ./build.sh release --init --make
 mkdir -p ~/seekdb/bin
 cp build_release/src/observer/seekdb ~/seekdb/bin

@@ -1,0 +1,68 @@
+## owner:nijia.nj
+## owner group:sql2
+## description:
+## 测试点：测试partition leader分布在不同server时information_schema下视图查询是否会报分布式强一致性读问题
+
+ob1=OBI(cluster=2:2:2,proxy_num=0);
+ob1.reboot;
+
+sleep 5;
+ob_connect(conn_sys, ob1, root@sys,,test,,USE_OB_CONNECTOR);
+connection conn_sys;
+
+##---------- 调整系统租户unit_num 1——>2 ----------##
+#alter resource pool sys_pool unit_num = 2;
+#alter system set balancer_idle_time = '20s';
+#sleep 60;
+
+##关闭partiton leader自动迁移
+alter system set enable_auto_leader_switch=False;
+## 调整__all_database 0号partition leader 到follower,下同
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_database:0);
+$follow.switch_partition sys:oceanbase:__all_database;
+## 调整__all_table
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_table:0);
+$follow.switch_partition sys:oceanbase:__all_table;
+## 调整__all_column
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_column:0);
+$follow.switch_partition sys:oceanbase:__all_column;
+## 调整__all_virtual_meta_table
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_tenant_meta_table:0);
+$follow.switch_partition sys:oceanbase:__all_tenant_meta_table;
+## 调整__all_sequence
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_sequence:0);
+$follow.switch_partition sys:oceanbase:__all_sequence;
+## 调整__all_sys_variable
+let $follow = deploy_get_value(ob1.get_follower sys:oceanbase:__all_sys_variable:0);
+$follow.switch_partition sys:oceanbase:__all_sys_variable;
+
+sleep 30;
+
+#检查是否切主成功
+#__all_database
+select count(*) as num  from oceanbase.__all_root_table where table_id = 1099511627880 and role =1 group by svr_ip,svr_port order by num;
+#__all_table
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627779 and role =1 group by svr_ip,svr_port order by num ;
+#__all_column
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627780 and role =1 group by svr_ip,svr_port order by num;
+#__all_tenant_meta_table
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627877 and role =1 group by svr_ip,svr_port order by num;
+#__all_sequence
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627903 and role =1 group by svr_ip,svr_port order by num;
+#_all_sys_variable
+select count(*) as num from oceanbase.__all_root_table where table_id = 1099511627896 and role =1 group by svr_ip,svr_port order by num;
+
+
+##---------- 对于系统表, 查询leader是否已经分布在两台server上 ----------##
+## 期待结果为2
+#use oceanbase;
+#select count(1) from (select svr_ip,svr_port from __all_root_table where tenant_id = 1 and role = 1 group by 1,2) a;
+
+#is下相关视图
+--disable_result_log
+select * from information_schema.global_variables;
+select * from information_schema.schemata;
+select * from information_schema.tables;
+select * from information_schema.views;
+select * from information_schema.key_column_usage;
+--enable_result_log

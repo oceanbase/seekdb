@@ -1,0 +1,37 @@
+##
+# owner:yulan.way
+# owner group:transaction
+# description:
+# 测试功能点：基本场景，单机单partition
+# 用例描述：宕机重启后可以恢复到一个稳态，读写数据正确
+##
+ob1=OBI(cluster=1, init_unit_cpu=5);
+ob1.reboot;
+
+sleep 10;
+
+let $ip=deploy_get_value(ob1.z1.obs0.ip);
+let $port=deploy_get_value(ob1.z1.obs0.mysql_port);
+connect (conn1,$ip,root@obtest,,test,$port);
+
+connection conn1
+create database obtest;
+use obtest;
+create table t1(pk int primary key, c1 int, c2 varchar(20));
+
+--disable_query_log
+let $cnt=50;
+while($cnt>0)
+{
+	eval insert into t1 values($cnt,$cnt,'c$cnt');
+	dec $cnt;
+}
+--enable_query_log
+select * from t1;
+
+ob1.z1.obs0.restart;
+sleep 120;
+
+connect (conn2,$ip,root@obtest,,test,$port);
+connection conn2;
+select * from obtest.t1;

@@ -64,21 +64,16 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
                                                      change_var.old_val_,
                                                      new_val,
                                                      changed))) {
-        LOG_WARN("failed to check actully changed", K(ret), K(change_var), K(changed));
       } else if (changed) {
         ObStringKV str_kv;
         sql::ObBasicSysVar *sys_var_ptr = NULL;
         if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(change_var.id_, str_kv.key_))) {
-          LOG_WARN("failed to get sys variable name", K(ret), K(change_var));
         } else if (OB_FAIL(session.get_sys_variable(change_var.id_, sys_var_ptr))){
-          LOG_WARN("failed to get sys variable", K(ret), K(change_var));
         } else if (OB_ISNULL(sys_var_ptr)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("sys var ptr is null", K(ret), K(change_var));
         } else if (OB_FAIL(sys_var_ptr->to_show_str(allocator, session, str_kv.value_))) {
-          LOG_WARN("failed to get sys variable new value string", K(ret), K(new_val), K(change_var.id_));
         } else if (OB_FAIL(ok_pkt.add_system_var(str_kv))) {
-          LOG_WARN("failed to add system variable", K(str_kv), K(ret));
         } else {
 #ifndef NDEBUG
           LOG_INFO("success add system var to ok pack", K(str_kv), K(change_var), K(new_val),
@@ -108,7 +103,6 @@ int ObMPUtils::get_user_sql_literal(ObIAllocator &allocator, const ObObj &obj, O
   const bool is_plain = false;
   int64_t user_sql_print_length = 0;
   if (OB_FAIL(get_literal_print_length(obj, is_plain, user_sql_print_length, print_param))) {
-    LOG_WARN("fail to get buffer length", K(ret), K(obj), K(user_sql_print_length));
   } else if (OB_UNLIKELY(user_sql_print_length <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid buffer length", K(ret), K(obj), K(user_sql_print_length));
@@ -116,7 +110,6 @@ int ObMPUtils::get_user_sql_literal(ObIAllocator &allocator, const ObObj &obj, O
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to alloc mem", K(user_sql_print_length), K(ret));
   } else if (OB_FAIL(obj.print_sql_literal(data, user_sql_print_length, pos, print_param))) {
-    LOG_WARN("fail to print sql  literal", K(ret), K(pos), K(user_sql_print_length), K(obj));
   } else {
     value_str.assign_ptr(data, static_cast<uint32_t>(pos));
   }

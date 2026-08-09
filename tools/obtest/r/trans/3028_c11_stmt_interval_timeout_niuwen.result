@@ -1,0 +1,271 @@
+ob1=OBI(cluster=1,proxy_num=0);
+ob1.reboot;
+use oceanbase;
+create table t1(x int);
+desc t1;
+Field	Type	Null	Key	Default	Extra
+x	int(11)	YES		NULL	
+create table t2(x int);
+desc t2;
+Field	Type	Null	Key	Default	Extra
+x	int(11)	YES		NULL	
+insert into t1 values(111);
+insert into t1 values(222);
+insert into t1 values(333);
+insert into t2 values(111);
+insert into t2 values(222);
+insert into t2 values(333);
+set @@session.autocommit=off;
+set @@session.ob_query_timeout=100000000000;
+set @@session.ob_trx_timeout=100000000000;
+begin;
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+commit;
+begin;
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+commit;
+begin;
+insert into t1 values(111);
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+commit;
+begin;
+insert into t1 values(111);
+commit;
+ERROR 25000: Transaction exiting
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+commit;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 2,3600;
+begin;
+insert into t1 values(111);
+insert into t1 values(222);
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+commit;
+begin;
+insert into t1 values(111);
+insert into t1 values(222);
+ERROR 25000: Transaction exiting
+commit;
+ERROR 25000: Transaction exiting
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+commit;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 3,3600;
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+select * from t2;
+x
+111
+222
+333
+111
+commit;
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+commit;
+ERROR 25000: Transaction exiting
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+select * from t2;
+x
+111
+222
+333
+111
+commit;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 4,3600;
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+111
+select * from t2;
+x
+111
+222
+333
+111
+111
+commit;
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+commit;
+ERROR 40000: Transaction rollbacked
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+111
+select * from t2;
+x
+111
+222
+333
+111
+111
+commit;
+begin;
+insert into t1 values(111);
+insert into t2 values(111);
+commit;
+ERROR 25000: Transaction exiting
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+111
+select * from t2;
+x
+111
+222
+333
+111
+111
+commit;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 5,3600;
+begin;
+insert into t1 values(111);
+insert into t2 values(222);
+insert into t1 values(333);
+commit;
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+111
+111
+333
+select * from t2;
+x
+111
+222
+333
+111
+111
+222
+commit;
+begin;
+insert into t1 values(111);
+insert into t2 values(222);
+insert into t1 values(333);
+ERROR 25000: Transaction exiting
+commit;
+ERROR 25000: Transaction exiting
+begin;
+select * from t1;
+x
+111
+222
+333
+111
+111
+222
+111
+111
+111
+333
+select * from t2;
+x
+111
+222
+333
+111
+111
+222
+commit;
+alter system major freeze;
+ob1.check_until_timeout select value from __all_zone where zone='' and name='last_merged_version', 6,3600;

@@ -1,0 +1,15 @@
+ob1=OBI(cluster=1,proxy_num=0,init_unit_cpu=2);
+ob1.reboot;
+ob1.mysql alter system set merger_switch_leader_duration_time=0;
+ob1.mysql alter system set enable_auto_leader_switch=false;
+ob1.mysql alter system set enable_rereplication=false;
+ob1.mysql alter system set enable_rebalance=false;
+use test;
+create table t1(id1 bigint, id2 bigint, id3 bigint default 0, id4 bigint default 0, primary key(id1, id2)) progressive_merge_num=10 tablet_size=104857600;
+insert into t1 values(0, 4000, 1, 1);
+ob1.mysql alter system major freeze;
+ob1.check_version 2;
+count(*)
+1
+id1	id2	id3	id4
+0	4000	5	1

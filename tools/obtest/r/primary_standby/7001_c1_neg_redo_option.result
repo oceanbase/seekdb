@@ -1,0 +1,11 @@
+ob1=OBI(cluster=1, proxy_num = 0);
+ob1.reboot;
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='NET_TIMEOUT = 10000000';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='REOPEN = 20';
+ob1.mysql alter system modify cluster '$cluster_name' cluster_id $cluster_id set redo_transport_options='MAX_FAILURE = 10';
+ERROR HY000: parameter cannot be modified because specified value is invalid
+ERROR HY000: parameter cannot be modified because specified value is invalid
+ERROR HY000: parameter cannot be modified because specified value is invalid
+ERROR HY000: parameter cannot be modified because specified value is invalid
+ERROR HY000: parameter cannot be modified because specified value is invalid
+ERROR HY000: parameter cannot be modified because specified value is invalid
