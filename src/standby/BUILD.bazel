@@ -71,16 +71,37 @@ cc_library(
 )
 
 cc_library(
+    name = "standby_state",
+    srcs = ["control/standby_state_store.cpp"],
+    hdrs = ["control/standby_state_store.h"],
+    deps = [
+        "//src/oblib:oblib_foundation",
+        "//src/oblib:oblib_foundation_base",
+        "//src/oblib:oblib_foundation_support",
+        "//src/oblib:oblib_data_formats_model",
+        "//src/share:config",
+        "//src/share:seekdb_runtime_foundation",
+        "//src/share:tenant_runtime",
+    ],
+    features = ["layering_check"],
+)
+
+cc_library(
     name = "standby_runtime",
     srcs = glob(["**/*.cpp"], exclude = [
+        "control/standby_state_store.cpp",
         "standby_module.cpp",
         "standby_module_disabled.cpp",
     ]),
     hdrs = glob(["**/*.h"], exclude = [
+        "control/standby_state_store.h",
         "standby_host.h",
         "standby_module.h",
     ]),
-    deps = STANDBY_DEPS + [":standby_interface"],
+    deps = STANDBY_DEPS + [
+        ":standby_interface",
+        ":standby_state",
+    ],
     features = ["layering_check"],
 )
 
@@ -96,6 +117,7 @@ cc_library(
     deps = STANDBY_DEPS + [
         ":standby_interface",
         ":standby_runtime",
+        ":standby_state",
     ],
     features = ["layering_check"],
 )
@@ -105,8 +127,10 @@ cc_library(
     srcs = ["standby_module_disabled.cpp"],
     deps = [
         ":standby_interface",
+        ":standby_state",
         "//src/oblib:oblib_foundation_base",
         "//src/oblib:oblib_memory_utilities",
+        "//src/share:tenant_runtime",
     ],
     features = ["layering_check"],
 )

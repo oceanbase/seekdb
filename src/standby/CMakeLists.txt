@@ -9,6 +9,7 @@ if(OB_ENABLE_STANDBY)
     ob_standby_palf_base_info.cpp
     control/ob_standby_role_transition_service.cpp
     control/ob_standby_timestamp_provider.cpp
+    control/standby_state_store.cpp
     restore/ob_physical_copy_ctx.cpp
     restore/ob_physical_copy_task.cpp
     restore/ob_restore_helper.cpp
@@ -25,7 +26,9 @@ if(OB_ENABLE_STANDBY)
   ob_set_subtarget(ob_standby common standby_module.cpp)
   ob_server_add_target(ob_standby_runtime)
 else()
-  ob_set_subtarget(ob_standby common standby_module_disabled.cpp)
+  ob_set_subtarget(ob_standby common
+    standby_module_disabled.cpp
+    control/standby_state_store.cpp)
 endif()
 
 ob_server_add_target(ob_standby)

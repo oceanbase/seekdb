@@ -89,8 +89,11 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     const char *data_disk_health_status = device_health_status_to_str(dhs);
     const share::ObServerRole::Role active_role = share::server_role();
     share::ObServerInfo server_info;
-    const int load_info_ret = share::ObServerInfoProxy::load_server_info(
-        GCTX.config_mgr_, active_role, server_info);
+    const share::IServerRoleStateProvider *role_state_provider =
+        share::server_service<share::IServerRoleStateProvider>();
+    const int load_info_ret = nullptr == role_state_provider
+        ? OB_NOT_INIT
+        : role_state_provider->get_server_info(server_info);
 
     role_buf_[0] = '\0';
     switchover_status_buf_[0] = '\0';

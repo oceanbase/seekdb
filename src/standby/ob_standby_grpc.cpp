@@ -27,6 +27,7 @@
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/ob_standby_grpc_stream_util.h"
 #include "standby/ob_standby_source_util.h"
+#include "standby/control/standby_state_store.h"
 #include "standby/restore/ob_standby_restore_reader.h"
 #include "standby/standby_host.h"
 #include "storage/tablet/ob_tablet_iterator.h"
@@ -51,8 +52,15 @@ namespace standby
 class StandbyGrpcService final : public standbyservice::StandbyService::Service
 {
 public:
-  StandbyGrpcService(const StandbyConfig &config, IStandbyHost &host)
-    : self_addr_(config.self_addr_), io_timeout_ms_(config.io_timeout_ms_), host_(host)
+  StandbyGrpcService(
+      const StandbyConfig &config,
+      StandbyStateStore &state_store,
+      IStandbyHost &host)
+    : self_addr_(config.self_addr_),
+      io_timeout_ms_(config.io_timeout_ms_),
+      rpc_tls_enabled_(config.rpc_tls_enabled_),
+      state_store_(state_store),
+      host_(host)
   {}
   virtual ~StandbyGrpcService() {}
 
@@ -100,12 +108,15 @@ public:
 private:
   common::ObAddr self_addr_;
   int64_t io_timeout_ms_;
+  bool rpc_tls_enabled_;
+  StandbyStateStore &state_store_;
   IStandbyHost &host_;
 };
 
 int create_and_register_standby_grpc_service(
     obgrpc::ObGrpcServer &grpc_server,
     const StandbyConfig &config,
+    StandbyStateStore &state_store,
     IStandbyHost &host,
     StandbyGrpcService *&service)
 {
@@ -116,7 +127,7 @@ int create_and_register_standby_grpc_service(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby gRPC service config", KR(ret));
   } else if (OB_ISNULL(new_service = OB_NEW(
-      StandbyGrpcService, "StandbyGrpc", config, host))) {
+      StandbyGrpcService, "StandbyGrpc", config, state_store, host))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC service", KR(ret));
   } else if (OB_FAIL(grpc_server.register_service(new_service))) {
@@ -904,7 +915,7 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
   } else {
     SERVER_MODULE_SCOPE {
       share::ObServerInfo server_info;
-      if (OB_FAIL(host_.load_server_info(server_info))) {
+      if (OB_FAIL(state_store_.load(server_info))) {
         LOG_WARN("failed to load source role transition state", K(ret));
       } else if (server_info.is_primary()) {
         ObLSService *ls_service = share::server_service<ObLSService>();
@@ -958,7 +969,7 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
           LOG_WARN("promotion boundary source chain contains a cycle",
               K(ret), K(source_addr), K(boundary_request));
         } else if (OB_FAIL(client.init(
-            source_addr, io_timeout_ms_ * 1000L, host_.rpc_tls_enabled()))) {
+            source_addr, io_timeout_ms_ * 1000L, rpc_tls_enabled_))) {
           LOG_WARN("failed to connect promotion boundary source", K(ret), K(source_addr));
         } else if (OB_FAIL(client.get_promotion_boundary(boundary_request, boundary))) {
           LOG_WARN("failed to relay promotion boundary", K(ret), K(source_addr));
@@ -980,7 +991,7 @@ grpc::Status StandbyGrpcService::get_promotion_boundary(
               K(source_before), K(source_after));
         } else {
           share::ObServerInfo rechecked_server_info;
-          if (OB_FAIL(host_.load_server_info(rechecked_server_info))) {
+          if (OB_FAIL(state_store_.load(rechecked_server_info))) {
             LOG_WARN("failed to recheck relay role", K(ret));
           } else if (!rechecked_server_info.is_standby()
                      || rechecked_server_info.has_pending_role()) {

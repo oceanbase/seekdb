@@ -401,7 +401,7 @@ int ObStandbyLogSyncService::query_source_promotion_boundary_(
   boundary = StandbyPromotionBoundary();
   if (OB_FAIL(request.add_visited(config_->self_addr_))) {
     LOG_WARN("failed to initialize promotion boundary path", KR(ret), K(config_->self_addr_));
-  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, host_->rpc_tls_enabled()))) {
+  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.get_promotion_boundary(request, boundary))) {
     LOG_WARN("failed to query source promotion boundary", KR(ret), K(source_addr));
@@ -448,7 +448,7 @@ int ObStandbyLogSyncService::sync_once_(
     // end_lsn. Starting the next batch at end_lsn can fetch an already
     // submitted group again and violate PALF's strict continuity check.
     LOG_WARN("failed to get local standby log import position", KR(ret));
-  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, host_->rpc_tls_enabled()))) {
+  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.fetch_log(
       start_lsn,
@@ -519,7 +519,7 @@ int ObStandbyLogSyncService::validate_switch_to_primary_(const bool is_failover)
   share::SCN local_sync_scn;
   const int64_t deadline_us = THIS_WORKER.is_timeout_ts_valid()
       ? THIS_WORKER.get_timeout_ts()
-      : common::ObTimeUtility::current_time() + host_->operation_timeout_us();
+      : common::ObTimeUtility::current_time() + config_->operation_timeout_us_;
 
   {
     lib::ObMutexGuard guard(lock_);
@@ -608,7 +608,7 @@ int ObStandbyLogSyncService::prepare_promotion_(
   bool paused_by_this_call = false;
   const int64_t deadline_us = THIS_WORKER.is_timeout_ts_valid()
       ? THIS_WORKER.get_timeout_ts()
-      : common::ObTimeUtility::current_time() + host_->operation_timeout_us();
+      : common::ObTimeUtility::current_time() + config_->operation_timeout_us_;
   target_scn.reset();
 
   {
@@ -725,7 +725,7 @@ int ObStandbyLogSyncService::prepare_persisted_promotion_(
   share::SCN local_sync_scn;
   const int64_t deadline_us = THIS_WORKER.is_timeout_ts_valid()
       ? THIS_WORKER.get_timeout_ts()
-      : common::ObTimeUtility::current_time() + host_->operation_timeout_us();
+      : common::ObTimeUtility::current_time() + config_->operation_timeout_us_;
 
   if (!target_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;

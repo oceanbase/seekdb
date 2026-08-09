@@ -47,7 +47,6 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "observer/ob_server_options.h"
 #include "share/ob_timezone_mgr.h"
 #include "share/ob_schema_status_proxy.h"
-#include "share/ob_server_info.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "logservice/ob_log_allocator_mgr.h"
 #include "observer/omt/ob_server_runtime.h"
@@ -112,58 +111,6 @@ class ObServer::StandbyHostAdapter final : public standby::IStandbyHost
 public:
   explicit StandbyHostAdapter(ObServer &server) : server_(server) {}
 
-  share::ObServerRole::Role boot_role() const override
-  {
-    return server_.gctx_.server_role_;
-  }
-
-  int load_server_info(share::ObServerInfo &server_info) override
-  {
-    const share::ObServerRole::Role active_role = share::server_role();
-    const share::ObServerRole::Role fallback_role =
-        share::ObServerRole::INVALID_ROLE == active_role
-            ? server_.gctx_.server_role_
-            : active_role;
-    return share::ObServerInfoProxy::load_server_info(
-        &server_.config_mgr_, fallback_role, server_info);
-  }
-
-  int initialize_server_info() override
-  {
-    return share::ObServerInfoProxy::init_server_info_from_role(
-        &server_.config_mgr_, server_.gctx_.server_role_);
-  }
-
-  int update_server_info(const share::ObServerInfo &server_info) override
-  {
-    return share::ObServerInfoProxy::update_server_info(&server_.config_mgr_, server_info);
-  }
-
-  void publish_server_role(const share::ObServerRole::Role role) override
-  {
-    share::set_server_role(role);
-  }
-
-  void set_write_enabled(const bool enabled) override
-  {
-    share::set_server_write_enabled(enabled);
-  }
-
-  bool is_write_enabled() const override
-  {
-    return share::server_is_write_enabled();
-  }
-
-  void set_recovery_mode(const bool enabled) override
-  {
-    share::set_server_recovery_mode(enabled);
-  }
-
-  void advance_switchover_epoch() override
-  {
-    share::set_server_switchover_epoch(common::ObTimeUtility::current_time());
-  }
-
   int load_log_restore_source(
       common::ObIAllocator &allocator,
       common::ObString &source,
@@ -183,24 +130,9 @@ public:
     return ret;
   }
 
-  bool rpc_tls_enabled() const override
-  {
-    return server_.config_.enable_rpc_tls;
-  }
-
   void publish_rpc_cert_expire_time(const int64_t expire_time_us) override
   {
     server_.gctx_.ssl_key_expired_time_ = expire_time_us;
-  }
-
-  int64_t operation_timeout_us() const override
-  {
-    return server_.config_.internal_sql_execute_timeout;
-  }
-
-  common::ObInOutBandwidthThrottle *bandwidth_throttle() override
-  {
-    return &server_.bandwidth_throttle_;
   }
 
   void reset_max_id_cache() override
@@ -208,22 +140,20 @@ public:
     server_.local_management_service_.get_max_id_cache_mgr().reset();
   }
 
-  int get_latest_schema_version(int64_t &schema_version) override
+  int refresh_schema() override
   {
     int ret = OB_SUCCESS;
+    int64_t schema_version = OB_INVALID_VERSION;
     share::schema::ObRefreshSchemaStatus schema_status;
     if (OB_FAIL(server_.schema_status_proxy_.get_refresh_schema_status(schema_status))) {
       LOG_WARN("failed to get schema refresh status", KR(ret));
     } else if (OB_FAIL(server_.schema_service_.get_schema_version_in_inner_table(
         server_.sql_proxy_, schema_status, schema_version))) {
       LOG_WARN("failed to get latest schema version", KR(ret));
+    } else if (OB_FAIL(server_.ob_service_.submit_async_refresh_schema_task(schema_version))) {
+      LOG_WARN("failed to submit schema refresh", KR(ret), K(schema_version));
     }
     return ret;
-  }
-
-  int submit_schema_refresh(const int64_t schema_version) override
-  {
-    return server_.ob_service_.submit_async_refresh_schema_task(schema_version);
   }
 
   int bootstrap_primary() override
@@ -236,14 +166,15 @@ public:
     return server_.ob_service_.report_bootstrap_telemetry();
   }
 
-  int wait_schema_ready() override
+  int wait_primary_metadata_ready() override
   {
-    return server_.check_if_schema_ready();
-  }
-
-  int wait_timezone_usable() override
-  {
-    return server_.check_if_timezone_usable();
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(server_.check_if_schema_ready())) {
+      LOG_WARN("failed to wait for schema readiness", KR(ret));
+    } else if (OB_FAIL(server_.check_if_timezone_usable())) {
+      LOG_WARN("failed to wait for timezone readiness", KR(ret));
+    }
+    return ret;
   }
 
   int start_timezone_manager() override
@@ -2342,6 +2273,10 @@ int ObServer::init_ob_service(bool need_bootstrap)
   standby_config.embedded_mode_ = gctx_.is_embedded_mode();
   standby_config.rpc_tls_enabled_ = config_.enable_rpc_tls;
   standby_config.io_timeout_ms_ = config_._data_storage_io_timeout / 1000L;
+  standby_config.operation_timeout_us_ = config_.internal_sql_execute_timeout;
+  standby_config.boot_role_ = gctx_.server_role_;
+  standby_config.config_manager_ = &config_mgr_;
+  standby_config.bandwidth_throttle_ = &bandwidth_throttle_;
 #ifdef ERRSIM
   standby_config.errsim_migration_tablet_id_ = config_.errsim_migration_tablet_id.get_value();
   standby_config.errsim_test_tablet_id_ = config_.errsim_test_tablet_id.get_value();

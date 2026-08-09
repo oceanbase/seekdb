@@ -24,12 +24,6 @@
 
 namespace oceanbase
 {
-namespace common
-{
-class ObMySQLProxy;
-class ObISQLClient;
-class ObConfigManager;
-}
 namespace share
 {
 
@@ -62,21 +56,11 @@ struct ObServerInfo
     cutover_scn_.reset();
   }
 
-  int assign(const ObServerInfo &other) {
-    server_role_ = other.server_role_;
-    pending_role_ = other.pending_role_;
-    switchover_status_ = other.switchover_status_;
-    cutover_scn_ = other.cutover_scn_;
-    return OB_SUCCESS;
-  }
-
-  // Getters
   const ObServerRole &get_server_role() const { return server_role_; }
   const ObServerRole &get_pending_role() const { return pending_role_; }
   const ObServerSwitchoverStatus &get_switchover_status() const { return switchover_status_; }
   const SCN &get_cutover_scn() const { return cutover_scn_; }
 
-  // Convenience methods
   bool is_primary() const { return server_role_.is_primary(); }
   bool is_standby() const { return server_role_.is_standby(); }
   bool has_pending_role() const { return pending_role_.is_valid(); }
@@ -105,26 +89,13 @@ struct ObServerInfo
   ObServerRole pending_role_;
   ObServerSwitchoverStatus switchover_status_;
   SCN cutover_scn_;
-
-  OB_UNIS_VERSION(1);
 };
 
-class ObServerInfoProxy
+class IServerRoleStateProvider
 {
 public:
-  static int load_server_info(
-      common::ObConfigManager *config_mgr,
-      const ObServerRole::Role fallback_role,
-      ObServerInfo &server_info);
-
-  static int init_server_info_from_role(
-      common::ObConfigManager *config_mgr,
-      const ObServerRole::Role server_role);
-
-  static int update_server_info(
-      common::ObConfigManager *config_mgr,
-      const ObServerInfo &server_info);
-
+  virtual ~IServerRoleStateProvider() {}
+  virtual int get_server_info(ObServerInfo &server_info) const = 0;
 };
 
 } // namespace share

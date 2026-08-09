@@ -16,8 +16,10 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "standby/standby_module.h"
+#include "standby/control/standby_state_store.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/oblog/ob_log.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -27,18 +29,26 @@ namespace standby
 class StandbyModule::Impl final
 {
 public:
-  Impl() : is_inited_(false), host_(nullptr) {}
+  Impl()
+    : is_inited_(false),
+      boot_role_(share::ObServerRole::INVALID_ROLE),
+      state_store_(),
+      host_(nullptr)
+  {}
 
   int init(const StandbyConfig &config, IStandbyHost &host)
   {
     int ret = OB_SUCCESS;
     if (is_inited_) {
       ret = OB_INIT_TWICE;
-    } else if (!config.is_valid()
-               || share::ObServerRole::INVALID_ROLE == host.boot_role()) {
+    } else if (!config.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(state_store_.init(*config.config_manager_, config.boot_role_))) {
+      LOG_WARN("failed to initialize server role state store", KR(ret));
     } else {
+      boot_role_ = config.boot_role_;
       host_ = &host;
+      share::bind_server_service<share::IServerRoleStateProvider>(&state_store_);
       is_inited_ = true;
     }
     return ret;
@@ -50,15 +60,15 @@ public:
     share::ObServerInfo server_info;
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(host_->load_server_info(server_info))) {
+    } else if (OB_FAIL(state_store_.load(server_info))) {
       LOG_WARN("failed to load server role without standby support", KR(ret));
     } else if (!server_info.is_primary() || !server_info.is_normal_status()) {
       ret = OB_NOT_SUPPORTED;
       LOG_ERROR("binary without standby support cannot restore this server role",
           KR(ret), K(server_info));
     } else {
-      host_->publish_server_role(share::ObServerRole::PRIMARY_ROLE);
-      host_->set_recovery_mode(false);
+      share::set_server_role(share::ObServerRole::PRIMARY_ROLE);
+      share::set_server_recovery_mode(false);
     }
     return ret;
   }
@@ -68,10 +78,10 @@ public:
     int ret = OB_SUCCESS;
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-    } else if (share::ObServerRole::PRIMARY_ROLE != host_->boot_role()) {
+    } else if (share::ObServerRole::PRIMARY_ROLE != boot_role_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_ERROR("standby role requires a standby-enabled binary", KR(ret), K(host_->boot_role()));
-    } else if (need_bootstrap && OB_FAIL(host_->initialize_server_info())) {
+      LOG_ERROR("standby role requires a standby-enabled binary", KR(ret), K_(boot_role));
+    } else if (need_bootstrap && OB_FAIL(state_store_.initialize())) {
       LOG_WARN("failed to initialize primary server role", KR(ret));
     } else if (need_bootstrap && OB_FAIL(host_->bootstrap_primary())) {
       LOG_WARN("failed to bootstrap primary server", KR(ret));
@@ -89,10 +99,8 @@ public:
     int ret = OB_SUCCESS;
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(host_->wait_schema_ready())) {
-      LOG_WARN("failed to wait for schema readiness", KR(ret));
-    } else if (OB_FAIL(host_->wait_timezone_usable())) {
-      LOG_WARN("failed to wait for timezone readiness", KR(ret));
+    } else if (OB_FAIL(host_->wait_primary_metadata_ready())) {
+      LOG_WARN("failed to wait for primary metadata readiness", KR(ret));
     }
     return ret;
   }
@@ -110,11 +118,18 @@ public:
 
   void destroy()
   {
+    if (share::server_service<share::IServerRoleStateProvider>() == &state_store_) {
+      share::unbind_server_service<share::IServerRoleStateProvider>();
+    }
+    state_store_.reset();
+    boot_role_ = share::ObServerRole::INVALID_ROLE;
     host_ = nullptr;
     is_inited_ = false;
   }
 
   bool is_inited_;
+  share::ObServerRole::Role boot_role_;
+  StandbyStateStore state_store_;
   IStandbyHost *host_;
 };
 

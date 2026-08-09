@@ -24,6 +24,7 @@
 #include "standby/ob_standby_schema_refresh_trigger.h"
 #include "standby/control/ob_standby_timestamp_provider.h"
 #include "standby/control/ob_standby_role_transition_service.h"
+#include "standby/control/standby_state_store.h"
 #include "standby/ob_standby_grpc_service.h"
 #include "standby/ob_standby_log_sync_service.h"
 #include "standby/standby_host.h"
@@ -61,6 +62,7 @@ private:
   bool resume_pending_promotion_;
   StandbyConfig config_;
   IStandbyHost *host_;
+  StandbyStateStore state_store_;
   StandbyGrpcServer *grpc_server_;
   StandbyGrpcService *grpc_service_;
   ObStandbySchemaRefreshTrigger schema_refresh_trigger_;
@@ -74,6 +76,7 @@ StandbyModule::Impl::Impl()
     resume_pending_promotion_(false),
     config_(),
     host_(nullptr),
+    state_store_(),
     grpc_server_(nullptr),
     grpc_service_(nullptr),
     schema_refresh_trigger_(),
@@ -165,19 +168,20 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (!config.is_valid()
-             || share::ObServerRole::INVALID_ROLE == host.boot_role()) {
+  } else if (!config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby module configuration", KR(ret), K(config.self_addr_),
         K(config.rpc_port_), K(config.embedded_mode_), K(config.io_timeout_ms_),
-        K(host.boot_role()));
+        K(config.operation_timeout_us_), K(config.boot_role_));
   } else if (FALSE_IT(config_ = config)) {
   } else if (FALSE_IT(host_ = &host)) {
+  } else if (OB_FAIL(state_store_.init(*config_.config_manager_, config_.boot_role_))) {
+    LOG_WARN("failed to initialize standby state store", KR(ret));
   } else if (OB_ISNULL(grpc_server_ = OB_NEW(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate standby gRPC server", KR(ret));
   } else if (OB_FAIL(create_and_register_standby_grpc_service(
-      *grpc_server_, config_, *host_, grpc_service_))) {
+      *grpc_server_, config_, state_store_, *host_, grpc_service_))) {
     LOG_WARN("failed to register standby gRPC service", KR(ret));
   } else if (OB_FAIL(schema_refresh_trigger_.init(config_, *host_))) {
     LOG_WARN("failed to init standby schema refresh trigger", KR(ret));
@@ -185,11 +189,12 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
     LOG_WARN("failed to init standby log sync service", KR(ret));
     schema_refresh_trigger_.destroy();
   } else if (OB_FAIL(role_transition_service_.init(
-      log_sync_service_, schema_refresh_trigger_, *host_))) {
+      log_sync_service_, schema_refresh_trigger_, state_store_, config_, *host_))) {
     LOG_WARN("failed to init standby role transition service", KR(ret));
     log_sync_service_.destroy();
     schema_refresh_trigger_.destroy();
   } else {
+    share::bind_server_service<share::IServerRoleStateProvider>(&state_store_);
     share::bind_server_service<share::ObITenantRoleTransitionService>(&role_transition_service_);
     is_inited_ = true;
   }
@@ -200,6 +205,7 @@ int StandbyModule::Impl::init(const StandbyConfig &config, IStandbyHost &host)
   if (OB_FAIL(ret)) {
     destroy_standby_grpc_service(grpc_service_);
     config_ = StandbyConfig();
+    state_store_.reset();
     host_ = nullptr;
   }
   return ret;
@@ -254,11 +260,15 @@ void StandbyModule::Impl::destroy()
     share::unbind_server_service<share::ObITenantRoleTransitionService>();
   }
   role_transition_service_.destroy();
+  if (share::server_service<share::IServerRoleStateProvider>() == &state_store_) {
+    share::unbind_server_service<share::IServerRoleStateProvider>();
+  }
   if (nullptr != grpc_server_) {
     OB_DELETE(StandbyGrpcServer, ObModIds::OB_COMMON_NETWORK, grpc_server_);
     grpc_server_ = nullptr;
   }
   destroy_standby_grpc_service(grpc_service_);
+  state_store_.reset();
   config_ = StandbyConfig();
   host_ = nullptr;
   is_inited_ = false;
@@ -272,7 +282,7 @@ int StandbyModule::Impl::prepare_storage_replay()
   share::ObServerInfo server_info;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(host_->load_server_info(server_info))) {
+  } else if (OB_FAIL(state_store_.load(server_info))) {
     LOG_WARN("failed to load persisted server profile", KR(ret));
   } else if (!server_info.is_valid()) {
     ret = OB_INVALID_DATA;
@@ -283,7 +293,7 @@ int StandbyModule::Impl::prepare_storage_replay()
         && server_info.get_pending_role().is_standby()) {
       if (OB_FAIL(server_info.activate_pending_role())) {
         LOG_WARN("failed to activate persisted pending role", KR(ret), K(server_info));
-      } else if (OB_FAIL(host_->update_server_info(server_info))) {
+      } else if (OB_FAIL(state_store_.update(server_info))) {
         LOG_WARN("failed to commit activated server profile", KR(ret), K(server_info));
       }
     } else if (server_info.has_pending_role()
@@ -299,11 +309,11 @@ int StandbyModule::Impl::prepare_storage_replay()
     }
     if (OB_SUCC(ret)) {
       standby_profile_ = server_info.is_standby();
-      host_->publish_server_role(server_info.server_role_.value());
-      host_->set_recovery_mode(standby_profile_);
+      share::set_server_role(server_info.server_role_.value());
+      share::set_server_recovery_mode(standby_profile_);
       // Startup publishes write capability only after the selected profile is
       // fully activated. This also covers a crash after durable role commit.
-      host_->set_write_enabled(false);
+      share::set_server_write_enabled(false);
       LOG_INFO("selected server boot profile", K(server_info), K_(standby_profile));
     }
   }
@@ -315,9 +325,9 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (need_bootstrap && OB_FAIL(host_->initialize_server_info())) {
+  } else if (need_bootstrap && OB_FAIL(state_store_.initialize())) {
     LOG_WARN("failed to initialize server role state before bootstrap", KR(ret),
-        K(host_->boot_role()));
+        K(config_.boot_role_));
   } else if (need_bootstrap
              && !standby_profile_
              && OB_FAIL(activate_current_role_())) {
@@ -339,7 +349,7 @@ int StandbyModule::Impl::prepare_service_start(const bool need_bootstrap)
   if (OB_SUCC(ret)
       && (!need_bootstrap || standby_profile_)
       && OB_FAIL(activate_current_role_())) {
-    LOG_WARN("failed to activate current server role", KR(ret), K(host_->boot_role()));
+    LOG_WARN("failed to activate current server role", KR(ret), K(config_.boot_role_));
   }
   return ret;
 }
@@ -358,7 +368,7 @@ int StandbyModule::Impl::bootstrap_standby_()
       source_allocator, param.source_, source_version))) {
     LOG_WARN("failed to load standby bootstrap source", KR(ret));
   }
-  param.bandwidth_throttle_ = host_->bandwidth_throttle();
+  param.bandwidth_throttle_ = config_.bandwidth_throttle_;
   param.restore_config_ = &config_;
 
   // The restored LS must never allocate a local timestamp before source-log
@@ -389,7 +399,7 @@ int StandbyModule::Impl::activate_current_role_()
              && OB_FAIL(ObStandbyTimestampProvider::disable())) {
     LOG_WARN("failed to activate primary timestamp provider", KR(ret));
   } else {
-    host_->set_write_enabled(!standby_profile_);
+    share::set_server_write_enabled(!standby_profile_);
   }
   return ret;
 }
@@ -403,7 +413,7 @@ int StandbyModule::Impl::start()
     LOG_WARN("failed to start standby schema refresh trigger", KR(ret));
   } else if (standby_profile_ && !resume_pending_promotion_ && !config_.embedded_mode_
              && OB_FAIL(log_sync_service_.start())) {
-    LOG_WARN("failed to start standby log sync service", KR(ret), K(host_->boot_role()));
+    LOG_WARN("failed to start standby log sync service", KR(ret), K(config_.boot_role_));
   }
   return ret;
 }
@@ -437,10 +447,8 @@ int StandbyModule::Impl::wait_metadata_ready()
     if (OB_FAIL(host_->start_timezone_manager())) {
       LOG_WARN("failed to start standby timezone manager", KR(ret));
     }
-  } else if (OB_FAIL(host_->wait_schema_ready())) {
-    LOG_WARN("failed to wait for primary schema readiness", KR(ret));
-  } else if (OB_FAIL(host_->wait_timezone_usable())) {
-    LOG_WARN("failed to wait for primary timezone readiness", KR(ret));
+  } else if (OB_FAIL(host_->wait_primary_metadata_ready())) {
+    LOG_WARN("failed to wait for primary metadata readiness", KR(ret));
   }
   return ret;
 }

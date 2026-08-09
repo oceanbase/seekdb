@@ -266,9 +266,8 @@ int ObTransService::start_tx(ObTxDesc &tx, const ObTxParam &tx_param)
     } else {
       // Promotion changes admission for later transactions only. A transaction
       // begun during recovery remains read-only until it ends.
-      tx.access_mode_     = write_fenced
-          ? ObTxAccessMode::FENCED_RD_ONLY
-          : tx_param.access_mode_;
+      tx.access_mode_     = write_fenced ? ObTxAccessMode::RD_ONLY : tx_param.access_mode_;
+      tx.flags_.WRITE_FENCED_ = write_fenced;
       tx.isolation_       = tx_param.isolation_;
       tx.active_ts_       = ObClockGenerator::getClock();
       tx.timeout_us_      = tx_param.timeout_us_;
@@ -589,8 +588,8 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
         !tx.snapshot_version_.is_valid()/*version invalid*/) {
       SCN version;
       if (OB_FAIL(acquire_local_snapshot_(version))) {
-      } else if (tx.access_mode_ != ObTxAccessMode::FENCED_RD_ONLY
-                 && !tx.tx_id_.is_valid()
+      } else if (!tx.is_write_fenced()
+                  && !tx.tx_id_.is_valid()
                  && OB_FAIL(tx_desc_mgr_.add(tx))) {
         TRANS_LOG(WARN, "add tx to mgr fail", K(ret), K(tx));
       }
@@ -816,8 +815,7 @@ int ObTransService::create_global_implicit_savepoint_(ObTxDesc &tx,
                                                       const bool release)
 {
   int ret = OB_SUCCESS;
-  const bool fenced_read_only =
-      tx.access_mode_ == ObTxAccessMode::FENCED_RD_ONLY;
+  const bool fenced_read_only = tx.is_write_fenced();
   // tx is idle, update tx parameters
   if (tx.state_ == ObTxDesc::State::IDLE) {
     if (!fenced_read_only) {
@@ -1125,8 +1123,8 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
   ObTxSavePoint sp;
   if (OB_SUCC(sp.init(scn, savepoint))) {
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
-    } else if (tx.access_mode_ != ObTxAccessMode::FENCED_RD_ONLY
-               && !tx.tx_id_.is_valid()
+    } else if (!tx.is_write_fenced()
+                && !tx.tx_id_.is_valid()
                && OB_FAIL(tx_desc_mgr_.add(tx))) {
       TRANS_LOG(WARN, "add tx to mgr failed", K(ret), K(tx));
       tx.savepoints_.pop_back();
