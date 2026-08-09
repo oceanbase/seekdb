@@ -29,10 +29,12 @@ namespace standby
 struct StandbyConfig;
 class StandbyGrpcService;
 class IStandbyHost;
+class StandbyStateStore;
 
 int create_and_register_standby_grpc_service(
     obgrpc::ObGrpcServer &grpc_server,
     const StandbyConfig &config,
+    StandbyStateStore &state_store,
     IStandbyHost &host,
     StandbyGrpcService *&service);
 void destroy_standby_grpc_service(StandbyGrpcService *&service);

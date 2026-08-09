@@ -47,7 +47,6 @@
 #include "common/ob_data_version_mgr.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
-#include "share/ob_server_info.h"  // ObServerInfoProxy
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "storage/ls/ob_ls.h"

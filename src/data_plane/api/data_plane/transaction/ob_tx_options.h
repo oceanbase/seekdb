@@ -63,7 +63,6 @@ enum class ObTxAccessMode
   INVL = -1,
   RW = 0,
   RD_ONLY = 1,
-  FENCED_RD_ONLY = 2,
 };
 
 enum ObTxCleanPolicy

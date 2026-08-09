@@ -128,14 +128,9 @@ int ObStandbySchemaRefreshTrigger::check_inner_stat_()
 int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
 {
   int ret = OB_SUCCESS;
-  int64_t schema_version = OB_INVALID_VERSION;
-  if (OB_FAIL(host_->get_latest_schema_version(schema_version))) {
-    LOG_WARN("fail to get latest schema version in inner table", K(ret));
-  } else if (OB_FAIL(host_->submit_schema_refresh(schema_version))) {
-    LOG_WARN("fail to submit async refresh schema task",
-             KR(ret), K(schema_version));
+  if (OB_FAIL(host_->refresh_schema())) {
+    LOG_WARN("failed to refresh standby schema", KR(ret));
   }
-
   return ret;
 }
 
