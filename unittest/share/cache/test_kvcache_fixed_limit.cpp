@@ -66,24 +66,29 @@ TEST(TestKVCacheFixedLimit, computes_store_block_excess)
                                                                block_size));
 }
 
-TEST(TestKVCacheFixedLimit, triggers_sync_wash_before_quota_overshoot)
+TEST(TestKVCacheFixedLimit, allows_one_background_batch_before_front_path_wash)
 {
   const int64_t mib = 1L << 20;
   const int64_t memory_budget = 300L * mib;
   const int64_t block_size = 2L * mib;
-  const int64_t cache_limit =
-      ObKVCacheStore::compute_fixed_cache_limit(memory_budget, block_size);
+  const int64_t burst_block_count = 64;
+  const int64_t pressure_limit = 218L * mib;
 
-  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_before_alloc(
-      cache_limit - block_size, block_size, memory_budget));
-  EXPECT_TRUE(ObKVCacheStore::need_sync_wash_before_alloc(
-      cache_limit - block_size + 1, block_size, memory_budget));
-  EXPECT_TRUE(ObKVCacheStore::need_sync_wash_before_alloc(
-      cache_limit, block_size, memory_budget));
-  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_before_alloc(
-      cache_limit, 0, memory_budget));
-  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_before_alloc(
-      cache_limit, block_size, 0));
+  EXPECT_EQ(pressure_limit,
+            ObKVCacheStore::compute_allocation_pressure_limit(
+                memory_budget, block_size, burst_block_count));
+  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit - block_size, block_size, memory_budget, burst_block_count));
+  EXPECT_TRUE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit - block_size + 1, block_size, memory_budget, burst_block_count));
+  EXPECT_TRUE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit, block_size, memory_budget, burst_block_count));
+  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit, 0, memory_budget, burst_block_count));
+  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit, block_size, 0, burst_block_count));
+  EXPECT_FALSE(ObKVCacheStore::need_sync_wash_for_allocation_pressure(
+      pressure_limit, block_size, memory_budget, -1));
 }
 
 } // namespace common

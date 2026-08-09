@@ -831,19 +831,18 @@ int ObKVCacheStore::alloc_mbhandle(
   ObKVStoreMemBlock *mem_block = NULL;
   char *buf = NULL;
 
-  // The jemalloc backend allocates cache blocks outside ObMemoryMgr's normal
-  // allocation-pressure path, so it cannot rely on that path to trigger a
-  // synchronous cache wash.  Apply backpressure here when a new block would
-  // exceed the fixed KV cache quota; otherwise a burst can outrun the periodic
-  // washer and exhaust every preallocated memblock handle.
+  // The periodic washer's selection heap covers one batch per pass. Allow that
+  // much burst space, then make new allocations keep pace with reclamation so
+  // the jemalloc backend cannot outrun the configured cache policy unchecked.
   const int64_t current_cache_size = ATOMIC_LOAD(&global_status_.store_size_);
   const int64_t memory_budget = lib::get_memory_budget();
-  if (need_sync_wash_before_alloc(current_cache_size, block_size, memory_budget)) {
+  if (need_sync_wash_for_allocation_pressure(
+      current_cache_size, block_size, memory_budget, WASH_HEAP_SIZE)) {
     int tmp_ret = OB_SUCCESS;
     ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
     if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
       if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
-        COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache under allocation pressure",
             K(tmp_ret), K(block_size), K(current_cache_size), K(memory_budget));
       }
     } else {
@@ -859,22 +858,34 @@ int ObKVCacheStore::alloc_mbhandle(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (NULL == (buf = static_cast<char*>(alloc_mb(
-            mb_list_.resource_mgr_, block_size)))) {
+  } else {
+    buf = static_cast<char*>(alloc_mb(mb_list_.resource_mgr_, block_size));
+    if (OB_ISNULL(buf)) {
+      // The raw cache allocator has no ObMemoryMgr pressure callback in
+      // jemalloc mode. Wash and retry here so an allocation failure is still a
+      // recoverable cache-pressure event.
+      int tmp_ret = OB_SUCCESS;
+      ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+      if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
+        if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+          COMMON_LOG(WARN, "Fail to synchronously wash KV cache after memblock allocation failure",
+              K(tmp_ret), K(block_size));
+        }
+      } else {
+        free_mbs(mb_list_.resource_mgr_, wash_blocks);
+      }
+      buf = static_cast<char*>(alloc_mb(mb_list_.resource_mgr_, block_size));
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(WARN, "Fail to allocate memory, ", K(block_size), K(ret));
   } else {
     mem_block = new (buf) ObKVStoreMemBlock(buf + sizeof(ObKVStoreMemBlock),
         block_size - sizeof(ObKVStoreMemBlock));
-    while (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
-      if (OB_UNLIKELY(!try_supply_mb(SUPPLY_MB_NUM_ONCE))) {
-        purge_mb_handle_retire_station();
-        if (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        }
-        break;
-      }
-    }
+    ret = pop_mb_handle_with_recovery(block_size, mb_handle);
 
     if (OB_FAIL(ret)) {
       mem_block->~ObKVStoreMemBlock();
@@ -905,6 +916,62 @@ int ObKVCacheStore::alloc_mbhandle(
     ATOMIC_SAF(&global_status_.store_size_, block_size);
   }
 
+  return ret;
+}
+
+int ObKVCacheStore::pop_mb_handle_with_recovery(
+    const int64_t block_size,
+    ObKVMemBlockHandle *&mb_handle)
+{
+  int ret = mb_handles_pool_.pop(mb_handle);
+
+  // Handle objects are preallocated at init and published to the free pool in
+  // batches. Publish all unused objects before attempting reclamation.
+  while (OB_ENTRY_NOT_EXIST == ret && try_supply_mb(SUPPLY_MB_NUM_ONCE)) {
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // First reclaim handles whose memblocks have already been released and are
+    // only waiting in the qclock retire station.
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // Then finish reclamation of memblocks that a previous wash has already
+    // retired. This does not select any additional cache block for eviction.
+    int tmp_ret = OB_SUCCESS;
+    uint64_t reclaimed_size = 0;
+    WashCallBack callback(*this, reclaimed_size);
+    if (OB_TMP_FAIL(HazardDomain::get_instance().reclaim(callback))) {
+      COMMON_LOG(WARN, "Fail to reclaim retired KV cache memblocks for mb handle",
+          K(tmp_ret), K(reclaimed_size));
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // No retired handle is reusable. Retire one full memblock, reclaim it and
+    // retry as the last allocation-pressure fallback.
+    int tmp_ret = OB_SUCCESS;
+    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
+      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache for mb handle",
+            K(tmp_ret), K(block_size));
+      }
+    } else {
+      free_mbs(mb_list_.resource_mgr_, wash_blocks);
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
   return ret;
 }
 
