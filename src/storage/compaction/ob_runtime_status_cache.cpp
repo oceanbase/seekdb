@@ -27,9 +27,7 @@ bool ObRuntimeStatusCache::should_skip_merge() const
 {
   bool bret = true;
   if (IS_INIT) {
-    // Compaction only needs the replay-only capability here. The active role
-    // is fixed for the process and must not be polled by this hot path.
-    bret = during_restore_ && !share::server_is_write_enabled();
+    bret = during_restore_ && share::server_is_recovery_mode();
   }
   return bret;
 }

@@ -112,15 +112,20 @@ class ObServer::StandbyHostAdapter final : public standby::IStandbyHost
 public:
   explicit StandbyHostAdapter(ObServer &server) : server_(server) {}
 
-  share::ObServerRole::Role server_role() const override
+  share::ObServerRole::Role boot_role() const override
   {
     return server_.gctx_.server_role_;
   }
 
   int load_server_info(share::ObServerInfo &server_info) override
   {
+    const share::ObServerRole::Role active_role = share::server_role();
+    const share::ObServerRole::Role fallback_role =
+        share::ObServerRole::INVALID_ROLE == active_role
+            ? server_.gctx_.server_role_
+            : active_role;
     return share::ObServerInfoProxy::load_server_info(
-        &server_.config_mgr_, server_.gctx_.server_role_, server_info);
+        &server_.config_mgr_, fallback_role, server_info);
   }
 
   int initialize_server_info() override
@@ -136,7 +141,6 @@ public:
 
   void publish_server_role(const share::ObServerRole::Role role) override
   {
-    server_.gctx_.server_role_ = role;
     share::set_server_role(role);
   }
 
@@ -145,9 +149,38 @@ public:
     share::set_server_write_enabled(enabled);
   }
 
-  common::ObString log_restore_source() const override
+  bool is_write_enabled() const override
   {
-    return server_.config_.log_restore_source.str();
+    return share::server_is_write_enabled();
+  }
+
+  void set_recovery_mode(const bool enabled) override
+  {
+    share::set_server_recovery_mode(enabled);
+  }
+
+  void advance_switchover_epoch() override
+  {
+    share::set_server_switchover_epoch(common::ObTimeUtility::current_time());
+  }
+
+  int load_log_restore_source(
+      common::ObIAllocator &allocator,
+      common::ObString &source,
+      int64_t &version) const override
+  {
+    int ret = OB_SUCCESS;
+    source.reset();
+    version = 0;
+    common::DRWLock::RDLockGuard guard(server_.config_.rwlock_);
+    const common::ObString current = common::ObString::make_string(
+        server_.config_.log_restore_source.str());
+    if (OB_FAIL(common::ob_write_string(allocator, current, source))) {
+      LOG_WARN("failed to copy standby log source", KR(ret));
+    } else {
+      version = server_.config_.log_restore_source.version();
+    }
+    return ret;
   }
 
   bool rpc_tls_enabled() const override
@@ -1303,7 +1336,7 @@ int ObServer::start()
       FLOG_INFO("success to start net frame");
     }
 
-    if (OB_SUCC(ret) && FAILEDx(standby_module_->start_listener())) {
+    if (OB_SUCC(ret) && OB_FAIL(standby_module_->start_listener())) {
       LOG_ERROR("fail to start standby gRPC service", KR(ret));
     }
 

@@ -25,20 +25,25 @@ namespace oceanbase
 namespace standby
 {
 class ObStandbyLogSyncService;
+class ObStandbySchemaRefreshTrigger;
 class IStandbyHost;
 
 class ObStandbyRoleTransitionService final : public share::ObITenantRoleTransitionService
 {
 public:
   ObStandbyRoleTransitionService()
-      : lock_(), log_sync_service_(nullptr), host_(nullptr) {}
-  int init(ObStandbyLogSyncService &log_sync_service, IStandbyHost &host);
+      : lock_(), log_sync_service_(nullptr), schema_refresh_trigger_(nullptr), host_(nullptr) {}
+  int init(ObStandbyLogSyncService &log_sync_service,
+           ObStandbySchemaRefreshTrigger &schema_refresh_trigger,
+           IStandbyHost &host);
   void destroy();
   int execute(const share::ObTenantRoleTransitionOp op, const bool is_verify) override;
+  int resume_pending_promotion();
 
 private:
   lib::ObMutex lock_;
   ObStandbyLogSyncService *log_sync_service_;
+  ObStandbySchemaRefreshTrigger *schema_refresh_trigger_;
   IStandbyHost *host_;
 };
 

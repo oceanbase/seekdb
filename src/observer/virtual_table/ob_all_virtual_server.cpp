@@ -87,25 +87,26 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     const int64_t data_disk_allocated =
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count() * OB_STORAGE_OBJECT_MGR.get_macro_block_size();
     const char *data_disk_health_status = device_health_status_to_str(dhs);
+    const share::ObServerRole::Role active_role = share::server_role();
     share::ObServerInfo server_info;
     const int load_info_ret = share::ObServerInfoProxy::load_server_info(
-        GCTX.config_mgr_, GCTX.server_role_, server_info);
+        GCTX.config_mgr_, active_role, server_info);
 
     role_buf_[0] = '\0';
     switchover_status_buf_[0] = '\0';
     pending_role_buf_[0] = '\0';
+    switch (active_role) {
+      case share::ObServerRole::PRIMARY_ROLE:
+        snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
+        break;
+      case share::ObServerRole::STANDBY_ROLE:
+        snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
+        break;
+      default:
+        snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
+        break;
+    }
     if (OB_SUCCESS == load_info_ret && server_info.is_valid()) {
-      switch (server_info.get_server_role().value()) {
-        case share::ObServerRole::PRIMARY_ROLE:
-          snprintf(role_buf_, sizeof(role_buf_), "PRIMARY");
-          break;
-        case share::ObServerRole::STANDBY_ROLE:
-          snprintf(role_buf_, sizeof(role_buf_), "STANDBY");
-          break;
-        default:
-          snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
-          break;
-      }
       snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "%s",
                server_info.get_switchover_status().to_str());
       snprintf(pending_role_buf_, sizeof(pending_role_buf_), "%s",
@@ -113,7 +114,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     } else {
       if (OB_SUCCESS != load_info_ret) {
       }
-      snprintf(role_buf_, sizeof(role_buf_), "UNKNOWN");
       snprintf(switchover_status_buf_, sizeof(switchover_status_buf_), "UNKNOWN");
       snprintf(pending_role_buf_, sizeof(pending_role_buf_), "UNKNOWN");
     }
@@ -137,7 +137,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (server_info.is_standby()) {
+    } else if (share::ObServerRole::STANDBY_ROLE == active_role) {
       logservice::ObLogService *log_service =
           share::server_service<logservice::ObLogService>();
       share::SCN replay_scn;
@@ -150,7 +150,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
         sync_scn_val = replay_scn.get_val_for_inner_table_field();
         readable_scn_val = readable_scn.get_val_for_inner_table_field();
       }
-    } else if (server_info.is_primary()) {
+    } else if (share::ObServerRole::PRIMARY_ROLE == active_role) {
       share::SCN decided_scn;
       if (OB_FAIL(ls->get_max_decided_scn(decided_scn))) {
       } else {

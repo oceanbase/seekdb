@@ -2,9 +2,9 @@
 #    @nijia.nj
 # CASE_DESC:
 #    Basic test cases for primary-standby cluster switchover and failover
-#    Note: Role changes are prepared online and take effect after restart. The
-#          old primary is restarted as a standby only after the new primary is
-#          ready, while a failover permanently removes the old primary.
+#    Note: Standby promotion takes effect online. Primary demotion is fenced
+#          online and takes effect after restart; a failed old primary is not
+#          rejoined.
 #    Test cases:
 #    1. Primary cluster switchover to standby (with verify)
 #    2. Standby cluster switchover to primary (with verify)
@@ -62,18 +62,29 @@ create table test_table_standby(a int);
 --error 4688
 insert into test_table_primary values(2, 2);
 
-# 目标备库先准备成为主库；旧主仍在线但已被 fencing
+# 在恢复期间开始的事务必须在 promotion 后保持只读
+db_s.check_until_timeout select count(*) from test_table_primary where a = 1 and b = 1, 1, 120;
 connection conn_sys_s;
+start transaction;
+select count(*) from test_table_primary;
+
+# 使用另一条管理连接在线 promotion；旧主仍在线但已被 fencing
+ob_connect(conn_admin_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+connection conn_admin_s;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
 
-# 外部编排者停止旧主，重启目标后才让 PRIMARY profile 生效
+# promotion 不断开已有读连接，旧事务仍只读；下一事务立即可写
+connection conn_sys_s;
+--error 1792
+insert into test_table_primary values(2, 2);
+rollback;
+start transaction;
+insert into test_table_primary values(2, 2);
+commit;
+
+# 外部编排者只需停止旧主，再按 pending role 重启为备库
 db_p.force_stop;
-db_s.force_stop;
-db_s.nstart;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-
-# 旧主按 pending role 重启为备库，并从新主接续日志
 db_p.nstart;
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 
@@ -84,9 +95,8 @@ db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 #################################################################################################
 --echo ========== Case 2: Standby Cluster Switchover to Primary ==========
 
-# Case 1 的重启已经使 db_s 进入 PRIMARY profile；这里验证主库上的
-# VERIFY 和重复 prepare 都是幂等的。
-ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# Case 1 已在线使 db_s 进入 PRIMARY；这里验证同一连接仍可用，且
+# VERIFY 和重复 promotion 都是幂等的。
 connection conn_sys_s;
 
 # 使用 VERIFY 选项检查是否可以切换（不实际切换）
@@ -97,7 +107,7 @@ db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
 # PRIMARY INVALID NORMAL
 
-# 角色已在 Case 1 的重启阶段生效，重复执行只验证幂等性
+# 角色已在 Case 1 在线生效，重复执行只验证幂等性
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
@@ -141,18 +151,12 @@ ALTER SYSTEM ACTIVATE STANDBY VERIFY;
 db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 # STANDBY
 
-# 停止故障旧主后，prepare failover 只记录 pending role
+# 停止故障旧主后，备库在线 failover
 db_s.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
 
-# 验证 active role 未改变
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
-
-# 外部编排者重启目标，PRIMARY profile 才生效
-db_p.force_stop;
-db_p.nstart;
+# 验证 active role 已在线切换，连接未重建
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
-ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
 # 验证新主库（failover 后）可以执行 DDL 和 INSERT
 create table if not exists test_table_failover_primary(a int primary key, b int);

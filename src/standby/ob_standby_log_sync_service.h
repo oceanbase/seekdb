@@ -18,8 +18,10 @@
 #define OCEANBASE_STANDBY_OB_STANDBY_LOG_SYNC_SERVICE_H_
 
 #include <functional>
+#include "lib/allocator/ob_allocator.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/net/ob_addr.h"
+#include "lib/string/ob_string.h"
 #include "lib/task/ob_timer.h"
 #include "share/log/palf/lsn.h"
 #include "share/scn.h"
@@ -29,6 +31,7 @@ namespace oceanbase
 namespace standby
 {
 struct StandbyConfig;
+struct StandbyPromotionBoundary;
 class IStandbyHost;
 
 // Owns the only standby log-import loop. Role transitions serialize with this
@@ -45,11 +48,11 @@ public:
   void destroy();
 
   int validate_switch_to_primary(const bool is_failover);
-  int prepare_switch_to_primary(const bool is_failover);
-  int pause();
+  int prepare_promotion(const bool is_failover, share::SCN &target_scn);
+  void cancel_promotion_preparation();
+  int prepare_persisted_promotion(const share::SCN &target_scn);
   int set_startup_target_scn(const share::SCN &target_scn);
   int wait_startup_replay(const std::function<bool()> &is_stopping);
-  static int wait_local_append();
   static int get_local_progress(share::SCN &end_scn, share::SCN &sync_scn);
 
   void runTimerTask() override;
@@ -61,12 +64,20 @@ private:
   int wait_();
   void destroy_();
   int validate_switch_to_primary_(const bool is_failover);
-  int prepare_switch_to_primary_(const bool is_failover);
-  int pause_();
+  int prepare_promotion_(const bool is_failover, share::SCN &target_scn);
+  void cancel_promotion_preparation_();
+  int prepare_persisted_promotion_(const share::SCN &target_scn);
   int set_startup_target_scn_(const share::SCN &target_scn);
   int wait_startup_replay_(const std::function<bool()> &is_stopping);
   int get_source_addr_(common::ObAddr &source_addr) const;
-  int query_source_end_scn_(const common::ObAddr &source_addr, share::SCN &end_scn);
+  int load_source_snapshot_(
+      common::ObIAllocator &allocator,
+      common::ObString &source,
+      int64_t &version,
+      common::ObAddr &source_addr) const;
+  int query_source_promotion_boundary_(
+      const common::ObAddr &source_addr,
+      StandbyPromotionBoundary &boundary);
   int sync_once_(const common::ObAddr &source_addr, bool &made_progress);
   int append_log_group_(const char *buf,
                         const int64_t size,

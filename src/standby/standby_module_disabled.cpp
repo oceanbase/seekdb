@@ -35,7 +35,7 @@ public:
     if (is_inited_) {
       ret = OB_INIT_TWICE;
     } else if (!config.is_valid()
-               || share::ObServerRole::INVALID_ROLE == host.server_role()) {
+               || share::ObServerRole::INVALID_ROLE == host.boot_role()) {
       ret = OB_INVALID_ARGUMENT;
     } else {
       host_ = &host;
@@ -58,6 +58,7 @@ public:
           KR(ret), K(server_info));
     } else {
       host_->publish_server_role(share::ObServerRole::PRIMARY_ROLE);
+      host_->set_recovery_mode(false);
     }
     return ret;
   }
@@ -67,9 +68,9 @@ public:
     int ret = OB_SUCCESS;
     if (!is_inited_) {
       ret = OB_NOT_INIT;
-    } else if (share::ObServerRole::PRIMARY_ROLE != host_->server_role()) {
+    } else if (share::ObServerRole::PRIMARY_ROLE != host_->boot_role()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_ERROR("standby role requires a standby-enabled binary", KR(ret), K(host_->server_role()));
+      LOG_ERROR("standby role requires a standby-enabled binary", KR(ret), K(host_->boot_role()));
     } else if (need_bootstrap && OB_FAIL(host_->initialize_server_info())) {
       LOG_WARN("failed to initialize primary server role", KR(ret));
     } else if (need_bootstrap && OB_FAIL(host_->bootstrap_primary())) {

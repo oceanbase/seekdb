@@ -32,8 +32,7 @@ namespace share
 
 OB_SERIALIZE_MEMBER(ObServerInfo, server_role_, pending_role_, switchover_status_, cutover_scn_);
 
-// New format: "active_role:pending_role:transition_status:cutover_scn".
-// The two-field form is still accepted for old data directories.
+// Format: "active_role:pending_role:transition_status:cutover_scn".
 static int serialize_server_info_to_string(const ObServerInfo &server_info, common::ObString &str, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -115,8 +114,9 @@ static int parse_scn(const common::ObString &str, SCN &scn)
   return ret;
 }
 
-// Legacy two-field values are mapped to one pending role so restart can finish
-// an old interrupted transition without reviving its online state machine.
+// Stable legacy data directories used "active_role:NORMAL". Interrupted
+// states from the removed hot-switchover state machine have no trustworthy C
+// and are deliberately rejected.
 static int deserialize_server_info_from_string(const common::ObString &str, ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
@@ -148,18 +148,9 @@ static int deserialize_server_info_from_string(const common::ObString &str, ObSe
       LOG_WARN("invalid active role in server_info", KR(ret), K(str));
     } else if (field_count == 2) {
       server_info.switchover_status_ = ObServerSwitchoverStatus(fields[1]);
-      if (!server_info.switchover_status_.is_valid()) {
+      if (!server_info.switchover_status_.is_normal_status()) {
         ret = OB_INVALID_DATA;
-      } else if (server_info.switchover_status_.is_prepare_switching_to_standby_status()
-                 || server_info.switchover_status_.is_switching_to_standby_status()) {
-        server_info.pending_role_ = STANDBY_SERVER_ROLE;
-        server_info.switchover_status_ = PREPARING_SWITCHOVER_STATUS;
-      } else if (server_info.switchover_status_.is_prepare_switching_to_primary_status()
-                 || server_info.switchover_status_.is_prepare_flashback_for_failover_to_primary_status()
-                 || server_info.switchover_status_.is_flashback_status()
-                 || server_info.switchover_status_.is_switching_to_primary_status()) {
-        server_info.pending_role_ = PRIMARY_SERVER_ROLE;
-        server_info.switchover_status_ = PREPARING_SWITCHOVER_STATUS;
+        LOG_WARN("legacy hot-switchover state cannot be recovered safely", KR(ret), K(str));
       }
     } else if (OB_FAIL(parse_role(fields[1], server_info.pending_role_))) {
       LOG_WARN("invalid pending role in server_info", KR(ret), K(str));

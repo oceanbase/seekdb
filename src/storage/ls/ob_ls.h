@@ -247,8 +247,12 @@ private:
   int online_tx_();
   int online_without_lock_(const LocalLogMode log_mode);
   int online_local_log_(const LocalLogMode log_mode);
-  int start_local_log_(const int64_t deadline_us = INT64_MAX);
+  int start_local_log_(const int64_t deadline_us = INT64_MAX,
+                       const bool activate_handlers = true);
   int stop_local_log_(const int64_t deadline_us = INT64_MAX);
+  int prepare_local_append_(const int64_t deadline_us);
+  int activate_local_append_();
+  int fence_local_append_();
   int update_tablet_table_store_without_lock_(
       const ObTabletID &tablet_id,
       const ObUpdateTableStoreParam &param,

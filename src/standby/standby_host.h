@@ -18,6 +18,7 @@
 #define OCEANBASE_STANDBY_STANDBY_HOST_H_
 
 #include <stdint.h>
+#include "lib/allocator/ob_allocator.h"
 #include "lib/net/ob_addr.h"
 #include "lib/string/ob_string.h"
 #include "share/ob_server_info.h"
@@ -66,16 +67,22 @@ class IStandbyHost
 public:
   virtual ~IStandbyHost() {}
 
-  virtual share::ObServerRole::Role server_role() const = 0;
+  virtual share::ObServerRole::Role boot_role() const = 0;
   virtual int load_server_info(share::ObServerInfo &server_info) = 0;
   virtual int initialize_server_info() = 0;
   virtual int update_server_info(const share::ObServerInfo &server_info) = 0;
-  // Role publication is a startup-only operation. Runtime preparation uses
-  // the independent write gate below and never changes the active role.
+  // Runtime role publication is monotonic: recovery may become primary, but
+  // a running primary is fenced and restarted before it can become standby.
   virtual void publish_server_role(const share::ObServerRole::Role role) = 0;
   virtual void set_write_enabled(const bool enabled) = 0;
+  virtual bool is_write_enabled() const = 0;
+  virtual void set_recovery_mode(bool enabled) = 0;
+  virtual void advance_switchover_epoch() = 0;
 
-  virtual common::ObString log_restore_source() const = 0;
+  virtual int load_log_restore_source(
+      common::ObIAllocator &allocator,
+      common::ObString &source,
+      int64_t &version) const = 0;
   virtual bool rpc_tls_enabled() const = 0;
   virtual void publish_rpc_cert_expire_time(int64_t expire_time_us) = 0;
   virtual int64_t operation_timeout_us() const = 0;

@@ -427,7 +427,7 @@ int ObLS::offline_compaction_()
   return ret;
 }
 
-int ObLS::start_local_log_(const int64_t deadline_us)
+int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handlers)
 {
   int ret = OB_SUCCESS;
   palf::LSN end_lsn;
@@ -463,12 +463,50 @@ int ObLS::start_local_log_(const int64_t deadline_us)
   }
   if (OB_SUCC(ret)) {
     log_handler_.set_local_append_enabled(true);
-    if (OB_FAIL(local_log_handler_set_.activate())) {
+    if (!activate_handlers) {
+      is_local_append_mode_ = true;
+    } else if (OB_FAIL(local_log_handler_set_.activate())) {
       log_handler_.set_local_append_enabled(false);
     } else {
       is_local_append_mode_ = true;
     }
   }
+  return ret;
+}
+
+int ObLS::prepare_local_append_(const int64_t deadline_us)
+{
+  int ret = OB_SUCCESS;
+  if (is_local_append_mode_) {
+    LOG_INFO("local append infrastructure is already ready", K_(ls_meta));
+  } else if (OB_FAIL(start_local_log_(deadline_us, false /*activate_handlers*/))) {
+    LOG_WARN("failed to prepare local append infrastructure", K(ret), K_(ls_meta));
+  }
+  return ret;
+}
+
+int ObLS::activate_local_append_()
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(local_log_handler_set_.activate_except(
+      logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to activate local append handlers", K(ret));
+  } else if (OB_FAIL(local_log_handler_set_.activate_handler(
+      logservice::ObLogBaseType::TRANS_SERVICE_LOG_BASE_TYPE))) {
+    LOG_WARN("failed to activate local transaction admission", K(ret));
+  }
+  return ret;
+}
+
+int ObLS::fence_local_append_()
+{
+  int ret = OB_SUCCESS;
+  // Keep replay disabled: prepare-to-standby only seals this process's append
+  // side. The restart path selects and activates the standby replay profile.
+  log_handler_.set_local_append_enabled(false);
+  local_log_handler_set_.deactivate();
+  log_handler_.wait_append_sync();
+  LOG_INFO("local append is fenced for the remaining process lifetime", K_(ls_meta));
   return ret;
 }
 
