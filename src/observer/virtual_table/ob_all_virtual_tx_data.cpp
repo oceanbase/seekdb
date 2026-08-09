@@ -33,7 +33,6 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
 
   if (false == start_to_read_) {
     if (OB_FAIL(get_primary_key_())) {
-      SERVER_LOG(WARN, "get primary key failed", KR(ret));
     } else if (OB_FAIL(generate_virtual_tx_data_row_(tx_data_row_))) {
       if (OB_ITER_END == ret) {
       } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
@@ -42,7 +41,6 @@ int ObAllVirtualTxData::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "generate virtual tx data row failed", KR(ret));
       }
     } else if (OB_FAIL(fill_in_row_(tx_data_row_, row))) {
-      SERVER_LOG(WARN, "fill in row failed", KR(ret));
     } else {
       start_to_read_ = true;
     }
@@ -123,7 +121,6 @@ int ObAllVirtualTxData::get_primary_key_()
                  "size of end key",
                  key_range.get_end_key().get_obj_cnt());
     } else if (OB_FAIL(handle_key_range_(key_range))) {
-      SERVER_LOG(WARN, "handle key range faield", KR(ret));
     }
   }
   return ret;
@@ -166,11 +163,8 @@ int ObAllVirtualTxData::generate_virtual_tx_data_row_(
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", KR(ret));
     } else if (OB_FAIL(ls_service->get_ls(ls))) {
-      SERVER_LOG(WARN, "get ls from ls service failed", KR(ret));
     } else if (OB_FAIL(ls->generate_virtual_tx_data_row(tx_id_, tx_data_row))) {
-      SERVER_LOG(WARN, "ls genenrate virtual tx data row failed", KR(ret), K(ls));
     } else {
-      SERVER_LOG(DEBUG, "generate tx data row succeed", K(tx_data_row));
     }
   }
   return ret;

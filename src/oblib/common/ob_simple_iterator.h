@@ -62,7 +62,6 @@ int ObSimpleIterator<T, LABEL, LOCAL_ARRAY_SIZE>::push(const T &item)
     OB_LOG(WARN, "ObSimpleIterator already ready, cannot push element");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(item_arr_.push_back(item))) {
-    OB_LOG(WARN, "item push back error", K(ret), K(item));
   } else {
     // do nothing
   }

@@ -56,15 +56,10 @@ int ObTransformSimplifyOrderby::transform_one_stmt(common::ObIArray<ObParentDMLS
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null stmt", K(ret), K(stmt), K(ctx_), K(ctx_->session_info_));
   } else if (OB_FAIL(ctx_->session_info_->is_serial_set_order_forced(force_serial_set_order))) {
-    LOG_WARN("fail to get force_serial_set_order value", K(ret));
   } else if (OB_FAIL(remove_order_by_for_subquery(stmt, subquery_happened))) {
-    LOG_WARN("remove order by for subquery failed");
   } else if (OB_FAIL(remove_order_by_for_view_stmt(stmt, view_happened, force_serial_set_order))) {
-    LOG_WARN("remove order by for subquery failed");
   } else if (OB_FAIL(remove_order_by_for_set_stmt(stmt, set_happened, force_serial_set_order))) {
-    LOG_WARN("failed to remove order by for set stmt", K(ret));
   } else if (OB_FAIL(remove_order_by_duplicates(stmt, remove_duplicates))) {
-    LOG_WARN("failed to remove order by duplicates", K(ret));
   } else {
     trans_happened = (subquery_happened || view_happened || remove_duplicates || set_happened);
     OPT_TRACE("remove order by for subquery:", subquery_happened);
@@ -74,7 +69,6 @@ int ObTransformSimplifyOrderby::transform_one_stmt(common::ObIArray<ObParentDMLS
   }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -189,14 +183,12 @@ int ObTransformSimplifyOrderby::do_remove_stmt_order_by(ObSelectStmt *select_stm
       // in case the subquery returns more than one rows,
       // we should keep the subquery which may returns error
       if (OB_FAIL(new_order_items.push_back(order_item))) {
-        LOG_WARN("store new order item failed", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && select_stmt->get_order_item_size() != new_order_items.count()) {
     trans_happened = true;
     if (OB_FAIL(select_stmt->get_order_items().assign(new_order_items))) {
-      LOG_WARN("assign new order items failed", K(ret));
     }
   }
   return ret;
@@ -225,7 +217,6 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
         OrderItem &cur_item = order_items.at(i);
         is_exist = false;
         if (OB_FAIL(exist_item_by_expr(cur_item.expr_, new_order_items, is_exist))) {
-          LOG_WARN("fail to adjust exist order item", K(ret), K(cur_item), K(new_order_items), K(is_exist));
         } else if (!is_exist) {
           for (int64_t j = 0; OB_SUCC(ret) && !is_exist && j < M; ++j) {
             ObRawExpr *op_expr = cond_exprs.at(j);
@@ -246,16 +237,13 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
                 } else if (OB_FAIL(ObRelationalExprOperator::is_equal_transitive(
                                               left_param->get_result_type(),
                                               right_param->get_result_type(), is_consistent))) {
-                  LOG_WARN("failed to check is equal transitive", K(ret), KPC(left_param), KPC(right_param));
                 } else if (!is_consistent) {
                   // do nothing
                 } else if (right_param == cur_item.expr_) {
                   if (OB_FAIL(exist_item_by_expr(left_param, new_order_items, is_exist))) {
-                    LOG_WARN("fail to find expr in items", K(ret));
                   }
                 } else if (left_param == cur_item.expr_) {
                   if (OB_FAIL(exist_item_by_expr(right_param, new_order_items, is_exist))) {
-                    LOG_WARN("fail to find expr in items", K(ret));
                   }
                 }
               }
@@ -264,7 +252,6 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
         } else {/*do nothing*/}
         if (OB_SUCC(ret) && !is_exist) {
           if (OB_FAIL(new_order_items.push_back(cur_item))) {
-            LOG_WARN("failed to push back order item", K(ret), K(cur_item));
           }
         }
       }// for
@@ -273,7 +260,6 @@ int ObTransformSimplifyOrderby::remove_order_by_duplicates(ObDMLStmt *stmt,
           trans_happened = true;
         }
         if (OB_FAIL(order_items.assign(new_order_items))) {
-          LOG_WARN("failed to reset order items", K(ret));
         }
       }
     }

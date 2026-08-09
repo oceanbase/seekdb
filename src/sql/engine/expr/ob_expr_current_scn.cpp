@@ -59,7 +59,6 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     session->get_query_timeout(query_timeout);
     int64_t expire_ts = session->get_query_start_time() + query_timeout;
     if (OB_FAIL(txs->get_read_snapshot_version(expire_ts, current_scn))) {
-      LOG_WARN("get read snapshot version", K(ret));
     } else if (ObUInt64Type == expr.datum_meta_.type_) {
       expr_datum.set_uint(current_scn.get_val_for_sql());
     } else {
@@ -67,7 +66,6 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       ObNumStackOnceAlloc tmp_alloc;
       number::ObNumber num;
       if (OB_FAIL(num.from(scn_version, tmp_alloc))) {
-        LOG_WARN("copy number fail", K(ret));
       } else {
         expr_datum.set_number(num);
       }

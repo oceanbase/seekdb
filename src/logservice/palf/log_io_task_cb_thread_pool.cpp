@@ -48,7 +48,6 @@ int LogIOTaskCbThreadPool::init(const int64_t log_io_cb_num,
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(task_num_limit), KPC(palf_env_impl));
   } else if (OB_FAIL(common::ObLinkQueueThreadPool::init(
                  thread_num, task_num_limit, "LogIOCB"))) {
-    PALF_LOG(WARN, "LogIOTaskCbThreadPool init failed", K(ret), K(thread_num), K(task_num_limit));
   } else {
     thread_num_ = thread_num;
     palf_env_impl_ = palf_env_impl;
@@ -133,9 +132,7 @@ void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(log_io_task));
   } else if (OB_FAIL(log_io_task->after_consume(palf_env_impl_))) {
-    PALF_LOG(WARN, "LogIOTask after_consume failed", K(ret), KP(log_io_task));
   } else {
-    PALF_LOG(TRACE, "LogIOTaskCbThreadPool handle success");
   }
   if (OB_NOT_NULL(log_io_task)) {
     log_io_task->free_this(palf_env_impl_);

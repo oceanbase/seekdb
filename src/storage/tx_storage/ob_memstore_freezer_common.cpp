@@ -240,7 +240,6 @@ ObMemstoreFreezeGuard::~ObMemstoreFreezeGuard()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(error_code_)) {
-    LOG_WARN("[FREEZE_CHECKER]global freeze failed, skip check frozen memstore", KR(error_code_));
   } else {
     ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
     int64_t curr_frozen_pos = 0;

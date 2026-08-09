@@ -64,14 +64,11 @@ int ObMacroBlockDataIterator::init(
     LOG_WARN("Invalid init parameter for macro block data iterator",
         K(ret), KP(macro_block_buf), K(macro_block_buf_size), K(micro_block_infos), K(endkeys));
   } else if (OB_FAIL(common_header.deserialize(macro_block_buf, macro_block_buf_size, read_pos))) {
-    LOG_ERROR("Fail to deserialize common header", K(ret), K(macro_block_buf_size), K(read_pos));
   } else if (OB_FAIL(common_header.check_integrity())) {
-    LOG_ERROR("Invalid common header", K(ret), K(common_header));
   } else if (OB_UNLIKELY(!common_header.is_sstable_data_block())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Macro block type not supported for data iterator", K(ret), K(common_header));
   } else if (OB_FAIL(macro_header.deserialize(macro_block_buf, macro_block_buf_size, read_pos))) {
-    LOG_WARN("fail to deserialize macro block header", K(ret), K(macro_header));
   } else {
     macro_buf_ = macro_block_buf;
     macro_buf_size_ = macro_block_buf_size;
@@ -110,13 +107,9 @@ int ObMacroBlockDataIterator::next_micro_block(ObMicroBlock &micro_block)
     int64_t pos = 0;
     const char *payload_buf = nullptr;
     int64_t payload_size = 0;
-    LOG_DEBUG("next micro block", K(micro_block_info));
     if (OB_FAIL(micro_block.header_.deserialize(micro_buf, micro_buf_size, pos))) {
-      LOG_WARN("fail to deserialize record header", K(ret));
     } else if (OB_FAIL(micro_block.header_.check_and_get_record(
         micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC, payload_buf, payload_size))) {
-      LOG_ERROR("micro block data is corrupted", K(ret),
-        KP(micro_buf), K(micro_buf_size), K(cur_micro_cursor_), K(micro_block_infos_->count()));
     } else {
       ObDatumRange &micro_range = micro_block.range_;
       micro_block.data_.get_buf() = micro_buf;
@@ -173,7 +166,6 @@ int ObIndexBlockMicroIterator::init(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_range_include_rowkey_array(range_, endkeys, table_read_info.get_datum_utils()))) {
-    STORAGE_LOG(WARN, "Failed to check range include rowkey", K(ret), K(range_), K(endkeys));
   } else {
     ObStorageObjectReadInfo read_info;
     read_info.offset_ = sstable->get_macro_offset();
@@ -189,9 +181,7 @@ int ObIndexBlockMicroIterator::init(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "failed to alloc macro read info buffer", K(ret));
     } else if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_handle_))) {
-      LOG_WARN("async read block failed, ", K(ret), K(read_info), K(macro_desc));
     } else if (OB_FAIL(macro_handle_.wait())) {
-      LOG_WARN("io wait failed", K(ret), K(macro_desc), K(read_info));
     } else if (OB_ISNULL(macro_handle_.get_buffer())
         || (OB_UNLIKELY(macro_handle_.get_data_size() != read_info.size_))) {
       ret = OB_ERR_UNEXPECTED;
@@ -204,8 +194,6 @@ int ObIndexBlockMicroIterator::init(
         micro_block_infos,
         endkeys,
         &range_))){
-      LOG_WARN("Fail to init data iterator, ", K(ret), K(macro_desc),
-          KP(macro_handle_.get_buffer()), K(macro_handle_.get_data_size()), K(range_));
     } else {
       micro_block_.read_info_ = &table_read_info;
       is_inited_ = true;
@@ -227,12 +215,10 @@ int ObIndexBlockMicroIterator::check_range_include_rowkey_array(
     const blocksstable::ObDatumRowkey &array_start_key = endkeys.at(0);
     const blocksstable::ObDatumRowkey &array_end_key = endkeys.at(endkeys.count() - 1);
     if (OB_FAIL(range.get_start_key().compare(array_start_key, datum_utils, cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare start key", K(ret), K(range), K(array_start_key));
     } else if (cmp_ret > 0) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected range start key", K(ret), K(range), K(array_start_key));
     } else if (OB_FAIL(range.get_end_key().compare(array_end_key, datum_utils, cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare start key", K(ret), K(range), K(array_end_key));
     } else if (cmp_ret < 0) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected range end key", K(ret), K(range), K(array_end_key));
@@ -254,7 +240,6 @@ int ObIndexBlockMicroIterator::next(const blocksstable::ObMicroBlock *&micro_blo
     }
   } else {
     micro_block = &micro_block_;
-    LOG_DEBUG("Iterate micro block", KPC(micro_block));
   }
   return ret;
 }

@@ -38,15 +38,11 @@ int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *right = NULL;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, val))) {
-    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (val->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, left))) {
-    LOG_WARN("eval arg 1 failed", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, right))) {
-    LOG_WARN("eval arg 2 failed", K(ret));
   } else if (left->is_null() && right->is_null()) {
     res_datum.set_null();
   } else {
@@ -57,7 +53,6 @@ int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(
                        expr.inner_functions_[0]))(
               *left, *val, cmp_ret, datum_access_ctx))) {
-        LOG_WARN("compare left failed", K(ret));
       } else {
         left_cmp_succ = cmp_ret <= 0 ? true : false;
       }
@@ -67,7 +62,6 @@ int calc_between_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(
                        expr.inner_functions_[1]))(
               *val, *right, cmp_ret, datum_access_ctx))) {
-        LOG_WARN("compare left failed", K(ret));
       } else {
         right_cmp_succ = cmp_ret <= 0 ? true : false;
       }

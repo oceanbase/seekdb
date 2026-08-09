@@ -62,7 +62,6 @@ int ObVectorRefreshTransaction::ObSessionParamSaved::save(
     bool autocommit = false;
     if (OB_FAIL(query::ObSessionAccess::get_autocommit(
             session_info, autocommit))) {
-      LOG_WARN("fail to get autocommit", KR(ret));
     } else {
       session_info_ = session_info;
       is_inner_ = query::ObSessionAccess::is_inner(session_info);
@@ -70,7 +69,6 @@ int ObVectorRefreshTransaction::ObSessionParamSaved::save(
       query::ObSessionAccess::set_inner_session(session_info);
       if (OB_FAIL(query::ObSessionAccess::set_autocommit(
               session_info, false))) {
-        LOG_WARN("fail to disable autocommit", KR(ret));
       } else {
         query::ObSessionAccess::set_dummy_ddl_visibility(session_info, true);
       }
@@ -90,7 +88,6 @@ int ObVectorRefreshTransaction::ObSessionParamSaved::restore()
     }
     if (OB_FAIL(query::ObSessionAccess::set_autocommit(
             session_info_, autocommit_))) {
-      LOG_WARN("fail to restore autocommit", KR(ret));
     }
     query::ObSessionAccess::set_dummy_ddl_visibility(session_info_, false);
     session_info_ = nullptr;
@@ -127,7 +124,6 @@ int ObVectorRefreshTransaction::connect_(ObSQLSessionInfo *session_info,
             ObInnerSQLConnection::
                 create_spi_connection_with_external_session(
                     session_info, conn_))) {
-      LOG_WARN("create connection failed", KR(ret), KP(session_info));
     } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", KR(ret));
@@ -146,7 +142,6 @@ int ObVectorRefreshTransaction::start_transaction_()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection is NULL", KR(ret));
   } else if (OB_FAIL(connection->start_transaction(false))) {
-    LOG_WARN("fail to start transaction", KR(ret));
   }
   if (OB_SUCCESS == get_errno()) {
     set_errno(ret);
@@ -163,10 +158,8 @@ int ObVectorRefreshTransaction::end_transaction_(const bool commit)
     LOG_WARN("connection is NULL", KR(ret));
   } else if (commit) {
     if (OB_FAIL(connection->commit())) {
-      LOG_WARN("fail to commit transaction", KR(ret));
     }
   } else if (OB_FAIL(connection->rollback())) {
-    LOG_WARN("fail to rollback transaction", KR(ret));
   }
   if (OB_SUCCESS == get_errno()) {
     set_errno(ret);
@@ -189,20 +182,15 @@ int ObVectorRefreshTransaction::start(ObSQLSessionInfo *session_info,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session is in transaction", KR(ret));
   } else if (OB_FAIL(session_param_saved_.save(session_info))) {
-    LOG_WARN("fail to save session param", KR(ret));
   } else if (OB_FAIL(connect_(session_info, sql_client))) {
-    LOG_WARN("fail to connect", KR(ret));
   } else if (OB_FAIL(start_transaction_())) {
-    LOG_WARN("failed to start transaction", KR(ret));
   } else {
     in_transaction_ = true;
-    LOG_DEBUG("start vector refresh transaction success");
   }
   if (OB_FAIL(ret)) {
     int tmp_ret = OB_SUCCESS;
     close();
     if (OB_TMP_FAIL(session_param_saved_.restore())) {
-      LOG_WARN("fail to restore session param", KR(tmp_ret));
     }
   }
   return ret;
@@ -214,9 +202,7 @@ int ObVectorRefreshTransaction::end(const bool commit)
   int tmp_ret = OB_SUCCESS;
   if (in_transaction_) {
     if (OB_FAIL(end_transaction_(commit))) {
-      LOG_WARN("fail to end transaction", KR(ret));
     } else {
-      LOG_DEBUG("end vector refresh transaction success", K(commit));
     }
     in_transaction_ = false;
   }
@@ -239,7 +225,6 @@ int ObVectorRefreshTransaction::lock_domain_table(
     LOG_WARN("invalid args", KR(ret), K(in_transaction_), K(domain_table_id));
   } else if (OB_FAIL(owner_id.convert_from_value(
                  ObLockOwnerType::DEFAULT_OWNER_TYPE, get_tid_cache()))) {
-    LOG_WARN("failed to get owner id", KR(ret), K(get_tid_cache()));
   } else if (OB_ISNULL(connection = static_cast<ObInnerSQLConnection *>(
                            get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
@@ -257,17 +242,13 @@ int ObVectorRefreshTransaction::lock_domain_table(
       ObTimeoutCtx timeout_ctx;
       if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(
               timeout_ctx, GCONF.internal_sql_execute_timeout))) {
-        LOG_WARN("fail to set default timeout context", KR(ret));
       } else {
         lock_arg.timeout_us_ = timeout_ctx.get_timeout();
       }
     }
     if (OB_SUCC(ret)) {
-      LOG_DEBUG("lock vector refresh domain table start", K(lock_arg));
       if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, connection))) {
-        LOG_WARN("fail to lock vector refresh domain table", KR(ret));
       }
-      LOG_DEBUG("lock vector refresh domain table end", KR(ret));
     }
   }
   return ret;

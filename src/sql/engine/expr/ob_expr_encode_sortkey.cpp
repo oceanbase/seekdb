@@ -80,7 +80,6 @@ int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx,
       share::ObEncParam *buf = NULL;
       int64_t param_cnt = expr.arg_cnt_ / 3;
       if (OB_FAIL(exec_ctx->create_expr_op_ctx(enc_id, encode_ctx))) {
-        LOG_WARN("failed to create operator context", K(ret));
       } else if (OB_ISNULL(buf = static_cast<share::ObEncParam *>(exec_ctx->get_allocator().alloc(
                              param_cnt * sizeof(share::ObEncParam))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -94,9 +93,7 @@ int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx,
           ObDatum *order = NULL;
           ObDatum *nulls_pos = NULL;
           if (OB_FAIL(expr.args_[i + 1]->eval(ctx, order))) {
-            LOG_WARN("incorrect order", K(ret), K(i + 1));
           } else if (OB_FAIL(expr.args_[i + 2]->eval(ctx, nulls_pos))) {
-            LOG_WARN("incorrect null position", K(ret), K(i + 2));
           } else if (OB_ISNULL(order)) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("invalid argument", K(ret));
@@ -166,7 +163,6 @@ int ObExprEncodeSortkey::eval_encode_sortkey(const ObExpr &expr, ObEvalCtx &ctx,
       for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 3) {
         ObDatum *data = NULL;
         if (OB_FAIL(expr.args_[i]->eval(ctx, data))) {
-          LOG_WARN("incorrect data", K(ret), K(i));
         } else {
           int64_t tmp_data_len = 0;
           if (OB_FAIL(share::ObSortkeyConditioner::process_key_conditioning(
@@ -222,7 +218,6 @@ int ObExprEncodeSortkey::eval_encode_sortkey_batch(const ObExpr &expr,
       share::ObEncParam *buf = NULL;
       int64_t param_cnt = expr.arg_cnt_ / 3;
       if (OB_FAIL(exec_ctx->create_expr_op_ctx(enc_id, encode_ctx))) {
-        LOG_WARN("failed to create operator context", K(ret));
       } else if (OB_ISNULL(buf = static_cast<share::ObEncParam *>(exec_ctx->get_allocator().alloc(
                              param_cnt * sizeof(share::ObEncParam))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -236,9 +231,7 @@ int ObExprEncodeSortkey::eval_encode_sortkey_batch(const ObExpr &expr,
         // init param
         for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 3) {
           if (OB_FAIL(expr.args_[i + 1]->eval_batch(ctx, skip, batch_size))) {
-            LOG_WARN("incorrect order", K(ret), K(i + 1));
           } else if (OB_FAIL(expr.args_[i + 2]->eval_batch(ctx, skip, batch_size))) {
-            LOG_WARN("incorrect null position", K(ret), K(i + 2));
           } else {
             ObDatum order = expr.args_[i + 1]->locate_expr_datum(ctx);
             ObDatum nulls_pos = expr.args_[i + 2]->locate_expr_datum(ctx);
@@ -291,7 +284,6 @@ int ObExprEncodeSortkey::eval_encode_sortkey_batch(const ObExpr &expr,
     share::ObEncParam *params = encode_ctx->params_;
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; i += 3) {
       if (OB_FAIL(expr.args_[i]->eval_batch(ctx, skip, batch_size))) {
-        LOG_WARN("incorrect data", K(ret), K(i));
       } else {
         // do nothing
       }

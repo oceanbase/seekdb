@@ -56,13 +56,10 @@ int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
   meta_.col_idx_ = col_idx;
   meta_.col_type_ = SK_IDX_NULL_COUNT;
   if (OB_FAIL(agg_row_reader_.read(meta_, null_count))) {
-    LOG_WARN("Failed read agg null count", K(ret), K(meta_));
   } else if (FALSE_IT(meta_.col_type_ = SK_IDX_MIN)) {
   } else if (OB_FAIL(agg_row_reader_.read(meta_, min_datum, is_min_prefix))) {
-    LOG_WARN("Failed read agg min datum", K(ret), K(meta_));
   } else if (FALSE_IT(meta_.col_type_ = SK_IDX_MAX)) {
   } else if (OB_FAIL(agg_row_reader_.read(meta_, max_datum, is_max_prefix))) {
-    LOG_WARN("Failed read agg max datum", K(ret), K(meta_));
   } else if (!min_datum.is_null() &&
              OB_FAIL(pad_column(obj_meta, col_param, is_padding_mode, allocator, min_datum))) {
     LOG_WARN("Failed to pad column on min datum", K(ret));
@@ -70,7 +67,6 @@ int ObSkipIndexFilterExecutor::read_aggregate_data(const uint32_t col_idx,
              OB_FAIL(pad_column(obj_meta, col_param, is_padding_mode, allocator, max_datum))){
     LOG_WARN("Failed to pad column on max datum", K(ret));
   }
-  LOG_DEBUG("[SKIP INDEX] read aggregate row", K(ret), K(null_count), K(min_datum), K(max_datum));
   return ret;
 }
 
@@ -92,7 +88,6 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
     LOG_WARN("Invalid argument", K(ret), K(index_info));
   } else if (FALSE_IT(agg_row_reader_.reset())) {
   } else if (OB_FAIL(agg_row_reader_.init(index_info.agg_row_buf_, index_info.agg_buf_size_))) {
-    LOG_WARN("failed to init agg row reader", K(ret));
   } else {
     switch (index_type) {
       case ObSkipIndexType::MIN_MAX: {
@@ -107,21 +102,18 @@ int ObSkipIndexFilterExecutor::falsifiable_pushdown_filter(
             filter.get_filter_bool_mask().set_always_true();
           } else if (OB_FAIL(filter_on_min_max(col_idx, index_info.get_row_count(),
               obj_meta, dynamic_filter, allocator))) {
-            LOG_WARN("Failed to filter on min_max for dynamic filter", K(ret), K(col_idx));
           }
         } else if (filter.is_filter_white_node()) {
           sql::ObWhiteFilterExecutor &white_filter = 
             static_cast<sql::ObWhiteFilterExecutor &>(filter);
           if (OB_FAIL(filter_on_min_max(col_idx, index_info.get_row_count(),
               obj_meta, white_filter, allocator))) {
-            LOG_WARN("Failed to filter on min_max for white filter", K(ret), K(col_idx));
           }
         } else if (filter.is_filter_black_node()) {
           sql::ObBlackFilterExecutor &black_filter =
             static_cast<sql::ObBlackFilterExecutor &>(filter);
           if (OB_FAIL(black_filter_on_min_max(col_idx, index_info.get_row_count(),
               obj_meta, black_filter, allocator, use_vectorize))) {
-            LOG_WARN("Failed to filter on min_max for black filter", K(ret), K(col_idx));
           }
         }
         break;
@@ -154,7 +146,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
     fal_desc.set_always_false();
   } else if (OB_FAIL(read_aggregate_data(col_idx, allocator, col_param, obj_meta,
       filter.is_padding_mode(), null_count, min_datum, is_min_prefix, max_datum, is_max_prefix))) {
-    LOG_WARN("Failed to read min and max", K(ret), K(col_idx));
   } else if (null_count.is_null() && min_datum.is_null() && max_datum.is_null()) {
     // min max null_count all null, expect uncertain cause by progressive merge
     fal_desc.set_uncertain();
@@ -197,7 +188,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(eq_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run EQ operator", K(ret));
         }
         break;
       }
@@ -207,7 +197,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(ne_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run NE operator", K(ret));
         }
         break;
       }
@@ -217,7 +206,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(gt_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run GT operator", K(ret));
         }
         break;
       }
@@ -227,7 +215,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(ge_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run GE operator", K(ret));
         }
         break;
       }
@@ -237,7 +224,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(lt_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run LT operator", K(ret));
         }
         break;
       }
@@ -247,7 +233,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(le_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run LE operator", K(ret));
         }
         break;
       }
@@ -257,7 +242,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(in_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run IN operator", K(ret));
         }
         break;
       }
@@ -267,7 +251,6 @@ int ObSkipIndexFilterExecutor::filter_on_min_max(
         } else if (is_min_max_null) {
           fal_desc.is_uncertain();
         } else if (OB_FAIL(bt_operator(filter, min_datum, is_min_prefix, max_datum, is_max_prefix, fal_desc))) {
-          LOG_WARN("Failed to run BT operator", K(ret));
         }
         break;
       }
@@ -295,7 +278,6 @@ inline int ObSkipIndexFilterExecutor::pad_column(const ObObjMeta &obj_meta,
   if (is_padding_mode && obj_meta.is_fixed_len_char_type()) {
     if (OB_FAIL(storage::pad_column(obj_meta, col_param->get_accuracy(),
                                     padding_alloc, datum))) {
-      LOG_WARN("Failed to pad column", K(ret));
     }
   }
   return ret;
@@ -319,9 +301,7 @@ int ObSkipIndexFilterExecutor::eq_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res == 0 && max_cmp_res == 0 && !is_min_prefix && !is_max_prefix) {
       fal_desc.set_always_true();
     } else if (min_cmp_res > 0 || (max_cmp_res < 0 && !is_max_prefix)) {
@@ -354,9 +334,7 @@ int ObSkipIndexFilterExecutor::ne_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res == 0 && max_cmp_res == 0 && !is_min_prefix && !is_max_prefix) {
       fal_desc.set_always_false();
     } else if (min_cmp_res > 0 || (max_cmp_res < 0 && !is_max_prefix)) {
@@ -389,9 +367,7 @@ int ObSkipIndexFilterExecutor::gt_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0) {
       fal_desc.set_always_true();
     } else if (max_cmp_res < 0 || max_cmp_res == 0) {
@@ -430,9 +406,7 @@ int ObSkipIndexFilterExecutor::ge_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0 || (min_cmp_res == 0 && !is_min_prefix)) {
       fal_desc.set_always_true();
     } else if (max_cmp_res < 0) {
@@ -467,9 +441,7 @@ int ObSkipIndexFilterExecutor::lt_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0 || (min_cmp_res == 0 && !is_min_prefix)) {
       fal_desc.set_always_false();
     } else if (max_cmp_res < 0) {
@@ -505,9 +477,7 @@ int ObSkipIndexFilterExecutor::le_operator(const sql::ObWhiteFilterExecutor &fil
     int min_cmp_res = 0;
     int max_cmp_res = 0;
     if (OB_FAIL(cmp_func(min_datum, ref_datum, min_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_datum, max_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
     } else if (min_cmp_res > 0) {
       fal_desc.set_always_false();
     } else if (max_cmp_res == 0 && !is_max_prefix) {
@@ -556,7 +526,6 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     } else {
       const ObDatum &ref_datum = datums.at(pos);
       if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res, nullptr))) {
-        LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_datum));
       } else if (cmp_res > 0) { // min_datum <= datums[pos] < max_datum
         fal_desc.set_uncertain();
       } else if (is_max_prefix) {
@@ -569,7 +538,6 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
         fal_desc.set_uncertain(); // min_datum != max_datum and max_datum == datums[pos]
       }
     }
-    LOG_DEBUG("check filter in in skip index", K(ret), K(cmp_res), K(equal), K(pos), K(fal_desc));
   }
   return ret;
 }
@@ -597,13 +565,9 @@ int ObSkipIndexFilterExecutor::bt_operator(const sql::ObWhiteFilterExecutor &fil
     int max_right_cmp_res = 0;
 
     if (OB_FAIL(cmp_func(min_datum, ref_left_datum, min_left_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(min_datum), K(ref_left_datum));
     } else if (OB_FAIL(cmp_func(min_datum, ref_right_datum, min_right_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_right_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_left_datum, max_left_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_left_datum));
     } else if (OB_FAIL(cmp_func(max_datum, ref_right_datum, max_right_cmp_res, nullptr))) {
-      LOG_WARN("Failed to compare datum", K(ret), K(max_datum), K(ref_right_datum));
     } else if (min_right_cmp_res > 0 || max_left_cmp_res < 0) {
       fal_desc.set_always_false();
     } else if ((min_left_cmp_res > 0 || min_left_cmp_res == 0) && !is_min_prefix
@@ -638,7 +602,6 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
     LOG_WARN("Invalid black filter, filter is not monotonic", K(ret), K(filter));
   } else if (OB_FAIL(read_aggregate_data(col_idx, allocator, col_param, obj_meta,
       filter.is_padding_mode(),null_count, min_datum, is_min_prefix, max_datum, is_max_prefix))) {
-    LOG_WARN("Failed to read min and max", K(ret), K(col_idx));
   } else if (null_count.is_null() && min_datum.is_null() && max_datum.is_null()) {
     // min max null_count all null, expect uncertain cause by progressive merge
     fal_desc.set_uncertain();
@@ -662,11 +625,8 @@ int ObSkipIndexFilterExecutor::black_filter_on_min_max(
                                                   has_null,
                                                   nullptr, /*result_bitmap*/
                                                   fal_desc))) {
-      LOG_WARN("Failed to check can skip by monotonicity", K(ret), K(min_datum), K(max_datum), K(has_null), K(filter));
     } 
   }
-  LOG_DEBUG("Utilize skip index judge black filter", K(ret), K(fal_desc), K(min_datum), K(max_datum), 
-                                                     K(null_count), K(row_count), K(filter));
   return ret;
 }
 

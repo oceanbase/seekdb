@@ -53,7 +53,6 @@ int ObPrepareResolver::resolve(const ParseNode &parse_tree)
     if (T_VARCHAR == stmt_node->type_ || T_HEX_STRING == stmt_node->type_ || T_OP_GET_USER_VAR == stmt_node->type_) {
       ObRawExpr *stmt_expr = NULL;
       if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *stmt_node, stmt_expr, NULL))) {
-        LOG_WARN("failed to resolve const expr", K(ret));
       } else {
         prepare_stmt->set_prepare_sql(stmt_expr);
       }

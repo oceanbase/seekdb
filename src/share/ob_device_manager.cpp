@@ -40,14 +40,10 @@ int ObDeviceManager::init_devices_env()
       device_ins_[i].device_key_ = NULL;
     }
     if (OB_FAIL(device_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
-      OB_LOG(WARN, "fail to create device map", K(ret));
     } else if (OB_FAIL(handle_map_.create(MAX_DEVICE_INSTANCE*2, "DeviceMng", "DeviceMng"))) {
-      OB_LOG(WARN, "fail to create handle map", K(ret));
     } else if (OB_FAIL(allocator_.init(ObMallocAllocator::get_instance(),
                                       OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
-      OB_LOG(WARN, "Fail to init allocator ", K(ret));
     } else if (OB_FAIL(lock_.init(mem_attr))) {
-      OB_LOG(WARN, "fail to init lock", KR(ret));
     }
   }
 
@@ -145,7 +141,6 @@ int ObDeviceManager::alloc_device_(
   int64_t avai_idx = -1;
   ObIODevice *device_handle = nullptr;
   if (OB_FAIL(alloc_local_device(storage_type_prefix, device_handle, allocator_))) {
-    OB_LOG(WARN, "fail to alloc device!", K(ret), K(storage_type_prefix));
   } else {
     //find a device slot
     for (int i = 0; i < MAX_DEVICE_INSTANCE; i++) {
@@ -169,13 +164,8 @@ int ObDeviceManager::alloc_device_(
         ObIODevice* del_device = device_ins_[last_no_ref_idx].device_;
         ObString old_key(device_ins_[last_no_ref_idx].device_key_);
         if (OB_FAIL(ObIOManager::get_instance().remove_device_channel(del_device))) {
-          OB_LOG(WARN, "fail to remove device channel", KR(ret), KP(del_device));
         } else if (OB_FAIL(device_map_.erase_refactored(old_key))) {
-          OB_LOG(WARN, "fail to erase device from device map", KP(old_key.ptr()), KR(ret),
-              K(storage_type_prefix), KP(device_key.ptr()));
         } else if (OB_FAIL(handle_map_.erase_refactored((int64_t)(device_ins_[last_no_ref_idx].device_)))) {
-          OB_LOG(WARN, "fail to erase device from handle map", K(device_ins_[last_no_ref_idx].device_),
-                 KR(ret), K(storage_type_prefix), KP(device_key.ptr()));
         } else {
           /*free the resource*/
           del_device->destroy();
@@ -199,15 +189,9 @@ int ObDeviceManager::alloc_device_(
         //insert into map
         ObString cur_key;
         if (OB_FAIL(ob_write_string(allocator_, device_key, cur_key, true/*c_style*/))) {
-          OB_LOG(WARN, "fail to deep copy device key",
-              KR(ret), K(storage_type_prefix), KP(device_key.ptr()));
         } else if (FALSE_IT(device_ins_[avai_idx].device_key_ = cur_key.ptr())) {
         } else if (OB_FAIL(device_map_.set_refactored(cur_key, &(device_ins_[avai_idx])))) {
-          OB_LOG(WARN, "fail to set device to device map!",
-              KR(ret), KP(cur_key.ptr()), K(storage_type_prefix));
         } else if (OB_FAIL(handle_map_.set_refactored((int64_t)(device_handle), &(device_ins_[avai_idx])))) {
-          OB_LOG(WARN, "fail to set device to handle map!",
-              KR(ret), K(storage_type_prefix), KP(device_key.ptr()));
         } else {
           OB_LOG(INFO, "success insert into map!", K(storage_type_prefix), KP(device_key.ptr()));
         }
@@ -261,7 +245,6 @@ int ObDeviceManager::get_deivce_(const ObString &device_key, ObIODevice *&device
     }
     // device_->inc_ref/dec_ref/get_ref_cnt are atomic operations, so acquiring a read lock suffices
   } else if (OB_FAIL(inc_device_ref_nolock_(dev_info))) {
-    OB_LOG(WARN, "fail to inc device ref", KR(ret));
   } else {
     device_handle = dev_info->device_;
   }
@@ -284,7 +267,6 @@ int ObDeviceManager::alloc_device_and_init_(
       ret = OB_SUCCESS;
       // alloc a device, and set into the map
       if (OB_FAIL(alloc_device_(storage_type_prefix, device_key, dev_info))) {
-        OB_LOG(WARN, "fail to alloc device!", KR(ret), K(storage_type_prefix), KP(device_key.ptr()));
       }
     } else {
       OB_LOG(WARN, "fail to re-check device existence", KR(ret), K(storage_type_prefix), KP(device_key.ptr()));
@@ -315,15 +297,12 @@ int ObDeviceManager::get_device_(
     OB_LOG(WARN, "device manager is not inited", KR(ret));
   } else if (OB_FAIL(get_device_key_(
       allocator, storage_type_prefix, storage_id_mod, tmp_device_key))) {
-    OB_LOG(WARN, "fail to get device key", KR(ret), K(storage_type_prefix), K(storage_id_mod));
   } else {
     if (OB_FAIL(get_deivce_(tmp_device_key, device_handle))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(alloc_device_and_init_(
               storage_type_prefix, tmp_device_key, device_handle))) {
-          OB_LOG(WARN, "fail to alloc device from device manager ", KR(ret),
-              K(storage_type_prefix), K(storage_id_mod), KP(tmp_device_key));
         }
       } else {
         OB_LOG(WARN, "fail to get device from device manager ", KR(ret),
@@ -348,7 +327,6 @@ int ObDeviceManager::get_local_device(
   } else {
     if (OB_FAIL(ObDeviceManager::get_instance().get_device_(
             storage_type_prefix, storage_id_mod, device_handle))) {
-      OB_LOG(WARN, "fail to get local device", K(ret));
     }
   }
   return ret;
@@ -371,7 +349,6 @@ int ObDeviceManager::release_device(ObIODevice *&device_handle)
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "device_handle is null!");
   } else if (OB_FAIL(handle_map_.get_refactored((int64_t)(device_handle), device_info))) {
-    OB_LOG(WARN, "fail to get device by handle!", K(ret));
   }
 
   if (OB_SUCCESS == ret) {
@@ -387,7 +364,6 @@ int ObDeviceManager::release_device(ObIODevice *&device_handle)
         abort_unless(device_info->device_->get_ref_cnt() > 0);
         device_info->device_->dec_ref();
         if (0 == device_info->device_->get_ref_cnt()) {
-          OB_LOG(DEBUG, "A Device has no others ref", K(device_info->device_), KP(device_info->device_key_));
         } else {
           OB_LOG(DEBUG, "released dev info", K(device_info->device_), K(device_info->device_->get_ref_cnt()));
         }
@@ -420,7 +396,6 @@ int ObDeviceManager::get_device_key_(
                                        OB_LOCAL_PREFIX,
                                        (uint64_t)storage_id_mod.storage_used_mod_,
                                        storage_id_mod.storage_id_))) {
-      OB_LOG(WARN, "fail to construct device key", K(ret));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;

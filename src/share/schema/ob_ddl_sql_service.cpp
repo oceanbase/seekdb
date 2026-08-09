@@ -41,11 +41,8 @@ int ObDDLSqlService::log_operation(
     LOG_WARN("pointer is null", KR(ret), KP(sql_string));
   } else if (FALSE_IT(sql_string->reuse())) {
   } else if (OB_FAIL(log_operation_dml(schema_operation, ddl_operation_dml))) {
-    LOG_WARN("failed to get log_operation_dml", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.splice_insert_sql(OB_ALL_DDL_OPERATION_TNAME, *sql_string))) {
-    LOG_WARN("failed to splice insert sql", KR(ret));
   } else if (OB_FAIL(sql_client.write(sql_string->ptr(), affected_rows))) {
-    LOG_WARN("failed to write sql", KR(ret), K(*sql_string));
   } else if (affected_rows != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows expect to 1, ", KR(ret), K(affected_rows));
@@ -70,7 +67,6 @@ int ObDDLSqlService::log_operation_dml(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(gen_ddl_operation_dml(schema_operation, ddl_operation_dml))) {
-    LOG_WARN("failed to gen ddl operation dml", KR(ret), K(schema_operation));
   }
   return ret;
 }
@@ -84,34 +80,23 @@ int ObDDLSqlService::gen_ddl_operation_dml(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_operation is invalid", K(schema_operation), K(ret));
   } else if (OB_FAIL(ddl_operation_dml.add_column("schema_version", schema_operation.schema_version_))) {
-    LOG_WARN("failed to add column schema_version", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("user_id",
           fill_schema_id(schema_operation.user_id_)))) {
-    LOG_WARN("failed to add column user_id", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("database_id",
           fill_schema_id(schema_operation.database_id_)))) {
-    LOG_WARN("failed to add column database_id", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("database_name",
           ObHexEscapeSqlStr(schema_operation.database_name_?:"")))) {
-    LOG_WARN("failed to add column database_name", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("column_id",
           fill_schema_id(schema_operation.column_id_)))) {
-    LOG_WARN("failed to add column column_id", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("table_id",
           fill_schema_id(schema_operation.table_id_)))) {
-    LOG_WARN("failed to add column table_id", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("table_name",
           ObHexEscapeSqlStr(schema_operation.table_name_?:"")))) {
-    LOG_WARN("failed to add column table_name", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("operation_type", schema_operation.op_type_))) {
-    LOG_WARN("failed to add column operation_type", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_column("ddl_stmt_str",
           ObHexEscapeSqlStr(schema_operation.ddl_stmt_str_?:"")))) {
-    LOG_WARN("failed to add column ddl_stmt_str", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.add_gmt_modified())) {
-    LOG_WARN("failed to add column gmt_modified", KR(ret), K(schema_operation));
   } else if (OB_FAIL(ddl_operation_dml.finish_row())) {
-    LOG_WARN("failed to finish ddl_operation_dml", KR(ret));
   }
   return ret;
 }
@@ -137,7 +122,6 @@ int ObDDLSqlService::log_nop_operation(const ObSchemaOperation &schema_operation
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema version", K(ret), K(ddl_schema_op));
   } else if (OB_FAIL(log_operation(ddl_schema_op, sql_client))) {
-    LOG_WARN("failed to log ddl operator", K(ret), K(ddl_schema_op));
   }
   return ret;
 }

@@ -805,7 +805,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
   new_object_name.reset();
   if (OB_FAIL(new_object_name.append_fmt("__recycle_$_%ld",
                                         schema.get_schema_version()))) {
-    RS_LOG(WARN, "append new object name failed", K(ret), K(schema));
   }
   return ret;
 }

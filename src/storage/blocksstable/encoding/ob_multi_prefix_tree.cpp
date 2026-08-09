@@ -160,7 +160,6 @@ int ObMultiPrefixTree::init(const int64_t cell_cnt, const int64_t bucket_cnt_lim
     const int64_t cnode_cnt_limit = cell_cnt / CNODE_LIMIT_RATIO + 1;
 
     if (OB_FAIL(ht_.create(bucket_cnt_limit, cnode_cnt_limit, &alloc_))) {
-      LOG_WARN("failed to create hashtable", K(ret), K(cell_cnt));
     } else if (OB_ISNULL(cell_nodes_ = reinterpret_cast<CellNode *>(alloc_.alloc(cnode_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc cell nodes", K(ret), K(cnode_size));
@@ -217,7 +216,6 @@ int ObMultiPrefixTree::try_previous_length(const int64_t last_prefix_length, boo
     stop = true;
     // do nothing
   } else if (OB_FAIL(traverse_by_level(/* level = */ 1, stop, last_prefix_length))) {
-    LOG_WARN("failed to traverse by level using previous length", K(ret));
   } else {
     // for try previous length (root node was split),
     // the cells in root node should be moved to a new tree node,
@@ -255,9 +253,7 @@ int ObMultiPrefixTree::build_tree(
   } else {
 
     if (OB_FAIL(init_root_node(col_datums))) {
-      LOG_WARN("failed to init root node", K(ret), KP(col_datums));
     } else if (OB_FAIL(try_previous_length(last_prefix_length, stop))) {
-      LOG_WARN("failed to try previous length", K(ret), KP(last_prefix_length));
     } else {
       int64_t level = stop ? 0 : 1;
       stop = false;
@@ -276,13 +272,11 @@ int ObMultiPrefixTree::build_tree(
           suitable = false;
         }
       }
-      LOG_DEBUG("debug, multi-prefix tree", K(level), K(stop), K(suitable));
     }
 
     if (OB_FAIL(ret) || !suitable) {
       // do nothing
     } else if (OB_FAIL(complete_build(prefix_count, prefix_length, last_prefix_length))) {
-      LOG_WARN("failed to complete build prefix tree", K(ret));
     }
   }
   return ret;
@@ -320,7 +314,6 @@ int ObMultiPrefixTree::traverse_by_level(const int64_t level, bool &stop,
 
         if (OB_SUCC(ret)) {
           if (0 == ht_.size()) {
-            LOG_DEBUG("size of hashtable is 0", K(ret), K(level));
           } else if (1 == ht_.size() && 0 == tnode.cells_.get_size()) {
             // contains the same step_str, update current tree node
             tnode.length_ += move_step;
@@ -362,7 +355,6 @@ int ObMultiPrefixTree::add_node(TreeNode &par_tnode, CellList &cells, const int6
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(MAX_TNODE_CNT == tnode_cnt_)) {
     ret = OB_DATA_OUT_OF_RANGE;
-    LOG_DEBUG("tnode out of range", K(ret), K_(tnode_cnt));
   } else {
     // add a new tnode
     TreeNode &new_tnode = tree_nodes_[tnode_cnt_];
@@ -409,13 +401,11 @@ int ObMultiPrefixTree::complete_build(int64_t &prefix_count,
           if (tnode.length_ < last_prefix_length) {
             last_prefix_length = tnode.length_;
           }
-          LOG_DEBUG("leaf tnode", K(tnode));
         }
       } else if (NULL != tnode.children_->prefix_) {
         // parent node choose the prefix of its first child as the prefix
         tnode.prefix_ = tnode.children_->prefix_;
         tnode.ref_ = tnode.children_->ref_;
-        LOG_DEBUG("inner tnode", K(tnode));
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child's prefix is NULL, unexpected", K(ret), K(tnode),
@@ -438,7 +428,6 @@ int ObMultiPrefixTree::complete_build(int64_t &prefix_count,
               find_prefix(prefix->ptr_ + tnode.length_, cnode->datum_->ptr_ + tnode.length_,
               MIN(prefix->len_, cnode->len_) - tnode.length_);
           cnode->len_ = tnode.length_ + addition_len;
-          LOG_DEBUG("cnode", K(*cnode));
           cnode = cnode->get_next();
         }
       }

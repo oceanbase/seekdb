@@ -204,7 +204,6 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   const ObConstRawExpr *param3 = NULL;
   ObObjType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
-    LOG_WARN("cg_expr_inner failed", K(ret));
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("const raw expr param is null", K(param2));
@@ -213,11 +212,9 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
     rt_expr.eval_func_ = ObExprIs::calc_is_null;
   } else if (param2->get_value().is_true()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, true))) {
-      LOG_WARN("is expr got unexpected type param", K(ret));
     }
   } else if (param2->get_value().is_false()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, false, false))) {
-      LOG_WARN("is expr got unexpected type param", K(ret));
     }
   } else if (ObDoubleType == param2->get_value().get_type()) {
     if (isnan(param2->get_value().get_double())) {
@@ -240,7 +237,6 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   const ObConstRawExpr *param3 = NULL;
   ObObjType param1_type = ObMaxType;
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
-    LOG_WARN("cg_expr_inner failed", K(ret));
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("const raw expr param is null", K(param2));
@@ -250,11 +246,9 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
     rt_expr.eval_batch_func_ = ObExprIsNot::calc_batch_is_not_null;
   } else if (param2->get_value().is_true()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, true))) {
-      LOG_WARN("is expr got unexpected type param", K(ret));
     }
   } else if (param2->get_value().is_false()) {
     if (OB_FAIL(cg_result_type_class(param1_type, rt_expr.eval_func_, true, false))) {
-      LOG_WARN("is expr got unexpected type param", K(ret));
     }
   } else if (ObDoubleType == param2->get_value().get_type()) {
     if (isnan(param2->get_value().get_double())) {
@@ -275,7 +269,6 @@ int ObExprIs::calc_is_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_dat
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else {
     bool ret_bool = param1->is_null();
     expr_datum.set_int32(static_cast<int32_t>(ret_bool));
@@ -289,13 +282,11 @@ int ObExprIs::calc_is_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::INFINITE_VALUE))) {
-      LOG_WARN("calc_is_infinite unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));
     }
@@ -309,13 +300,11 @@ int ObExprIs::calc_is_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::NAN_VALUE))) {
-      LOG_WARN("calc_is_nan unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(ret_bool));
     }
@@ -328,7 +317,6 @@ int ObExprIsNot::calc_is_not_null(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else {
     bool ret_bool = !param1->is_null();
     expr_datum.set_int32(static_cast<int32_t>(ret_bool));
@@ -340,11 +328,9 @@ int ObExprIsNot::calc_batch_is_not_null(const ObExpr &expr, ObEvalCtx &ctx,
                                         const ObBitVector &skip, const int64_t batch_size)
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("calculate batch is not null", K(batch_size));
   ObDatum *results = expr.locate_batch_datums(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch args", K(ret), K(batch_size));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
       if (skip.at(i) || eval_flags.at(i)) {
@@ -365,13 +351,11 @@ int ObExprIsNot::calc_is_not_infinite(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   ObDatum *param1 = NULL;
   bool ret_bool = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::INFINITE_VALUE))) {
-      LOG_WARN("calc_is_not_infinite unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(!ret_bool));
     }
@@ -384,14 +368,12 @@ int ObExprIsNot::calc_is_not_nan(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
   int ret = OB_SUCCESS;
   ObDatum *param1 = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param1))) {
-    LOG_WARN("eval first param failed", K(ret));
   } else if (param1->is_null()) {
     expr_datum.set_null();
   } else {
     bool ret_bool = false;
     if (OB_FAIL(is_infinite_nan(expr.args_[0]->datum_meta_.type_, param1,
                                 ret_bool, Ieee754::NAN_VALUE))) {
-      LOG_WARN("calc_is_not_nan unexpect error", K(ret));
     } else {
       expr_datum.set_int32(static_cast<int32_t>(!ret_bool));
     }

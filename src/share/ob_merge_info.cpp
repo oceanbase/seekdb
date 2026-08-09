@@ -90,7 +90,6 @@ int ObMergeInfoItem::set_scn(const uint64_t scn_val)
   int ret = OB_SUCCESS;
   is_scn_ = true;
   if (OB_FAIL(scn_.convert_for_inner_table_field(scn_val))) {
-    LOG_WARN("fail to convert uint64_t to SCN", KR(ret), K(scn_val));
   }
   return ret;
 }
@@ -99,7 +98,6 @@ int ObMergeInfoItem::set_scn(const uint64_t scn_val, const bool need_update)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_scn(scn_val))) {
-    LOG_WARN("fail to set scn val", KR(ret), K(scn_val));
   } else {
     need_update_ = need_update;
   }

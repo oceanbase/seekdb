@@ -177,7 +177,6 @@ int ObRandomFileReader::open(const ObString &filename)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRandomFileReader init twice", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.open(filename.ptr(), false))) {
-    LOG_WARN("fail to open file", KR(ret), K(filename));
   } else {
     filename_ = filename;
     offset_ = 0;
@@ -194,7 +193,6 @@ int ObRandomFileReader::read(char *buf, int64_t count, int64_t &read_size)
     ret = OB_NOT_INIT;
     LOG_WARN("ObRandomFileReader not init", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.pread(buf, count, offset_, read_size))) {
-    LOG_WARN("fail to pread file buf", KR(ret), K(count), K_(offset), K(read_size));
   } else if (0 == read_size) {
     eof_ = true;
   } else {
@@ -287,7 +285,6 @@ ObPacketStreamFileReader::~ObPacketStreamFileReader()
   }
   const int release_ret = release_packet();
   if (OB_SUCCESS != release_ret) {
-    LOG_WARN("failed to release cached load-data packet", K(release_ret));
   }
   arena_allocator_.reset();
 }
@@ -306,9 +303,7 @@ int ObPacketStreamFileReader::open(const ObString &filename,
     obmysql::OMPKLocalInfile filename_packet;
     filename_packet.set_filename(filename);
     if (OB_FAIL(packet_handle.response_packet(filename_packet))) {
-      LOG_INFO("failed to send local infile packet to client", K(ret), K(filename));
     } else if (OB_FAIL(packet_handle.flush_buffer(false /*is_last*/))) {
-      LOG_INFO("failed to flush socket buffer while send local infile packet", K(ret), K(filename));
     } else {
       LOG_INFO("[load data local]send filename to client success", K(filename));
     }
@@ -395,7 +390,6 @@ int ObPacketStreamFileReader::receive_packet()
         (void)release_packet();
       } else {
         received_size_ += pkt_len;
-        LOG_TRACE("got a packet", K(pkt_len));
       }
     }
   }
@@ -517,7 +511,6 @@ int ObDecompressFileReader::open(const ObFileReadParam &param, ObFileReader *sou
   if (param.compression_format_ == ObCSVGeneralFormat::ObCSVCompression::NONE) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObDecompressor::create(param.compression_format_, allocator_, decompressor_))) {
-    LOG_WARN("failed to create decompressor", K(param.compression_format_), K(ret));
   } else if (OB_ISNULL(compressed_data_ = (char *)allocator_.alloc(COMPRESSED_DATA_BUFFER_SIZE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate buffer.", K(COMPRESSED_DATA_BUFFER_SIZE));
@@ -555,7 +548,6 @@ int ObDecompressFileReader::read(char *buf, int64_t capacity, int64_t &read_size
                                     capacity,
                                     read_size);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to decompress", K(ret));
     } else {
       consumed_data_size_ += consumed_size;
       uncompressed_size_  += read_size;
@@ -680,15 +672,11 @@ int ObZlibDecompressor::decompress(const char *src, int64_t src_size, int64_t &c
 
     zlib_ret = inflate(zstream_ptr, Z_NO_FLUSH);
     if (Z_OK == zlib_ret || Z_STREAM_END == zlib_ret) {
-      LOG_TRACE("inflate success",
-                K(last_avail_in - zstream_ptr->avail_in),
-                K(zstream_ptr->total_out  - last_total_out));
 
       consumed_size     = last_avail_in - zstream_ptr->avail_in;
       decompressed_size = zstream_ptr->total_out  - last_total_out;
 
       if (Z_STREAM_END == zlib_ret) {
-        LOG_DEBUG("got Z_STREAM_END");
         zstream_need_reset_ = true;
       }
     } else {
@@ -740,7 +728,6 @@ int ObZstdDecompressor::init()
 
     ret = ObZstdWrapper::create_stream_dctx(allocator, zstd_stream_context_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to create zstd stream context", K(ret));
     }
   }
 

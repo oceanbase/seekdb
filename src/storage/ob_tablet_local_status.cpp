@@ -197,7 +197,6 @@ int ObTabletLocalStatus::serialize(char *buf, const int64_t len, int64_t &pos) c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, local_status_))) {
-    LOG_WARN("serialize tablet local status failed", K(ret), K(new_pos), K(len), K(local_status_), K(*this));
   } else {
     pos = new_pos;
   }
@@ -215,7 +214,6 @@ int ObTabletLocalStatus::deserialize(const char *buf, const int64_t len, int64_t
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &local_status_))) {
-    LOG_WARN("failed to deserialize tablet local status", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }

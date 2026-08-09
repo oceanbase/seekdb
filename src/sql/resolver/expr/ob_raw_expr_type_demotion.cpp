@@ -187,11 +187,9 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
           || OB_ISNULL(query_ctx_ = expr_factory_->get_query_ctx())) {
     // exec ctx and query ctx may be null, in which case the type demotion is disabled.
     disabled = true;
-    LOG_TRACE("Type demotion is disabled because of null ctx", KP(exec_ctx), KP_(query_ctx));
   } else if (query_ctx_->is_prepare_stmt_) {
     // the actual type of the question mark expr in prepare stage cannot be determined.
     disabled = true;
-    LOG_TRACE("Type demotion is disabled because of prepare statement");
   } else if (query_ctx_->type_demotion_flag_inited_) {
     // type demotion flag has been initialized and can be accessed directly.
   } else {
@@ -213,7 +211,6 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     bool is_exists = false;
     if (OB_FAIL(query_ctx_->get_global_hint().opt_params_.get_bool_opt_param(
         ObOptParamHint::ENABLE_CONSTANT_TYPE_DEMOTION, enable_constant_type_demotion, is_exists))) {
-      LOG_WARN("fail to get hint", K(ret));
     } else if (is_exists) {
       query_ctx_->enable_constant_type_demotion_ = enable_constant_type_demotion;
     }
@@ -221,7 +218,6 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(query_ctx_->get_global_hint().opt_params_.get_opt_param(
         ObOptParamHint::NON_STANDARD_COMPARISON_LEVEL, non_std_cmp_level))) {
-      LOG_WARN("fail to get hint", K(ret));
     } else if (non_std_cmp_level.is_varchar()) {
       // all branch need overwrite due to the high priority of hint
       if (0 == non_std_cmp_level.get_varchar().case_compare("range")) {
@@ -261,16 +257,13 @@ int ObRawExprTypeDemotion::demote_type(ObOpRawExpr &expr)
   int ret = OB_SUCCESS;
   bool disabled = false;
   if (OB_FAIL(init_query_ctx_flags(disabled))) {
-    LOG_WARN("fail to init query ctx flag", K(ret));
   } else if (OB_UNLIKELY(disabled)) {
     // The type demotion feature is disabled, no need to check expression.
   } else if (IS_COMMON_COMPARISON_OP(expr.get_expr_type())) {
     if (OB_FAIL(demote_type_common_comparison(expr))) {
-      LOG_WARN("fail to type demotion common comparison", K(ret), K(expr));
     }
   } else if (T_OP_IN == expr.get_expr_type() || T_OP_NOT_IN == expr.get_expr_type()) {
     if (OB_FAIL(demote_type_in_or_not_in(expr))) {
-      LOG_WARN("fail to type demotion in or notin expr", K(ret), K(expr));
     }
   }
   return ret;
@@ -295,11 +288,9 @@ int ObRawExprTypeDemotion::demote_type_common_comparison(ObOpRawExpr &expr)
     const ObConstRawExpr *const_value = NULL;
     int64_t constant_expr_idx = 0;
     if (OB_FAIL(extract_cmp_expr_pair(left, right, column_ref, const_value, constant_expr_idx))) {
-      LOG_WARN("fail to extract comparison expr template", K(ret));
     } else if (OB_NOT_NULL(column_ref) && OB_NOT_NULL(const_value)) {
       if (OB_FAIL(try_demote_constant_type(*column_ref, *const_value, is_range_cmp, expr,
                                            constant_expr_idx))) {
-        LOG_WARN("fail to demote const expr", K(ret));
       }
     }
   } else if (T_OP_ROW == left->get_expr_type() && T_OP_ROW == right->get_expr_type()
@@ -311,12 +302,10 @@ int ObRawExprTypeDemotion::demote_type_common_comparison(ObOpRawExpr &expr)
     for (int64_t i = 0; OB_SUCC(ret) && i < left->get_param_count(); ++i) {
       if (OB_FAIL(extract_cmp_expr_pair(left->get_param_expr(i), right->get_param_expr(i),
                                         column_ref, const_value, constant_expr_idx))) {
-        LOG_WARN("fail to extract comparison expr template", K(ret));
       } else if (OB_NOT_NULL(column_ref) && OB_NOT_NULL(const_value)) {
         ObOpRawExpr *op_row = static_cast<ObOpRawExpr*>(expr.get_param_expr(constant_expr_idx));
         if (OB_FAIL(try_demote_constant_type(*column_ref, *const_value, is_range_cmp, *op_row,
                                              i))) {
-          LOG_WARN("fail to demote const expr", K(ret), K(i));
         }
       }
     }
@@ -378,7 +367,6 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
                                                             &const_value,
                                                             column_ref.get_result_type(),
                                                             demote_cast_expr))) {
-    LOG_WARN("fail to build range placement expr", K(ret));
   } else if (need_constraint(const_value.get_result_type().get_type(),
                              column_ref.get_result_type().get_type())) {
     ObPhysicalPlanCtx *plan_ctx = NULL;
@@ -395,7 +383,6 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
                                                                  got_result,
                                                                  exec_ctx->get_allocator(),
                                                                  true))) {
-      LOG_WARN("failed to calc const or calculable expr", K(ret));
     } else if (got_result) {
       // No errors occurred during the type demotion process, indicating that the constant's
       // range placement is inside and constant value can be demoted.
@@ -409,14 +396,12 @@ int ObRawExprTypeDemotion::try_demote_constant_type(const ObColumnRefRawExpr &co
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(add_range_placement_constraint(column_ref, const_value, range_placement_value))) {
-        LOG_WARN("fail to add constraint", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(demote_cast_expr)) {
     // rewriting the expressions on constants side of the comparison operation.
     if (OB_FAIL(op_expr.replace_param_expr(replaced_expr_idx, demote_cast_expr))) {
-      LOG_WARN("fail to replace demoted expr", K(ret));
     }
   }
   return ret;
@@ -451,7 +436,6 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
       } else if (FALSE_IT(const_value = static_cast<const ObConstRawExpr*>(in_item))) {
       } else if (OB_FAIL(try_demote_constant_type(*column_ref, *const_value, false/*is_range_cmp*/,
                                                   *in_list, i))) {
-        LOG_WARN("fail to demote constant type", K(ret), K(i));
       }
     }
   } else if (T_OP_ROW == left->get_expr_type()) {
@@ -483,7 +467,6 @@ int ObRawExprTypeDemotion::demote_type_in_or_not_in(ObOpRawExpr &expr)
                 static_cast<ObConstRawExpr*>(right_op_row->get_param_expr(l_idx));
               if (OB_FAIL(try_demote_constant_type(*column_ref, *const_value, false/*is_range_cmp*/,
                                                    *right_op_row, l_idx))) {
-                LOG_WARN("fail to demote constant type", K(ret), K(l_idx));
               }
             }
           }
@@ -519,19 +502,15 @@ int ObRawExprTypeDemotion::add_range_placement_constraint(
                                                       &const_expr,
                                                       column_ref.get_result_type(),
                                                       range_placement_expr))) {
-    LOG_WARN("fail to build range placement expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*expr_factory_,
                                                           ObInt32Type,
                                                           static_cast<int32_t>(rp),
                                                           rp_value_expr))) {
-    LOG_WARN("fail to build range placement value expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(*expr_factory_, T_OP_EQ,
                                                                  range_placement_expr,
                                                                  rp_value_expr,
                                                                  equal_expr))) {
-    LOG_WARN("fail to build equal expr", K(ret));
   } else if (OB_FAIL(equal_expr->formalize(session_))) {
-    LOG_WARN("fail to formalize expr", K(ret));
   } else if (OB_UNLIKELY(!equal_expr->is_static_const_expr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pre calculable expr is expected here", K(ret));
@@ -539,9 +518,7 @@ int ObRawExprTypeDemotion::add_range_placement_constraint(
     ObExprConstraint cons(equal_expr, PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE);
     cons.ignore_const_check_ = false;
     if (OB_FAIL(add_var_to_array_no_dup(query_ctx_->all_expr_constraints_, cons))) {
-      LOG_WARN("failed to push back pre calc constraints", K(ret));
     } else {
-      LOG_TRACE("add constraints", K(rp), K(const_expr), K(query_ctx_->all_expr_constraints_));
     }
   }
   return ret;

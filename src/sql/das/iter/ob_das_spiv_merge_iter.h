@@ -161,7 +161,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(inv_dim_scan_iters_.push_back(iter))) {
-      LOG_WARN("failed to push inv scan iter");
     }
     return ret;
   }

@@ -52,7 +52,6 @@ int ObExprPLAssocIndex::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
-    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     info_ = static_cast<const ObExprPLAssocIndex &>(other).info_;
   }

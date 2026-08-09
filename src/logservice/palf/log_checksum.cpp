@@ -62,8 +62,6 @@ int LogChecksum::acquire_accum_checksum(const int64_t data_checksum,
     accum_checksum_ = common::ob_crc64(accum_checksum_, const_cast<int64_t *>(&data_checksum),
                                        sizeof(data_checksum));
     accum_checksum = accum_checksum_;
-    PALF_LOG(TRACE, "acquire_accum_checksum success", K(data_checksum), K_(verify_checksum),
-        K_(prev_accum_checksum), K_(accum_checksum));
   }
   return ret;
 }
@@ -79,12 +77,9 @@ int LogChecksum::verify_accum_checksum(const int64_t data_checksum,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(verify_accum_checksum(old_verify_checksum, data_checksum, accum_checksum, new_verify_checksum))) {
-    PALF_LOG(ERROR, "verify_accum_checksum failed", K(data_checksum), K(accum_checksum), K(old_verify_checksum));
   } else {
     // Update verify_checksum_ when checking succeeds.
     verify_checksum_ = new_verify_checksum;
-    PALF_LOG(TRACE, "verify_accum_checksum success", K(ret), K(data_checksum), K(accum_checksum),
-             K_(verify_checksum), K_(accum_checksum));
   }
   
   return ret;
@@ -105,8 +100,6 @@ int LogChecksum::verify_accum_checksum(const int64_t old_accum_checksum,
         K(expected_accum_checksum), K(old_accum_checksum), K(new_accum_checksum));
     LOG_DBA_ERROR_V2(OB_LOG_CHECKSUM_MISMATCH, ret, "log checksum error");
   } else {
-    PALF_LOG(TRACE, "verify_accum_checksum success", K(ret), K(data_checksum),
-        K(expected_accum_checksum), K(old_accum_checksum), K(new_accum_checksum));
   }
   
   return ret;

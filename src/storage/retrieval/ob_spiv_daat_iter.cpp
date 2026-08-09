@@ -28,7 +28,6 @@ int ObSPIVDaaTIter::init(const ObSPIVDaaTParam &param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_init(param))) {
-    LOG_WARN("failed to init spiv daat iter");
   }
   return ret;
 }
@@ -96,11 +95,9 @@ int ObSPIVDaaTIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
   } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
-    LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {
       if (OB_FAIL(valid_docid_set_.set_refactored(iter->first))) {
-        LOG_WARN("failed to insert docid to valid docid set", K(ret), K(iter->first));
       }
     }
   }
@@ -138,7 +135,6 @@ int ObSPIVDaaTNaiveIter::inner_init(const ObSPIVDaaTParam &param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null base param", K(ret));
   } else if (OB_FAIL(ObSRDaaTIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
-    LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
@@ -190,7 +186,6 @@ int ObSPIVDaaTNaiveIter::project_results(int64_t count)
     if (!is_pre_filter_ || exist) {
       // negative inner product
       if (OB_FAIL(sort_heap_->push(buffered_domain_ids_[i], -buffered_relevances_[i]))) {
-        LOG_WARN("failed to push item to sort heap", K(ret));
       }
     }
   }
@@ -210,7 +205,6 @@ int ObSPIVDaaTNaiveIter::process()
     }
     if ((OB_SUCC(ret) || OB_ITER_END == ret) && count > 0) {
       if (OB_FAIL(project_results(count))) {
-        LOG_WARN("failed to project rows", K(ret));
       }
     }
   }
@@ -224,14 +218,12 @@ int ObSPIVDaaTNaiveIter::process()
     } else {
       ObDocIdExt docid;
       if (OB_FAIL(result_docids_.prepare_allocate(heap_size))) {
-        LOG_WARN("failed to prepare allocate", K(ret));
       }
       for (int i = 0; OB_SUCC(ret) && i < heap_size; i++) {
         docid = sort_heap_->get_doc_id(sort_heap_->top().doc_idx_);
         // for negative inner product, using ascend sorting
         result_docids_[heap_size - 1 - i].from_datum(docid.get_datum());
         if (OB_FAIL(sort_heap_->pop())) {
-          LOG_WARN("failed to pop docid", K(ret));
         }
       }
     }
@@ -293,7 +285,6 @@ int ObSPIVBMWIter::init(const ObSPIVDaaTParam &param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null base param", K(ret));
   } else if (OB_FAIL(ObSRBMWIterImpl::init(*param.base_param_, *param.dim_iters_, *param.allocator_, *param.relevance_collector_))) {
-    LOG_WARN("failed to init spiv daat iter", K(ret));
   } else {
     is_pre_filter_ = param.is_pre_filter_;
     is_use_docid_ = param.is_use_docid_;
@@ -313,11 +304,9 @@ int ObSPIVBMWIter::set_valid_docid_set(const common::hash::ObHashSet<ObDocIdExt>
   int64_t expected_size = valid_docid_set.size();
   if (valid_docid_set.empty()){
   } else if (OB_FAIL(valid_docid_set_.create(expected_size, ObMemAttr("ValidDocidSet")))) {
-    LOG_WARN("failed to create valid docid set", K(ret), K(expected_size));
   } else {
     for (common::hash::ObHashSet<ObDocIdExt>::const_iterator iter = valid_docid_set.begin(); OB_SUCC(ret) && iter != valid_docid_set.end(); ++iter) {
       if (OB_FAIL(valid_docid_set_.set_refactored(iter->first))) {
-        LOG_WARN("failed to insert docid to valid docid set", K(ret), K(iter->first));
       }
     }
   }
@@ -391,14 +380,12 @@ int ObSPIVBMWIter::reverse_top_k_heap()
   } else {
     ObDocIdExt docid;
     if (OB_FAIL(result_docids_.prepare_allocate(heap_size))) {
-      LOG_WARN("failed to prepare allocate", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < heap_size; i++) {
       const TopKItem &top_k_item = top_k_heap_.top();
       docid = id_cache_.at(top_k_item.cache_idx_);
       result_docids_[heap_size - 1 - i].from_datum(docid.get_datum());
       if (OB_FAIL(top_k_heap_.pop())) {
-        LOG_WARN("failed to pop docid", K(ret));
       }
     }
   }
@@ -451,7 +438,6 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
   if (is_pre_filter_) {
     ObDocIdExt docid;
     if (OB_FAIL(docid.from_datum(id_datum))) {
-      LOG_WARN("failed to from datum", K(ret));
     } else {
       int hash_ret = valid_docid_set_.exist_refactored(docid);
       if (OB_HASH_EXIST == hash_ret) {
@@ -466,9 +452,7 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
       LOG_WARN("unexpected top k heap count", K(ret), K(top_k_heap_.count()), K_(top_k_count));
     } else if (top_k_heap_.count() < top_k_count_) {
       if (OB_FAIL(id_cache_.at(top_k_heap_.count()).from_datum(id_datum))) {
-        LOG_WARN("failed to from datum", K(ret));
       } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, top_k_heap_.count())))) {
-        LOG_WARN("failed to push top k item", K(ret));
       }
     } else {
       const int64_t cache_idx = top_k_heap_.top().cache_idx_;
@@ -476,11 +460,8 @@ int ObSPIVBMWIter::process_collected_row(const ObDatum &id_datum, const double r
       if (relevance <= top_k_threshold) {
         // not a new top k candidate
       } else if (OB_FAIL(id_cache_.at(cache_idx).from_datum(id_datum))) {
-        LOG_WARN("failed to from datum", K(ret));
       } else if (OB_FAIL(top_k_heap_.pop())) {
-        LOG_WARN("failed to pop top k heap", K(ret));
       } else if (OB_FAIL(top_k_heap_.push(TopKItem(relevance, cache_idx)))) {
-        LOG_WARN("failed to push top k item", K(ret));
       }
     }
   }
@@ -494,7 +475,6 @@ int ObSPIVBMWIter::init_before_wand_process()
   for (int64_t i = 0; OB_SUCC(ret) && i < dim_iters_->count(); ++i) {
     ObSPIVBlockMaxDimIter *block_max_iter = static_cast<ObSPIVBlockMaxDimIter *>(dim_iters_->at(i));
     if (OB_FAIL(block_max_iter->init_block_max_iter())) {
-      LOG_WARN("failed to init block max iter", K(ret));
     }
   }
   return ret;

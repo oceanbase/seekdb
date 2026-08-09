@@ -395,7 +395,6 @@ int SCN::fixed_serialize(char* buf, const int64_t buf_len, int64_t& pos) const
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, val_))) {
-    PALF_LOG(WARN, "failed to encode val_", K(buf), K(buf_len), K(new_pos), K(ret));
   } else {
     pos = new_pos;
   }
@@ -416,7 +415,6 @@ int SCN::fixed_deserialize_without_transform(const char* buf, const int64_t data
     PALF_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos,
                                                reinterpret_cast<int64_t*>(&val_)))) {
-    PALF_LOG(WARN, "failed to decode val_", K(buf), K(data_len), K(new_pos), K(ret));
   } else {
     pos = new_pos;
   }
@@ -427,7 +425,6 @@ int SCN::fixed_deserialize(const char* buf, const int64_t data_len, int64_t& pos
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fixed_deserialize_without_transform(buf, data_len, pos))) {
-    PALF_LOG(WARN, "failed to fixed_deserialize_without_transform", K(buf), K(data_len), K(pos), K(ret));
   } else {
     (void)transform_max_();
   }
@@ -449,7 +446,6 @@ int SCN::serialize(char* buf, const int64_t buf_len, int64_t& pos) const
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, new_pos, val_))) {
-    PALF_LOG(WARN, "failed to encode val_", K(buf), K(buf_len), K(new_pos), K(ret));
   } else {
     pos = new_pos;
   }
@@ -464,7 +460,6 @@ int SCN::deserialize(const char* buf, const int64_t data_len, int64_t& pos)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, new_pos, val_))) {
-    PALF_LOG(WARN, "failed to decode val_", K(buf), K(data_len), K(new_pos), K(ret));
   } else {
     pos = new_pos;
     (void)transform_max_();

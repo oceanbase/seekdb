@@ -142,7 +142,6 @@ public:
       }
       //table version take minimum value
     } else if (table_version < max_table_version_) {
-      TRANS_LOG(DEBUG, "current table version lower the last one", K(table_version), K(*this));
       //Not the first update of table version, expected not to be int64_max
     } else if (INT64_MAX == table_version) {
       TRANS_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "unexpected table version", K(table_version), K(*this));

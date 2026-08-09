@@ -71,7 +71,6 @@ int ObTruncateInfoArray::init_with_kv_cache_array(
     is_inited_ = true;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < input_array.count(); ++idx) {
       if (OB_FAIL(append_with_deep_copy(input_array.at(idx)))) {
-        LOG_WARN("failed to append", KR(ret), K(idx), K(input_array.at(idx)));
       }
     }
     if (OB_FAIL(ret)) {
@@ -89,9 +88,7 @@ int ObTruncateInfoArray::append_with_deep_copy(const ObTruncateInfo &truncate_in
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(*allocator_, info))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(info->assign(*allocator_, truncate_info))) {
-    LOG_WARN("failed to copy truncate info", K(ret), K(truncate_info));
   } else {
     ret = inner_append_and_sort(*info);
   }
@@ -119,7 +116,6 @@ int ObTruncateInfoArray::inner_append_and_sort(ObTruncateInfo &info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(truncate_info_array_.push_back(&info))) {
-    LOG_WARN("failed to push back to array", K(ret));
   } else {
     lib::ob_sort(truncate_info_array_.begin(), truncate_info_array_.end(), compare);
   }

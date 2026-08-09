@@ -552,7 +552,6 @@ int ObSysVarFactory::create_all_sys_vars_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_store_mem())) {
-    LOG_WARN("Fail to init", K(ret));
   } else if (!all_sys_vars_created_) {
     int64_t store_idx = -1;
     ObBasicSysVar *sys_var_ptr = NULL;
@@ -10671,7 +10670,6 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var_ptr = NULL;
   if (OB_FAIL(try_init_store_mem())) {
-    LOG_WARN("fail to init", K(ret));
   } else if (-1 == store_idx && OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sys_var_id, store_idx))) {
     LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
   } else if (store_idx < 0 || store_idx >= share::ObSysVarMeta::ALL_SYS_VARS_COUNT) {
@@ -10688,7 +10686,6 @@ int ObSysVarFactory::create_sys_var(share::ObSysVarClassType sys_var_id, ObBasic
   }
   if (OB_SUCC(ret) && OB_ISNULL(sys_var_ptr)) {
     if (OB_FAIL(create_sys_var(allocator_, sys_var_id, sys_var_ptr))) {
-      LOG_WARN("fail to calc sys var", K(ret), K(sys_var_id));
     }
   }
   if (OB_SUCC(ret)) {

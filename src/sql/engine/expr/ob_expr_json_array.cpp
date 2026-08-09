@@ -98,7 +98,6 @@ int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
       LOG_WARN("failed: get_json_val failed", K(ret));
     } else if (OB_FAIL(j_base->array_append(j_val))) {
-      LOG_WARN("failed: json array append json value", K(ret));
     }
   }
 
@@ -108,9 +107,7 @@ int ObExprJsonArray::eval_json_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
       ret = OB_ERR_JSON_OUT_OF_DEPTH;
       LOG_WARN("current json over depth", K(ret), K(j_arr.depth()));
     } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-      LOG_WARN("failed: json get binary", K(ret));
     } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-      LOG_WARN("fail to pack json result", K(ret));
     }
   }
 

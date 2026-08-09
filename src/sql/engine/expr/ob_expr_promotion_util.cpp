@@ -51,7 +51,6 @@ int ObExprPromotionUtil::get_nvl_type(ObExprResType &type, const ObExprResType &
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_calc_type(type, type1, type2, NVL_TYPE_PROMOTION))) {
-    LOG_WARN("failed to get calc type", K(ret), K(type1), K(type2), K(type));
   }
   return ret;
 }

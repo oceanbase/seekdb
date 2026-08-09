@@ -87,7 +87,6 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
     // if called by check_default_value in ddl resolver, no sql ctx, get guard from session cache
     if (OB_ISNULL(exec_ctx.get_sql_ctx()) || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
       if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-        LOG_WARN("fail to get schema guard", K(ret));
       } else {
         schema_guard_ptr = &schema_guard;
       }
@@ -145,14 +144,12 @@ int ObExprObjectConstruct::eval_object_construct(const ObExpr &expr, ObEvalCtx &
   ObObj *objs = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("failed to eval param ", K(ret));
   } else if (expr.arg_cnt_ > 0
      && OB_ISNULL(objs = static_cast<ObObj *>
         (ctx.exec_ctx_.get_allocator().alloc(expr.arg_cnt_ * sizeof(ObObj))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc mem for objs", K(ret));
   } else if (OB_FAIL(fill_obj_stack(expr, ctx, objs))) {
-    LOG_WARN("failed to convert obj", K(ret));
   } else if (expr.arg_cnt_ > 0 && OB_FAIL(check_types(ctx, objs, info->elem_types_, expr.arg_cnt_))) {
     LOG_WARN("failed to check types", K(ret));
   } else if (info->rowsize_ != pl::ObRecordType::get_init_size(expr.arg_cnt_)) {
@@ -234,7 +231,6 @@ int ObExprObjectConstruct::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, Ob
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     ObDatum &param = expr.locate_param_datum(ctx, i);
     if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-      LOG_WARN("failed to convert obj", K(ret), K(i));
     }
   }
   return ret;

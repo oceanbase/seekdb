@@ -108,11 +108,8 @@ public:
       ret = OB_INIT_TWICE;
       OCCAM_LOG(WARN, "init twice", K(this), K_(id), K(ret));
     } else if (OB_FAIL(func_.assign(std::forward<T>(func)))) {
-      OCCAM_LOG(WARN, "assign function failed", K(this), K_(id), K(ret));
     } else if (OB_FAIL(share::ObThreadPool::init())) {
-      OCCAM_LOG(WARN, "ObThreadPool::init failed", K(this), K_(id), K(ret));
     } else if (OB_FAIL(share::ObThreadPool::start())) {
-      OCCAM_LOG(WARN, "start function failed", K(this), K_(id), K(ret));
     } else {
       OCCAM_LOG(INFO, "init thread success", K(this), K_(id), K(ret));
       is_inited_ = true;
@@ -183,7 +180,6 @@ inline void CallWithTupleUnpack(seq<S...>,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(promise.set(func(std::get<S>(tpl) ...)))) {
-    OCCAM_LOG(ERROR, "set promise failed", K(ret));
   }
 }
 
@@ -203,7 +199,6 @@ inline void CallWithTupleUnpack(seq<S...>,
   int ret = OB_SUCCESS;
   func(std::get<S>(tpl) ...);
   if (OB_FAIL(promise.set())) {
-    OCCAM_LOG(ERROR, "set promise failed", K(ret));
   }
 }
 
@@ -301,7 +296,6 @@ public:
         is_stopped_ = true;
       }
       if (OB_FAIL(cv_.broadcast())) {
-        OCCAM_LOG(ERROR, "cv broadcast failed", K(ret));
       }
       for (int64_t idx = 0; idx < thread_num_; ++idx) {
         threads_[idx].stop();
@@ -345,10 +339,8 @@ public:
       ret = OB_NOT_INIT;
     } else {
       using result_type = typename std::invoke_result<F, Args...>::type;
-      OCCAM_LOG(DEBUG, "commit task");
       ObPromise<result_type> promise;
       if (OB_FAIL(promise.init())) {
-        OCCAM_LOG(WARN, "init promise failed", K(ret));
       } else {
         ObFunction<void()> function;
         std::tuple<Args...> args_tuple = std::tuple<Args...>(std::forward<Args>(args)...);
@@ -358,9 +350,7 @@ public:
                                                               f,
                                                               promise);
         }))) {
-          OCCAM_LOG(WARN, "assign function failed", K(ret));
         } else if (OB_FAIL(queues_[static_cast<int>(PRIORITY)].push_task(function))) {
-          OCCAM_LOG(WARN, "push task failed", K(ret));
         } else {
           future = promise.get_future();
           {
@@ -368,7 +358,6 @@ public:
             total_task_count_++;
           }
           if (OB_FAIL(cv_.signal())) {
-            OCCAM_LOG(ERROR, "cv signal failed", K(ret));
           }
         }
       }
@@ -401,7 +390,6 @@ private:
               ObThreadCondGuard guard(cv_);
               total_task_count_--;
             }
-            OCCAM_LOG(DEBUG, "successfully fetch a task", K(thread_id));
             break; // break the fetch loop to execute the task
           }
         }
@@ -411,7 +399,6 @@ private:
             OCCAM_LOG(ERROR, "fetch a invalid task", K(thread_id), K(function));
           } else {
             function();
-            OCCAM_LOG(DEBUG, "execute task done", K(thread_id), K(function));
           }
           function.reset();
         } else if (ret == OB_EAGAIN) { // all queue empty, waiting for someone commit task
@@ -419,7 +406,6 @@ private:
           ObThreadCondGuard guard(cv_);
           while (total_task_count_ == 0 && !is_stopped_) {
             if (OB_FAIL(cv_.wait())) {
-              OCCAM_LOG(ERROR, "cv_ wait return err code", K(ret));
             }
           }
         } else { // unknown error
@@ -479,7 +465,6 @@ private:
         // OCCAM_LOG(WARN, "no task in queue", K_(head), K(tail_), K(thread_id));
       } else if (OB_SUCC(function.assign(std::move((buffer_[head_ & mask_value_]))))) {
         ++head_;
-        OCCAM_LOG(DEBUG, "fetch task success", KP(this), K_(head), K(tail_), K(thread_id), K(function), K(queue_size_));
       } else {
         OCCAM_LOG(WARN, "fetch task failed", K_(head), K(tail_), K(thread_id));
       }
@@ -498,7 +483,6 @@ private:
         OCCAM_LOG(WARN, "invalid argument", K(ret), K_(head), K_(tail), K(lbt()), K(function));
       } else if (OB_SUCC(buffer_[tail_ & mask_value_].assign(function))) {
         ++tail_;
-        OCCAM_LOG(DEBUG, "push task success", KP(this), K_(head), K_(tail), K(function), K(queue_size_));
       } else {
         OCCAM_LOG(WARN, "push task failed", K(ret), K_(head), K_(tail), K(lbt()));
       }
@@ -537,7 +521,6 @@ public:
     int ret = OB_SUCCESS;
     ret = ob_make_shared<occam::ObOccamThreadPool>(thread_pool_);
     if (OB_FAIL(ret)) {
-      OCCAM_LOG(WARN, "make shared failed");
     } else if (OB_FAIL(thread_pool_->init(
         thread_num, queue_size_square_of_2, thread_name, run_wrapper))) {
       thread_pool_.reset();
@@ -563,7 +546,6 @@ public:
     } else if (OB_FAIL(thread_pool_->commit_task<PRIORITY>(future,
                                                            std::forward<F>(f),
                                                            std::forward<Args>(args)...))) {
-      OCCAM_LOG(WARN, "commit task failed");
     }
     return ret;
   }
@@ -580,7 +562,6 @@ public:
     } else if (OB_FAIL(thread_pool_->commit_task<PRIORITY>(future,
                                                            std::forward<F>(f),
                                                            std::forward<Args>(args)...))) {
-      OCCAM_LOG(WARN, "commit task failed");
     }
     return ret;
   }

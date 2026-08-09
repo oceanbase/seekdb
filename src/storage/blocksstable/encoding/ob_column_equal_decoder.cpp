@@ -60,7 +60,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -70,7 +69,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -80,7 +78,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -93,7 +90,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -103,7 +99,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -113,7 +108,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -126,8 +120,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
     // not an exception, get from reffed column
     if (OB_SUCC(ret) && -1 == ref) {
       if (OB_FAIL(ctx.ref_decoder_->decode(*ctx.ref_ctx_, datum, row_id, bs, data, len))) {
-        LOG_WARN("ref_decoder_ decode failed", K(ret),
-            K(row_id), KP(data), K(len));
       }
     }
   }

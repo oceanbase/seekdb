@@ -39,15 +39,12 @@ ObDtlLocalChannel::ObDtlLocalChannel(
 ObDtlLocalChannel::~ObDtlLocalChannel()
 {
   destroy();
-  LOG_TRACE("dtl use time", K(times_), K(write_buf_use_time_), K(send_use_time_),
-    KP(id_), KP(peer_id_));
 }
 
 int ObDtlLocalChannel::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDtlBasicChannel::init())) {
-    LOG_WARN("Initialize fifo allocator fail", K(ret));
   }
   return ret;
 }
@@ -74,7 +71,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     if (buf->is_data_msg() && buf->use_interm_result()) {
       SERVER_MODULE_SCOPE {
         if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDTLIntermResultManager>()->process_interm_result(buf, peer_id_))) {
-          LOG_WARN("fail to process internal result", K(ret));
         }
       }
     } else if (OB_FAIL(DTL.get_channel(peer_id_, chan))) {
@@ -86,7 +82,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
       if (!buf->is_data_msg() && OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(*buf, header, keep_pos))) {
         LOG_WARN("failed to deserialize msg header", K(ret));
       } else if (header.is_drain()) {
-        LOG_TRACE("receive drain cmd, unregister local channel", KP(peer_id_));
         ret = OB_SUCCESS;
         tmp_ret = OB_SUCCESS;
       } else if (buf->is_data_msg() && 1 == buf->seq_no()) {
@@ -99,7 +94,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     } else {
       ObDtlLocalChannel *local_chan = reinterpret_cast<ObDtlLocalChannel*>(chan);
       if (OB_FAIL(local_chan->feedup(buf))) {
-        LOG_WARN("feed up DTL channel fail", KP(peer_id_), K(ret));
       } else if (OB_ISNULL(local_chan->get_dfc())) {
         LOG_TRACE("dfc of local channel is null", K(msg_response_.is_block()), KP(peer_id_),
                   K(ret), KP(local_chan->get_id()));
@@ -142,7 +136,6 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
     LOG_WARN("invalid argument", K(ret));
   } else {
     if (OB_FAIL(wait_response())) {
-      LOG_WARN("failed to wait response", K(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(wait_unblocking_if_blocked())) {
       LOG_WARN("failed to block data flow", K(ret));
@@ -155,16 +148,13 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
     // The consumer channel may not be linked when the first message arrives.
     bool is_eof = buf->is_eof();
     if (OB_FAIL(msg_response_.start())) {
-      LOG_WARN("start message process fail", K(ret));
     } else if (OB_FAIL(send_shared_message(buf))) {
       // 1) for data message, if dtl channel is not built, it's cached by first buffer manage,
       //    it's processed rightly, or it's drain
       //    so don't wait first response
       // 2) control message SQC and QC channel also must be linked
       // Bloom-filter messages use their local datahub path instead of this channel.
-      LOG_DEBUG("data channel linked", K(ret), KP(peer_id_));
     }
-    LOG_TRACE("local channel status", K(ret), KP(peer_id_));
     if (is_eof) {
       set_eof();
     }

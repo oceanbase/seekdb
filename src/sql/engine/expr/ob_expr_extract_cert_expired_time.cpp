@@ -73,13 +73,11 @@ int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr,
     if (!ob_is_castable_type_class(in_tc)) {
       res.set_null();
     } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-      LOG_WARN("eval arg failed", K(ret));
     } else if (arg->is_null()) {
       res.set_null();
     } else if (in_tc != ObTextTC) {
       const ObString &arg_str = arg->get_string();
       if (OB_FAIL(extract_cert_expired_time(arg_str.ptr(), arg_str.length(), expired_time))) {
-        LOG_WARN("failed to extract expired time", K(ret), K(*arg), K(in_tc));
       } else {
         res.set_timestamp(expired_time);
       }
@@ -89,9 +87,7 @@ int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr,
       ObString text_str;
       if (OB_FAIL(ObTextStringHelper::get_string(ctx.exec_ctx_, expr, tmp_alloc,
                   0, arg, text_str))) {
-        LOG_WARN("failed to read realdata", K(ret));
       } else if (OB_FAIL(extract_cert_expired_time(text_str.ptr(), text_str.length(), expired_time))) {
-        LOG_WARN("failed to extract expired time", K(ret), K(*arg), K(in_tc));
       } else {
         res.set_timestamp(expired_time);
       }

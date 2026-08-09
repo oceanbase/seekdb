@@ -543,7 +543,6 @@ protected:
       // project
       FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
         if (OB_FAIL((*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
-          SQL_ENG_LOG(WARN, "expr evaluate failed", K(ret), K(*e));
         } else {
           (*e)->get_eval_info(eval_ctx_).projected_ = true;
         }
@@ -678,13 +677,11 @@ int ObOpSpec::find_target_specs(T &spec, const FILTER &f, common::ObIArray<T *> 
         ret = common::OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "NULL child", K(ret), K(spec));
       } else if (OB_FAIL(find_target_specs(*spec.get_child(i), f, res))) {
-        SQL_ENG_LOG(WARN, "find target specs failed", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && f(spec)) {
     if (OB_FAIL(res.push_back(&spec))) {
-      SQL_ENG_LOG(WARN, "array push back failed", K(ret));
     }
   }
   return ret;

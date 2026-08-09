@@ -88,11 +88,8 @@ DEFINE_SERIALIZE(MacroBlockId)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid macro block id", K(ret), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, first_id_))) {
-    LOG_WARN("serialize first id failed", K(ret), K(new_pos), K(buf_len), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, second_id_))) {
-    LOG_WARN("serialize second id failed", K(ret), K(new_pos), K(buf_len), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, third_id_))) {
-    LOG_WARN("serialize third id failed", K(ret), K(new_pos), K(buf_len), K(*this));
   } else {
     pos = new_pos;
   }
@@ -107,11 +104,8 @@ DEFINE_DESERIALIZE(MacroBlockId)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KP(buf), K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &first_id_))) {
-    LOG_WARN("decode first id failed", K(ret), K(new_pos), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &second_id_))) {
-    LOG_WARN("decode second id failed", K(ret), K(new_pos), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &third_id_))) {
-    LOG_WARN("decode third id failed", K(ret), K(new_pos), K(data_len));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid macro block id", K(ret), K(*this));

@@ -84,7 +84,6 @@ int ObExprXor::eval_xor(const ObExpr &expr,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arg", K(ret), K(expr.args_[0]));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-      LOG_WARN("failed to eval", K(ret));
     } else if (OB_ISNULL(param)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid param", K(ret), K(param));
@@ -100,7 +99,6 @@ int ObExprXor::eval_xor(const ObExpr &expr,
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(i));
       } else if (OB_FAIL(expr.args_[i]->eval(ctx, param))) {
-        LOG_WARN("failed to eval param", K(ret));
       } else if (OB_ISNULL(param)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid param", K(ret), K(param));

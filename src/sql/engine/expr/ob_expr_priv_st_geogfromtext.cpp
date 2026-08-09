@@ -78,7 +78,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
 
   // get wkt
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, datum))) {
-    LOG_WARN("eval wkt arg failed", K(ret));
   } else if(datum->is_null()){
     res.set_null();
   } else {
@@ -91,7 +90,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     ObString wkt = datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkt))) {
-      LOG_WARN("fail to get real data.", K(ret), K(wkt));
     } else if (OB_NOT_NULL(wkt.find(';'))) {
       ObString srid_str = wkt.split_on(';');
       if (OB_FAIL(ObGeoExprUtils::parse_srid(srid_str, srid))) {
@@ -107,7 +105,6 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, srid, srs_item))) {
-      LOG_WARN("failed to get srs item", K(ret));
     } else if (OB_ISNULL(srs_item)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null srs item", K(ret));
@@ -128,13 +125,11 @@ int ObExprPrivSTGeogFromText::eval_priv_st_geogfromtext_common(const ObExpr &exp
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null geo after parse_wkt", K(ret), K(wkt));
     } else if (OB_FAIL(ObGeoExprUtils::correct_coordinate_range(srs_item, geo, func_name))) {
-      LOG_WARN("check geo coordinate range failed", K(ret));
     } 
     
     if (OB_SUCC(ret)) {
       ObString res_wkb;
       if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs_item, res_wkb))) {
-        LOG_WARN("failed to write geometry to wkb", K(ret));
       } else {
         res.set_string(res_wkb);
       }

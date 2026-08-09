@@ -33,13 +33,9 @@ int ObParamedSelectItemCtx::deep_copy(const ObParamedSelectItemCtx &other, ObIAl
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null allocator", K(ret));
   } else if (OB_FAIL(ob_write_string(*allocator, other.paramed_cname_, paramed_cname_))) {
-    LOG_WARN("failed to write stirng", K(ret));
   } else if (OB_FAIL(param_str_offsets_.assign(other.param_str_offsets_))) {
-    LOG_WARN("failed to deep copy param string offsets", K(ret));
   } else if (OB_FAIL(param_idxs_.assign(other.param_idxs_))) {
-    LOG_WARN("failed to deep copy param idxs", K(ret));
   } else if (OB_FAIL(neg_param_idxs_.assign(other.neg_param_idxs_))) {
-    LOG_WARN("failed to deep copy neg param idxs", K(ret));
   } else {
     esc_str_flag_ = other.esc_str_flag_;
     need_check_dup_name_ = other.need_check_dup_name_;
@@ -73,23 +69,14 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
     ret = OB_ERR_UNEXPECTED;
   } else {
     if (OB_FAIL(ob_write_string(*allocator, other.dname_, dname_))) {
-      LOG_WARN("ObStringBuf write Field.dname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.tname_, tname_))) {
-      LOG_WARN("ObStringBuf write Field.tname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.org_tname_, org_tname_))) {
-      LOG_WARN("ObStringBuf write Field.org_tname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.cname_, cname_))) {
-      LOG_WARN("ObStringBuf write Field.cname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.org_cname_, org_cname_))) {
-      LOG_WARN("ObStringBuf write Field.org_cname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_name_, type_name_))) {
-      LOG_WARN("ObStringBuf write Field.type_name_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_owner_, type_owner_))) {
-      LOG_WARN("ObStringBuf write Field.type_owner_ string error", K(ret));
     } else if (OB_FAIL(deep_copy_obj(*allocator, other.type_, type_))) {
-      LOG_WARN("deep copy obj failed", K(ret), K(other.type_));
     } else if (OB_FAIL(deep_copy_obj(*allocator, other.default_value_, default_value_))) {
-      LOG_WARN("deep copy obj failed", K(ret), K(other.default_value_));
     } else {
       accuracy_ = other.accuracy_;
       charsetnr_ = other.charsetnr_;
@@ -105,7 +92,6 @@ int ObField::full_deep_copy(const ObField &other, ObIAllocator *allocator)
         } else if (FALSE_IT(paramed_ctx_ = new(buf)ObParamedSelectItemCtx())) {
           // do nothing
         } else if (OB_FAIL(paramed_ctx_->deep_copy(*other.paramed_ctx_, allocator))) {
-          LOG_WARN("failed to deep copy paramed ctx", K(ret));
         } else {
           // do nothing
         }
@@ -123,19 +109,12 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
     ret = OB_ERR_UNEXPECTED;
   } else {
     if (OB_FAIL(ob_write_string(*allocator, other.dname_, dname_))) {
-      LOG_WARN("ObStringBuf write Field.dname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.tname_, tname_))) {
-      LOG_WARN("ObStringBuf write Field.tname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.org_tname_, org_tname_))) {
-      LOG_WARN("ObStringBuf write Field.org_tname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.cname_, cname_))) {
-      LOG_WARN("ObStringBuf write Field.cname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.org_cname_, org_cname_))) {
-      LOG_WARN("ObStringBuf write Field.org_cname_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_name_, type_name_))) {
-      LOG_WARN("ObStringBuf write Field.type_name_ string error", K(ret));
     } else if (OB_FAIL(ob_write_string(*allocator, other.type_owner_, type_owner_))) {
-      LOG_WARN("ObStringBuf write Field.type_name_ string error", K(ret));
     } else {
       // Attention: These two members are not deep copied.
       type_ = other.type_;
@@ -156,7 +135,6 @@ int ObField::deep_copy(const ObField &other, ObIAllocator *allocator)
         } else if (FALSE_IT(paramed_ctx_ = new(buf)ObParamedSelectItemCtx())) {
           // do nothing
         } else if (OB_FAIL(paramed_ctx_->deep_copy(*other.paramed_ctx_, allocator))) {
-          LOG_WARN("failed to deep copy paramed ctx", K(ret));
         } else {
           // do nothing
         }
@@ -297,7 +275,6 @@ int ObField::get_field_mb_length(const ObObjType type,
       } else {
         int64_t mbmaxlen = 1;
         if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(charsetnr, mbmaxlen))) {
-          LOG_WARN("fail to get mbmaxlen", K(charsetnr), K(ret));
         } else {
           if (tc == ObTextTC) {
             // compat mysql-jdbc 8.x for judge text type by length
@@ -368,7 +345,6 @@ int ObField::get_field_mb_length(const ObObjType type,
       } else {
         int64_t mbmaxlen = 1;
         if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(charsetnr, mbmaxlen))) {
-          LOG_WARN("fail to get mbmaxlen", K(charsetnr), K(ret));
         } else {
           length = static_cast<uint32_t>(accuracy.get_length() * mbmaxlen);
         }

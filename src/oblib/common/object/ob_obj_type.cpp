@@ -480,7 +480,6 @@ int ob_collection_str(const ObObjType &type, const common::ObIArray<ObString> &t
   } else {
     ObString cur_str = type_info.at(0);
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "%.*s", cur_str.length(), cur_str.ptr()))) {
-      LOG_WARN("fail to print array type info", K(ret), K(buff_length), K(pos));
     }
   }
   return ret;
@@ -495,10 +494,8 @@ int ob_enum_or_set_str(const ObObjMeta &obj_meta, const common::ObIArray<ObStrin
     LOG_WARN("unexpected column type", K(ret), K(obj_meta));
   } else if (ObEnumType == obj_meta.get_type()) {
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "enum("))) {
-      LOG_WARN("fail to print buffer", K(ret), K(buff_length), K(pos));
     }
   } else if (OB_FAIL(databuff_printf(buff, buff_length, pos, "set("))) {
-    LOG_WARN("fail to print buffer", K(ret), K(buff_length), K(pos));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < type_info.count(); ++i) {
@@ -508,16 +505,11 @@ int ob_enum_or_set_str(const ObObjMeta &obj_meta, const common::ObIArray<ObStrin
                                            obj_meta.get_collation_type(),
                                            ObCharset::get_system_collation(),
                                            cur_str))) {
-      LOG_WARN("convert string to system collation failed",
-               K(ret), K(obj_meta), K(cur_str));
     } else if (OB_FAIL(databuff_printf(buff, buff_length, pos, "'%.*s'", cur_str.length(), cur_str.ptr()))) {
-      LOG_WARN("fail to print buffer", K(ret), K(buff_length), K(pos), K(i));
     } else if (i == type_info.count() - 1) {
       if (OB_FAIL(databuff_printf(buff, buff_length, pos, ")"))) {
-        LOG_WARN("fail to print buffer", K(ret), K(buff_length), K(pos), K(i));
       }
     } else if (OB_FAIL(databuff_printf(buff, buff_length, pos, ","))) {
-      LOG_WARN("fail to print buffer", K(ret), K(buff_length), K(pos), K(i));
     }
   }
   return ret;
@@ -578,15 +570,12 @@ int ob_sql_type_str_with_coll(char *buff,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_sql_type_str(buff, buff_length, pos, type, length, precision, scale, coll_type, type_info, sub_type, is_string_lob))) {
-    LOG_WARN("fail to get data type str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
   } else if (ob_is_string_type(type) && CS_TYPE_BINARY != coll_type) {
       if (ObCharset::is_default_collation(coll_type)) {
         if (OB_FAIL(databuff_printf(buff, buff_length, pos, " CHARSET %s", ObCharset::charset_name(coll_type)))) {
-          LOG_WARN("fail to concat charset str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
         }
       } else {
         if (OB_FAIL(databuff_printf(buff, buff_length, pos, " CHARSET %s COLLATE %s", ObCharset::charset_name(coll_type), ObCharset::collation_name(coll_type)))) {
-          LOG_WARN("fail to concat charset and coll_type str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
         }
       }
   }
@@ -664,23 +653,19 @@ int ob_sql_type_str(char *buff,
   static_assert(sizeof(sql_type_name) / sizeof(ObSqlTypeStrFunc) == ObMaxType + 1, "Not enough initializer");
   if (ob_is_geometry_tc(type) && static_cast<common::ObGeoType>(sub_type) != common::ObGeoType::GEOMETRY) {
     if (OB_FAIL(ob_geometry_sub_type_str(buff, buff_length, pos, static_cast<common::ObGeoType>(sub_type)))) {
-      LOG_WARN("fail to get geometry sub type str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
     }
   } else if (ob_is_collection_sql_type(type)) {
     int64_t pos = 0;
     if (OB_FAIL(ob_collection_str(type, type_info, buff, buff_length, pos))) {
-      LOG_WARN("fail to get enum_or_set str", K(ret), K(type), K(type_info), K(buff_length), K(pos));
     }
   } else if (is_string_lob) {
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "string"))) {
-      LOG_WARN("fail to print string lob str", K(ret), K(buff_length), K(pos));
     }
   } else if (ob_is_enumset_tc(type)) {
      ObObjMeta obj_meta;
      obj_meta.set_type(type);
      obj_meta.set_collation_type(coll_type);
     if (OB_FAIL(ob_enum_or_set_str(obj_meta, type_info, buff, buff_length, pos))) {
-      LOG_WARN("fail to get enum_or_set str", K(ret), K(type), K(type_info), K(obj_meta), K(buff_length), K(pos));
     }
   } else {
     ret = sql_type_name[OB_LIKELY(type < ObMaxType) ? type : ObMaxType](buff, buff_length, pos, length, precision, scale, coll_type);
@@ -759,23 +744,19 @@ int ob_sql_type_str(char *buff,
   } else if (ob_is_geometry_tc(type) && geo_type != common::ObGeoType::GEOMETRY) {
     int64_t pos = 0;
     if (OB_FAIL(ob_geometry_sub_type_str(buff, buff_length, pos, geo_type))) {
-      LOG_WARN("fail to get geometry sub type str", K(ret), K(geo_type), K(buff), K(buff_length), K(pos));
     }
   } else if (ob_is_collection_sql_type(type)) {
     int64_t pos = 0;
     if (OB_FAIL(ob_collection_str(type, type_info, buff, buff_length, pos))) {
-      LOG_WARN("fail to get enum_or_set str", K(ret), K(type), K(type_info), K(buff_length), K(pos));
     }
   } else if (is_string_lob) {
     int64_t pos = 0;
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "string"))) {
-      LOG_WARN("fail to print string lob str", K(ret), K(buff_length), K(pos));
     }
   } else if (OB_ISNULL(sql_type_name[type])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("function pointer is NULL", K(type), K(ret));
   } else if (OB_FAIL(sql_type_name[type](buff, buff_length, coll_type))) {
-    LOG_WARN("fail to print type", K(type), K(buff_length), K(coll_type), K(ret));
   }
 
   return ret;
@@ -797,15 +778,12 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
   UNUSED(default_length_semantics);
   if (obj_meta.is_enum_or_set()) {
     if (OB_FAIL(ob_enum_or_set_str(obj_meta, type_info, buff, buff_length, pos))) {
-      LOG_WARN("fail to get enum_or_set str", K(ret), K(obj_meta), K(accuracy), K(buff_length), K(pos));
     }
   } else if (obj_meta.is_geometry() && static_cast<common::ObGeoType>(sub_type) != common::ObGeoType::GEOMETRY) {
     if (OB_FAIL(ob_geometry_sub_type_str(buff, buff_length, pos, static_cast<common::ObGeoType>(sub_type)))) {
-      LOG_WARN("fail to get geometry sub type str", K(ret), K(sub_type), K(buff), K(buff_length), K(pos));
     }
   } else if (obj_meta.is_collection_sql_type()) {
     if (OB_FAIL(ob_collection_str(obj_meta.get_type(), type_info, buff, buff_length, pos))) {
-      LOG_WARN("fail to get enum_or_set str", K(ret), K(obj_meta), K(accuracy), K(buff_length), K(pos));
     }
   } else {
     ObObjType datatype = obj_meta.get_type();
@@ -815,7 +793,6 @@ int ob_sql_type_str(const ObObjMeta &obj_meta,
                                 datatype, length,
                                 precision_or_length_semantics, accuracy.get_scale(),
                                 coll_type, type_info, sub_type, is_string_lob))) {
-      LOG_WARN("fail to print sql type", K(ret), K(obj_meta), K(accuracy));
     }
   }
   return ret;

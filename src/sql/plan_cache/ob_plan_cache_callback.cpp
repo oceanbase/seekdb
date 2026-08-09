@@ -46,7 +46,6 @@ int ObLibCacheAtomicOp::get_value(ObILibCacheNode *&cache_node)
     if (NULL != cache_node_) {
       cache_node_->dec_ref_count();
     }
-    SQL_PC_LOG(DEBUG, "failed to get read lock of lib cache value", K(ret));
   }
   return ret;
 }
@@ -70,7 +69,6 @@ void ObCacheObjAtomicOp::operator()(ObjKV &entry)
     } else {
       cache_obj_ = nullptr;
     }
-    SQL_PC_LOG(DEBUG, "succ to get plan");
   } else {
     // do nothing
   }

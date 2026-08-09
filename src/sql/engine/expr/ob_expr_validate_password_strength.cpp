@@ -87,16 +87,13 @@ int ObExprValidatePasswordStrength::eval_password_strength(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, pwd_param))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (pwd_param->is_null()) {
     res_datum.set_null();
   } else if (FALSE_IT(password_orig = pwd_param->get_string())) {
   } else if (FALSE_IT(c_src = expr.args_[0]->obj_meta_.get_collation_type())) {
   } else if (OB_FAIL(ObCharset::charset_convert(ctx.exec_ctx_.get_allocator(),
       password_orig, c_src, ObCharset::get_system_collation(), password))) {
-    LOG_WARN("fail to convert password to sys collation", K(password_orig), K(c_src), K(ret));
   } else if (OB_FAIL(calc_password_strength(password, *session, strength))) {
-    LOG_WARN("fail to calc password strength", K(password), K(ret));
   } else {
     res_datum.set_int(strength);
   }
@@ -115,7 +112,6 @@ int ObExprValidatePasswordStrength::calc_password_strength(const ObString &passw
   strength = 0;
   for (int i = STRENGTH_LESSWEAK; OB_SUCC(ret) && passed && i < STRENGTH_MAX; ++i) {
     if (OB_FAIL(validate_funcs_[i](password, static_cast<int64_t>(c_len), session, passed))) {
-      LOG_WARN("failed to validate", K(password), K(i), K(ret));
     } else if (passed) {
       strength = i * PASSWORD_STRENGTH_MULTIPLIER;
     }
@@ -133,7 +129,6 @@ int ObExprValidatePasswordStrength::validate_password_lessweak(const ObString &p
   passed = false;
   if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_VALIDATE_PASSWORD_CHECK_USER_NAME,
                                        check_user_name))) {
-    LOG_WARN("fail to get validate_password_length", K(ret));
   } else {
     passed = password_char_length >= VALID_PASSWORD_LENGTH_MIN && (0 != check_user_name ||
              !ObCharset::case_insensitive_equal(password, session.get_user_name()));
@@ -151,7 +146,6 @@ int ObExprValidatePasswordStrength::validate_password_low(const ObString &passwo
   UNUSED(password);
   passed = false;
   if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_VALIDATE_PASSWORD_LENGTH, valid_pw_len))) {
-    LOG_WARN("fail to get validate_password_length", K(ret));
   } else {
     passed = password_char_length >= valid_pw_len;
   }
@@ -175,13 +169,10 @@ int ObExprValidatePasswordStrength::validate_password_medium(const ObString &pas
   passed = false;
   if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_VALIDATE_PASSWORD_MIXED_CASE_COUNT,
                                        valid_mix_case_count))) {
-    LOG_WARN("fail to get validate_password_mixed_case_count", K(ret));
   } else if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_VALIDATE_PASSWORD_NUMBER_COUNT,
                                               valid_number_count))) {
-    LOG_WARN("fail to get validate_password_number_count", K(ret));
   } else if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_VALIDATE_PASSWORD_SPECIAL_CHAR_COUNT,
                                               valid_special_count))) {
-    LOG_WARN("fail to get validate_password_special_char_count", K(ret));
   } else {
     auto handle_char_func = [&lower_count, &upper_count, &digit_count, &special_count]
                             (ObString, int wchar) -> int {

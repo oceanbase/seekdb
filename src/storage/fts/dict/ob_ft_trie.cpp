@@ -39,7 +39,6 @@ int ObFTTrie<DATA_TYPE>::insert(const ObString &words, const ObFTTrieNodeData<DA
                                             words.ptr() + offset,
                                             words.length() - offset,
                                             char_len))) {
-      LOG_WARN("fail to get first valid char", K(ret));
     } else {
       ObString current_char(char_len, words.ptr() + offset);
       bool isNewNode = false;
@@ -55,14 +54,12 @@ int ObFTTrie<DATA_TYPE>::insert(const ObString &words, const ObFTTrieNodeData<DA
           new_child->dat_build_info_.level_ = level;
           new_child->is_leaf_ = (offset + char_len == words.length());
           if (OB_FAIL(new_child->word_.set_word(current_char.ptr(), current_char.length()))) {
-            LOG_WARN("Failed to set new child", K(ret));
           } else {
             typename ObFTTrieNode<DATA_TYPE>::NodeIndex child_index;
             ObString word = new_child->word_.get_word();
             child_index.word_.set_word(word.ptr(), word.length());
             child_index.child_ = new_child;
             if (OB_FAIL(node_ptr->add_children(child_index))) {
-              LOG_WARN("Failed to add children.", K(ret));
             } else {
               node_ptr = new_child;
               node_num_++;

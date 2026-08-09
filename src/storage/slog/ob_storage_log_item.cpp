@@ -227,16 +227,13 @@ int ObStorageLogItem::fill_log(
       STORAGE_REDO_LOG(WARN, "Log is too large", K(ret),
           "log_size", (entry_size + data_len), K(left_space));
     } else if (OB_FAIL(data->serialize(buf_, len_ + data_len, len_))) {
-      STORAGE_REDO_LOG(WARN, "Fail to serialize data", K(ret), K(len_));
     } else if (OB_UNLIKELY(len_ - data_start_pos != data_len)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(ERROR, "data actual serialize size is not equal to expected size",
           K(ret), K(data_start_pos), K_(len), K(data_len));
     } else if (OB_FAIL(entry.fill_entry(buf_ + data_start_pos, data_len,
         log_param.cmd_, seq))) {
-      STORAGE_REDO_LOG(WARN, "Fail to fill header", K(ret), K(data_start_pos));
     } else if (OB_FAIL(entry.serialize(buf_, entry_pos + entry_size, entry_pos))) {
-      STORAGE_REDO_LOG(WARN, "Fail to serialize entry", K(ret), K(entry_pos));
     } else if (OB_UNLIKELY(entry_pos - entry_start_pos != entry_size)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(ERROR, "entry actual serialize size is not equal to expected size",
@@ -269,7 +266,6 @@ int ObStorageLogItem::fill_batch_header(
     batch_header.checksum_ =
         batch_header.cal_checksum(buf_ + pos + batch_header.get_serialize_size(), data_len);
     if (OB_FAIL(batch_header.serialize(buf_, pos + batch_header.get_serialize_size(), pos))) {
-      STORAGE_REDO_LOG(WARN, "Fail to serialize batch header", K(ret), K(pos), K(ret));
     }
   }
 

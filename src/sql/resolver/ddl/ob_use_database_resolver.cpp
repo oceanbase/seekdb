@@ -61,15 +61,12 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid session info", K(session_info_), K(schema_checker_));
     } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-      SERVER_LOG(WARN, "fail to get name case mode", K(mode), K(ret));
     } else {
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       ObCollationType cs_type = CS_TYPE_INVALID;
       if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-        LOG_WARN("fail to get collation_connection", K(ret));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                   cs_type, perserve_lettercase, db_name))) {
-        LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
       } else {
         CK (OB_NOT_NULL(schema_checker_));
         CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
@@ -83,7 +80,6 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
         uint64_t database_id = OB_INVALID_ID;
         const share::schema::ObDatabaseSchema *db_schema = NULL;
         if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
-          LOG_WARN("faile to get session priv info", K(ret));
         } else if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))) {
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
           LOG_WARN("invalid database name. ", K(db_name));
@@ -96,7 +92,6 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(schema_checker_->get_database_schema( database_id, db_schema))) {
-            LOG_WARN("failed to get db schema", K(ret), K(database_id));
           } else {
             use_database_stmt->set_db_id(database_id);
             use_database_stmt->set_db_priv_set(session_priv.db_priv_set_);

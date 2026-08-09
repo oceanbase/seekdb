@@ -45,7 +45,6 @@ int ObMvccValueIterator::init(ObMvccAccessCtx &ctx,
   } else {
     value_ = value;
     if (OB_FAIL(lock_for_read_(query_flag))) {
-      TRANS_LOG(WARN, "fail to find start pos for iterator", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -74,7 +73,6 @@ int ObMvccValueIterator::lock_for_read_(const ObQueryFlag &flag)
 
   while (OB_SUCC(ret) && NULL != iter && NULL == version_iter_) {
     if (OB_FAIL(lock_for_read_inner_(flag, iter))) {
-      TRANS_LOG(WARN, "lock for read failed", K(ret));
     }
   }
 
@@ -235,7 +233,6 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
                                                           data_version,
                                                           *cleanout_op,
                                                           *recheck_op))) {
-      TRANS_LOG(WARN, "lock for read failed", KPC(iter), K(lock_for_read_arg));
     } else if (can_read) {
       // Case 5.1: data is cleanout by lock for read and can be read by reader's
       //           snapshot
@@ -246,7 +243,6 @@ int ObMvccValueIterator::lock_for_read_inner_(const ObQueryFlag &flag,
              && transaction::is_effective_trans_version(data_version)
              && !(iter->is_committed() || iter->is_aborted() || iter->is_elr())) {
         if (OB_FAIL(try_cleanout_tx_node_(iter))) {
-          TRANS_LOG(WARN, "cleanout tx state failed", K(ret), KPC(value_), KPC(iter));
         }
         // Tip1: We rely on the row_scn and state on the tx node if we really
         // can read from the tx node. So if the tx node is not cleanout, we must
@@ -311,9 +307,7 @@ int ObMvccValueIterator::get_next_node(const void *&tnode)
       if (NULL == version_iter_) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(try_cleanout_tx_node_(version_iter_))) {
-        TRANS_LOG(WARN, "fail to cleanout tnode", K(ret), K(*version_iter_));
       } else if (OB_FAIL(version_iter_->is_lock_node(is_lock_node))) {
-        TRANS_LOG(WARN, "fail to check is lock node", K(ret), K(*version_iter_));
       } else if (!(version_iter_->is_aborted()              // skip abort version
                    || is_lock_node)) {                      // skip lock node
         tnode = static_cast<const void *>(version_iter_);
@@ -368,7 +362,6 @@ int ObMvccRowIterator::init(
       range.start_key_,  !range.border_flag_.inclusive_start(),
       range.end_key_,    !range.border_flag_.inclusive_end(),
       query_engine_iter_))) {
-    TRANS_LOG(WARN, "query engine scan fail", K(ret));
   } else {
     ctx_ = &ctx;
     query_flag_ = query_flag;
@@ -412,7 +405,6 @@ int ObMvccRowIterator::get_next_row(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(value_iter_.init(*ctx_, tmp_key, value, query_flag_))) {
-      TRANS_LOG(WARN, "value iter init fail", K(ret), "ctx", *ctx_, KP(value), K(*value));
     } else if (!value_iter_.is_exist()) {
       // mvcc row is empty(no tnode), so we continue
     } else {

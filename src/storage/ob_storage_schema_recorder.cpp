@@ -80,7 +80,6 @@ int ObStorageSchemaRecorder::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(saved_schema_version), KP(log_handler));
   } else if (OB_FAIL(ObIStorageClogRecorder::init(saved_schema_version, log_handler))) {
-    LOG_WARN("failed to init ObIStorageClogRecorder", K(ret), K(saved_schema_version), K(log_handler));
   } else {
     ignore_storage_schema_ = tablet_id.is_special_merge_tablet();
     tablet_id_ = tablet_id;
@@ -108,9 +107,7 @@ int ObStorageSchemaRecorder::replay_schema_log(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported to update storage schema", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &update_version))) {
-    LOG_WARN("fail to deserialize table_version", K(ret), K_(tablet_id));
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(update_version, scn, buf, size, pos))) {
-    LOG_WARN("failed to replay clog", K(ret), K(scn), K_(tablet_id), K(update_version));
   }
   return ret;
 }
@@ -136,9 +133,7 @@ int ObStorageSchemaRecorder::inner_replay_clog(
       LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id), K(scn));
     }
   } else if (OB_FAIL(replay_storage_schema.deserialize(tmp_allocator, buf, size, pos))) {
-    LOG_WARN("fail to deserialize table schema", K(ret), K_(tablet_id));
   } else if (OB_FAIL(replay_storage_schema.get_store_column_count(stored_col_cnt, true/*full_col*/))) {
-    LOG_WARN("failed to get store column count from replay schema", KR(ret),K(replay_storage_schema));
   } else {
     // replay schema clog and update to ObStorageSchemaRecorder
     // need get column_cnt on schema_recorder to mini merge
@@ -228,9 +223,7 @@ int ObStorageSchemaRecorder::prepare_struct_in_lock(
   if (FAILEDx(get_tablet_handle(tablet_id_, *tablet_handle_ptr_))) {
     LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id));
   } else if (OB_FAIL(get_schema(update_version))) {
-    LOG_WARN("fail to get expected schema", K(ret), K_(tablet_id), K(update_version));
   } else if (OB_FAIL(generate_clog(clog_buf, clog_len))) {
-    LOG_WARN("failed to generate clog", K(ret), K_(tablet_id));
   }
   return ret;
 }
@@ -273,9 +266,7 @@ int ObStorageSchemaRecorder::get_schema(
     LOG_WARN("schema guard/schema/allocator is null", K(ret), K_(tablet_id), KP_(schema_guard),
         KP_(storage_schema), KP_(allocator));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()->get_runtime_schema_guard(*schema_guard_))) {
-    LOG_WARN("failed to get runtime schema guard", K(ret), K(table_id_));
   } else if (OB_FAIL(schema_guard_->get_schema_version(runtime_schema_version))) {
-    LOG_WARN("fail to get schema version", KR(ret), K(runtime_schema_version));
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, t_schema))
              || NULL == t_schema
              || table_version > t_schema->get_schema_version()) {
@@ -290,7 +281,6 @@ int ObStorageSchemaRecorder::get_schema(
   } else {
     table_version = t_schema->get_schema_version();
     if (OB_FAIL(storage_schema_->init(*allocator_, *t_schema, false/*skip_column_info*/))) {
-      LOG_WARN("failed to init storage schema", K(ret), K(t_schema));
     }
   }
 
@@ -321,7 +311,6 @@ int ObStorageSchemaRecorder::submit_log(
     LOG_WARN("log handler or storage_schema is null", K(ret), KP(storage_schema_),
         KP(clog_buf), K(clog_len), K(tablet_handle_ptr_));
   } else if (OB_FAIL(write_clog(clog_buf, clog_len))) {
-    LOG_WARN("fail to submit log", K(ret), K_(tablet_id));
   } else {
     LOG_INFO("submit schema log succeed", K(ret), K_(tablet_id), K(clog_scn_),
         "schema_version", storage_schema_->get_schema_version());
@@ -360,13 +349,9 @@ int ObStorageSchemaRecorder::generate_clog(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K_(tablet_id));
   } else if (OB_FAIL(log_header.serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize log header", K(ret));
   } else if (OB_FAIL(tablet_id_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize tablet_id", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, storage_schema_->get_schema_version()))) {
-    LOG_WARN("fail to serialize table_version", K(ret), K_(tablet_id));
   } else if (OB_FAIL(storage_schema_->serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize data_table_schema", K(ret), K_(tablet_id));
   }
 
   if (OB_SUCC(ret)) {

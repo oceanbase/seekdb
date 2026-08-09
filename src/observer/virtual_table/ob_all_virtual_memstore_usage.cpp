@@ -66,7 +66,6 @@ int ObAllVirtualMemstoreUsage::inner_get_next_row(ObNewRow *&row)
                                                                freeze_trigger,
                                                                memstore_limit,
                                                                freeze_cnt))) {
-            SERVER_LOG(WARN, "fail to get memstore used", K(ret));
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
             uint64_t col_id = output_column_ids_.at(i);

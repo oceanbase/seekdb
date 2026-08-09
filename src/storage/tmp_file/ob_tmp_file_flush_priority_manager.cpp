@@ -107,11 +107,8 @@ int ObTmpFileFlushPriorityManager::insert_data_flush_list(ObITmpFile &file, cons
   FileList flush_idx = FileList::MAX;
 
   if (OB_FAIL(get_data_list_idx_(dirty_page_size, flush_idx))) {
-    LOG_WARN("fail to get data list idx", KR(ret), K(dirty_page_size));
   } else if (OB_FAIL(insert_flush_list_(false/*is_meta*/, file, flush_idx))) {
-    LOG_WARN("fail to insert data flush list", KR(ret), K(file), K(dirty_page_size));
   } else {
-    LOG_DEBUG("insert_data_flush_list succ", K(file), K(dirty_page_size));
   }
 
   return ret;
@@ -127,12 +124,8 @@ int ObTmpFileFlushPriorityManager::insert_meta_flush_list(ObITmpFile &file,
   FileList flush_idx = FileList::MAX;
 
   if (OB_FAIL(get_meta_list_idx_(non_rightmost_dirty_page_num, rightmost_dirty_page_num, flush_idx))) {
-    LOG_WARN("fail to get meta list idx", KR(ret), K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   } else if (OB_FAIL(insert_flush_list_(true/*is_meta*/, file, flush_idx))) {
-    LOG_WARN("fail to insert meta flush list", KR(ret), K(file), K(flush_idx),
-             K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   } else {
-    LOG_DEBUG("insert_meta_flush_list succ", K(file), K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   }
 
   return ret;
@@ -147,7 +140,6 @@ int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObITmp
   ObTmpFileFlushList *flush_lists =  is_meta ? meta_flush_lists_ : data_flush_lists_;
 
   if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-    LOG_WARN("fail to get flush node", KR(ret), K(file));
   } else if (OB_ISNULL(flush_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("flush node is null", KR(ret), K(file));
@@ -165,11 +157,9 @@ int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObITmp
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to add node to list", KR(ret), K(flush_idx), K(flush_node));
     } else if (OB_FAIL(set_flush_page_level_(is_meta, flush_idx, file))) {
-      LOG_WARN("fail to set flush page level", KR(ret), K(is_meta), K(flush_idx), K(file));
     }
   }
 
-  LOG_DEBUG("insert tmp file into flush list", KR(ret), K(is_meta), K(file), K(flush_idx));
   return ret;
 }
 
@@ -181,11 +171,8 @@ int ObTmpFileFlushPriorityManager::update_data_flush_list(ObITmpFile &file, cons
   FileList new_flush_idx = FileList::MAX;
 
   if (OB_FAIL(get_data_list_idx_(dirty_page_size, new_flush_idx))) {
-    LOG_WARN("fail to get data list idx", KR(ret), K(dirty_page_size));
   } else if (OB_FAIL(update_flush_list_(false/*is_meta*/, file, new_flush_idx))) {
-    LOG_WARN("fail to update data flush list", KR(ret), K(file), K(dirty_page_size));
   } else {
-    LOG_DEBUG("update_data_flush_list succ", K(file), K(dirty_page_size));
   }
   return ret;
 }
@@ -200,12 +187,8 @@ int ObTmpFileFlushPriorityManager::update_meta_flush_list(ObITmpFile &file,
   FileList new_flush_idx = FileList::MAX;
 
   if (OB_FAIL(get_meta_list_idx_(non_rightmost_dirty_page_num, rightmost_dirty_page_num, new_flush_idx))) {
-    LOG_WARN("fail to get meta list idx", KR(ret), K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   } else if (OB_FAIL(update_flush_list_(true/*is_meta*/, file, new_flush_idx))) {
-    LOG_WARN("fail to update meta flush list", KR(ret), K(file), K(new_flush_idx),
-             K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   } else {
-    LOG_DEBUG("update_meta_flush_list succ", K(file), K(non_rightmost_dirty_page_num), K(rightmost_dirty_page_num));
   }
   return ret;
 }
@@ -220,12 +203,10 @@ int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmp
   FileList cur_flush_idx = FileList::INVALID;
 
   if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-    LOG_WARN("fail to get flush node", KR(ret), K(file));
   } else if (OB_ISNULL(flush_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("flush node is null", KR(ret), K(file));
   } else if (OB_FAIL(get_file_flush_level_(is_meta, file, cur_flush_idx))) {
-    LOG_WARN("fail to get file flush level", KR(ret), K(file));
   } else if (cur_flush_idx < FileList::L1 || cur_flush_idx >= FileList::MAX){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid flush list idx", KR(ret), K(new_flush_idx));
@@ -254,12 +235,10 @@ int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmp
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to add node to new list", KR(ret), K(new_flush_idx));
       } else if (OB_FAIL(set_flush_page_level_(is_meta, new_flush_idx, file))) {
-        LOG_WARN("fail to set flush page level", KR(ret), K(is_meta), K(new_flush_idx), K(file));
       }
     }
   }
 
-  LOG_DEBUG("update tmp file flush list", KR(ret), K(is_meta), K(file), K(new_flush_idx));
   return ret;
 }
 
@@ -267,9 +246,7 @@ int ObTmpFileFlushPriorityManager::remove_file(ObITmpFile &file)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(remove_file(true /*is_meta*/, file))) {
-    LOG_ERROR("fail to remove file from meta flush list", KR(ret));
   } else if (OB_FAIL(remove_file(false /*is_meta*/, file))) {
-    LOG_WARN("fail to remove file from data flush list", KR(ret));
   }
   return ret;
 }
@@ -283,7 +260,6 @@ int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &f
   ObITmpFile::ObTmpFileNode *flush_node = nullptr;
 
   if (OB_FAIL(get_file_flush_level_(is_meta, file, flush_idx))) {
-    LOG_WARN("fail to get file flush level", KR(ret), K(file));
   } else if (FileList::INVALID == flush_idx) {
     // file doesn't exist in the flushing list
     // do nothing
@@ -291,7 +267,6 @@ int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &f
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid flush list idx", KR(ret), K(flush_idx));
   } else if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-    LOG_WARN("fail to get flush node", KR(ret), K(file));
   } else if (OB_ISNULL(flush_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("flush node is null", KR(ret), K(file));
@@ -307,9 +282,7 @@ int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &f
     } else {
       file.dec_ref_cnt();
       if (OB_FAIL(set_flush_page_level_(is_meta, FileList::INVALID, file))) {
-        LOG_WARN("fail to set flush page level", KR(ret), K(is_meta), K(file));
       }
-      LOG_DEBUG("remove file succ", K(file), K(is_meta));
     }
   }
   return ret;
@@ -339,7 +312,6 @@ int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const
         int tmp_ret = OB_SUCCESS;
         ObITmpFile::ObTmpFileNode *node = nullptr;
         if (OB_FAIL(get_file_flush_node_(is_meta, *file, node))) {
-          LOG_WARN("fail to get flush node", KR(ret), KPC(file));
         } else if (OB_ISNULL(node)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("flush node is null", KR(ret), KPC(file));
@@ -348,7 +320,6 @@ int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const
           LOG_WARN("fail to add node to list", KR(tmp_ret), K(list_idx), KP(file));
         }
       } else {
-        LOG_DEBUG("pop file succ", KPC(file), K(is_meta));
         file->dec_ref_cnt(); // ref_cnt of flush list
         actual_count++;
       }

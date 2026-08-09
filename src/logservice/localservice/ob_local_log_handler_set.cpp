@@ -100,8 +100,6 @@ int ObLocalLogHandlerSet::activate()
         CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i));
       }
     } else if (OB_FAIL(handler->activate())) {
-      CLOG_LOG(WARN, "activate failed", K(ret), KP(handler), K(i),
-          "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");
     } else {
       CLOG_LOG(INFO, "activate local log handler",
           "cursor", i, "name", has_defined_to_string ? local_log_handler_str : "hasn't define to string");

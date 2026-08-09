@@ -89,7 +89,6 @@ int ObMultiVersionValueIterator::init_multi_version_iter()
   // cause any wrong logic, but take care of it
   multi_version_iter_ = iter;
   if (OB_FAIL(cur_trans_version_.convert_for_tx(max_committed_trans_version_))) {
-    TRANS_LOG(ERROR, "failed to convert scn", K(ret), K_(max_committed_trans_version));
   } else if (max_committed_trans_version_ <= version_range_.multi_version_start_) {
     // If the start version of multiple versions is greater than or equal to the current maximum submitted version
     // Then only iterate over all trans node compact results
@@ -154,7 +153,6 @@ int ObMultiVersionValueIterator::get_next_uncommitted_node(
         bool need_get_state = version_iter_->get_tx_end_scn() > merge_scn_;
         if (need_get_state) {
           if (OB_FAIL(get_state_of_curr_trans_node(trans_id, state))) {
-            TRANS_LOG(WARN, "failed to get status of curr trans node", K(ret), K(merge_scn_));
           }
         }
         // If trans is running, tx_end_scn must be INT64_MAX
@@ -246,8 +244,6 @@ int ObMultiVersionValueIterator::get_state_of_curr_trans_node(
     if (version_iter_->is_aborted()) {
       state = ObTxData::ABORT;
     } else if (OB_FAIL(get_trans_status(trans_id, state))) {
-      TRANS_LOG(WARN, "failed to get trans status in running status",
-                K(ret), K(trans_id), K(sql_sequence), K(merge_scn_));
     }
   }
   return ret;
@@ -263,7 +259,6 @@ int ObMultiVersionValueIterator::get_trans_status(const transaction::ObTransID &
                                                     merge_scn_,
                                                     state,
                                                     trans_version))) {
-    STORAGE_LOG(WARN, "check_with_tx_data fail.", K(trans_id));
   }
 
   return ret;
@@ -489,7 +484,6 @@ int ObMultiVersionRowIterator::init(
       range.start_key_,  !range.border_flag_.inclusive_start(),
       range.end_key_,    !range.border_flag_.inclusive_end(),
       query_engine_iter_))) {
-    TRANS_LOG(WARN, "query engine scan fail", K(ret));
   } else {
     query_engine_ = &query_engine;
     ctx_ = &ctx;
@@ -524,12 +518,10 @@ int ObMultiVersionRowIterator::get_next_row(
       TRANS_LOG(ERROR, "unexpected value null pointer", "ctx", *ctx_);
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(try_cleanout_mvcc_row_(tmp_key, value))) {
-      TRANS_LOG(WARN, "try cleanout mvcc row failed", K(ret), "ctx", *ctx_);
     } else if (OB_FAIL(value_iter_.init(ctx_,
                                         version_range_,
                                         tmp_key,
                                         value))) {
-      TRANS_LOG(WARN, "value iter init fail", K(ret), "ctx", *ctx_, KP(value), K(*value));
     } else if (!value_iter_.is_exist()) {
       // continue
     } else {
@@ -556,7 +548,6 @@ int ObMultiVersionRowIterator::try_cleanout_mvcc_row_(
     ObMvccTransNode *iter = value->get_list_head();
     while (NULL != iter && OB_SUCC(ret)) {
       if (OB_FAIL(try_cleanout_tx_node_(value, iter, is_snapshot_gc_scn_row))) {
-        TRANS_LOG(WARN, "try cleanout tx state failed", K(ret), KPC(value), KPC(iter));
       } else {
         iter = iter->prev_;
       }

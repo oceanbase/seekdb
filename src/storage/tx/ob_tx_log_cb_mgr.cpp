@@ -149,7 +149,6 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
               start_estimated_time, estimated_synced_size, estimated_synced_time,
               estimated_occupied_count, estimated_occupied_time, syncing_size, occupying_size,
               last_barrier_ts))) {
-        TRANS_LOG(WARN, "cal estimated stat for log cb pool failed", K(ret), KPC(pool_iter));
       } else {
         total_synced_size += estimated_synced_size;
         total_synced_time += estimated_synced_time;
@@ -169,8 +168,6 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
   // check sync size his  -- allow expand
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_sync_size_increased_(expand_cnt, sync_size_increased_cnt))) {
-      TRANS_LOG(WARN, "check sync_size increased failed", K(ret), K(expand_cnt),
-                K(sync_size_increased_cnt));
     } else {
       if (expand_cnt > 0 && sync_size_increased_cnt < expand_cnt) {
         ATOMIC_STORE(&allow_expand_, false);
@@ -225,8 +222,6 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
     if (pool_list_size < expected_pool_cnt) {
       for (int64_t i = pool_list_size; i < expected_pool_cnt && OB_SUCC(ret); i++) {
         if (OB_FAIL(append_new_log_cb_pool_())) {
-          TRANS_LOG(WARN, "append a new log cb pool failed", K(ret), K(i), K(pool_list_size),
-                    K(expected_pool_cnt), KPC(this));
         } else {
           sync_his_flag = SyncSizeHistoryFlag::EXPAND;
         }
@@ -267,8 +262,6 @@ int ObTxLogCbPoolMgr::adjust_log_cb_pool(const int64_t active_tx_cnt)
   // push back sync size his
   if (estimated_ret == OB_SUCCESS) {
     if (OB_TMP_FAIL(push_back_sync_size_history_(total_synced_size, sync_his_flag))) {
-      TRANS_LOG(WARN, "push back sync_size history failed", K(ret), K(tmp_ret),
-                K(start_estimated_time), K(total_synced_size), K(sync_his_flag));
     }
   }
 
@@ -291,12 +284,10 @@ int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObTx
 
   ObTxLogCbPoolRefGuard ref_guard;
 
-  TRANS_LOG(DEBUG, "start to acquire_log_cb_group", K(ret), KP(group_ptr), KP(tx_ctx));
   if (!ATOMIC_LOAD(&is_inited_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "the log cb pool mgr is not inited", K(ret), KPC(this));
   } else if (OB_FAIL(iter_idle_pool_(ref_guard))) {
-    TRANS_LOG(WARN, "iter a idle pool failed", K(ret), K(ref_guard), KPC(this));
   } else if (OB_FAIL(ref_guard.get_pool_ptr()->acquire_log_cb_group(group_ptr))) {
     if (OB_TX_NOLOGCB == ret) {
       ATOMIC_BCAS(&idle_pool_ptr_, ref_guard.get_pool_ptr(), nullptr);
@@ -304,8 +295,6 @@ int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObTx
     TRANS_LOG(WARN, "acquire a log cb group failed", K(ret), K(ref_guard), KPC(group_ptr),
               KPC(this));
   } else if (OB_FAIL(group_ptr->occupy_by_tx(tx_ctx))) {
-    TRANS_LOG(WARN, "occupy log cb group by a tx_ctx failed", K(ret), K(ref_guard), KPC(group_ptr),
-              KPC(this));
   } else {
     TRANS_LOG(INFO, "[Log Cb Group Life] occupy a idle group by tx", K(ret),
               K(tx_ctx->get_trans_id()), K(ref_guard), KPC(group_ptr));
@@ -316,7 +305,6 @@ int ObTxLogCbPoolMgr::acquire_idle_log_cb_group(ObTxLogCbGroup *&group_ptr, ObTx
   } else if (OB_TX_NOLOGCB == ret) {
     ATOMIC_INC(&acquire_extra_log_cb_group_failed_cnt_);
   }
-  TRANS_LOG(DEBUG, "finish to acquire_log_cb_group", K(ret), KPC(group_ptr), KPC(tx_ctx));
 
   return ret;
 }
@@ -337,7 +325,6 @@ int ObTxLogCbPoolMgr::append_new_log_cb_pool_()
 
   ObTxLogCbPool *log_cb_alloc_ptr = nullptr;
   if (OB_FAIL(alloc_log_cb_pool_(log_cb_alloc_ptr))) {
-    TRANS_LOG(WARN, "alloc a log cb pool failed", K(ret), KPC(log_cb_alloc_ptr), KPC(this));
   } else {
     SpinWLockGuard guard(pool_list_rw_lock_);
     if (false == pool_list_.add_last(log_cb_alloc_ptr)) {
@@ -414,7 +401,6 @@ int ObTxLogCbPoolMgr::iter_idle_pool_(ObTxLogCbPoolRefGuard &ref_guard)
   } else {
     if (ref_guard.get_pool_ptr()->contain_idle_log_group()) {
       // do nothing
-      TRANS_LOG(DEBUG, "the log cb pool has already been idle", K(ret), K(ref_guard));
     } else {
       ref_guard.reset();
     }
@@ -510,15 +496,12 @@ int ObTxLogCbPoolMgr::print_sync_size_history_()
     if (OB_FAIL(::oceanbase::common::databuff_printf(
             sync_size_his_print_buf, PRINT_BUF_LEN, pos, "| Sync<%ld> | %s ", sync_size_history_[i],
             sync_size_his_to_str(sync_size_history_[i + 1])))) {
-      TRANS_LOG(WARN, "printf sync size history item failed", K(ret), K(pos), K(i),
-                K(sync_size_history_[i]), K(sync_size_history_[i + 1]));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(::oceanbase::common::databuff_printf(sync_size_his_print_buf, PRINT_BUF_LEN, pos,
                                                      "%s", "|"))) {
-      TRANS_LOG(WARN, "printf sync size history separator failed", K(ret), K(pos));
     }
   }
 

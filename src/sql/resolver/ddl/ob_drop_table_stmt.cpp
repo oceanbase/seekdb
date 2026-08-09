@@ -46,7 +46,6 @@ int ObDropTableStmt::add_table_item(const ObTableItem &table_item)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(drop_table_arg_.tables_.push_back(table_item))) {
-    LOG_WARN("failed to add table item!", K(table_item), K(ret));
   }
   return ret;
 }

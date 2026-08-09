@@ -87,9 +87,7 @@ int ObServerResourceConfig::generate_default(const int64_t log_disk_size)
   int ret = OB_SUCCESS;
   ObServerResource resource;
   if (OB_FAIL(resource.generate_default(log_disk_size))) {
-    LOG_WARN("failed to generate default server resource", KR(ret), K(resource));
   } else if (OB_FAIL(init(resource))) {
-    LOG_WARN("failed to initialize resource config", KR(ret), K(resource));
   }
   return ret;
 }

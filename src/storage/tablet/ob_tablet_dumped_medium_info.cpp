@@ -97,7 +97,6 @@ int ObTabletDumpedMediumInfo::init_for_evict_medium_info(
         // medium info no bigger than current max medium snapshot,
         // no need to copy it
       } else if (OB_FAIL(do_append(*src_info))) {
-        LOG_WARN("failed to append medium info", K(ret), K(i), KPC(src_info));
       }
     }
 
@@ -128,9 +127,7 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
     common::ObSEArray<compaction::ObMediumCompactionInfo*, 1> array2;
 
     if (OB_FAIL(array1.assign(other1.medium_info_list_))) {
-      LOG_WARN("failed to assign", K(ret));
     } else if (OB_FAIL(array2.assign(other2.medium_info_list_))) {
-      LOG_WARN("failed to assign", K(ret));
     } else {
       // sort first
       lib::ob_sort(array1.begin(), array1.end(), ObTabletDumpedMediumInfo::compare);
@@ -167,7 +164,6 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
         } else if (chosen_info->medium_snapshot_ <= get_max_medium_snapshot()) {
           // do nothing
         } else if (OB_FAIL(do_append(*chosen_info))) {
-          LOG_WARN("failed to append medium info", K(ret), K(i), K(j), KPC(chosen_info));
         }
       }
 
@@ -179,7 +175,6 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
         } else if (info->medium_snapshot_ <= get_max_medium_snapshot()) {
           // do nothing
         } else if (OB_FAIL(do_append(*info))) {
-          LOG_WARN("failed to append medium info", K(ret), K(i), KPC(info));
         }
       }
 
@@ -191,7 +186,6 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
         } else if (info->medium_snapshot_ <= get_max_medium_snapshot()) {
           // do nothing
         } else if (OB_FAIL(do_append(*info))) {
-          LOG_WARN("failed to append medium info", K(ret), K(j), KPC(info));
         }
       }
     }
@@ -220,11 +214,8 @@ int ObTabletDumpedMediumInfo::assign(common::ObIAllocator &allocator, const ObTa
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("src medium info is null", K(ret), KP(src_medium_info), K(i));
       } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, medium_info))) {
-        LOG_WARN("failed to alloc and new", K(ret));
       } else if (OB_FAIL(medium_info->assign(allocator, *src_medium_info))) {
-        LOG_WARN("failed to copy mds dump kv", K(ret));
       } else if (OB_FAIL(medium_info_list_.push_back(medium_info))) {
-        LOG_WARN("failed to push back to array", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -261,11 +252,8 @@ int ObTabletDumpedMediumInfo::append(
     const common::ObString &user_data = node.user_data_;
     int64_t pos = 0;
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(*allocator_, medium_info))) {
-      LOG_WARN("failed to alloc and new", K(ret));
     } else if (OB_FAIL(medium_info->deserialize(*allocator_, user_data.ptr(), user_data.length(), pos))) {
-      LOG_WARN("failed to deserialize medium info", K(ret));
     } else if (OB_FAIL(medium_info_list_.push_back(medium_info))) {
-      LOG_WARN("failed to push back to array", K(ret));
     } else {
       lib::ob_sort(medium_info_list_.begin(), medium_info_list_.end(), compare);
     }
@@ -290,7 +278,6 @@ int ObTabletDumpedMediumInfo::append(const compaction::ObMediumCompactionInfo &m
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_FAIL(do_append(medium_info))) {
-    LOG_WARN("failed to do append", K(ret));
   }
 
   return ret;
@@ -302,11 +289,8 @@ int ObTabletDumpedMediumInfo::do_append(const compaction::ObMediumCompactionInfo
   compaction::ObMediumCompactionInfo *info = nullptr;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(*allocator_, info))) {
-    LOG_WARN("failed to alloc and new", K(ret));
   } else if (OB_FAIL(info->assign(*allocator_, medium_info))) {
-    LOG_WARN("failed to copy medium info", K(ret), K(medium_info));
   } else if (OB_FAIL(medium_info_list_.push_back(info))) {
-    LOG_WARN("failed to push back to array", K(ret), KPC(info));
   }
 
   if (OB_FAIL(ret)) {
@@ -374,7 +358,6 @@ int ObTabletDumpedMediumInfo::serialize(char *buf, const int64_t buf_len, int64_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, new_pos, count))) {
-    LOG_WARN("failed to serialize", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       const compaction::ObMediumCompactionInfo *medium_info = medium_info_list_.at(i);
@@ -382,7 +365,6 @@ int ObTabletDumpedMediumInfo::serialize(char *buf, const int64_t buf_len, int64_
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("medium info is null", K(ret), KP(medium_info), K(i));
       } else if (OB_FAIL(medium_info->serialize(buf, buf_len, new_pos))) {
-        LOG_WARN("failed to serialize medium info", K(ret));
       }
     }
   }
@@ -407,9 +389,7 @@ int ObTabletDumpedMediumInfo::deserialize(common::ObIAllocator &allocator, const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::decode(buf, buf_len, new_pos, count))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (OB_FAIL(medium_info_list_.reserve(count))) {
-    LOG_WARN("failed to reserve memory for array", K(ret), K(count));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       compaction::ObMediumCompactionInfo *medium_info = nullptr;
@@ -419,9 +399,7 @@ int ObTabletDumpedMediumInfo::deserialize(common::ObIAllocator &allocator, const
         LOG_WARN("failed to allocate memory", K(ret));
       } else if (FALSE_IT(medium_info = new (buffer) compaction::ObMediumCompactionInfo())) {
       } else if (OB_FAIL(medium_info->deserialize(allocator, buf, buf_len, new_pos))) {
-        LOG_WARN("failed to deserialize", K(ret));
       } else if (OB_FAIL(medium_info_list_.push_back(medium_info))) {
-        LOG_WARN("failed to push back to array", K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -589,11 +567,8 @@ int ObTabletDumpedMediumInfoIterator::init(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, src medium info is null", K(ret), K(i), KP(src_medium_info));
         } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, info))) {
-          LOG_WARN("failed to alloc and new", K(ret));
         } else if (OB_FAIL(info->assign(allocator, *src_medium_info))) {
-          LOG_WARN("failed to copy medium info", K(ret), KPC(src_medium_info));
         } else if (OB_FAIL(medium_info_list_.push_back(info))) {
-          LOG_WARN("failed to push back to array", K(ret));
         }
 
         if (OB_FAIL(ret)) {

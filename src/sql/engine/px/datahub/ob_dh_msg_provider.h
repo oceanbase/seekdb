@@ -135,7 +135,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(whole_msg_.assign(msg))) {
-      SQL_ENG_LOG(WARN,"fail assign msg", K(msg), K(ret));
     } else {
       whole_msg_set_ = true;
     }

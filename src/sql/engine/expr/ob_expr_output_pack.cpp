@@ -64,7 +64,6 @@ int ObExprOutputPack::cg_expr(ObExprCGCtx &cg_ctx, const ObRawExpr &raw_expr, Ob
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOutputPackInfo::init_output_pack_info(raw_expr.get_field_array(), cg_ctx.allocator_, rt_expr, type_))) {
-    LOG_WARN("failed to init output pack info", K(ret));
   } else {
     rt_expr.eval_func_ = &eval_output_pack;
     rt_expr.eval_batch_func_ = &eval_output_pack_batch;
@@ -81,18 +80,15 @@ int ObOutputPackInfo::deep_copy(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObOutputPackInfo *output_pack_info = nullptr;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("failed to alloc expr extra info", K(ret));
   } else if (OB_ISNULL(output_pack_info = dynamic_cast<ObOutputPackInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
   }
   else if (OB_FAIL(output_pack_info->param_fields_.prepare_allocate(param_fields_.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < param_fields_.count(); i++) {
       if (OB_FAIL(output_pack_info->param_fields_.at(i).deep_copy(param_fields_.at(i),
                                                                   &allocator))) {
-        LOG_WARN("failed to write field", K(ret));
       }
     }
   }
@@ -120,7 +116,6 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
     output_pack_info = new(buf) ObOutputPackInfo(*allocator, type);
     output_pack_info->param_fields_.set_allocator(allocator);
     if (OB_FAIL(output_pack_info->param_fields_.reserve(rt_expr.arg_cnt_))) {
-      LOG_WARN("fail to init param fields", K(ret));
     }
     //for output_pack expr , the 0th parameter indicates whether the ps protocol
     //only arg_cnt_ - 1 fields stored in pctx
@@ -130,15 +125,12 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected array pos", K(i), K(fields->count()), K(ret));
       } else if (OB_FAIL(tmp_field.full_deep_copy(fields->at(i), allocator))) {
-        LOG_WARN("full deep copy field failed", K(ret));
       } else if (OB_FAIL(output_pack_info->param_fields_.push_back(tmp_field))) {
-        LOG_WARN("failed to add field", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       rt_expr.extra_info_ = output_pack_info;
-      LOG_DEBUG("succ init_output_pack_info", KPC(output_pack_info));
     }
   }
   return ret;
@@ -160,10 +152,8 @@ int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx is not init", K(session), K(sql_ctx), K(schema_guard));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("failed to eval output datum", K(ret));
   } else if (OB_FAIL(process_oneline(expr, ctx, session, alloc,
                                      extra_info, schema_guard, expr_datum))) {
-    LOG_WARN("failed to process oneline", K(ret));
   }
   return ret;
 }
@@ -187,7 +177,6 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx is not init", K(session), K(sql_ctx), K(schema_guard));
   } else if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch", K(ret));
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
@@ -197,7 +186,6 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
       guard.set_batch_idx(i);
       if (OB_FAIL(process_oneline(expr, ctx, session, alloc,
                                   extra_info, schema_guard, result[i]))) {
-        LOG_WARN("failed to process oneline", K(ret));
       }
       eval_flags.set(i);
     }
@@ -212,7 +200,6 @@ int ObExprOutputPack::convert_string_value_charset(common::ObObj &value,
   int ret = OB_SUCCESS;
   ObCharsetType charset_type = CHARSET_INVALID;
   if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
   } else {
     OZ (value.convert_string_value_charset(charset_type, alloc));
   }
@@ -230,9 +217,7 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
   ObString raw_str = value.get_string();
   if (OB_ISNULL(raw_str.ptr()) || raw_str.length() == 0) {
     // may need return error?
-    LOG_DEBUG("get null lob locator v2", K(ret));
   } else if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (ObCharset::is_valid_charset(charset_type) && CHARSET_BINARY != charset_type) {
@@ -256,9 +241,7 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
       ObTextStringIter str_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(
               str_iter, exec_ctx, &alloc))) {
-        LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
       } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
-        LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
       } else {
         // mock result buffer and reserve data length
         // could do streaming charset convert
@@ -269,16 +252,11 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
         uint32_t result_len = 0;
 
         if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
-          LOG_WARN("Lob: get lob data byte len failed", K(ret), K(loc));
         } else if (OB_FAIL(new_tmp_lob.init(lob_data_byte_len * 4))) {
-          LOG_WARN("Lob: init tmp lob failed", K(ret), K(lob_data_byte_len * 4));
         } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_len))) {
-          LOG_WARN("Lob: get empty buffer failed", K(ret), K(lob_data_byte_len * 4));
         } else if (OB_FAIL(convert_string_charset(data_str, from_collation_type, to_collation_type,
                                                   buf, buf_len, result_len))) {
-          LOG_WARN("convert string charset failed", K(ret));
         } else if (OB_FAIL(new_tmp_lob.lseek(result_len, 0))) {
-          LOG_WARN("temp lob lseek failed", K(ret));
         } else {
           ObString lob_loc_str;
           new_tmp_lob.get_result_buffer(lob_loc_str);
@@ -312,9 +290,7 @@ int ObExprOutputPack::process_lob_locator_results(common::ObObj& value,
     ObTextStringIter instr_iter(value);
     if (OB_FAIL(ObTextStringHelper::build_text_iter(
             instr_iter, exec_ctx, &alloc))) {
-      LOG_WARN("init lob str inter failed", K(ret), K(value));
     } else if (OB_FAIL(instr_iter.get_full_data(data))) {
-      LOG_WARN("Lob: init lob str iter failed ", K(value));
     } else {
       ObObjType dst_type = value.is_json() ? ObJsonType : ObLongTextType;
       if (value.is_json()) {
@@ -380,12 +356,10 @@ int ObExprOutputPack::build_row_values(
     ObObj obj;
     if (OB_FAIL(datum.to_obj(obj, expr.args_[column_idx]->obj_meta_,
                              expr.args_[column_idx]->obj_datum_map_))) {
-      LOG_WARN("failed to cast to obj", K(ret), K(column_idx));
     } else {
       if (obmysql::MYSQL_PROTOCOL_TYPE::BINARY == encode_type) {
         ObCastMode cast_mode = CM_NONE;
         if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session, cast_mode))) {
-          LOG_WARN("failed to get default cast mode", K(ret));
         } else {
           cast_mode |= CM_WARN_ON_FAIL;
           if (obj.get_type() != extra_info->param_fields_.at(column_idx - 1).type_.get_type()) {
@@ -394,8 +368,6 @@ int ObExprOutputPack::build_row_values(
                                                       cast_ctx,
                                                       obj,
                                                       obj))) {
-              LOG_WARN("failed to cast object", K(ret), K(obj),
-              K(obj.get_type()), K(extra_info->param_fields_.at(column_idx - 1).type_.get_type()));
             }
           }
         }
@@ -425,11 +397,7 @@ int ObExprOutputPack::build_row_values(
               obj, encode_type, alloc, value, dtc_params,
               &extra_info->param_fields_.at(column_idx - 1), *session,
               schema_guard))) {
-        LOG_WARN("failed to build MySQL Row semantic value", K(ret),
-                 K(column_idx));
       } else if (OB_FAIL(values.push_back(value))) {
-        LOG_WARN("failed to retain MySQL Row semantic value", K(ret),
-                 K(column_idx));
       }
     }
   }
@@ -457,23 +425,14 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid packed MySQL Row output", K(ret), K(len), K(cell_count));
   } else if (OB_FAIL(values.reserve(cell_count))) {
-    LOG_WARN("failed to reserve packed MySQL Row semantic values", K(ret),
-             K(cell_count));
   } else if (OB_FAIL(views.reserve(cell_count))) {
-    LOG_WARN("failed to reserve packed Rust MySQL Row views", K(ret),
-             K(cell_count));
   } else if (OB_FAIL(build_row_values(expr, ctx, session, alloc, extra_info,
                                       schema_guard, encode_type, values))) {
-    LOG_WARN("failed to build packed MySQL Row semantic values", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
       nio_mysql_cell_view view = {};
       if (OB_FAIL(query::build_nio_mysql_cell_view(values.at(i), view))) {
-        LOG_WARN("failed to build packed Rust MySQL Row cell view", K(ret),
-                 K(i));
       } else if (OB_FAIL(views.push_back(view))) {
-        LOG_WARN("failed to retain packed Rust MySQL Row cell view", K(ret),
-                 K(i));
       }
     }
     if (OB_SUCC(ret)) {
@@ -482,7 +441,6 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
       row_view.cell_count = views.count();
       if (OB_FAIL(query::get_nio_mysql_row_protocol(encode_type,
                                                     row_view.protocol))) {
-        LOG_WARN("invalid packed MySQL Row protocol", K(ret), K(encode_type));
       } else {
         int frame_ret =
             nio_encode_mysql_packed_row_blob(buffer, len, &row_view, &blob_len);

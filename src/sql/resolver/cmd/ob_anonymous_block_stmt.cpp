@@ -29,7 +29,6 @@ int ObAnonymousBlockStmt::add_param(const ObObjParam &param)
     ret = OB_NOT_INIT;
     LOG_WARN("not inited array", K(ret));
   } else if (OB_FAIL(params_->push_back(param))) {
-    LOG_WARN("fail to push back param", K(ret));
   }
   return ret;
 }

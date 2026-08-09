@@ -71,7 +71,6 @@ int ObKmeansCtx::try_normalize(int64_t dim, float *data, float *norm_vector) con
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(norm_info_)) { // cos&ip need norm center vec
     if (OB_FAIL(norm_info_->normalize_func_(dim, data, norm_vector, nullptr))) {
-      LOG_WARN("failed to normalize vector", K(ret));
     }
   }
   return ret;
@@ -83,7 +82,6 @@ int ObKmeansCtx::try_normalize_samples() const
   if (OB_NOT_NULL(norm_info_) && VIDA_COS == dist_algo_) {  // cos need norm before kmeans
     for (int i = 0; OB_SUCC(ret) && i < sample_vectors_.count(); ++i) {
       if (OB_FAIL(norm_info_->normalize_func_(sample_dim_, sample_vectors_[i], sample_vectors_[i], nullptr))) {
-        LOG_WARN("failed to normalize vector", K(ret), K(i), K(sample_dim_));
       }
     }
   }
@@ -110,7 +108,6 @@ int ObKmeansCtx::append_sample_vector(float* vector)
       } else {
         MEMCPY(save_vector, vector, sizeof(float) * sample_dim_);
         if (OB_FAIL(sample_vectors_.push_back(save_vector))) {
-          SHARE_LOG(WARN, "failed to push back array", K(ret));
         }
       }
     } else {
@@ -161,7 +158,6 @@ int ObKmeansAlgo::build(const ObIArray<float*> &input_vectors)
     int64_t status_start_time = ObTimeUtility::current_time_ms();
     while (OB_SUCC(ret) && !is_finish()) {
       if (OB_FAIL(inner_build(input_vectors))) {
-        SHARE_LOG(WARN, "failed to do kmeans", K(ret));
       } else if (check_stop()) {
         ret = OB_CANCELED;
         SHARE_LOG(INFO, "kmeans ctx is fore stop", K(ret), K(*this));
@@ -182,22 +178,18 @@ int ObKmeansAlgo::inner_build(const ObIArray<float*> &input_vectors)
     case PREPARE_CENTERS: {
       if (kmeans_ctx_->lists_ >= input_vectors.count()) {
         if (OB_FAIL(quick_centers(input_vectors))) {
-          SHARE_LOG(WARN, "failed to quick centers", K(ret));
         }
       } else if (OB_FAIL(init_first_center(input_vectors))) {
-        SHARE_LOG(WARN, "failed to init first center", K(ret));
       }
       break;
     }
     case INIT_CENTERS: {
       if (OB_FAIL(init_centers(input_vectors))) {
-        SHARE_LOG(WARN, "failed to init centers", K(ret));
       }
       break;
     }
     case RUNNING_KMEANS: {
       if (OB_FAIL(do_kmeans(input_vectors))) {
-        SHARE_LOG(WARN, "failed to do kmeans", K(ret));
       }
       break;
     }
@@ -225,11 +217,9 @@ int ObKmeansAlgo::quick_centers(const ObIArray<float*> &input_vectors)
     ret = OB_STATE_NOT_MATCH;
     SHARE_LOG(WARN, "status not match", K(ret), K(status_));
   } else if (OB_FAIL(centers_[cur_idx_].init(kmeans_ctx_->dim_, input_vectors.count(), ivf_build_mem_ctx_))) {
-    SHARE_LOG(WARN, "failed to init center buffer", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < input_vectors.count(); ++i) {
       if (OB_FAIL(centers_[cur_idx_].push_back(kmeans_ctx_->dim_, input_vectors.at(i)))) {
-        SHARE_LOG(WARN, "failed to push back center", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -249,16 +239,13 @@ int ObKmeansAlgo::init_first_center(const ObIArray<float *> &input_vectors)
     ret = OB_STATE_NOT_MATCH;
     SHARE_LOG(WARN, "status not match", K(ret), K(status_));
   } else if (OB_FAIL(centers_[0].init(kmeans_ctx_->dim_, kmeans_ctx_->lists_, ivf_build_mem_ctx_))) {
-    SHARE_LOG(WARN, "failed to init center buffer", K(ret));
   } else if (OB_FAIL(centers_[1].init(kmeans_ctx_->dim_, kmeans_ctx_->lists_, ivf_build_mem_ctx_))) {
-    SHARE_LOG(WARN, "failed to init center buffer", K(ret));
   }  else {
     const int64_t sample_cnt = input_vectors.count();
     int64_t random = 0;
     random = ObRandom::rand(0, sample_cnt - 1);
     // use random sample vector as the first center
     if (OB_FAIL(centers_[cur_idx_].push_back(kmeans_ctx_->dim_, input_vectors.at(random)))) {
-      SHARE_LOG(WARN, "failed to push back center", K(ret));
     } else if (OB_ISNULL(weight_ = static_cast<float *>(ivf_build_mem_ctx_.Allocate(sizeof(float) * sample_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SHARE_LOG(WARN, "failed to alloc memory", K(ret), K(ivf_build_mem_ctx_.get_all_vsag_use_mem_byte()));
@@ -267,7 +254,6 @@ int ObKmeansAlgo::init_first_center(const ObIArray<float *> &input_vectors)
         weight_[i] = FLT_MAX;
       }
       status_ = INIT_CENTERS;
-      SHARE_LOG(TRACE, "success to init first center", K(ret));
     }
   }
   return ret;
@@ -302,7 +288,6 @@ int ObKmeansAlgo::init_centers(const ObIArray<float*> &input_vectors)
       for (i = 0; OB_SUCC(ret) && i < sample_cnt; ++i) {
         float *sample_vector = input_vectors.at(i);
         if (OB_FAIL(calc_kmeans_distance(sample_vector, current_center, kmeans_ctx_->dim_, distance))) {
-          SHARE_LOG(WARN, "failed to calc kmeans distance", K(ret));
         } else {
           distance *= distance;
           if (distance < weight_[i]) {
@@ -323,10 +308,8 @@ int ObKmeansAlgo::init_centers(const ObIArray<float*> &input_vectors)
           i = sample_cnt - 1 < 0 ? 0 : sample_cnt - 1;
         }
         if (OB_FAIL(centers_[cur_idx_].push_back(kmeans_ctx_->dim_, input_vectors.at(i)))) {
-          SHARE_LOG(WARN, "failed to push back center", K(ret));
         } else {
           const int64_t center_count = centers_[cur_idx_].count();
-          SHARE_LOG(TRACE, "success to init center", K(ret), K(center_count));
         }
       }
     }
@@ -391,7 +374,6 @@ int ObKmeansExecutor::append_sample_vector(float* vector)
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid null vector", K(ret));
   } else if (OB_FAIL(ctx_.append_sample_vector(vector))) {
-    LOG_WARN("failed to append sample vector", K(ret), K(ctx_));
   } else {
     ++ctx_.total_scan_count_;
   }
@@ -410,7 +392,6 @@ int ObSingleKmeansExecutor::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ctx_.init(lists, samples_per_nlist, dim, dist_algo, norm_info, 1 /*pq_m*/))) {
-    LOG_WARN("fail to init kmeans ctx", K(ret), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
   } else {
     if (algo_type == ObKmeansAlgoType::KAT_ELKAN) {
       void *tmp_buf = nullptr;
@@ -441,9 +422,7 @@ int ObSingleKmeansExecutor::build()
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "kmeans ctx is not inited", K(ret));
   } else if (OB_FAIL(ctx_.try_normalize_samples())) {
-    LOG_WARN("fail to try normalize all samples", K(ret), K(ctx_));
   } else if (OB_FAIL(algo_->build(ctx_.sample_vectors_))) {
-    LOG_WARN("fail to build kmeans algo", K(ret), K(algo_));
   }
   if (OB_NOT_NULL(algo_)) {
     algo_->destroy();
@@ -520,11 +499,9 @@ int ObMultiKmeansExecutor::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ctx_.init(lists, samples_per_nlist, dim, dist_algo, norm_info, pq_m_size))) {
-    LOG_WARN("fail to init kmeans ctx", K(ret), K(lists), K(samples_per_nlist), K(dim), K(dist_algo));
   } else {
     pq_m_size_ = pq_m_size;
     if (OB_FAIL(algos_.prepare_allocate(pq_m_size))) {
-      LOG_WARN("fail to reserve space", K(ret), K(pq_m_size));
     }
 
     for (int i = 0; OB_SUCC(ret) && i < algos_.count(); ++i) {
@@ -563,7 +540,6 @@ int ObMultiKmeansExecutor::build(storage::ObInsertMonitor *insert_monitor)
     // init spilited_arrs, size: m * sample_vectors_.count()
     ObArrayArray<float*> splited_arrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(tmp_alloc, "MulKmeans"));
     if (OB_FAIL(prepare_splited_arrs(splited_arrs))) {
-      LOG_WARN("fail to prepare splited_arrs", K(ret));
     } else if (OB_NOT_NULL(insert_monitor)) {
       if (OB_NOT_NULL(insert_monitor->vec_index_task_total_cnt_)) {
         (void)ATOMIC_AAF(insert_monitor->vec_index_task_total_cnt_, pq_m_size_);
@@ -577,7 +553,6 @@ int ObMultiKmeansExecutor::build(storage::ObInsertMonitor *insert_monitor)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("size of algos_ should be pq_m_size_", K(ret), K(i), K(pq_m_size_), K(algos_.count()));
       } else if (OB_FAIL(algos_[i]->build(splited_arrs.at(i)))) {
-        LOG_WARN("fail to build kmeans algo", K(ret), K(i), K(algos_[i]));
       } else if (OB_NOT_NULL(insert_monitor) && OB_NOT_NULL(insert_monitor->vec_index_task_finish_cnt_)) {
         (void)ATOMIC_AAF(insert_monitor->vec_index_task_finish_cnt_, 1);
       }
@@ -595,19 +570,15 @@ int ObMultiKmeansExecutor::prepare_splited_arrs(ObArrayArray<float *> &splited_a
   int ret = OB_SUCCESS;
   const ObIArray<float *> &sample_arr = ctx_.sample_vectors_;
   if (OB_FAIL(splited_arrs.reserve(pq_m_size_))) {
-    LOG_WARN("fail to prepare alloc space", K(ret), K(pq_m_size_));
   }
   for (int i = 0; OB_SUCC(ret) && i < pq_m_size_; ++i) {
     if (OB_FAIL(splited_arrs.push_back(ObArray<float *>()))) {
-      LOG_WARN("fail to push back empty array", K(ret), K(i), K(pq_m_size_), K(splited_arrs.count()));
     } else if (OB_FAIL(splited_arrs.at(i).reserve(sample_arr.count()))) {
-      LOG_WARN("fail to reserve space", K(ret), K(i), K(pq_m_size_), K(splited_arrs.count()));
     }
   }
 
   for (int i = 0; OB_SUCC(ret) && i < sample_arr.count(); ++i) {
     if (OB_FAIL(split_vector(sample_arr.at(i), splited_arrs))) {
-      LOG_WARN("fail to split vector", K(ret));
     }
   }
 
@@ -622,9 +593,7 @@ int ObMultiKmeansExecutor::init_build_handle(ObKmeansBuildTaskHandler &handle)
   if (handle.is_inited()) {
     // no need to init twice, skip
   } else if (OB_FAIL(handle.init())) {
-    LOG_WARN("fail to init vector kmeans build task handle", K(ret));
   } else if (OB_FAIL(handle.start())) {
-    LOG_WARN("fail to start vector kmeans build thread pool", K(ret));
   }
 
   return ret;
@@ -676,7 +645,6 @@ int ObMultiKmeansExecutor::build_parallel(const common::ObTableID &table_id,
     // init spilited_arrs, size: m * sample_vectors_.count()
     ObArrayArray<float *> splited_arrs(OB_MALLOC_NORMAL_BLOCK_SIZE, ModulePageAllocator(tmp_alloc, "MulKmeans"));
     if (OB_FAIL(prepare_splited_arrs(splited_arrs))) {
-      LOG_WARN("fail to prepare splited_arrs", K(ret));
     } else {
       // build_parallel
       storage::ObIVectorIndexRuntime *runtime =
@@ -690,7 +658,6 @@ int ObMultiKmeansExecutor::build_parallel(const common::ObTableID &table_id,
         ObKmeansBuildTask *build_tasks = nullptr;
 
         if (OB_FAIL(init_build_handle(handle))) {
-          LOG_WARN("fail to init build handle", K(ret));
         } else if (OB_ISNULL(buf = tmp_alloc.alloc(sizeof(ObKmeansBuildTask) * pq_m_size_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory of ObKmeansBuildTask", K(ret));
@@ -704,10 +671,8 @@ int ObMultiKmeansExecutor::build_parallel(const common::ObTableID &table_id,
         }
         for (int i = 0; i < pq_m_size_ && OB_SUCC(ret); i++) {
           ObKmeansBuildTask &build_task = build_tasks[i];
-          if (OB_FAIL(build_task.init(table_id, tablet_id, i, algos_[i], &splited_arrs.at(i)))) {  // 1. make task
-            LOG_WARN("fail to init opt async task", KR(ret));
-          } else if (OB_FAIL(handle.push_task(build_task))) {  // 2. push task
-            LOG_WARN("fail to push task", K(ret));
+          if (OB_FAIL(build_task.init(table_id, tablet_id, i, algos_[i], &splited_arrs.at(i)))) {
+          } else if (OB_FAIL(handle.push_task(build_task))) {
           }
         }
         // Note. If the previous process fails, all tasks need to be stopped otherwise it may cause a core dump because
@@ -727,7 +692,6 @@ int ObMultiKmeansExecutor::build_parallel(const common::ObTableID &table_id,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected nullptr", K(ret));
           } else if (OB_FAIL(build_tasks[i].get_ret())) {
-            LOG_WARN("fail to build kmeans algo", K(ret), K(i), K(build_tasks[i]));
           }
         }  // end for
       }
@@ -743,7 +707,6 @@ int ObMultiKmeansExecutor::split_vector(float *vector, ObArrayArray<float *> &sp
   int64_t start_idx = 0;
   for (int i = 0; OB_SUCC(ret) && i < pq_m_size_; ++i) {
     if (OB_FAIL(splited_arrs.push_back(i, vector + start_idx))) {
-      SHARE_LOG(WARN, "failed to push back array", K(ret), K(i));
     } else {
       start_idx += ctx_.dim_;
     }
@@ -830,7 +793,6 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
       for (int64_t j = i + 1; OB_SUCC(ret) && j < center_count; ++j) {
         calc_dis_cnt++;
         if (OB_FAIL(calc_kmeans_distance(centers_[cur_idx_].at(i), centers_[cur_idx_].at(j), dim, distance))) {
-          SHARE_LOG(WARN, "failed to calc kmeans distance between centers", K(ret));
         } else {
           set_centers_distance(centers_distance, i, j, distance);
         }
@@ -844,7 +806,6 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
       float gate_distance = FLT_MAX;
       calc_dis_cnt++;
       if (OB_FAIL(calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(0), kmeans_ctx_->dim_, min_distance))) {
-        SHARE_LOG(WARN, "failed to calc kmeans distance", K(ret));
       } else {
         nearest_center_idx = 0;
         gate_distance = min_distance * GATE_DISTANCE_FACTOR;
@@ -855,12 +816,10 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
           float dis_half_dim = 0.0;
           calc_half_dis_cnt++;
           if (OB_FAIL(calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(j), dim / 2, dis_half_dim))) {
-            SHARE_LOG(WARN, "failed to calc kmeans distance", K(ret)); 
           } else if (dis_half_dim < min_distance) {
             float full_distance = 0.0;
             calc_half_dis_cnt++;
             if (OB_FAIL(calc_kmeans_distance(sample_vector + dim / 2, centers_[cur_idx_].at(j) + dim / 2, dim - dim / 2, full_distance))) {
-              SHARE_LOG(WARN, "failed to calc kmeans distance", K(ret));
             } else if (OB_FALSE_IT(full_distance += dis_half_dim)) {
             } else if (full_distance < min_distance) {
               min_distance = full_distance;
@@ -874,7 +833,6 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
         // Update the distance of the target function
         dis_obj += min_distance;
         if (OB_FAIL(centers_[next_idx()].add(nearest_center_idx, dim, sample_vector))) {
-          SHARE_LOG(WARN, "failed to add vector to center buffer", K(ret));
         } else {
           ++data_cnt_in_cluster[nearest_center_idx];
         }
@@ -883,7 +841,6 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
     if (OB_SUCC(ret)) {
       dis_obj = dis_obj / sample_cnt;
       float calc_sum_dis_rate = static_cast<float>(calc_dis_cnt + calc_half_dis_cnt / 2) / total_dis_cnt;
-      SHARE_LOG(TRACE, "dis_obj", K(dis_obj), K(calc_sum_dis_rate), K(calc_dis_cnt), K(calc_half_dis_cnt), K(total_dis_cnt));
     }
   }
   return ret;
@@ -930,14 +887,12 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
       centers_[next_idx()].clear();
       // 1. search nearest center
       if (OB_FAIL(search_nearest_center(input_vectors, centers_distance, data_cnt_in_cluster, dis_obj))) {
-        SHARE_LOG(WARN, "failed to search nearest center", K(ret));
       }
 
       // 2. calc the new centers
       for (int64_t i = 0; OB_SUCC(ret) && i < kmeans_ctx_->lists_; ++i) {
         if (data_cnt_in_cluster[i] > 0) {
           if (OB_FAIL(centers_[next_idx()].divide(i, data_cnt_in_cluster[i]))) {
-            SHARE_LOG(WARN, "failed to divide vector", K(ret));
           }
         } else {
           // use random sample vector as the center
@@ -945,7 +900,6 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
           const int64_t sample_cnt = input_vectors.count();
           random = ObRandom::rand(0, sample_cnt - 1);
           if (OB_FAIL(centers_[next_idx()].add(i, kmeans_ctx_->dim_, input_vectors.at(random)))) {
-            SHARE_LOG(WARN, "failed to add vector", K(ret));
           }
         }
         // 3. normalize the new center, if need
@@ -954,7 +908,6 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
               kmeans_ctx_->dim_,
               centers_[next_idx()].at(i), 
               centers_[next_idx()].at(i)))) {
-            LOG_WARN("failed to normalize vector", K(ret));
           }
         }
       } // end for
@@ -971,13 +924,11 @@ int ObElkanKmeansAlgo::do_kmeans(const ObIArray<float*> &input_vectors)
         } else {
           cur_idx_ = next_idx();
           double imbalance_factor = this->calc_imbalance_factor(input_vectors, data_cnt_in_cluster);
-          SHARE_LOG(TRACE, "finish one iters", K(ret), K(iter), K(dis_obj), K(diff), K(imbalance_factor));
         }
       }
     } // iter end for
     // free tmp memory
     int64_t mem_used = ivf_build_mem_ctx_.get_all_vsag_use_mem_byte() >> 20;
-    SHARE_LOG(TRACE, "elkan kmeans memused", K(ret), K(mem_used));
     if (OB_NOT_NULL(centers_distance)) {
       ivf_build_mem_ctx_.Deallocate(centers_distance);
       centers_distance = nullptr;
@@ -1008,7 +959,6 @@ int ObIvfBuildHelper::init(ObString &init_str, lib::MemoryContext &parent_mem_ct
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObVectorIndexUtil::parser_params_from_string(init_str, ObVectorIndexType::VIT_IVF_INDEX, param_))) {
-    LOG_WARN("failed to parse params.", K(ret));
   } else if (OB_ISNULL(ivf_build_mem_ctx_ = OB_NEWx(ObIvfMemContext, get_allocator(), all_vsag_use_mem))) { 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create ivf_build_mem_ctx", K(ret)); 
@@ -1018,7 +968,6 @@ int ObIvfBuildHelper::init(ObString &init_str, lib::MemoryContext &parent_mem_ct
     ivf_build_mem_ctx_ = nullptr;
   } else {
     int64_t mem_used = ivf_build_mem_ctx_->get_all_vsag_use_mem_byte() >> 20;
-    SHARE_LOG(TRACE, "init ivf_build_mem_ctx", K(ret), K(mem_used));
   }
   return ret;
 }
@@ -1034,7 +983,6 @@ int ObIvfBuildHelper::init_ctx(int64_t dim)
     ret = first_ret_code_;
     SHARE_LOG(WARN, "init falied before", K(ret), K(dim), K(param_));
   } else if (OB_FAIL(init_kmeans_ctx(dim))) {
-    SHARE_LOG(WARN, "failed to init kmeans ctx", K(ret), K(dim), K(param_));
   } else {
     is_inited_ = true;
   }
@@ -1067,7 +1015,6 @@ int64_t ObIvfBuildHelper::get_free_vector_mem_size()
     LOG_WARN("mem ctx is null", K(ret));
   } else if (OB_FALSE_IT(curr_used = ATOMIC_LOAD(ivf_build_mem_ctx_->get_all_vsag_use_mem()))) {
   } else if (OB_FAIL(ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-    LOG_WARN("failed to get vector mem limit size.", K(ret));
   } else if (memory_limit_size > curr_used) {
     free_vector_mem_size = memory_limit_size - curr_used;
   }
@@ -1110,7 +1057,6 @@ int ObIvfFlatBuildHelper::init_kmeans_ctx(const int64_t dim)
     } else if (OB_FALSE_IT(executor_ = new (tmp_buf) ObSingleKmeansExecutor(*ivf_build_mem_ctx_))) {
     } else if (OB_FAIL(executor_->init(algo_type, param_.nlist_,
                                        param_.sample_per_nlist_, dim, param_.dist_algorithm_, norm_info))) {
-      LOG_WARN("failed to init kmeans ctx", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -1266,7 +1212,6 @@ int ObIvfPqBuildHelper::init_kmeans_ctx(const int64_t dim)
                                   param_.dist_algorithm_, 
                                   nullptr, // pq center kmenas no need normlize, Reference faiss
                                   param_.m_))) {
-      LOG_WARN("failed to init kmeans ctx", K(ret), K(param_), K(pqnlist));
     } else {
       is_inited_ = true;
     }
@@ -1285,10 +1230,8 @@ int ObIvfPqBuildHelper::build(const common::ObTableID &table_id,
     LOG_WARN("unexpected nullptr ctx", K(ret));
   } else if (can_use_parallel()) {
     if (OB_FAIL(executor_->build_parallel(table_id, tablet_id, insert_monitor))) {
-      LOG_WARN("failed to build clusters", K(ret));
     }
   } else if (OB_FAIL(executor_->build(insert_monitor))) {
-    LOG_WARN("failed to build clusters", K(ret));
   }
 
 #ifdef ERRSIM
@@ -1315,7 +1258,6 @@ bool ObIvfPqBuildHelper::can_use_parallel()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("executor_ is null", KR(ret));
   } else if (OB_FAIL(ObVectorIndexUtil::estimate_ivf_pq_kmeans_memory(executor_->get_max_sample_count(), param_, max_thread_cnt, parallel_need_max_mem))) {
-    LOG_WARN("estimate ivf memory failed", KR(ret), K(executor_->get_max_sample_count()), K(param_));
   } else {
     vector_free_mem = get_free_vector_mem_size();
     if (vector_free_mem > parallel_need_max_mem) {
@@ -1333,7 +1275,6 @@ int ObKmeansBuildTaskHandler::init()
   if (is_inited_) {
     LOG_INFO("init before", KR(ret));
   } else if (OB_FAIL(common::ObSimpleThreadPool::init(MIN_THREAD_COUNT, MAX_QUEUE_SIZE, "VectorTaskPool"))) {
-    LOG_WARN("init vector kmeans build task thread pool failed", KR(ret));
   } else {
     is_inited_ = true;
     LOG_INFO("init vector kmeans build task handler", K(ret));
@@ -1351,7 +1292,6 @@ int ObKmeansBuildTaskHandler::start()
     ret = OB_NOT_INIT;
     LOG_WARN("handler is not init", KR(ret));
   } else if (OB_FAIL(common::ObSimpleThreadPool::set_adaptive_thread(MIN_THREAD_COUNT, max_thread_cnt))) {
-    LOG_WARN("set vector kmeans build task adaptive thread failed", KR(ret), K(max_thread_cnt));
   } else if (common::ObSimpleThreadPool::get_thread_count() <= 0
       && !common::ObSimpleThreadPool::try_expand_one(MIN_THREAD_COUNT)) {
     ret = OB_ERR_UNEXPECTED;
@@ -1411,7 +1351,6 @@ int ObKmeansBuildTaskHandler::push_task(ObKmeansBuildTask &build_task)
         LOG_WARN("fail to push task", KR(ret), K(build_task));
       } else {
         // sleep 1s and retry
-        LOG_DEBUG("fail to push task, queue is full will retry", KR(ret), K(build_task));
         ob_usleep(WAIT_RETRY_PUSH_TASK_TIME);
         ret = OB_SUCCESS;
       }
@@ -1443,7 +1382,6 @@ void ObKmeansBuildTaskHandler::handle(void *task)
     build_task = static_cast<ObKmeansBuildTask *>(task);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(build_task->do_work())) {
-      LOG_WARN("fail to do task", KR(ret), KPC(build_task));
     }
   }
   // !!!!! desc task ref cnt
@@ -1515,7 +1453,6 @@ int ObKmeansBuildTask::do_work()
     LOG_WARN("not init", KR(ret));
   } else if (OB_FALSE_IT(task_ctx_.gmt_modified_ = ObTimeUtility::current_time())) {
   } else if (OB_FAIL(algo_->build(*vectors_))) {
-    LOG_WARN("fail to build", KR(ret), K_(task_ctx), KP_(algo), KP_(vectors));
   }
   if (OB_NOT_NULL(algo_)) {
       algo_->destroy();

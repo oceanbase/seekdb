@@ -38,11 +38,8 @@ int ObIKLetterProcessor::do_process(TokenizeContext &ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(process_english_letter(ctx, ch, char_len, type))) {
-    LOG_WARN("Fail to process english letter", K(ret));
   } else if (OB_FAIL(process_arabic_letter(ctx, ch, char_len, type))) {
-    LOG_WARN("Fail to process arabic letter", K(ret));
   } else if (OB_FAIL(process_mix_letter(ctx, ch, char_len, type))) {
-    LOG_WARN("Fail to process mix letter", K(ret));
   }
   return ret;
 }
@@ -70,7 +67,6 @@ int ObIKLetterProcessor::process_english_letter(TokenizeContext &ctx,
                                 english_end_ - english_start_,
                                 english_char_cnt_,
                                 ObIKTokenType::IK_ENGLISH_TOKEN))) {
-        LOG_WARN("fail to add token", K(ret));
       } else {
         reset_english_state();
       }
@@ -84,7 +80,6 @@ int ObIKLetterProcessor::process_english_letter(TokenizeContext &ctx,
                                 english_end_ - english_start_,
                                 english_char_cnt_,
                                 ObIKTokenType::IK_ENGLISH_TOKEN))) {
-        LOG_WARN("Fail to add token", K(ret));
       } else {
         reset_english_state();
       }
@@ -117,7 +112,6 @@ int ObIKLetterProcessor::process_arabic_letter(TokenizeContext &ctx,
     arabic_connect_cnt_ = 0;
   } else if (OB_FAIL(
                  ObFTCharUtil::check_num_connector(ctx.collation(), ch, char_len, is_connector))) {
-    LOG_WARN("Fail to check is num connector", K(ret));
   } else if (ObFTCharUtil::CharType::USELESS == type && is_connector) {
     // only if connector follows  and is followed by an arabic number we count it
     arabic_connect_cnt_++;
@@ -130,7 +124,6 @@ int ObIKLetterProcessor::process_arabic_letter(TokenizeContext &ctx,
                               arabic_end_ - arabic_start_,
                               arabic_char_cnt_ + arabic_connect_cnt_,
                               ObIKTokenType::IK_ARABIC_TOKEN))) {
-      LOG_WARN("Fail to add token", K(ret));
     } else {
       reset_arabic_state();
     }
@@ -146,7 +139,6 @@ int ObIKLetterProcessor::process_arabic_letter(TokenizeContext &ctx,
                                 arabic_end_ - arabic_start_,
                                 arabic_char_cnt_ + arabic_connect_cnt_,
                                 ObIKTokenType::IK_ARABIC_TOKEN))) {
-        LOG_WARN("fail to add token", K(ret));
       } else {
         reset_arabic_state();
       }
@@ -180,7 +172,6 @@ int ObIKLetterProcessor::process_mix_letter(TokenizeContext &ctx,
                                                             ch,
                                                             char_len,
                                                             is_connector))) {
-      LOG_WARN("Fail to check is letter connector", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type && is_connector) {
       this->mix_end_ = ctx.get_end_cursor();
       this->mix_char_cnt_++;
@@ -190,7 +181,6 @@ int ObIKLetterProcessor::process_mix_letter(TokenizeContext &ctx,
                                 mix_end_ - mix_start_,
                                 mix_char_cnt_,
                                 ObIKTokenType::IK_MIX_TOKEN))) {
-        LOG_WARN("Fail to add token", K(ret));
       } else {
         reset_mix_state();
       }
@@ -204,7 +194,6 @@ int ObIKLetterProcessor::process_mix_letter(TokenizeContext &ctx,
                                 mix_end_ - mix_start_,
                                 mix_char_cnt_,
                                 ObIKTokenType::IK_MIX_TOKEN))) {
-        LOG_WARN("Fail to add token", K(ret));
       } else {
         reset_mix_state();
       }

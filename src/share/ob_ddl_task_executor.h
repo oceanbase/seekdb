@@ -173,7 +173,6 @@ int ObDDLTaskExecutor::push_task(const T &task)
       STORAGE_LOG(WARN, "fail to push back task", K(ret));
     }
   } else if (OB_FAIL(cond_.broadcast())) {
-    STORAGE_LOG(WARN, "fail to broadcase siginal", K(ret));
   }
   return ret;
 }

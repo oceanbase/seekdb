@@ -49,9 +49,7 @@ public:
     ObTxDataMemtable *tx_data_memtable = nullptr;
     if (OB_FAIL(handles_[size_].set_table(
             static_cast<ObITable *const>(i_memtable), t3m, ObITable::TableType::TX_DATA_MEMTABLE))) {
-      STORAGE_LOG(WARN, "set i memtable to handle failed", KR(ret), KP(i_memtable), KP(t3m));
     } else if (OB_FAIL(handles_[size_].get_tx_data_memtable(tx_data_memtable))) {
-      STORAGE_LOG(ERROR, "get tx data memtable from memtable handle failed", KR(ret), K(handles_[size_]));
     } else if (OB_ISNULL(tx_data_memtable)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "tx data memtable is unexpected nullptr", K(ret), KPC(tx_data_memtable));

@@ -35,17 +35,11 @@ int ObTabletSpaceUsage::serialize(char *buf, const int64_t buf_len, int64_t &pos
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer is not enough", K(ret), K(length), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, TABLET_SPACE_USAGE_INFO_VERSION))) {
-    LOG_WARN("fail to serialize version", K(ret), K(buf_len), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, new_pos, length))) {
-    LOG_WARN("fail to serialize length", K(ret), K(buf_len), K(new_pos), K(length));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, all_sstable_data_required_size_))) {
-    LOG_WARN("fail to serialize all_sstable_data_required_size_", K(ret), K(buf_len), K(new_pos), K(length), K(all_sstable_data_required_size_));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, tablet_clustered_meta_size_))) {
-    LOG_WARN("fail to serialize tablet_clustered_meta_size_", K(ret), K(buf_len), K(new_pos), K(length), K(tablet_clustered_meta_size_));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, all_sstable_meta_size_))) {
-    LOG_WARN("fail to serialize all_sstable_meta_size_", K(ret), K(buf_len), K(new_pos), K(length), K(all_sstable_meta_size_));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, all_sstable_data_occupy_size_))) {
-    LOG_WARN("fail to serialize all_sstable_data_occupy_size_", K(ret), K(buf_len), K(new_pos), K(length), K(all_sstable_data_occupy_size_));
   } else if (OB_UNLIKELY(length != new_pos - pos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("length doesn't match", K(ret), K(length), K(new_pos), K(pos));
@@ -66,7 +60,6 @@ int ObTabletSpaceUsage::deserialize(const char *buf, const int64_t data_len, int
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, new_pos, &version))) {
-    LOG_WARN("fail to deserialize version", K(ret), K(data_len), K(new_pos));
   } else if (OB_UNLIKELY(TABLET_SPACE_USAGE_INFO_VERSION != version)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("version doesn't match", K(ret), K(version));

@@ -69,7 +69,6 @@ int ObDDLSeqGenerator::get_next(int64_t &seq_val, bool &is_step_over)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(*this));
   } else if (OB_FAIL(preview_next(current_, seq_val))) {
-    LOG_WARN("preview next failed", K(ret));
   } else {
     current_ = seq_val;
     is_step_over = this->is_step_over(current_);

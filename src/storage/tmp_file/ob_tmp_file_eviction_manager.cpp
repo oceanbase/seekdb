@@ -98,9 +98,7 @@ int ObTmpFileEvictionManager::remove_file(ObSharedNothingTmpFile &file)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(remove_file(true, file))) {
-    LOG_WARN("fail to remove file from meta list", KR(ret), K(file));
   } else if (OB_FAIL(remove_file(false, file))) {
-    LOG_WARN("fail to remove file from data list", KR(ret), K(file));
   }
   return ret;
 }
@@ -132,13 +130,10 @@ int ObTmpFileEvictionManager::evict(const int64_t expected_evict_page_num, int64
 
   int64_t actual_evict_data_page_num = 0;
   if (OB_FAIL(evict_file_from_list_(false/*is_meta*/, remain_evict_page_num, actual_evict_data_page_num))) {
-    LOG_WARN("fail to evict file from list", KR(ret), K(remain_evict_page_num), K(actual_evict_data_page_num));
   } else {
     remain_evict_page_num -= actual_evict_data_page_num;
     actual_evict_page_num += actual_evict_data_page_num;
   }
-  LOG_DEBUG("evict data pages over", KR(ret), K(expected_evict_page_num), K(remain_evict_page_num),
-                                     K(actual_evict_page_num), K(actual_evict_data_page_num));
 
   int64_t actual_evict_meta_page_num = 0;
   if (FAILEDx(evict_file_from_list_(true/*is_meta*/, remain_evict_page_num, actual_evict_meta_page_num))) {
@@ -147,8 +142,6 @@ int ObTmpFileEvictionManager::evict(const int64_t expected_evict_page_num, int64
     remain_evict_page_num -= actual_evict_meta_page_num;
     actual_evict_page_num += actual_evict_meta_page_num;
   }
-  LOG_DEBUG("evict meta pages over", KR(ret), K(expected_evict_page_num), K(remain_evict_page_num),
-                                    K(actual_evict_page_num), K(actual_evict_meta_page_num));
 
   return ret;
 }
@@ -180,8 +173,6 @@ int ObTmpFileEvictionManager::evict_file_from_list_(const bool &is_meta,
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
         is_empty_list = true;
-        LOG_DEBUG("no tmp file in list", K(is_meta), K(expected_evict_page_num),
-                                         K(remain_evict_page_num), K(actual_evict_page_num));
       } else {
         LOG_WARN("fail to pop file from list", KR(ret), K(is_meta));
       }
@@ -191,15 +182,11 @@ int ObTmpFileEvictionManager::evict_file_from_list_(const bool &is_meta,
     } else if (is_meta) {
       if (OB_FAIL(file_handle.get()->evict_meta_pages(remain_evict_page_num,
                                                       actual_evict_file_page_num))) {
-        LOG_WARN("fail to evict meta pages", KR(ret), K(file_handle), K(remain_evict_page_num),
-                 K(actual_evict_file_page_num));
       }
     } else {
       if (OB_FAIL(file_handle.get()->evict_data_pages(remain_evict_page_num,
                                                       actual_evict_file_page_num,
                                                       remain_flushed_file_page_num))) {
-        LOG_WARN("fail to evict data pages", KR(ret), K(file_handle), K(remain_evict_page_num),
-                 K(actual_evict_page_num), K(remain_flushed_file_page_num));
       } else if (OB_UNLIKELY(remain_evict_page_num > actual_evict_file_page_num && remain_flushed_file_page_num > 1)) {
         // we allow to not evict the last data page
         ret = OB_ERR_UNEXPECTED;
@@ -230,7 +217,6 @@ int ObTmpFileEvictionManager::pop_file_from_list_(const bool &is_meta, ObSNTmpFi
   ObSpinLockGuard guard(lock);
   if (eviction_list.is_empty()) {
     ret = OB_EMPTY_RESULT;
-    LOG_DEBUG("eviction_list is empty", K(is_meta));
   } else if (OB_ISNULL(file = &eviction_list.remove_first()->file_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("file is null", KR(ret));

@@ -90,10 +90,8 @@ int ObPxTargetMonitor::apply_target(int64_t wait_time_us, int64_t session_target
     }
   }
   if (OB_SUCC(ret) && need_wait) {
-    LOG_DEBUG("wait begin", K(wait_time_us), K(session_target), K(req_cnt));
     int64_t wait_us = min(wait_time_us, static_cast<int64_t>(1000000));
     target_cond_.wait(wait_us);
-    LOG_DEBUG("wait finish");
   }
   return ret;
 }

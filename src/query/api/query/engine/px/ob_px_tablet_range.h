@@ -69,7 +69,6 @@ int ObPxTabletRange::deep_copy_from(const ObPxTabletRange &other,
   tablet_id_ = other.tablet_id_;
   range_weights_ = other.range_weights_;
   if (OB_FAIL(range_cut_.reserve(other.range_cut_.count()))) {
-    SQL_LOG(WARN, "reserve end keys failed", K(ret), K(other.range_cut_.count()));
   }
   DatumKey copied_key;
   RangeWeight range_weight;
@@ -84,12 +83,10 @@ int ObPxTabletRange::deep_copy_from(const ObPxTabletRange &other,
       } else if (!use_allocator && OB_FAIL(tmp_datum.deep_copy(cur_key.at(j), buf, size, pos))) {
         SQL_LOG(WARN, "deep copy datum failed", K(ret), K(i), K(j), K(cur_key.at(j)), K(size), K(pos));
       } else if (OB_FAIL(copied_key.push_back(tmp_datum))) {
-        SQL_LOG(WARN, "push back datum failed", K(ret), K(i), K(j), K(tmp_datum));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(range_cut_.push_back(copied_key))) {
-      SQL_LOG(WARN, "push back rowkey failed", K(ret), K(copied_key), K(i));
     }
   }
   return ret;

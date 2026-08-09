@@ -38,11 +38,9 @@ int ObLCObjectManager::init(int64_t hash_bucket, ObPlanCache *lib_cache)
   } else if (OB_FAIL(cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                     ObModIds::OB_HASH_BUCKET_LC_STAT,
                                     ObModIds::OB_HASH_NODE_LC_STAT))) {
-    LOG_WARN("failed to init cache obj map", K(ret));
   } else if (OB_FAIL(alloc_cache_obj_map_.create(hash::cal_next_prime(hash_bucket),
                                                  ObModIds::OB_HASH_BUCKET_LC_STAT,
                                                  ObModIds::OB_HASH_NODE_LC_STAT))) {
-    LOG_WARN("failed to init alloc cache obj map", K(ret));
   }
   return ret;
 }
@@ -63,14 +61,12 @@ int ObLCObjectManager::alloc(ObCacheObjGuard& guard,
   } else if (FALSE_IT(mem_attr.label_ = LC_NS_TYPE_LABELS[ns])) {
   } else if (OB_FAIL(parent_context->CREATE_CONTEXT(entity,
                      lib::ContextParam().set_mem_attr(mem_attr)))) {
-    LOG_WARN("create entity failed", K(ret), K(mem_attr));
   } else if (OB_ISNULL(entity)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
       if (OB_FAIL(LC_CO_ALLOC[ns](entity, cache_obj))) {
-        LOG_WARN("failed to create lib cache node", K(ret), K(ns));
       } else {
         uint64_t obj_id = allocate_object_id();
         cache_obj->object_id_ = obj_id;
@@ -98,7 +94,6 @@ int ObLCObjectManager::add_cache_obj(ObILibCacheObject *cache_obj)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(cache_obj), K(ret));
   } else if (OB_FAIL(cache_obj_map_.set_refactored(cache_obj->get_object_id(), cache_obj))) {
-    LOG_WARN("failed to set element", K(ret), K(cache_obj->get_object_id()));
   }
   return ret;
 }
@@ -108,9 +103,7 @@ int ObLCObjectManager::erase_cache_obj(ObCacheObjID id)
   int ret = OB_SUCCESS;
   ObILibCacheObject *cache_obj = NULL;
   if (OB_FAIL(cache_obj_map_.erase_refactored(id, &cache_obj))) {
-    SQL_PC_LOG(WARN, "failed to erase cache obj", K(ret), K(id));
   } else {
-    SQL_PC_LOG(DEBUG, "succeed to remove cache obj", K(id), K(ret));
     if (NULL != cache_obj) {
       // set logical deleted time
       cache_obj->set_logical_del_time(common::ObTimeUtility::current_monotonic_time());
@@ -144,9 +137,7 @@ void ObLCObjectManager::common_free(ObILibCacheObject *cache_obj)
     } else if (ref_count == 0) {
       
       if (OB_FAIL(cache_obj->before_cache_evicted())) {
-        LOG_WARN("failed to process before_cache_evicted");
       } else if (OB_FAIL(destroy_cache_obj(false, cache_obj->get_object_id()))) {
-        LOG_WARN("failed to destroy cache obj", K(ret));
       }
     } else {
       LOG_ERROR("invalid cache obj ref count", K(ref_count), KP(cache_obj));

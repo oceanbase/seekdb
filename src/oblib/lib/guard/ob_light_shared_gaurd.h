@@ -106,7 +106,6 @@ struct ObLightSharedPtr// RAII used
   ~ObLightSharedPtr() { reset(); }
   void reset() {
     if (OB_NOT_NULL(ctrl_ptr_)) {
-      OCCAM_LOG(DEBUG, "ObLightSharedPtr destructed", KPC_(ctrl_ptr));
       if (0 == ctrl_ptr_->dec_ref()) {
         ctrl_ptr_->~LightControlBlock();
       }

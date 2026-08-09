@@ -623,7 +623,6 @@ int ObCharset::caseup(const ObCollationType collation_type,
     dst.reset();
   } else {
     if (OB_FAIL(ob_write_string(allocator, src, dst))) {
-      LOG_WARN("fail to write string", K(ret));
     } else {
       ObCollationType col_type = (charset_type_by_coll(collation_type) == CHARSET_BINARY) ?
                                     ObCollationType::CS_TYPE_UTF8MB4_BIN : collation_type;
@@ -1443,7 +1442,6 @@ int ObCharset::charset_name_by_coll(const ObString &coll_name, ObString &cs_name
     ret = OB_ERR_UNKNOWN_COLLATION;
     LOG_WARN("invalid collation type", K(ret), K(coll_name));
   } else if (OB_FAIL(charset_name_by_coll(coll_type, cs_name))) {
-    LOG_WARN("fail to get charset type by collation type", K(ret), K(coll_type), K(coll_name));
   }
   return ret;
 }
@@ -1623,11 +1621,6 @@ int ObCharset::aggregate_collation_new(
   }
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("Illegal mix of collations", K(ret),
-            "type1", ObCharset::collation_name(collation_type1),
-            "level1", ObCharset::collation_level(collation_level1),
-            "type2", ObCharset::collation_name(collation_type2),
-            "level2", ObCharset::collation_level(collation_level2));
   }
   return ret;
 }
@@ -1946,7 +1939,6 @@ int ObCharset::toupper(const ObCollationType collation_type,
     int casemulti = cs_info->caseup_multiply;
     if (1 == casemulti) {
       if (OB_FAIL(ob_write_string(allocator, src, dst))) {
-        LOG_WARN("fail to copy string", K(ret), K(src));
       } else {
         size_t size = cs_info->cset->caseup(cs_info, dst.ptr(), dst.length(), dst.ptr(), dst.length());
         dst.assign_ptr(dst.ptr(), static_cast<ObString::obstr_size_t>(size));
@@ -1973,7 +1965,6 @@ int ObCharset::tolower(const ObCollationType collation_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tolower(get_charset(collation_type), src, dst, allocator))) {
-    LOG_WARN("fail to casedown string", K(ret), K(collation_type), K(src));
   }
   return ret;
 }
@@ -1990,7 +1981,6 @@ int ObCharset::tolower(const ObCharsetInfo *cs_info,
     int casemulti = cs_info->casedn_multiply;
     if (1 == casemulti) {
       if (OB_FAIL(ob_write_string(allocator, src, dst))) {
-        LOG_WARN("fail to copy string", K(ret), K(src));
       } else {
         size_t size = cs_info->cset->casedn(cs_info, dst.ptr(), dst.length(), dst.ptr(), dst.length());
         dst.assign_ptr(dst.ptr(), static_cast<ObString::obstr_size_t>(size));
@@ -2371,7 +2361,6 @@ int ObCharset::charset_convert(ObIAllocator &alloc,
         out = in;
       } else {
         if (OB_FAIL(ob_write_string(alloc, in, out))) {
-          LOG_WARN("fail to write string", K(ret), K(in));
         }
       }
     } else if (charset_type_by_coll(src_cs_type) == CHARSET_BINARY) {
@@ -2395,7 +2384,6 @@ int ObCharset::charset_convert(ObIAllocator &alloc,
     } else {
       int64_t maxmb_len = 0;
       if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(dst_cs_type, maxmb_len))) {
-        LOG_WARN("failed to get mbmaxlen by coll", K(dst_cs_type));
       } else {
         const uint32_t res_buf_len = in.length() * maxmb_len;
         uint32_t res_len = 0;
@@ -2676,7 +2664,6 @@ int ObCharset::init_charset_by_collation_type(const ObCollationType collation_ty
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("charset_arr is null", K(ret), K(collation_type));
   } else if (OB_FAIL(init_charset_info_coll_info(charset_info, loader))) {
-    LOG_WARN("fail to init charset", K(ret));
   } else {
     add_coll(collation_type, charset_info);
   }
@@ -2688,7 +2675,6 @@ int ObCharset::init_charset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_charset_and_arr())) {
-    LOG_WARN("fail to init charset", K(ret));
   } else {
     // charset name does not depend on initialization
     for (int i = CS_TYPE_INVALID + 1; i < CS_TYPE_MAX; ++i) {
@@ -2735,7 +2721,6 @@ int ObCharsetUtils::init_const_str(ObCollationType coll_type, int ascii)
     char *sys_buf = NULL;
     ObCharsetType charset_type = ObCharset::charset_type_by_coll(coll_type);
     if (OB_FAIL(ObCharset::wc_mb(coll_type, ascii, buf, buf_len, result_len))) {
-      LOG_WARN("fail to convert ascii to multi byte char", K(ret), K(buf_len));
     } else if (OB_ISNULL(sys_buf = static_cast<char*>(charset_malloc(result_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate mem", K(ret), K(result_len));

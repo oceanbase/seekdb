@@ -90,9 +90,6 @@ int ObTimestampService::get_timestamp(int64_t &gts)
           ATOMIC_STORE(&last_request_ts_, current_time);
           ATOMIC_STORE(&last_gts_, gts);
         }
-        TRANS_LOG(DEBUG, "check the gts service advancing speed", K(ret), K(current_time),
-            K(last_request_ts), K(time_delta), K(last_gts), K(gts), K(gts_delta),
-            K(compensation_value));
       }
       ATOMIC_STORE(&check_gts_speed_lock_, 0);
     }

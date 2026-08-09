@@ -41,7 +41,6 @@ int64_t ObStorageObjectOpt::to_string(char *buf, const int64_t buf_len) const
     break;
   }
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "object_type=%s", type_name))) {
-    LOG_WARN("failed to print storage object option", K(ret), K(buf_len), K(pos), K(object_type_));
   }
   return pos;
 }
@@ -73,9 +72,7 @@ int ObObjectManager::init(const int64_t macro_object_size)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(super_block_buf_holder_.init(ObServerSuperBlockHeader::OB_MAX_SUPER_BLOCK_SIZE))) {
-    LOG_WARN("fail to init super block buffer holder, ", K(ret));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.init(&LOCAL_DEVICE_INSTANCE, macro_object_size))) {
-    LOG_WARN("fail to init block manager", K(ret), K(macro_object_size));
   }
 
   if (OB_SUCC(ret)) {
@@ -98,9 +95,7 @@ int ObObjectManager::start(const int64_t reserved_size)
   } else {
     bool need_format = false;
     if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size, need_format))) {
-      LOG_WARN("fail to start block manager", K(ret), K(reserved_size));
     } else if (OB_FAIL(read_or_format_super_block_(need_format))) {
-      LOG_WARN("fail to read or format super block", K(ret), K(need_format));
     }
   }
   return ret;
@@ -133,7 +128,6 @@ int ObObjectManager::alloc_object(const ObStorageObjectOpt &opt, ObStorageObject
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("unsupported macro object type", K(ret), K(opt));
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_object(object_handle))) {
-    LOG_WARN("fail to alloc object", K(ret), K(opt));
   }
   return ret;
 }
@@ -155,9 +149,7 @@ int ObObjectManager::async_write_object(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(write_info));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(opt, object_handle))) {
-    LOG_WARN("fail to alloc object from object manager", K(ret), K(opt));
   } else if (OB_FAIL(object_handle.async_write(write_info))) {
-    LOG_WARN("Fail to async write block", K(ret), K(opt), K(object_handle));
   }
   return ret;
 }
@@ -168,9 +160,7 @@ int ObObjectManager::read_object(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(async_read_object(read_info, object_handle))) {
-    LOG_WARN("fail to sync read object", K(ret), K(read_info));
   } else if (OB_FAIL(object_handle.wait())) {
-    LOG_WARN("Fail to wait io finish", K(ret), K(read_info));
   }
   return ret;
 }
@@ -181,9 +171,7 @@ int ObObjectManager::write_object(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(async_write_object(opt, write_info, object_handle))) {
-    LOG_WARN("fail to sync write block", K(ret), K(write_info), K(object_handle));
   } else if (OB_FAIL(object_handle.wait())) {
-    LOG_WARN("fail to wait io finish", K(ret), K(write_info));
   }
   return ret;
 }
@@ -235,9 +223,7 @@ int ObObjectManager::resize_local_device(
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.resize_file(
           new_device_size, new_device_disk_percentage, reserved_size, tmp_super_block))) {
-        LOG_WARN("fail to resize file", K(ret), K(new_device_size), K(new_device_disk_percentage), K(reserved_size));
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
-        LOG_WARN("fail to write super block", K(ret), K(tmp_super_block));
       } else {
         super_block_ = tmp_super_block;
         FLOG_INFO("succeed to resize local device", K_(super_block));
@@ -273,9 +259,7 @@ int ObObjectManager::update_super_block(const common::ObLogCursor &replay_start_
       tmp_super_block.body_.runtime_meta_entry_ = runtime_meta_entry;
       tmp_super_block.construct_header();
       if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(tmp_super_block, super_block_buf_holder_))) {
-        LOG_WARN("fail to write server super block", K(ret));
       } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
-        LOG_WARN("failed to fsync_block", K(ret));
       } else {
         super_block_ = tmp_super_block;
       }
@@ -309,16 +293,13 @@ int  ObObjectManager::read_or_format_super_block_(const bool need_format)
   // read super block
   if (!need_format) {
     if (OB_FAIL(OB_SERVER_BLOCK_MGR.read_super_block(super_block_, super_block_buf_holder_))) {
-      LOG_WARN("fail to read server super block", K(ret));
     } else {
       LOG_INFO("succeed to read super block", K_(super_block));
     }
   } else {
     if (OB_FAIL(super_block_.format_startup_super_block(
         macro_object_size_, OB_SERVER_BLOCK_MGR.get_total_block_size()))) {
-      LOG_WARN("fail to format super block, ", K(ret));
     } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.write_super_block(super_block_, super_block_buf_holder_))) {
-      LOG_WARN("fail to write super block, ", K(ret));
     }
   }
   return ret;

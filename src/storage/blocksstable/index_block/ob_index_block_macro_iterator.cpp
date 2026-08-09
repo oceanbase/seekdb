@@ -84,7 +84,6 @@ int ObMicroIndexRowItem::init(ObIAllocator &allocator,
       LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObDatumRowkey)));
     } else if (FALSE_IT(endkey_ = new (key_buf) ObDatumRowkey())) {
     } else if (OB_FAIL(endkey->deep_copy(*endkey_, allocator))) {
-      LOG_WARN("fail to deep copy rowkey", K(ret), KPC(endkey_), KPC(endkey));
     }
 
     void *header_buf = nullptr;
@@ -246,14 +245,11 @@ int ObIndexBlockMacroIterator::open(
   } else if (sstable.no_data_to_read()) {
     is_iter_end_ = true;
   } else if (OB_FAIL(sstable.get_last_rowkey(allocator, sstable_endkey))) {
-    LOG_WARN("Fail to get last rowkey of sstable", K(ret));
   } else if (OB_FAIL(sstable_endkey.compare(
       range.get_start_key(), rowkey_read_info.get_datum_utils(), cmp_ret))) {
-    LOG_WARN("Fail to compare sstable endkey and range start key", K(ret));
   } else if (cmp_ret < 0 || (0 == cmp_ret && !range.get_border_flag().inclusive_start())) {
     is_iter_end_ = true;
   } else if (OB_FAIL(tree_cursor_.init(sstable, allocator, &rowkey_read_info))) {
-    LOG_WARN("Fail to init tree cursor", K(ret), K(sstable));
   } else {
     const int64_t store_rowkey_cnt = rowkey_read_info.get_schema_rowkey_count()
         + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt(); // include multi-version
@@ -267,7 +263,6 @@ int ObIndexBlockMacroIterator::open(
           begin_,
           begin_block_start_row_offset_,
           start_beyond_range))) {
-        LOG_WARN("Fail to locate begin macro block", K(ret), K(range));
       } else if (OB_FAIL(locate_macro_block(
           true,
           false,
@@ -276,7 +271,6 @@ int ObIndexBlockMacroIterator::open(
           end_,
           end_block_start_row_offset_,
           end_beyond_range))) {
-        LOG_WARN("Fail to locate end macro block", K(ret), K(range));
       } else {
         curr_key_ = range.get_end_key();
         if (start_beyond_range) {
@@ -294,7 +288,6 @@ int ObIndexBlockMacroIterator::open(
           end_,
           end_block_start_row_offset_,
           end_beyond_range))) {
-        LOG_WARN("Fail to locate end macro block", K(ret), K(range));
       } else if (OB_FAIL(locate_macro_block(
           false,
           true,
@@ -303,7 +296,6 @@ int ObIndexBlockMacroIterator::open(
           begin_,
           begin_block_start_row_offset_,
           start_beyond_range))) {
-        LOG_WARN("Fail to locate begin macro block", K(ret), K(range));
       } else {
         // Always return MIN_ROWKEY as start_key of first iterated macro block
         // for check reuse boundary during compaction
@@ -329,8 +321,6 @@ int ObIndexBlockMacroIterator::open(
     is_inited_ = true;
   }
 
-  LOG_DEBUG("succeed to open index block macro iterator", K(ret),
-            K(index_tree_type_), K(need_record_micro_info_));
 
   return ret;
 }
@@ -380,14 +370,11 @@ int ObIndexBlockMacroIterator::get_next_idx_row(ObIAllocator &item_allocator, Ob
   } else if (is_iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(tree_cursor_.get_macro_block_id(macro_id))) {
-    LOG_WARN("Fail to get macro row block id", K(ret), K(macro_id));
   } else if (OB_FAIL(tree_cursor_.get_idx_parser(idx_row_parser))) {
-    LOG_WARN("Fail to get idx row parser", K(ret), K_(tree_cursor));
   } else if (OB_ISNULL(idx_row_parser)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null idx_row_parser", K(ret));
   } else if (OB_FAIL(idx_row_parser->get_header(idx_row_header))) {
-    LOG_WARN("Fail to get idx row header", K(ret), KPC(idx_row_parser));
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index row header", K(ret));
@@ -402,7 +389,6 @@ int ObIndexBlockMacroIterator::get_next_idx_row(ObIAllocator &item_allocator, Ob
     ObDatumRowkey rowkey;
     row_offset = idx_row_parser->get_row_offset();
     if (OB_FAIL(idx_row_parser->parse_minor_meta_and_agg_row(minor_meta_info, agg_row_buf, agg_buf_size))) {
-      LOG_WARN("Fail to parse minor meta and agg row", K(ret));
     } else {
       if (need_record_micro_info_) {
         micro_endkey_allocator_.reuse();
@@ -413,21 +399,16 @@ int ObIndexBlockMacroIterator::get_next_idx_row(ObIAllocator &item_allocator, Ob
                     micro_endkeys_,
                     micro_index_infos_,
                     hold_item_))) {
-          LOG_WARN("Fail to record child micro block info", K(ret), KPC(iter_range_));
         }
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(deep_copy_rowkey(curr_key_, prev_key_, prev_key_buf_))) {
-      STORAGE_LOG(WARN, "Failed to save prev key", K(ret), K_(curr_key));
     } else if (OB_FAIL(tree_cursor_.get_current_endkey(rowkey))) {
-      LOG_WARN("Fail to get current endkey", K(ret), K_(tree_cursor));
     } else if (OB_FAIL(deep_copy_rowkey(rowkey, curr_key_, curr_key_buf_))) {
-      STORAGE_LOG(WARN, "Failed to save curr key", K(ret), K(rowkey));
     } else if (FALSE_IT(macro_index_item.reuse())) {
     } else if (OB_FAIL(macro_index_item.init(item_allocator, idx_row_header, &curr_key_, minor_meta_info, agg_row_buf, agg_buf_size))) {
-      STORAGE_LOG(WARN, "Failed to init macro index item", K(ret), K(macro_index_item));
     } else if (OB_FAIL(tree_cursor_.move_forward(is_reverse_scan_))) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         is_iter_end_ = true;
@@ -459,11 +440,9 @@ int ObIndexBlockMacroIterator::get_next_macro_block(
   if (OB_FAIL(ret)) {
   } else if (IndexTreeType::IndexTree == index_tree_type_) {
     if (OB_FAIL(get_data_macro_block_id_in_index_tree(macro_id))) {
-      LOG_WARN("Fail to get data macro block id in index tree", K(ret));
     }
   } else if (IndexTreeType::ClusteredIndexTree == index_tree_type_) {
     if (OB_FAIL(get_data_macro_block_id_in_clustered_index_tree(macro_id))) {
-      LOG_WARN("Fail to get data macro block id in clustered index tree", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -472,12 +451,10 @@ int ObIndexBlockMacroIterator::get_next_macro_block(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tree_cursor_.get_idx_parser(idx_row_parser))) {
-    LOG_WARN("Fail to get idx row parser", K(ret), K_(tree_cursor));
   } else if (OB_ISNULL(idx_row_parser)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null idx_row_parser", K(ret));
   } else if (OB_FAIL(idx_row_parser->get_header(idx_row_header))) {
-    LOG_WARN("Fail to get idx row header", K(ret), KPC(idx_row_parser));
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index row header", K(ret));
@@ -500,17 +477,13 @@ int ObIndexBlockMacroIterator::get_next_macro_block(
                   micro_endkeys_,
                   micro_index_infos_,
                   hold_item_))) {
-        LOG_WARN("Fail to record child micro block info", K(ret), KPC(iter_range_));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(deep_copy_rowkey(curr_key_, prev_key_, prev_key_buf_))) {
-      STORAGE_LOG(WARN, "Failed to save prev key", K(ret), K_(curr_key));
     } else if (OB_FAIL(tree_cursor_.get_current_endkey(rowkey))) {
-      LOG_WARN("Fail to get current endkey", K(ret), K_(tree_cursor));
     } else if (OB_FAIL(deep_copy_rowkey(rowkey, curr_key_, curr_key_buf_))) {
-      STORAGE_LOG(WARN, "Failed to save curr key", K(ret), K(rowkey));
     }
 
     // Move forward.
@@ -541,12 +514,10 @@ int ObIndexBlockMacroIterator::get_next_macro_block(ObMacroBlockDesc &block_desc
   } else if (is_iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(tree_cursor_.get_idx_parser(idx_row_parser))) {
-    LOG_WARN("Fail to get idx row parser", K(ret), K_(tree_cursor));
   } else if (OB_ISNULL(idx_row_parser)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null idx_row_parser", K(ret));
   } else if (OB_FAIL(idx_row_parser->get_header(idx_row_header))) {
-    LOG_WARN("Fail to get idx row header", K(ret), KPC(idx_row_parser));
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index row header", K(ret));
@@ -597,9 +568,6 @@ int ObIndexBlockMacroIterator::get_current_clustered_index_info(
   } else {
     hold_item_.block_data_.type_ = ObMicroBlockData::Type::INDEX_BLOCK;
     clustered_micro_block_data = &(hold_item_.block_data_);
-    LOG_DEBUG("succeed to get clustered index info", K(ret),
-              K(need_record_micro_info_), K(index_tree_type_),
-              KPC(clustered_micro_block_data));
   }
   return ret;
 }
@@ -611,7 +579,6 @@ int ObIndexBlockMacroIterator::get_data_macro_block_id_in_index_tree(MacroBlockI
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("incorrect index tree type, should be index tree", K(ret), K(index_tree_type_));
   } else if (OB_FAIL(tree_cursor_.get_current_node_macro_id(macro_id))) {
-    LOG_WARN("fail to get current node macro id", K(ret));
   }
   return ret;
 }
@@ -627,19 +594,12 @@ int ObIndexBlockMacroIterator::get_data_macro_block_id_in_clustered_index_tree(M
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("incorrect index tree type, should be clustered index tree", K(ret), K(index_tree_type_));
   } else if (OB_FAIL(tree_cursor_.get_idx_row_header(idx_header))) {
-    LOG_WARN("fail to get index row header", K(ret));
   } else if (OB_FAIL(tree_cursor_.get_current_endkey(last_rowkey))) {
-    LOG_WARN("fail to get current endkey", K(ret));
   } else if (OB_FAIL(tree_cursor_.drill_down(
                  last_rowkey, ObIndexBlockTreeCursor::ONE_LEVEL, is_beyond_range))) {
-    LOG_WARN("fail to drill down to leaf", K(ret));
-  // TODO(baichangmin): denfensive check here, should drilled down to leaf level.
   } else if (OB_FAIL(tree_cursor_.get_current_node_macro_id(macro_id))) {
-    LOG_WARN("fail to get current node macro id", K(ret));
   } else if (OB_FAIL(tree_cursor_.pull_up(false /* cascade */, false /* is_reverse_scan */))) {
-    LOG_WARN("fail to pull up cursor back", K(ret));
   } else {
-    LOG_DEBUG("succeed to get data macro block id in clustered index tree", K(ret), K(macro_id));
   }
   return ret;
 }
@@ -663,13 +623,10 @@ int ObIndexBlockMacroIterator::locate_macro_block(
   MacroBlockId leaf_level_macro_id;
   if (IndexTreeType::Unknown == index_tree_type_) {
     if (OB_FAIL(tree_cursor_.pull_up_to_root())) {
-      LOG_WARN("Fail to pull up sstable index tree cursror to root", K(ret));
     } else if (OB_FAIL(tree_cursor_.drill_down(
                    rowkey, ObIndexBlockTreeCursor::LEAF, lower_bound, equal,
                    is_beyond_the_range))) {
-      LOG_WARN("Fail to drill down to leaf level", K(ret));
     } else if (OB_FAIL(tree_cursor_.get_current_node_macro_id(leaf_level_macro_id))) {
-      LOG_WARN("Fail to get current node macro id", K(ret));
     } else if (ObIndexBlockRowHeader::DEFAULT_IDX_ROW_MACRO_ID == leaf_level_macro_id) {
       index_tree_type_ = IndexTreeType::IndexTree;
     } else {
@@ -680,22 +637,17 @@ int ObIndexBlockMacroIterator::locate_macro_block(
   // Drill down to MACRO level.
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tree_cursor_.pull_up_to_root())) {
-    LOG_WARN("Fail to pull up sstable index tree cursor to root", K(ret));
   } else if (OB_FAIL(tree_cursor_.drill_down(
       rowkey, ObIndexBlockTreeCursor::MoveDepth::MACRO, lower_bound, equal, is_beyond_the_range))) {
-    LOG_WARN("Fail to drill down to macro level", K(ret));
   }
 
   // Get begin or end macro id.
   if (OB_FAIL(ret)) {
   } else if (IndexTreeType::IndexTree == index_tree_type_) {
     if (OB_FAIL(get_data_macro_block_id_in_index_tree(macro_id))) {
-      LOG_WARN("Fail to get data macro block id in index tree", K(ret));
     }
   } else if (IndexTreeType::ClusteredIndexTree == index_tree_type_) {
     if (OB_FAIL(get_data_macro_block_id_in_clustered_index_tree(macro_id))) {
-      LOG_WARN("Fail to get data macro block id in clustered index tree",
-               K(ret), K(rowkey), K(lower_bound), K(is_beyond_the_range));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -704,12 +656,10 @@ int ObIndexBlockMacroIterator::locate_macro_block(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tree_cursor_.get_idx_parser(parser))) {
-    LOG_WARN("Fail to get macro block idx parser", K(ret));
   } else if (OB_ISNULL(parser)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null parser", K(ret));
   } else if (OB_FAIL(parser->get_start_row_offset(start_row_offset))) {
-    LOG_WARN("Fail to get prev row offset", K(ret), KPC(parser));
   }
   return ret;
 }

@@ -44,7 +44,6 @@ int calc_digest_text_inner(const ObString &query,
   stmt::StmtType stmt_type = stmt::T_NONE;
   ObItemType item_type = T_NULL;
   if (OB_FAIL(parser.parse(query, parse_result))) {
-    LOG_WARN("fail to parse sql str", K(query), K(ret));
   } else if (OB_ISNULL(parse_result.result_tree_)
             || OB_ISNULL(parse_result.result_tree_->children_[0])) {
     ret = OB_ERR_UNEXPECTED;
@@ -61,7 +60,6 @@ int calc_digest_text_inner(const ObString &query,
     LOG_WARN("invalid empty query", K(item_type), K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "digest function");
   } else if (OB_FAIL(ObResolverUtils::resolve_stmt_type(parse_result, stmt_type))) {
-    LOG_WARN("failed to resolve stmt type", K(ret));
   } else if (ObStmt::is_dml_stmt(stmt_type) && !ObStmt::is_show_stmt(stmt_type)) {
     if (OB_UNLIKELY(parse_result.result_tree_->children_[0]->value_ > 0)) {
       ret = OB_INVALID_ARGUMENT;
@@ -73,7 +71,6 @@ int calc_digest_text_inner(const ObString &query,
                                                                 parse_result.result_tree_,
                                                                 tmp_params,
                                                                 charsets4parser))) {
-      LOG_WARN("fail to parameterize syntax tree", K(query), K(ret));
     } else {
       digest_str = pc_ctx.sql_ctx_.plan_key_.format_sql_;
     }
@@ -108,12 +105,10 @@ int calc_digest_text(ObIAllocator &allocator,
     ObSEArray<ObString, 1> queries;
     ObMPParseStat parse_stat;
     if (OB_FAIL(parser.split_multiple_stmt(sql_str, queries, parse_stat))) {
-      LOG_WARN("failed to split multiple stmt", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < queries.count(); ++i) {
         if (OB_FAIL(calc_digest_text_inner(queries.at(i), i, allocator, pc_ctx, parser,
                                            charsets4parser, digest_str))) {
-          LOG_WARN("fail to calc digest test inner", K(ret), K(sql_str));
         }
       }
     }
@@ -167,7 +162,6 @@ int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else{
@@ -180,11 +174,8 @@ int ObExprStatementDigest::eval_statement_digest(const ObExpr &expr, ObEvalCtx &
     char *buf = NULL;
     if (OB_FAIL(calc_digest_text(calc_alloc, sql_str, expr.args_[0]->datum_meta_.cs_type_,
                                  session, schema_guard, digest_str))) {
-      LOG_WARN("fail to calc statement digest text", K(sql_str), K(ret));
     } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_MD5, digest_str, calc_alloc, hash_str))) {
-      LOG_WARN("fail to calc md5", K(digest_str), K(ret));
     } else if (OB_FAIL(ObDatumHexUtils::hex(expr, hash_str, ctx, calc_alloc, expr_datum))) {
-      LOG_WARN("fail to convert hash_str to hex", K(ret));
     }
   }
   return ret;
@@ -232,7 +223,6 @@ int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_null();
   } else{
@@ -246,12 +236,9 @@ int ObExprStatementDigestText::eval_statement_digest_text(const ObExpr &expr, Ob
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     if (OB_FAIL(calc_digest_text(calc_alloc, sql_str, in_cs_type, session,
                                  schema_guard, digest_str))) {
-      LOG_WARN("fail to calc statement digest text", K(sql_str), K(ret));
     } else if (OB_FAIL(ObSQLUtils::copy_and_convert_string_charset(calc_alloc, digest_str, res_str,
         in_cs_type, res_cs_type))) {
-      LOG_WARN("fail to check need_convert_string_collation", K(ret));
     } else if (OB_FAIL(ObTextStringHelper::string_to_templob_result(expr, ctx, expr_datum, res_str))) {
-      LOG_WARN("fail to convert result to temporary lob", K(ret));
     }
   }
   return ret;

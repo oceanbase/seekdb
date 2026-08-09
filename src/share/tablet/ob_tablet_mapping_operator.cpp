@@ -165,15 +165,12 @@ int ObTabletMappingTableOperator::batch_update(
     int64_t end_idx = min(MAX_BATCH_COUNT, infos.count());
     while (OB_SUCC(ret) && start_idx < end_idx) {
       if (OB_FAIL(inner_batch_update_by_sql_(sql_proxy, infos, start_idx, end_idx))) {
-        LOG_WARN("fail to inner batch get by sql",
-            KR(ret), K(infos), K(start_idx), K(end_idx));
       } else {
         start_idx = end_idx;
         end_idx = min(start_idx + MAX_BATCH_COUNT, infos.count());
       }
     }
     if (OB_SUCC(ret)) {
-      LOG_TRACE("batch update tablet-table mapping success", K(infos));
     }
   }
   return ret;
@@ -194,14 +191,11 @@ int ObTabletMappingTableOperator::update_table_to_tablet_id_mapping(common::ObIS
        || OB_FAIL(dml_splicer.add_column("table_id", table_id))) {
       LOG_WARN("fail to add column", K(ret), K(tablet_id), K(table_id));
     } else if (OB_FAIL(dml_splicer.splice_update_sql(OB_ALL_TABLET_TO_TABLE_TNAME, sql))) {
-      LOG_WARN("fail to splice batch insert update sql", K(ret), K(sql));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", K(ret), K(sql), K(affected_rows));
     } else if(!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expect one row", K(ret), K(sql), K(affected_rows));
     } else {
-      LOG_TRACE("update tablet-table mapping success", K(affected_rows));
     }
   }
   return ret;
@@ -234,17 +228,12 @@ int ObTabletMappingTableOperator::inner_batch_update_by_sql_(
           || OB_FAIL(dml_splicer.add_column("table_id", info.get_table_id()))) {
         LOG_WARN("fail to add column", KR(ret), K(info));
       } else if (OB_FAIL(dml_splicer.finish_row())) {
-        LOG_WARN("fail to finish row", KR(ret));
       }
     }
     if (FAILEDx(dml_splicer.splice_batch_insert_update_sql(OB_ALL_TABLET_TO_TABLE_TNAME, sql))) {
       LOG_WARN("fail to splice batch insert update sql", KR(ret), K(sql));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", KR(ret), K(sql),
-          K(affected_rows), K(infos), K(start_idx), K(end_idx));
     } else {
-      LOG_TRACE("update tablet-table mapping success",
-          K(affected_rows), K(start_idx), K(end_idx));
     }
   }
   return ret;
@@ -267,8 +256,6 @@ int ObTabletMappingTableOperator::batch_remove(
           tablet_ids,
           start_idx,
           end_idx))) {
-        LOG_WARN("fail to inner batch remove by sql",
-            KR(ret), K(tablet_ids), K(start_idx), K(end_idx));
       } else {
         start_idx = end_idx;
         end_idx = min(start_idx + MAX_BATCH_COUNT, tablet_ids.count());
@@ -298,7 +285,6 @@ int ObTabletMappingTableOperator::inner_batch_remove_by_sql_(
   } else if (OB_FAIL(sql.append_fmt(
       "DELETE FROM %s WHERE tablet_id IN (",
       OB_ALL_TABLET_TO_TABLE_TNAME))) {
-    LOG_WARN("fail to assign sql", KR(ret));
   } else {
     int64_t affected_rows = 0;
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
@@ -307,13 +293,11 @@ int ObTabletMappingTableOperator::inner_batch_remove_by_sql_(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid tablet_id with runtime", KR(ret), K(tablet_id));
       } else if (OB_FAIL(sql.append_fmt("%s %lu", start_idx == idx ? "" : ",", tablet_id.id()))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(tablet_id));
       }
     }
     if (FAILEDx(sql.append_fmt(")"))) {
       LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", KR(ret), K(sql), K(affected_rows));
     }
   }
   return ret;
@@ -371,7 +355,6 @@ int ObTabletMappingTableOperator::construct_results_(
     } else if (FAILEDx(info.init(ObTabletID(tablet_id), table_id))) {
       LOG_WARN("init failed", KR(ret), K(tablet_id), K(table_id));
     } else if (OB_FAIL(infos.push_back(info))) {
-      LOG_WARN("fail to push back", KR(ret), K(info));
     }
   }
   if (OB_ITER_END == ret) {

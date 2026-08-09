@@ -77,7 +77,6 @@ int ObLogService::server_module_init(
         KP(runtime_clog_dir), KP(clog_dir), KP(log_storage),
         KP(log_block_pool), KP(log_local_device), KP(io_manager), K(self));
   } else if (OB_FAIL(LOG_ALLOCATOR_MGR_INSTANCE.get_log_allocator(alloc_mgr))) {
-    CLOG_LOG(WARN, "get_log_allocator failed", K(ret));
   } else if (OB_FAIL(logservice->init(palf_options,
                                       runtime_clog_dir,
                                       self,
@@ -89,9 +88,7 @@ int ObLogService::server_module_init(
                                       is_shared_storage_mode,
                                       replay_thread_quota,
                                       runtime_config))) {
-    CLOG_LOG(ERROR, "init ObLogService failed", K(ret), K(runtime_clog_dir));
   } else if (OB_FAIL(FileDirectoryUtils::fsync_dir(clog_dir))) {
-    CLOG_LOG(ERROR, "fsync_dir failed", K(ret), K(clog_dir));
   } else {
     CLOG_LOG(INFO, "ObLogService server_module_init success");
   }
@@ -108,11 +105,8 @@ int ObLogService::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_env_->start())) {
-    PALF_LOG(WARN, "start palf env failed", K(ret));
   } else if (OB_FAIL(apply_service_.start())) {
-    CLOG_LOG(WARN, "failed to start apply_service_", K(ret));
   } else if (OB_FAIL(replay_service_.start())) {
-    CLOG_LOG(WARN, "failed to start replay_service_", K(ret));
   } else {
     is_running_ = true;
     FLOG_INFO("ObLogService is started");
@@ -155,11 +149,9 @@ int check_and_prepare_dir(const char *dir)
   bool is_exist = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(common::FileDirectoryUtils::is_exists(dir, is_exist))) {
-    CLOG_LOG(WARN, "chcck dir exist failed", K(ret), K(dir));
   } else if (is_exist == true) {
     CLOG_LOG(INFO, "director exist", K(ret), K(dir));
   } else if (OB_FAIL(common::FileDirectoryUtils::create_directory(dir))) {
-    CLOG_LOG(WARN, "create_directory failed", K(ret), K(dir));
   } else {
     CLOG_LOG(INFO, "check_and_prepare_dir success", K(ret), K(dir));
   }
@@ -182,7 +174,6 @@ int ObLogService::init(const PalfOptions &options,
 
   
   if (OB_FAIL(check_and_prepare_dir(base_dir))) {
-    CLOG_LOG(WARN, "check_and_prepare_dir failed", K(ret), K(base_dir));
   } else if (is_inited_) {
     ret = OB_INIT_TWICE;
     CLOG_LOG(WARN, "ObLogService init twice", K(ret));
@@ -197,15 +188,12 @@ int ObLogService::init(const PalfOptions &options,
   } else if (OB_FAIL(PalfEnv::create_palf_env(options, base_dir, self,
                                               alloc_mgr, log_block_pool, &monitor_,
                                               log_local_device, io_manager, palf_env_))) {
-    CLOG_LOG(WARN, "failed to create_palf_env", K(base_dir), K(ret));
   } else if (OB_ISNULL(palf_env_)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "palf_env_ is NULL", K(ret));
   } else if (OB_FAIL(apply_service_.init(palf_env_, log_storage))) {
-    CLOG_LOG(WARN, "failed to init apply_service", K(ret));
   } else if (OB_FAIL(replay_service_.init(
       palf_env_, log_storage, alloc_mgr, replay_thread_quota))) {
-    CLOG_LOG(WARN, "failed to init replay_service", K(ret));
   } else {
     alloc_mgr_ = alloc_mgr;
     log_storage_ = log_storage;
@@ -234,7 +222,6 @@ int ObLogService::create_ls(const palf::PalfBaseInfo &palf_base_info,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid palf base info", K(ret), K(palf_base_info));
   } else if (OB_FAIL(create_ls_(palf_base_info, log_handler))) {
-    CLOG_LOG(WARN, "create ls failed", K(ret), K(palf_base_info));
   } else {
     FLOG_INFO("ObLogService create_ls success", K(ret), K(palf_base_info), K(log_handler));
   }
@@ -248,9 +235,7 @@ int ObLogService::remove_ls(ObLogHandler &log_handler)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.remove_status())) {
-    CLOG_LOG(WARN, "failed to remove from apply_service", K(ret));
   } else if (OB_FAIL(replay_service_.remove_status())) {
-    CLOG_LOG(WARN, "failed to remove from replay_service", K(ret));
   } else {
     // NB: can not execute destroy, otherwise, each interface in log_handler or restore_handler
     // may return OB_NOT_INIT.
@@ -260,7 +245,6 @@ int ObLogService::remove_ls(ObLogHandler &log_handler)
     // In abnormal case(create ls failed, need remove ls directlly), there is no possibility for dead lock.
     log_handler.stop();
     if (OB_FAIL(palf_env_->remove())) {
-      CLOG_LOG(WARN, "failed to remove from palf_env_", K(ret));
     } else {
       FLOG_INFO("ObLogService remove_ls success", K(ret));
     }
@@ -299,11 +283,8 @@ int ObLogService::add_ls(ObLogHandler &log_handler)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.create_status())) {
-    CLOG_LOG(WARN, "failed to create apply status", K(ret));
   } else if (OB_FAIL(replay_service_.create_status())) {
-    CLOG_LOG(WARN, "failed to create replay status", K(ret));
   } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
-    CLOG_LOG(WARN, "ObLogHandler init failed", K(ret), KP(palf_env_));
   } else {
     FLOG_INFO("add_ls success", K(ret), KP(this));
   }
@@ -319,10 +300,8 @@ int ObLogService::open_palf(palf::PalfHandleGuard &palf_handle_guard)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(palf_env_->open(palf_handle))) {
-    CLOG_LOG(WARN, "failed to get palf_handle", K(ret));
   } else if (FALSE_IT(palf_handle_guard.set(palf_handle, palf_env_))) {
   } else {
-    CLOG_LOG(TRACE, "ObLogService open_palf success", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -341,7 +320,6 @@ int ObLogService::update_replayable_point(const SCN &replayable_point)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(replay_service_.update_replayable_point(replayable_point))) {
-    CLOG_LOG(WARN, "update_replayable_point failed", K(ret), K(replayable_point));
   }
   return ret;
 }
@@ -353,7 +331,6 @@ int ObLogService::get_replayable_point(SCN &replayable_point)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(replay_service_.get_replayable_point(replayable_point))) {
-    CLOG_LOG(WARN, "get_replayable_point failed", K(ret), K(replayable_point));
   }
   return ret;
 }
@@ -390,7 +367,6 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size(
   } else {
     PalfOptions palf_opts;
     if (OB_FAIL(palf_env_->get_options(palf_opts))) {
-      CLOG_LOG(WARN, "palf get_options failed", K(ret));
     } else {
       palf_opts.disk_options_.log_disk_utilization_threshold_ =
           runtime_config.log_disk_utilization_threshold_;
@@ -402,7 +378,6 @@ int ObLogService::update_palf_options_except_disk_usage_limit_size(
           runtime_config.log_disk_throttling_maximum_duration_;
       palf_opts.enable_log_cache_ = runtime_config.enable_log_cache_;
       if (OB_FAIL(palf_env_->update_options(palf_opts))) {
-        CLOG_LOG(WARN, "palf update_options failed", K(ret), K(palf_opts));
       } else {
         runtime_config_ = runtime_config;
         CLOG_LOG(INFO, "palf update_options success", K(ret), K(palf_opts));
@@ -420,10 +395,8 @@ int ObLogService::update_log_disk_usage_limit_size(const int64_t log_disk_usage_
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(palf_env_->get_options(palf_opts))) {
-    CLOG_LOG(WARN, "palf get_options failed", K(ret));
   } else if (FALSE_IT(palf_opts.disk_options_.log_disk_usage_limit_size_ = log_disk_usage_limit_size)) {
   } else if (OB_FAIL(palf_env_->update_options(palf_opts))) {
-    CLOG_LOG(WARN, "palf update_options failed", K(ret), K(log_disk_usage_limit_size));
   } else {
     CLOG_LOG(INFO, "update_log_disk_usage_limit_size success", K(log_disk_usage_limit_size));
   }
@@ -448,9 +421,7 @@ int ObLogService::stat_palf(PalfStat &palf_stat)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(open_palf(guard))) {
-    CLOG_LOG(WARN, "failed to open palf", K(ret));
   } else if (OB_FAIL(guard.get_palf_handle()->stat(palf_stat))) {
-    CLOG_LOG(WARN, "failed to stat palf", K(ret));
   }
   return ret;
 }
@@ -487,19 +458,14 @@ int ObLogService::create_ls_(const palf::PalfBaseInfo &palf_base_info,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(palf_base_info));
   } else if (OB_FAIL(check_palf_exist(palf_exist))) {
-    CLOG_LOG(WARN, "check_palf_exist failed", K(ret), K(palf_base_info));
   } else if (palf_exist) {
     ret = OB_ENTRY_EXIST;
     CLOG_LOG(WARN, "palf has eixst", K(ret), K(palf_base_info));
   } else {
     if (OB_FAIL(palf_env_->create(palf::AccessMode::APPEND, palf_base_info, palf_handle))) {
-      CLOG_LOG(WARN, "failed to get palf_handle", K(ret));
     } else if (OB_FAIL(apply_service_.create_status())) {
-      CLOG_LOG(WARN, "failed to create apply status", K(ret));
     } else if (OB_FAIL(replay_service_.create_status())) {
-      CLOG_LOG(WARN, "failed to create replay status", K(ret));
     } else if (OB_FAIL(log_handler.init(self_, &apply_service_, &replay_service_, palf_env_))) {
-      CLOG_LOG(WARN, "ObLogHandler init failed", K(ret), KP(palf_env_), K(palf_handle));
     } else {
       CLOG_LOG(INFO, "ObLogService create_ls success", K(ret), K(log_handler));
     }
@@ -525,7 +491,6 @@ int ObLogService::diagnose_replay(ReplayDiagnoseInfo &diagnose_info)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(replay_service_.diagnose(diagnose_info))) {
-    CLOG_LOG(WARN, "replay_service diagnose failed", K(ret));
   } else {
     // do nothing
   }
@@ -539,7 +504,6 @@ int ObLogService::diagnose_apply(ApplyDiagnoseInfo &diagnose_info)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(apply_service_.diagnose(diagnose_info))) {
-    CLOG_LOG(WARN, "apply_service diagnose failed", K(ret));
   } else {
     // do nothing
   }
@@ -553,7 +517,6 @@ int ObLogService::get_io_start_time(int64_t &last_working_time)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(palf_env_->get_io_start_time(last_working_time))) {
-    CLOG_LOG(WARN, "palf_env get_io_start_time failed", K(ret));
   } else {
     // do nothing
   }
@@ -582,15 +545,12 @@ int ObLogService::check_need_do_checkpoint(bool &need_do_checkpoint)
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "log_service is not inited", K(ret));
   } else if (OB_FAIL(palf_env_->get_disk_usage(used_size, total_size))) {
-    CLOG_LOG(WARN, "get_disk_usage failed", K(ret));
   } else {
     int64_t unrecyclable_log_disk_size = 0;
     const int64_t CHECKPOINT_PERCENTAGE = enable_shared_storage_ ? 60 : 30;
     if (OB_FAIL(get_unrecyclable_log_disk_size(unrecyclable_log_disk_size))) {
-      CLOG_LOG(WARN, "get unrecyclable log disk size failed", K(ret));
     } else {
       need_do_checkpoint = (unrecyclable_log_disk_size * 100 >= total_size * CHECKPOINT_PERCENTAGE);
-      CLOG_LOG(TRACE, "check_need_do_checkpoint", K(unrecyclable_log_disk_size), K(total_size), K(need_do_checkpoint));
     }
   }
   return ret;
@@ -605,7 +565,6 @@ int ObLogService::get_unrecyclable_log_disk_size(int64_t &unrecyclable_log_disk_
     CLOG_LOG(WARN, "log storage is null", K(ret));
   } else if (OB_FAIL(log_storage_->get_unrecyclable_log_disk_size(
       unrecyclable_log_disk_size))) {
-    CLOG_LOG(WARN, "get unrecyclable log disk size failed", K(ret));
   }
   return ret;
 }
@@ -630,9 +589,7 @@ int check_clog_disk_full_or_hang(
   const int64_t now = ObTimeUtility::current_time();
   bool is_disk_enough = true;
   if (OB_FAIL(log_service.get_io_start_time(clog_disk_last_working_time))) {
-    LOG_WARN("get_io_start_time failed", KR(ret));
   } else if (OB_FAIL(log_service.check_disk_space_enough(is_disk_enough))) {
-    LOG_WARN("check_disk_space_enough failed", KR(ret));
   } else {
     clog_disk_is_full = !is_disk_enough;
     clog_disk_is_hang =

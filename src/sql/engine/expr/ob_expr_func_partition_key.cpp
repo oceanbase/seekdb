@@ -61,9 +61,7 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
   int ret = OB_SUCCESS;
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else {
     uint64_t hash_value = 0;
     for (int i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
@@ -76,7 +74,6 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
             param_datum, hash_value, hash_value, datum_access_ctx);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("hash value failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -97,12 +94,10 @@ int ObExprFuncPartKey::calc_partition_key_batch(BATCH_EVAL_FUNC_ARG_DECL)
   ObBitVector &flags = expr.get_evaluated_flags(ctx);
   const common::ObDatumAccessContext *datum_access_ctx = nullptr;
   if (OB_FAIL(ctx.get_datum_access_ctx(datum_access_ctx))) {
-    LOG_WARN("get datum access context failed", K(ret));
   }
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret) ; i++) {
     ObExpr *e = expr.args_[i];
     if (OB_FAIL(e->eval_batch(ctx, skip, size))) {
-      LOG_WARN("evaluate batch failed", K(ret), K(*e));
     } else {
       const bool is_batch_seed = (i > 0);
       if (ob_is_decimal_int(e->datum_meta_.type_)) {

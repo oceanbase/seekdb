@@ -56,7 +56,6 @@ void ObDtlBufAllocator::free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("mem_mgr is null", K(lbt()), K(ret));
   } else if (OB_FAIL(mem_mgr->free(buf))) {
-    LOG_WARN("failed to free buffer", K(ret), K(lbt()));
   } else if (nullptr != buf) {
     free_buffer_cnt_++;
     ch.free_buffer_count();
@@ -65,7 +64,6 @@ void ObDtlBufAllocator::free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf)
   if (nullptr != buf) {
     LOG_ERROR("fail to free dtl linked buffer", K(ret));
   }
-  LOG_DEBUG("free memory", K(ret), K(buf), KP(buf), K(free_buffer_cnt_), K(alloc_buffer_cnt_));
 }
 
 }

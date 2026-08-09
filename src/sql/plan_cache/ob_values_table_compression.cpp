@@ -172,12 +172,10 @@ int ObValuesTableCompression::add_raw_array_params(ObIAllocator &allocator,
       for (int64_t j = 0; OB_SUCC(ret) && j < row_count; ++j) {
         int64_t param_idx = begin_param + j * param_count + i;
         if (OB_FAIL(params_array->push_back(fp_result.raw_params_.at(param_idx)))) {
-          LOG_WARN("fail to push back", K(ret), K(i), K(j));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(pc_ctx.fp_result_.array_params_.push_back(params_array))) {
-        LOG_WARN("fail to push params array", K(ret));
       }
     }
   }
@@ -236,9 +234,7 @@ int ObValuesTableCompression::rebuild_new_raw_sql(ObPlanCacheCtx &pc_ctx,
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(no_param_pos.push_back(param_pos))) {
-            LOG_WARN("failed to push back", K(ret));
           } else if (OB_FAIL(raw_sql_offset.push_back(param_raw_offset))) {
-            LOG_WARN("failed to push back", K(ret));
           }
         }
       }
@@ -297,12 +293,9 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                                             values_token_pos, new_no_param_sql, old_sql_pos,
                                             new_sql_pos, batch_count, param_count, delta_len,
                                             is_valid))) {
-        LOG_WARN("fail to parser insert string", K(ret), K(fp_result.pc_key_.name_));
       } else if (!is_valid || param_count <= 0 || batch_count <= 1 || delta_len <= 0) {
-        LOG_TRACE("can not do batch opt", K(ret), K(is_valid), K(param_count), K(batch_count), K(delta_len));
       } else if (OB_FAIL(add_raw_array_params(allocator, pc_ctx, fp_result, param_idx, batch_count,
                                               param_count))) {
-        LOG_WARN("fail to rebuild raw_param", K(ret));
       } else {
         if (!can_fold_params) {
           if (OB_ISNULL(buff = (char *)allocator.alloc(buff_len))) {
@@ -314,7 +307,6 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
         }
         for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < param_idx + param_count; j++) {
           if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
-            LOG_WARN("failed to push back", K(ret));
           }
         }
         if (OB_FAIL(ret)) {
@@ -322,12 +314,10 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                            temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
                            no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
                            new_raw_sql_pos))) {
-          LOG_WARN("failed to rebuild new raw sql", K(ret));
         } else {
           int64_t batch_begin_idx = new_raw_idx + param_idx - last_raw_param_idx;
           if (OB_FAIL(phy_ctx->get_array_param_groups().push_back(ObArrayParamGroup(batch_count,
                                                                   param_count, batch_begin_idx)))) {
-            LOG_WARN("failed to push back", K(ret));
           } else {
             total_delta_len += delta_len;
             can_fold_params = true;
@@ -340,7 +330,6 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     if (OB_SUCC(ret) && can_fold_params) {
       for (int64_t j = last_raw_param_idx; OB_SUCC(ret) && j < pc_ctx.fp_result_.raw_params_.count(); j++) {
         if (OB_FAIL(temp_store.push_back(pc_ctx.fp_result_.raw_params_.at(j)))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -348,7 +337,6 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
                     temp_store.count() - new_raw_idx, total_delta_len, new_no_param_sql,
                     no_param_pos, raw_sql_offset, new_raw_sql, no_param_sql_pos,
                     new_raw_sql_pos))) {
-          LOG_WARN("failed to rebuild new raw sql", K(ret));
         } else if (OB_UNLIKELY(no_param_pos.count() != temp_store.count()) ||
                    OB_UNLIKELY(raw_sql_offset.count() != temp_store.count())) {
           ret = OB_ERR_UNEXPECTED;
@@ -370,7 +358,6 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
     // handle error.
     if (ret != OB_SUCCESS) {
       // Here whatever error can be swallowed, just cannot do batch optimization after the error
-      LOG_TRACE("failed to try fold params for values table", K(ret));
       phy_ctx->get_array_param_groups().reset();
       pc_ctx.fp_result_.array_params_.reset();
       pc_ctx.new_raw_sql_.reset();
@@ -385,7 +372,6 @@ int ObValuesTableCompression::try_batch_exec_params(ObIAllocator &allocator,
         temp_store.at(i)->node_->raw_sql_offset_ = raw_sql_offset.at(i);
       }
       if (OB_FAIL(fp_result.raw_params_.assign(temp_store))) {
-        LOG_WARN("fail to assign raw_param", K(ret));
       }
     }
   }
@@ -423,12 +409,9 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
     LOG_WARN("sql should be mutil stmt", K(ret), KP(session), KP(phy_ctx), K(raw_param_cnt),
              K(param_charset_type.count()), KP(ab_params));
   } else if (OB_FAIL(ab_params->reserve(raw_param_cnt))) {
-    LOG_WARN("failed to reserve param num", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimal_int))) {
-    LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
-    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
@@ -446,11 +429,9 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                     param_charset_type.at(raw_idx), neg_param_index, not_param_index,
                     must_be_positive_idx, formalize_prec_idx, pc_ctx.fp_result_.raw_params_.at(raw_idx), raw_idx,
                     enable_mysql_compatible_dates, obj_param, is_param, enable_decimal_int))) {
-          LOG_WARN("failed to resolver param", K(ret), K(raw_idx));
         } else if (!is_param) {
           not_param_cnt++;
         } else if (OB_FAIL(ab_params->push_back(obj_param))) {
-          LOG_WARN("fail to push item to array", K(ret), K(raw_idx));
         }
       }
       if (OB_SUCC(ret)) {
@@ -473,7 +454,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                         must_be_positive_idx, formalize_prec_idx, raw_array_param->at(k), raw_idx,
                         enable_mysql_compatible_dates, array_param_ptr->data_[k], is_param,
                         enable_decimal_int))) {
-              LOG_WARN("failed to resolver param", K(ret), K(k), K(raw_idx), K(j));
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
@@ -490,18 +470,15 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
               if (k == 0) {
                 new_res_type = res_type;
                 if (OB_FAIL(res_types.push_back(res_type))) {
-                  LOG_WARN("failed to push back", K(ret));
                 }
               } else if (k > 0 && is_same) {
                 is_same = ObSQLUtils::is_same_type(res_type, res_types.at(0));
                 if (!is_same) {
                   if (OB_FAIL(res_types.push_back(res_type))) {
-                    LOG_WARN("failed to push back", K(ret));
                   }
                 }
               } else {
                 if (OB_FAIL(res_types.push_back(res_type))) {
-                  LOG_WARN("failed to push back", K(ret));
                 }
               }
             }
@@ -516,7 +493,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                                                                   &res_types.at(0),
                                                                   res_types.count(),
                                                                   type_ctx))) {
-              LOG_WARN("failed to aggregate result type for merge", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -527,7 +503,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
             array_param.set_param_meta();
             array_param.get_param_flag().is_batch_parameter_ = true;
             if (OB_FAIL(ab_params->push_back(array_param))) {
-              LOG_WARN("failed to push back param", K(ret));
             }
           }
         }
@@ -538,11 +513,9 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                   param_charset_type.at(raw_idx), neg_param_index, not_param_index,
                   must_be_positive_idx, formalize_prec_idx, pc_ctx.fp_result_.raw_params_.at(raw_idx), raw_idx,
                   enable_mysql_compatible_dates, obj_param, is_param, enable_decimal_int))) {
-        LOG_WARN("failed to resolver param", K(ret), K(raw_idx));
       } else if (!is_param) {
         not_param_cnt++;
       } else if (OB_FAIL(ab_params->push_back(obj_param))) {
-        LOG_WARN("fail to push item to array", K(ret), K(raw_idx));
       }
     }
   }
@@ -571,10 +544,8 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
     LOG_WARN("sql should be mutil stmt", K(ret), KP(session), KP(phy_ctx), K(raw_param_cnt),
              K(param_charset_type.count()));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimal_int))) {
-    LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
-    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     ParamStore &phy_param_store = phy_ctx->get_param_store_for_update();
     ObIArray<ObArrayParamGroup> &array_param_groups = phy_ctx->get_array_param_groups();
@@ -625,7 +596,6 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                         param_charset_type.at(raw_idx), bit_set_dummy, bit_set_dummy,
                         bit_set_dummy, bit_set_dummy, raw_array_param->at(k), raw_idx, enable_mysql_compatible_dates,
                         array_param_ptr->data_[k], is_param, enable_decimal_int))) {
-              LOG_WARN("failed to resolver param", K(ret), K(k), K(raw_idx), K(j));
             } else {
               const ObObjParam &param = array_param_ptr->data_[k];
               ObExprResType res_type;
@@ -642,18 +612,15 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
               if (k == 0) {
                 new_res_type = res_type;
                 if (OB_FAIL(res_types.push_back(res_type))) {
-                  LOG_WARN("failed to push back", K(ret));
                 }
               } else if (k > 0 && is_same) {
                 is_same = ObSQLUtils::is_same_type(res_type, res_types.at(0));
                 if (!is_same) {
                   if (OB_FAIL(res_types.push_back(res_type))) {
-                    LOG_WARN("failed to push back", K(ret));
                   }
                 }
               } else {
                 if (OB_FAIL(res_types.push_back(res_type))) {
-                  LOG_WARN("failed to push back", K(ret));
                 }
               }
             }
@@ -668,9 +635,7 @@ int ObValuesTableCompression::resolve_params_for_values_clause(ObPlanCacheCtx &p
                                                                         &res_types.at(0),
                                                                         res_types.count(),
                                                                         type_ctx))) {
-              LOG_WARN("failed to aggregate result type for merge", K(ret));
             } else {
-              LOG_TRACE("get result type", K(new_res_type), K(res_types));
             }
           }
           if (OB_SUCC(ret)) {

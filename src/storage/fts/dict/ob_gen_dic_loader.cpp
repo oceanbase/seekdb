@@ -36,7 +36,6 @@ int ObGenDicLoader::ObGenDicLoaderKey::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
   } else if (OB_FAIL(set_parser_name(parser_name))) {
-    LOG_WARN("fail to set parser name", K(ret), K(parser_name));
   } else {
     charset_ = charset;
   }
@@ -49,7 +48,6 @@ int ObGenDicLoader::ObGenDicLoaderKey::assign(const ObGenDicLoaderKey &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("the other is invalid", K(ret), K(other));
   } else if (OB_FAIL(set_parser_name(other.parser_name_))) {
-    LOG_WARN("fail to set parser name", K(ret), K(other));
   } else {
     charset_ = other.charset_;
   }
@@ -135,28 +133,23 @@ int ObGenDicLoader::get_dic_loader(const ObString &parser_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parser_name), K(charset));
   } else if (OB_FAIL(dic_loader_key.init(parser_name, charset))) {
-    LOG_WARN("fail to init dic loader key", K(ret), K(parser_name), K(charset));
   } else {
     TCWLockGuard guard(lock_);
     if (OB_FAIL(dic_loader_map_.get_refactored(dic_loader_key, dic_loader))) {
       if (OB_HASH_NOT_EXIST == ret) {
         if (OB_FAIL(gen_dic_loader(dic_loader_key, dic_loader))) {
-          LOG_WARN("fail to gen dic loader", K(ret), K(dic_loader_key));
         } else if (OB_ISNULL(dic_loader)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_key));
         } else if (OB_FAIL(dic_loader_map_.set_refactored(dic_loader_key, dic_loader))) {
-          LOG_WARN("fail to set dic loader map", K(ret), K(dic_loader_key), KPC(dic_loader));
         } else if (OB_FALSE_IT(dic_loader->inc_ref())) {
         } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
-          LOG_WARN("fail to set dic loader", K(ret), K(dic_loader_key), KPC(dic_loader));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get dic loader", K(ret), K(dic_loader_key));
       }
     } else if (OB_FAIL(loader_handle.set_loader(dic_loader))) {
-      LOG_WARN("fail to set dic loader", K(ret), K(dic_loader_key), KPC(dic_loader));
     }
   }
   return ret;
@@ -183,7 +176,6 @@ int ObGenDicLoader::gen_dic_loader(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate memory for the loader", K(ret), K(dic_loader_key));
         } else if (OB_FAIL(dic_loader->init())) {
-          LOG_WARN("fail to init the dic loader", K(ret), K(dic_loader_key));  
         }
         break;
       }

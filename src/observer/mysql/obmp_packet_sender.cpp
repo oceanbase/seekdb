@@ -159,10 +159,8 @@ OB_NOINLINE int encode_row_packet(const OMPKRow &row_packet,
         for (int64_t i = 0; OB_SUCC(ret) && i < cell_count; ++i) {
           if (OB_FAIL(
                   row.build_cell_value(i, scratch_allocator, values.at(i)))) {
-            LOG_WARN("failed to build MySQL Row semantic cell", K(ret), K(i));
           } else if (OB_FAIL(
                          query::build_nio_mysql_cell_view(values.at(i), views.at(i)))) {
-            LOG_WARN("failed to build Rust MySQL Row cell view", K(ret), K(i));
           }
         }
         if (OB_FAIL(ret)) {
@@ -196,7 +194,6 @@ int append_ok_kv_views(const ObIArray<ObStringKV> &source,
     view.key = make_byte_view(kv.key_);
     view.value = make_byte_view(kv.value_);
     if (OB_FAIL(views.push_back(view))) {
-      LOG_WARN("failed to build MySQL OK variable view", K(ret), K(i));
     }
   }
   return ret;
@@ -301,8 +298,6 @@ void ObMPPacketSender::reset()
   if (RequestOwnership::OWNED == request_ownership_) {
     const int ret = finish_sql_request();
     if (OB_SUCCESS != ret) {
-      LOG_ERROR("failed to finish owned mysql request during sender reset",
-                K(ret));
     }
   } else {
     (void)release_read_packet_lease();
@@ -455,7 +450,6 @@ int ObMPPacketSender::wait_packet(obmysql::ObICSMemPool &mem_pool,
     rpc::ObPacket *pkt = NULL;
     uint64_t packet_lease = 0;
     mid_request_read_started_ = true;
-    LOG_DEBUG("mid-request read", KP(req_), K_(request_generation));
     ret = SQL_REQ_OP.wait_packet(req_, mem_pool, request_generation_,
                                  timeout_us, pkt, packet_lease);
     if (pkt != NULL) {
@@ -479,8 +473,6 @@ int ObMPPacketSender::release_packet(obmysql::ObMySQLPacket* pkt)
     ret = OB_STATE_NOT_MATCH;
   } else if (OB_FAIL(SQL_REQ_OP.release_read_packet(
                  req_, request_generation_, read_packet_lease_))) {
-    SERVER_LOG(WARN, "release Rust read packet lease failed",
-               K(ret), K_(read_packet_lease));
   } else {
     read_packet_lease_ = 0;
   }
@@ -499,9 +491,7 @@ int ObMPPacketSender::response_packet(obmysql::ObMySQLPacket &pkt) {
   if (OB_SUCC(ret)) {
     int64_t seri_size = 0;
     if (OB_FAIL(append_response(pkt, seri_size))) {
-      LOG_WARN("failed to encode packet", K(ret));
     } else {
-      LOG_DEBUG("succ encode packet", K(pkt), K(seri_size));
     }
   }
 
@@ -526,8 +516,6 @@ int ObMPPacketSender::response_resultset_metadata(
   } else {
     response_started_ = true;
     if (OB_FAIL(views.prepare_allocate(fields.count()))) {
-      LOG_WARN("failed to allocate Rust result-set metadata views", K(ret),
-               "field_count", fields.count());
     } else {
       for (int64_t i = 0; i < fields.count(); ++i) {
         views.at(i) = make_field_view(fields.at(i));
@@ -672,21 +660,17 @@ int ObMPPacketSender::send_error_packet(int err,
       epacket.set_errcode(static_cast<uint16_t>(wb->get_err_code()));
       if (strlen(wb->get_sql_state()) == 0) {
         if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
-          LOG_WARN("set sql_state failed", K(ret));
         }  
       } else if (OB_FAIL(epacket.set_sqlstate(wb->get_sql_state()))) {
-        LOG_WARN("set sql_state failed", K(ret));
       }
     } else {
       epacket.set_errcode(static_cast<uint16_t>(ob_errpkt_errno(err)));
       if (OB_FAIL(epacket.set_sqlstate(ob_sqlstate(err)))) {
-        LOG_WARN("set sql_state failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else {
       if (OB_FAIL(fin_msg.append(message))) {
-        LOG_WARN("append pl exact err msg fail", K(ret), K(message));
       } else if (has_pl()) {
         if (NULL == session && OB_FAIL(get_session(session))) {
           LOG_WARN("fail to get session", K(ret));
@@ -700,7 +684,6 @@ int ObMPPacketSender::send_error_packet(int err,
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(epacket.set_message(fin_msg.string()))) {
-        LOG_WARN("failed to set error message", K(ret));
       } else {
         // do nothing
       }
@@ -723,7 +706,6 @@ int ObMPPacketSender::send_error_packet(int err,
       if (session->has_active_autocommit_trans(trans_id)) {
         bool need_disconnect = false;
         if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
-          LOG_WARN("rollback autocommit trans failed", K(ret), K(need_disconnect));
         } else {
           LOG_INFO("rollback autocommit trans succeed", K(trans_id));
         }
@@ -774,7 +756,6 @@ int ObMPPacketSender::get_session(ObSQLSessionInfo *&sess_info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn or session mgr is NULL", K(ret), KP(conn_), K(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->get_session(conn_->sessid_, sess_info))) {
-    LOG_WARN("get session fail", K(ret), "sessid", conn_->sessid_);
   } else {
     NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid());
   }
@@ -829,7 +810,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
           if (OB_SUCC(ret)) {
             okp.set_use_standard_serialize(true);
             if (OB_FAIL(ObMPUtils::add_changed_session_info(okp, session))) {
-              SERVER_LOG(WARN, "fail to add changed session info", K(ret));
             }
           }
         }
@@ -843,7 +823,6 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
     bool is_no_backslash_escapes = false;
     IS_NO_BACKSLASH_ESCAPES(session.get_sql_mode(), is_no_backslash_escapes);
     if (OB_FAIL(session.get_autocommit(ac))) {
-      LOG_WARN("fail to get autocommit", K(ret));
     } else {
       ObServerStatusFlags flags = okp.get_server_status();
       flags.status_flags_.OB_SERVER_STATUS_IN_TRANS
@@ -866,11 +845,9 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
     // for ok packet which has no status packet
     if (NULL == pkt) {
       if (OB_FAIL(response_packet(okp))) {
-        LOG_WARN("response ok packet fail", K(ret));
       }
     } else {
       if (OB_FAIL(response_packet(*pkt))) {
-        LOG_WARN("response ok packet fail", K(pkt), K(ret));
       }
     }
   }
@@ -956,13 +933,10 @@ int ObMPPacketSender::send_eof_packet(const ObSQLSessionInfo &session,
   eofp.set_server_status(flags);
   if (OB_ISNULL(ok_param)) {
     if (OB_FAIL(response_packet(eofp))) {
-      LOG_WARN("response packet fail", K(ret));
     }
   } else {
     if (OB_FAIL(send_ok_packet(*const_cast<ObSQLSessionInfo *>(&session),
                                *ok_param, &eofp))) {
-      LOG_WARN("failed to response ok packet and eof packet", K(ret),
-               K(*ok_param));
     }
   }
   return ret;
@@ -1195,12 +1169,8 @@ int ObMPPacketSender::release_read_packet_lease()
 {
   int ret = OB_SUCCESS;
   if (0 != read_packet_lease_) {
-    LOG_DEBUG("release read packet lease", KP(req_), K_(request_generation),
-              K_(read_packet_lease));
     if (OB_FAIL(SQL_REQ_OP.release_read_packet(req_, request_generation_,
                                                read_packet_lease_))) {
-      SERVER_LOG(WARN, "release Rust read packet lease failed", K(ret),
-                 K_(read_packet_lease));
     }
     // A matching request commit is Rust's final cleanup fallback if this
     // explicit release lost a shutdown or generation race.

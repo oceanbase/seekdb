@@ -311,7 +311,6 @@ int ObCompactionSuggestionMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(array_.init(SUGGESTION_MAX_CNT))) {
-    STORAGE_LOG(WARN, "failed to init ObInfoRingArray", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -325,7 +324,6 @@ int ObCompactionSuggestionMgr::get_suggestion_list(ObIArray<ObCompactionSuggesti
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(array_.get_list(input_array))) {
-    STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
   }
   return ret;
 }
@@ -413,7 +411,6 @@ int ObCompactionSuggestionMgr::analyze_for_suggestion(
     suggestion.merge_start_time_ = common::ObTimeUtility::fast_current_time();
     suggestion.merge_finish_time_ = suggestion.merge_start_time_;
     if (OB_FAIL(array_.add(suggestion))) {
-      STORAGE_LOG(WARN, "failed to add suggestion", K(ret), K(suggestion));
     }
   }
   #undef ADD_COMPACTION_DAG_INFO_PARAM
@@ -461,7 +458,6 @@ int ObCompactionSuggestionMgr::diagnose_for_suggestion(
               thread_limits.at(i),
               running_cnts.at(i),
               dag_status))) {
-        COMMON_LOG(WARN, "fail to analyze insufficient thread", K(tmp_ret));
       }
     }
     clear_compaction_dag_status();
@@ -556,7 +552,6 @@ int ObCompactionSuggestionMgr::analyze_merge_info(
       suggestion.merge_start_time_ = running_info.merge_start_time_;
       suggestion.merge_finish_time_ = running_info.merge_finish_time_;
       if (OB_FAIL(array_.add(suggestion))) {
-        STORAGE_LOG(WARN, "failed to add suggestion", K(ret), K(suggestion));
       }
     }
   }
@@ -574,7 +569,6 @@ int ObCompactionSuggestionIterator::open()
     {
       SERVER_MODULE_SCOPE {
         if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionSuggestionMgr>()->get_suggestion_list(suggestion_array_))) {
-          STORAGE_LOG(WARN, "failed to get suggestion list", K(ret));
         }
       } else {
         if (OB_SERVER_RUNTIME_NOT_READY != ret) {

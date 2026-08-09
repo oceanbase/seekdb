@@ -43,7 +43,6 @@ int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILib
     } else if (!entry.second->added_lc()) {
       // do nothing
     } else if (OB_FAIL(key_array_->push_back(entry.first))) {
-      SQL_PC_LOG(WARN, "fail to push back plan_id", K(ret));
     }
   }
   return ret;
@@ -56,7 +55,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   //ObDASTableLoc table_loc;
   int64_t N = partition_infos.count();
   if (OB_FAIL(candi_table_locs.reserve(N))) {
-    LOG_WARN("fail reserve memory", K(ret), K(N));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
@@ -64,8 +62,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
       LOG_WARN("invalid partition info", K(ret));
     } else if (OB_FAIL(candi_table_locs.push_back(
                    partition_infos.at(i)->get_phy_tbl_location_info()))) {
-      LOG_WARN("failed to push_back phy_location_info", K(ret),
-               K(partition_infos.at(i)->get_phy_tbl_location_info()));
     } else { /* do nothing */ }
   }
   return ret;
@@ -87,7 +83,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
     ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;
     const ParamStore &params = plan_ctx->get_param_store();
     if (OB_FAIL(candi_table_locs.prepare_allocate(N))) {
-      LOG_WARN("phy_locations_info prepare allocate error", K(ret), K(N));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
         const ObTableLocation &table_location = table_locations.at(i);
@@ -97,20 +92,14 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
                                                                     params,
                                                                     candi_table_loc.get_phy_part_loc_info_list_for_update(),
                                                                     dtc_params))) {
-          LOG_WARN("failed to calculate partition location", K(ret));
         } else {
           NG_TRACE(calc_partition_location_end);
           candi_table_loc.set_table_location_key(
               table_location.get_table_id(), table_location.get_ref_table_id());
-          LOG_DEBUG("plan cache util", K(candi_table_loc));
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(table_location_ptrs.push_back(&table_location))) {
-            LOG_WARN("failed to push back table location ptrs", K(ret), K(i),
-                     K(N), K(table_locations.at(i)));
           } else if (OB_FAIL(phy_location_info_ptrs.push_back(&candi_table_loc))) {
-            LOG_WARN("failed to push back phy location info ptrs", K(ret), K(i),
-                     K(N), K(candi_table_locs.at(i)));
           }
         }
       } // for end
@@ -120,13 +109,8 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
       if (OB_FAIL(ObLogPlan::validate_local_tablets(exec_ctx,
                                                     table_location_ptrs,
                                                     phy_location_info_ptrs))) {
-        LOG_WARN("failed to validate local tablet locations", K(ret), K(table_locations),
-                 K(phy_location_info_ptrs));
       }
-      LOG_TRACE("after validating local tablet locations", K(candi_table_locs),
-                K(table_locations), K(ret));
     }
-    LOG_TRACE("after get_phy_locations", K(candi_table_locs));
   }
 
   return ret;
@@ -140,7 +124,6 @@ int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
   CK(table_locations.count() == candi_table_locs.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < table_locations.count(); i++) {
     if (OB_FAIL(das_ctx.add_candi_table_loc(table_locations.at(i).get_loc_meta(), candi_table_locs.at(i)))) {
-      LOG_WARN("add candi table location failed", K(ret), K(table_locations.at(i).get_loc_meta()));
     }
   }
   if (OB_FAIL(ret)) {
@@ -169,7 +152,6 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
                                                   partition_ids,
                                                   first_level_part_ids,
                                                   dtc_params))) {
-    LOG_WARN("calculate tablet ids failed", K(ret));
   } else {
     related_map = &exec_ctx.get_das_ctx().get_related_tablet_map();
     LOG_DEBUG("build_related tablet info", K(tablet_ids), K(partition_ids),
@@ -229,68 +211,45 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   // gen config str
   if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", pushdown_storage_level_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(pushdown_storage_level_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_px_batch_rescan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_px_ordered_coord_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_ordered_coord_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", bloom_filter_enabled_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(bloom_filter_enabled_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_newsort_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_newsort_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", px_join_skew_handling_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_handling_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", is_strict_defensive_check_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(is_strict_defensive_check_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", px_join_skew_minfreq_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_minfreq_));
-
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_spf_batch_rescan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_spf_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_var_assign_use_das_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_var_assign_use_das_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_das_keep_order_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_das_keep_order_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", bloom_filter_ratio_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(bloom_filter_ratio_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", realistic_runtime_bloom_filter_size_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(realistic_runtime_bloom_filter_size_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_parallel_das_dml_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_parallel_das_dml_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", hash_rollup_policy_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(hash_rollup_policy_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", ndv_runtime_bloom_filter_size_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(ndv_runtime_bloom_filter_size_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_index_merge_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_index_merge_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_distributed_das_scan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_distributed_das_scan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%ld,", enable_das_batch_rescan_flag_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_das_batch_rescan_flag_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_topn_runtime_filter_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_topn_runtime_filter_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", min_const_integer_precision_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(min_const_integer_precision_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", enable_px_task_rebalance_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_task_rebalance_));
   } else {
     // do nothing
   }

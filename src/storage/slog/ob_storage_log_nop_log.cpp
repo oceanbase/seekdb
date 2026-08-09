@@ -135,7 +135,6 @@ int64_t ObStorageLogNopLog::get_fixed_serialize_len(const int64_t used_len)
                           dummy_header.get_serialize_size();
   ret_len = ObStorageLogItem::get_align_padding_size(occupied_size,
       ObLogConstants::LOG_FILE_ALIGN_SIZE);
-  LOG_DEBUG("log data len", K(occupied_size));
   return ret_len;
 }
 } // namespace blocksstable

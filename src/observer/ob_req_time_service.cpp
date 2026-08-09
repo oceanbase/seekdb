@@ -25,7 +25,6 @@ ObReqTimeInfo::ObReqTimeInfo()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(ObGlobalReqTimeService::get_instance().add_req_time_info(this))) {
-    SERVER_LOG(ERROR, "failed to add req time info to list", K(ret));
   }
 }
 
@@ -33,7 +32,6 @@ ObReqTimeInfo::~ObReqTimeInfo()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(ObGlobalReqTimeService::get_instance().rm_req_time_info(this))) {
-    SERVER_LOG(ERROR, "failed to remove req time info from list", K(ret));
   }
   if (0 != reentrant_cnt_) {
     SERVER_LOG(ERROR, "invalid reentrant cnt", K(reentrant_cnt_));

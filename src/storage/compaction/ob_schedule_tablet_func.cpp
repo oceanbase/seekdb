@@ -82,7 +82,6 @@ int ObScheduleTabletFunc::schedule_tablet(
         LOG_ERROR("failed to schedule tablet execute", KR(tmp_ret), K_(ls_status), K(tablet_id));
       }
     } else {
-      LOG_DEBUG("success to schedule tablet execute", KR(tmp_ret), K_(ls_status), K(tablet_status_), K_(ls_could_schedule_merge));
     }
   }
   if (need_diagnose
@@ -117,10 +116,8 @@ int ObScheduleTabletFunc::schedule_tablet_new_round(
     if (OB_FAIL(func.schedule_next_medium_for_leader(
         tablet_status_.tablet_merge_finish() ? 0 : merge_version_,
         medium_clog_submitted))) {
-      LOG_WARN("failed to schedule next medium", K(ret), K_(ls_status), K(tablet_id));
     } else if (medium_clog_submitted) {
       if (OB_TMP_FAIL(clear_stat_tablets_.push_back(tablet_id))) {
-        LOG_WARN("failed to push back tablet_id for batch_freeze", KR(tmp_ret), K_(ls_status), K(tablet_id));
       }
     }
     time_guard_.click(ObCompactionScheduleTimeGuard::SCHEDULE_NEXT_MEDIUM);
@@ -148,7 +145,6 @@ int ObScheduleTabletFunc::request_schedule_new_round(
   } else if (OB_FAIL(tablet_status_.init_for_major(
                  ls_status_.get_ls(), merge_version_, *tablet,
                  should_skip_merge_, ls_could_schedule_new_round_))) {
-    LOG_WARN("failed to init tablet status", KR(ret), K_(ls_status), K(tablet_id));
   } else if (user_request) { // should print error log for user request
     if (!tablet_status_.tablet_merge_finish()) {
       ret = OB_MAJOR_FREEZE_NOT_FINISHED;
@@ -190,7 +186,6 @@ int ObScheduleTabletFunc::schedule_tablet_execute(
   bool can_merge = false;
   int64_t schedule_scn = 0;
   if (OB_FAIL(ObTabletScheduler::check_ready_for_major_merge(tablet, MEDIUM_MERGE))) {
-    LOG_WARN("failed to check ready for major merge", K(ret), K(tablet_id));
   } else if (OB_FAIL(get_schedule_execute_info(tablet, schedule_scn))) {
     if (OB_NO_NEED_MERGE == ret) {
       ret = OB_SUCCESS;
@@ -198,14 +193,12 @@ int ObScheduleTabletFunc::schedule_tablet_execute(
       LOG_WARN("failed to get schedule execute info", KR(ret), K_(ls_status), K(tablet_id));
     }
   } else if (OB_FAIL(check_with_schedule_scn(tablet, schedule_scn, tablet_status_, can_merge))) {
-    LOG_WARN("failed to check with schedule scn", KR(ret), K(schedule_scn));
   } else if (can_merge) {
     if (OB_FAIL(ObTabletScheduler::schedule_merge_dag(tablet, MEDIUM_MERGE, schedule_scn))) {
       if (OB_SIZE_OVERFLOW != ret && OB_EAGAIN != ret) {
         LOG_ERROR("failed to schedule medium merge dag", K(ret), K_(ls_status), K(tablet_id));
       }
     } else {
-      LOG_DEBUG("success to schedule medium merge dag", K(ret), K(schedule_scn), K_(ls_status), K(tablet_id));
       ++tablet_cnt_.schedule_dag_cnt_;
     }
   }
@@ -234,7 +227,6 @@ int ObScheduleTabletFunc::get_schedule_execute_info(
     schedule_flag = true;
   }
   if (OB_SUCC(ret) && !schedule_flag) {
-    LOG_DEBUG("tablet no need to schedule", KR(ret), K_(ls_status), K(tablet_status_), K(schedule_flag));
     ret = OB_NO_NEED_MERGE;
   }
   return ret;
@@ -260,7 +252,6 @@ int ObScheduleTabletFunc::diagnose_switch_tablet(
   const ObTabletID &tablet_id = tablet.get_tablet_id();
   tablet_status_.destroy();
   if (OB_FAIL(tablet_status_.init_for_diagnose(ls, merge_version_, tablet))) {
-    LOG_WARN("failed to init tablet status", KR(ret), K_(merge_version), K(ls_status_), K(tablet_id));
   }
   return ret;
 }

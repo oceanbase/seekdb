@@ -49,15 +49,11 @@ int64_t ObLSLock::lock(const ObLS *ls, int64_t hold, int64_t change, const int64
   while (hold | change) {
     if (change & 1) {
       if (OB_FAIL(locks_[pos].wrlock(ObLatchIds::LS_LOCK, abs_timeout_us))) {
-        // maybe timeout, it is expected error code.
-        LOG_WARN("wrlock failed", KR(ret), K(pos));
       } else {
         res |= 1L << pos;
       }
     } else if (hold & 1) {
       if (OB_FAIL(locks_[pos].rdlock(ObLatchIds::LS_LOCK, abs_timeout_us))) {
-        // maybe timeout, it is expected error code.
-        LOG_WARN("rdlock failed", KR(ret), K(pos));
       } else {
         res |= 1L << pos;
       }

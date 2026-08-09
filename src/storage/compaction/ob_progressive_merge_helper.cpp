@@ -152,7 +152,6 @@ int ObProgressiveMergeHelper::init(
     int64_t rewrite_macro_cnt = 0, reduce_macro_cnt = 0, rewrite_block_cnt_for_progressive = 0;
 
     if (OB_FAIL(collect_macro_info(sstable, merge_param, rewrite_macro_cnt, reduce_macro_cnt, rewrite_block_cnt_for_progressive))) {
-      LOG_WARN("Fail to scan secondary meta", K(ret), K(merge_param));
     } else if (need_calc_progressive_merge()) {
       if (rewrite_block_cnt_for_progressive > 0) {
         need_rewrite_block_cnt_ = MAX(rewrite_block_cnt_for_progressive /
@@ -196,7 +195,6 @@ int ObProgressiveMergeHelper::collect_macro_info(
   bool last_is_small_data_macro = false;
   const int64_t compare_progressive_merge_round = get_compare_progressive_round();
   if (OB_FAIL(open_macro_iter(sstable, merge_param, tmp_allocator, sec_meta_iter))) {
-    LOG_WARN("Fail to scan secondary meta", K(ret), K(merge_param));
   }
   while (OB_SUCC(ret)) {
     if (OB_FAIL(sec_meta_iter->get_next(macro_meta))) {
@@ -246,7 +244,6 @@ int ObProgressiveMergeHelper::open_macro_iter(
           *index_read_info,
           DATA_BLOCK_META,
           sec_meta_iter))) {
-    LOG_WARN("Fail to scan secondary meta", K(ret), K(merge_range));
   }
   return ret;
 }

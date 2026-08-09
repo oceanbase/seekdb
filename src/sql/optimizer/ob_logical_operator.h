@@ -1927,7 +1927,6 @@ int ObLogicalOperator::init_all_traverse_ctx(Allocator &alloc)
       ret = OB_ERR_UNEXPECTED;
       SQL_OPT_LOG(WARN, "NULL child", K(ret));
     } else if (OB_FAIL(get_child(i)->init_all_traverse_ctx(alloc))) {
-      SQL_OPT_LOG(WARN, "init all traverse ctx failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

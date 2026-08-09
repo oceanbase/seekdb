@@ -44,7 +44,6 @@ int ObInterruptUtil::broadcast_px(ObIArray<ObDfo *> &dfos, int int_code)
   int tmp_ret = OB_SUCCESS;
   for (int64_t idx = 0; idx < dfos.count(); ++idx) {
     if (OB_SUCCESS != (tmp_ret = broadcast_dfo(dfos.at(idx), int_code))) {
-      LOG_WARN("fail interrupt dfo", K(idx), K(ret));
     }
   }
   return ret;
@@ -64,7 +63,6 @@ int ObInterruptUtil::broadcast_dfo(ObDfo *dfo, int code)
   } else {
     ObInterruptibleTaskID interrupt_id = dfo->get_interrupt_id().px_interrupt_id_;
     if (OB_FAIL(manager->interrupt(interrupt_id, int_code))) {
-      LOG_WARN("fail to interrupt local dfo workers", K(ret), K(int_code), K(interrupt_id));
     } else {
       LOG_INFO("successfully interrupted local dfo workers", K(int_code), K(interrupt_id));
     }
@@ -96,7 +94,6 @@ int ObInterruptUtil::interrupt_tasks(ObPxSqcMeta &sqc, int code)
   ObGlobalInterruptManager *manager = ObGlobalInterruptManager::getInstance();
   ObInterruptibleTaskID interrupt_id = sqc.get_interrupt_id().px_interrupt_id_;
   if(OB_FAIL(manager->interrupt(interrupt_id, int_code))) {
-    LOG_WARN("fail to interrupt local tasks", K(ret), K(int_code), K(interrupt_id));
   } else {
     LOG_INFO("success to send interrupt message to local tasks",
              K(int_code), K(interrupt_id));
@@ -118,7 +115,6 @@ int ObInterruptUtil::interrupt_qc(ObPxSqcMeta &sqc, int code)
   if (OB_ISNULL(manager)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(manager->interrupt(interrupt_id, int_code))) {
-    LOG_WARN("fail to interrupt local qc", K(int_code), K(ret));
   } else {
     LOG_TRACE("sqc notified local qc to interrupt",
               "qc_id", sqc.get_qc_id(),
@@ -142,7 +138,6 @@ int ObInterruptUtil::interrupt_qc(ObPxTask &task, int code)
   if (OB_ISNULL(manager)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(manager->interrupt(interrupt_id, int_code))) {
-    LOG_WARN("fail to interrupt local qc", K(int_code), K(ret));
   } else {
     LOG_TRACE("task notified local qc to interrupt",
               "qc_id", task.get_qc_id(),

@@ -80,7 +80,6 @@ int ObTabletMediumClogReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     medium_info_,
     mds_ctx,
     scn_))) {
-    LOG_WARN("failed to replay to tablet", K(ret));
   } else {
     mds_ctx.single_log_commit(scn_, scn_);
   }
@@ -135,7 +134,6 @@ int ObTabletMediumCompactionInfoRecorder::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(log_handler));
   } else if (OB_FAIL(ObIStorageClogRecorder::init(max_saved_version, log_handler))) {
-    LOG_WARN("failed to init ObIStorageClogRecorder", K(ret), K(log_handler));
   } else {
     ignore_medium_ = tablet_id.is_special_merge_tablet();
     tablet_id_ = tablet_id;
@@ -162,7 +160,6 @@ int ObTabletMediumCompactionInfoRecorder::submit_medium_compaction_info(
     LOG_WARN("invalid argument", K(ret), K(medium_info));
   } else if (FALSE_IT(medium_info_ = &medium_info)) {
   } else if (OB_FAIL(try_update(medium_info.medium_snapshot_, &allocator))) {
-    LOG_WARN("failed to update for leader", K(ret), K(medium_info));
   }
   medium_info_ = nullptr;
   if (OB_ALLOCATE_MEMORY_FAILED == ret || OB_BLOCK_FROZEN == ret) {
@@ -206,9 +203,7 @@ int ObTabletMediumCompactionInfoRecorder::replay_medium_compaction_log(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to replay medium compaction clog", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::decode_i64(buf, size, pos, &update_version))) {
-    LOG_WARN("fail to deserialize table_version", K(ret), K_(tablet_id));
   } else if (OB_FAIL(ObIStorageClogRecorder::replay_clog(update_version, scn, buf, size, pos))) {
-    LOG_WARN("failed to replay clog", K(ret), K(scn), K_(tablet_id), K(update_version));
   }
   return ret;
 }
@@ -225,11 +220,9 @@ int ObTabletMediumCompactionInfoRecorder::inner_replay_clog(
   ObArenaAllocator tmp_allocator("MediumReplay", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObMediumCompactionInfo replay_medium_info;
   if (OB_FAIL(replay_medium_info.deserialize(tmp_allocator, buf, size, pos))) {
-    LOG_WARN("failed to deserialize medium compaction info", K(ret));
   } else { // new mds path
     ObTabletMediumClogReplayExecutor replay_executor(replay_medium_info);
     if (OB_FAIL(replay_executor.init(scn))) {
-      LOG_WARN("failed to init replay executor", K(ret), K(scn));
     } else if (OB_FAIL(replay_executor.execute(scn, tablet_id_))) {
       if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret) {
         ret = OB_SUCCESS;
@@ -255,10 +248,7 @@ int ObTabletMediumCompactionInfoRecorder::on_sync_clog_success(const int64_t upd
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("medium snapshot not match", K(ret), KPC(medium_info_), K(update_version));
   } else if (OB_FAIL(submit_trans_on_mds_table(true/*is_commit*/))) {
-    LOG_WARN("failed to dec ref on memtable", K(ret), K_(tablet_id), KPC(medium_info_));
   } else {
-    LOG_TRACE("success to save medium info for leader", K(ret), K_(tablet_id), KPC(medium_info_),
-        K(max_saved_version_), K_(clog_scn));
   }
   return ret;
 }
@@ -354,13 +344,9 @@ int ObTabletMediumCompactionInfoRecorder::prepare_struct_in_lock(
   if (FAILEDx(get_tablet_handle(tablet_id_, *tablet_handle_ptr_))) {
     LOG_WARN("failed to get tablet handle", K(ret), K_(tablet_id));
   } else if (OB_FAIL(log_header.serialize(alloc_clog_buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize log header", K(ret));
   } else if (OB_FAIL(tablet_id_.serialize(alloc_clog_buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize tablet_id", K(ret), K_(tablet_id));
   } else if (OB_FAIL(serialization::encode_i64(alloc_clog_buf, buf_len, pos, medium_info_->medium_snapshot_))) {
-    LOG_WARN("fail to serialize schema version", K(ret), K_(tablet_id));
   } else if (OB_FAIL(medium_info_->serialize(alloc_clog_buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize medium compaction info", K(ret), K(buf_len), K_(tablet_id), KPC(medium_info_));
   }
   if (OB_SUCC(ret)) {
     clog_buf = alloc_clog_buf;
@@ -390,12 +376,10 @@ int ObTabletMediumCompactionInfoRecorder::submit_log(
       ObMediumCompactionInfoKey(medium_info_->medium_snapshot_),
       *medium_info_,
       *mds_ctx_))) {
-    LOG_WARN("failed to save medium info on mds table", K(ret), K_(tablet_id), KPC(medium_info_));
   } else if (OB_FAIL(write_clog(clog_buf, clog_len))) {
     LOG_ERROR("fail to submit log", K(ret), K_(tablet_id), K(medium_info_));
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(submit_trans_on_mds_table(false))) {
-      LOG_ERROR("failed to dec ref on memtable", K(tmp_ret), K_(tablet_id));
     }
   } else {
     LOG_INFO("success to submit medium log", K(ret), K_(tablet_id), K(medium_info_),
@@ -481,9 +465,7 @@ int ObMediumCompactionInfoList::init(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, medium info is null", K(ret), K(i), KP(src_medium_info));
       } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, medium_info))) {
-        LOG_WARN("failed to alloc and new", K(ret));
       } else if (OB_FAIL(medium_info->init(allocator, *src_medium_info))) {
-        LOG_WARN("failed to copy medium info", K(ret), KPC(src_medium_info));
       } else if (OB_UNLIKELY(!medium_info_list_.add_last(medium_info))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to add last", K(ret), KPC(medium_info));
@@ -536,15 +518,11 @@ int ObMediumCompactionInfoList::serialize(char *buf, const int64_t buf_len, int6
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("medium info list is invalid", K(ret), KPC(this));
   } else if (OB_FAIL(extra_info_.serialize(buf, buf_len, new_pos))) {
-    LOG_WARN("failed to serialize extra info", K(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, new_pos, medium_info_list_.get_size()))) {
-    LOG_WARN("failed to serialize medium info list count", K(ret), K(buf_len));
   } else {
     DLIST_FOREACH_X(info, medium_info_list_, OB_SUCC(ret)) {
       if (OB_FAIL(static_cast<const ObMediumCompactionInfo *>(info)->serialize(buf, buf_len, new_pos))) {
-        LOG_WARN("failed to serialize medium compaction info", K(ret), K(buf), K(buf_len), K(new_pos), KPC(info));
       } else {
-        LOG_DEBUG("success to serialize medium info", K(ret), KPC(info));
       }
     }
   }
@@ -571,9 +549,7 @@ int ObMediumCompactionInfoList::deserialize(
     LOG_WARN("invalid args", K(ret), K(buf), K(data_len), K(pos));
   } else if (FALSE_IT(allocator_ = &allocator)) { // set allocator to call reset() when deserialize failed
   } else if (OB_FAIL(extra_info_.deserialize(buf, data_len, new_pos))) {
-    LOG_WARN("failed to deserialize extra medium info", K(ret), K(data_len));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, new_pos, &list_count))) {
-    LOG_WARN("failed to deserialize list count", K(ret), K(data_len));
   } else if (OB_UNLIKELY(list_count < 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected list count", K(ret), K(list_count));
@@ -586,12 +562,10 @@ int ObMediumCompactionInfoList::deserialize(
         LOG_WARN("failed to alloc memory", K(ret));
       } else if (FALSE_IT(new_info = new (alloc_buf) ObMediumCompactionInfo())) {
       } else if (OB_FAIL(new_info->deserialize(allocator, buf, data_len, new_pos))) {
-        LOG_WARN("failed to deserialize medium info", K(ret));
       } else if (!medium_info_list_.add_last(new_info)) {
         ret = OB_ERR_SYS;
         LOG_WARN("failed to add into medium info list", K(ret), KPC(new_info));
       } else {
-        LOG_DEBUG("success to deserialize medium info", K(ret), K(new_info));
       }
 
       if (OB_FAIL(ret) && nullptr != new_info) {

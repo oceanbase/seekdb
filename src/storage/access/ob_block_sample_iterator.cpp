@@ -87,7 +87,6 @@ int ObBlockSampleSSTableEndkeyIterator::open(
     is_iter_end_ = true;
     is_inited_ = true;
   } else if (OB_FAIL(tree_cursor_.init(sstable, allocator, &rowkey_read_info))) {
-    STORAGE_LOG(WARN, "Fail to init index tree cursor", K(ret), K(sstable));
   } else {
     sample_level_ = ObIndexBlockTreeCursor::LEAF;
     is_reverse_scan_ = is_reverse_scan;
@@ -110,12 +109,10 @@ int ObBlockSampleSSTableEndkeyIterator::open(
             K(ret), K(range), K(tree_cursor_));
       }
     } else if (OB_FAIL(locate_bound(range))) {
-      STORAGE_LOG(WARN, "Fail to locate bound", K(ret));
     }
     if (OB_SUCC(ret)) {
       is_inited_ = true;
     }
-    STORAGE_LOG(TRACE, "open iter", K(ret), K(macro_count_), K(micro_count_), K(sstable));
   }
 
   return ret;
@@ -132,7 +129,6 @@ int ObBlockSampleSSTableEndkeyIterator::upgrade_to_macro(const ObDatumRange &ran
   } else {
     sample_level_ = ObIndexBlockTreeCursor::MACRO;
     if (OB_FAIL(locate_bound(range))) {
-      STORAGE_LOG(WARN, "Fail to locate bound", K(ret));
     }
   }
 
@@ -151,11 +147,8 @@ int ObBlockSampleSSTableEndkeyIterator::move_forward()
   } else if (curr_block_id_ == (is_reverse_scan_ ? start_bound_micro_block_ : end_bound_micro_block_)) {
     is_iter_end_ = true;
   } else if (OB_FAIL(tree_cursor_.move_forward(is_reverse_scan_))) {
-    STORAGE_LOG(WARN, "Fail to move cursor forward", K(ret), K(tree_cursor_));
   } else if (OB_FAIL(tree_cursor_.get_current_endkey(curr_key_))) {
-    STORAGE_LOG(WARN, "Fail to get current endkey", K(ret), K(tree_cursor_));
   } else if (OB_FAIL(get_current_block_id(curr_block_id_))) {
-    STORAGE_LOG(WARN, "Fail to get current block id", K(ret));
   }
 
   return ret;
@@ -170,10 +163,8 @@ int ObBlockSampleSSTableEndkeyIterator::locate_bound(const ObDatumRange &range)
   ObMicroBlockId wider_end_bound_id;
   if (is_reverse_scan_) {
     if (OB_FAIL(locate_bound_micro_block(range.get_start_key(), start_bound_micro_block_, is_start_beyond_range))) {
-      STORAGE_LOG(WARN, "Fail to locate start bound endkey", K(ret));
     } else if (is_start_beyond_range) {
     } else if (OB_FAIL(locate_bound_micro_block(range.get_end_key(), wider_end_bound_id, is_end_beyond_range))) {
-      STORAGE_LOG(WARN, "Fail to locate end bound endkey", K(ret));
     } else if (OB_FAIL(tree_cursor_.move_forward(true))) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         is_iter_end_ = true;
@@ -182,11 +173,9 @@ int ObBlockSampleSSTableEndkeyIterator::locate_bound(const ObDatumRange &range)
         STORAGE_LOG(WARN, "Fail to move cursor backward", K(ret), K(tree_cursor_));
       }
     } else if (OB_FAIL(get_current_block_id(end_bound_micro_block_))) {
-      STORAGE_LOG(WARN, "Fail to get current block id", K(ret));
     }
   } else {
     if (OB_FAIL(locate_bound_micro_block(range.get_end_key(), wider_end_bound_id, is_end_beyond_range))) {
-      STORAGE_LOG(WARN, "Fail to locate end bound endkey", K(ret));
     } else if (OB_FAIL(tree_cursor_.move_forward(true))) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         is_iter_end_ = true;
@@ -195,16 +184,13 @@ int ObBlockSampleSSTableEndkeyIterator::locate_bound(const ObDatumRange &range)
         STORAGE_LOG(WARN, "Fail to move cursor backward", K(ret), K(tree_cursor_));
       }
     } else if (OB_FAIL(get_current_block_id(end_bound_micro_block_))) {
-      STORAGE_LOG(WARN, "Fail to get current block id", K(ret));
     } else if (OB_FAIL(locate_bound_micro_block(range.get_start_key(), start_bound_micro_block_, is_start_beyond_range))) {
-      STORAGE_LOG(WARN, "Fail to locate start bound endkey", K(ret));
     }
   }
   if (OB_SUCC(ret) && !is_iter_end_) {
     if (is_start_beyond_range || start_bound_micro_block_ == wider_end_bound_id) {
       is_iter_end_ = true;
     } else if (OB_FAIL(tree_cursor_.get_current_endkey(curr_key_))) {
-      STORAGE_LOG(WARN, "Fail to get current endkey", K(ret), K(tree_cursor_));
     } else {
       curr_block_id_ = is_reverse_scan_ ? end_bound_micro_block_ : start_bound_micro_block_;
     }
@@ -223,11 +209,8 @@ int ObBlockSampleSSTableEndkeyIterator::locate_bound_micro_block(
   bool equal = false;
   is_beyond_range = false;
   if (OB_FAIL(tree_cursor_.pull_up_to_root())) {
-    STORAGE_LOG(WARN, "Fail to pull up tree cursor back to root", K(ret));
   } else if (OB_FAIL(tree_cursor_.drill_down(rowkey, sample_level_, !is_reverse_scan_, equal, is_beyond_range))) {
-    STORAGE_LOG(WARN, "Fail to locate micro block address in index tree", K(ret));
   } else if (OB_FAIL(get_current_block_id(bound_block))) {
-    STORAGE_LOG(WARN, "Fail to get current block id", K(ret));
   }
 
   return ret;
@@ -240,9 +223,7 @@ int ObBlockSampleSSTableEndkeyIterator::get_current_block_id(ObMicroBlockId &mic
   ObLogicMacroBlockId logic_id;
   const ObIndexBlockRowHeader *idx_row_header = nullptr;
   if (OB_FAIL(tree_cursor_.get_idx_row_header(idx_row_header))) {
-    STORAGE_LOG(WARN, "Fail to get index block row header", K(ret), K(tree_cursor_));
   } else if (OB_FAIL(tree_cursor_.get_macro_block_id(micro_block_id.macro_id_))) {
-    STORAGE_LOG(WARN, "Fail to get macro block id", K(ret));
   } else {
     micro_block_id.offset_ = idx_row_header->get_block_offset();
     micro_block_id.size_ = idx_row_header->get_block_size();
@@ -337,11 +318,9 @@ int ObBlockSampleRangeIterator::open(
     endkey_comparor_.init(*datum_utils_, is_reverse_scan_);
 
     if (OB_FAIL(init_and_push_endkey_iterator(get_table_param, sample_method))) {
-      STORAGE_LOG(WARN, "Fail to init and push endkey iterator", K(ret));
     } else if (endkey_iters_.empty()) {
       is_range_iter_end_ = true;
     } else if (OB_FAIL(calculate_level_and_batch_size(percent, sample_method))) {
-      STORAGE_LOG(WARN, "Fail to calculate macro level and batch size", K(ret));
     } else if (is_reverse_scan_) {
       curr_key_.key_ = range.get_end_key();
       if (sample_range_->get_border_flag().inclusive_end()) {
@@ -376,7 +355,6 @@ int ObBlockSampleRangeIterator::get_next_range(const ObDatumRange *&range)
   } else if (is_range_iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(deep_copy_rowkey(curr_key_.key_, prev_key_))) {
-    STORAGE_LOG(WARN, "Fail to deep copy from current key to prev key", K(ret), K(curr_key_.key_));
   } else if (OB_FAIL(get_next_batch(min_iter))) {
     if (OB_ITER_END == ret) {
       generate_cur_range(is_reverse_scan_ ? sample_range_->get_start_key() : sample_range_->get_end_key());
@@ -386,7 +364,6 @@ int ObBlockSampleRangeIterator::get_next_range(const ObDatumRange *&range)
       STORAGE_LOG(WARN, "Fail to get next batch", K(ret));
     }
   } else if (OB_FAIL(deep_copy_rowkey(min_iter->get_endkey(), curr_key_))) {
-    STORAGE_LOG(WARN, "Fail to deep copy to current key", K(ret), KPC(min_iter));
   } else if (FALSE_IT(generate_cur_range(curr_key_.key_))) {
   } else if (OB_FAIL(move_endkey_iter(*min_iter))) {
     if (OB_ITER_END == ret) {
@@ -430,7 +407,6 @@ int ObBlockSampleRangeIterator::init_and_push_endkey_iterator(ObGetTableParam &g
         STORAGE_LOG(WARN, "Unexpected null sstable", K(ret), KP(table), KP(sample_range_), KP(allocator_));
       } else if (FALSE_IT(sstable = static_cast<ObSSTable*>(table))) {
       } else if (sstable->is_empty()) {
-        STORAGE_LOG(DEBUG, "Skip empty sstable", KPC(sstable));
       } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObBlockSampleSSTableEndkeyIterator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         STORAGE_LOG(WARN, "Fail to allocate memory for ObBlockSampleSSTableEndkeyIterator", K(ret));
@@ -440,9 +416,7 @@ int ObBlockSampleRangeIterator::init_and_push_endkey_iterator(ObGetTableParam &g
         if (OB_FAIL(iter->open(*sstable, *sample_range_,
             get_table_param.tablet_iter_.get_tablet()->get_rowkey_read_info(),
             *allocator_, is_reverse_scan_, sample_method))) {
-          STORAGE_LOG(WARN, "Fail to open ObBlockSampleSSTableEndkeyIterator", K(ret), KPC(sstable), KPC(sample_range_));
         } else if (OB_FAIL(endkey_iters_.push_back(iter))) {
-          STORAGE_LOG(WARN, "Fail to push back ObBlockSampleSSTableEndkeyIterator iter", K(ret), KPC(iter));
         }
         if (OB_FAIL(ret)) {
           iter->~ObBlockSampleSSTableEndkeyIterator();
@@ -450,7 +424,6 @@ int ObBlockSampleRangeIterator::init_and_push_endkey_iterator(ObGetTableParam &g
           iter = nullptr;
         } else if (iter->is_reach_end()) {
         } else if (OB_FAIL(endkey_heap_.push(iter))) {
-          STORAGE_LOG(WARN, "Fail to push iter key to heap", K(ret));
         }
       }
     }
@@ -483,7 +456,6 @@ int ObBlockSampleRangeIterator::calculate_level_and_batch_size(
     for (int64_t i = 0 ; OB_SUCC(ret) && i < endkey_iters_.count() ; ++i) {
       ObBlockSampleSSTableEndkeyIterator *iter = endkey_iters_[i];
       if (OB_FAIL(iter->upgrade_to_macro(*sample_range_))) {
-        STORAGE_LOG(WARN, "Fail to upgrade to macro level", K(ret));
       } else if (!iter->is_reach_end() && OB_FAIL(endkey_heap_.push(iter))) {
         STORAGE_LOG(WARN, "Fail to push endkey heap", K(ret), K(iter), K(endkey_heap_));
       }
@@ -495,7 +467,6 @@ int ObBlockSampleRangeIterator::calculate_level_and_batch_size(
   if (SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE == sample_method) {
     ++batch_size_;
   }
-  STORAGE_LOG(TRACE, "calculate", K(ret), K(macro_count), K(micro_count), K(macro_threshold), K(batch_size_));
   return ret;
 }
 
@@ -515,18 +486,15 @@ int ObBlockSampleRangeIterator::get_next_batch(ObBlockSampleSSTableEndkeyIterato
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null endkey iter ptr", K(ret), KP(iter));
       } else if (OB_FAIL(endkey_heap_.pop())) {
-        STORAGE_LOG(WARN, "Fail to pop from endkey heap", K(ret), K(endkey_heap_));
       } else if (++batch_count >= batch_size_) {
         int cmp_ret = 0;
         if (OB_FAIL(curr_key_.key_.compare(iter->get_endkey(), *datum_utils_, cmp_ret))) {
-          STORAGE_LOG(WARN, "Fail to compare curr endkey", K(ret), KPC(iter));
         } else if (0 != cmp_ret) {
           break;
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(move_endkey_iter(*iter))) {
-        STORAGE_LOG(WARN, "Fail to move forward endkey iterator", K(ret), KPC(iter));
       }
     }
   }
@@ -569,7 +537,6 @@ int ObBlockSampleRangeIterator::deep_copy_rowkey(const blocksstable::ObDatumRowk
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(dest.key_.reset())) {
   } else if (OB_FAIL(src_key.deep_copy(dest.key_, dest.key_buf_, dest.buf_size_))) {
-    STORAGE_LOG(WARN, "Fail to deep copy rowkey", K(ret), K(src_key));
   }
 
   return ret;
@@ -691,7 +658,6 @@ int ObBlockSampleIterator::open(ObMultipleScanMerge &scan_merge,
                                            sample_info_->percent_,
                                            is_reverse_scan,
                                            SampleInfo::SampleMethod::BLOCK_SAMPLE))) {
-    STORAGE_LOG(WARN, "Fail to init micro block iterator", K(ret));
   } else {
     scan_merge_ = &scan_merge;
     has_opened_range_ = false;
@@ -727,12 +693,10 @@ int ObBlockSampleIterator::get_next_row(blocksstable::ObDatumRow *&row)
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "range is null", K(ret), K(block_num_));
         } else if (return_this_sample(block_num_++)) {
-          STORAGE_LOG(DEBUG, "open a range", K(*range), K_(block_num));
           ++sample_block_cnt_;
           micro_range_.reset();
           micro_range_ = *range;
           if (OB_FAIL(open_range(micro_range_))) {
-            STORAGE_LOG(WARN, "Failed to open range", K(ret), K(micro_range_), K(block_num_));
           }
         }
       }
@@ -760,7 +724,6 @@ int ObBlockSampleIterator::open_range(blocksstable::ObDatumRange &range)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "the are invalid argument", K(ret), K(range));
   } else if (OB_FAIL(inner_open_range(range))) {
-    STORAGE_LOG(WARN, "failed to inner open range", K(ret), K(range));
   }
   return ret;
 }
@@ -772,11 +735,8 @@ int ObBlockSampleIterator::inner_open_range(blocksstable::ObDatumRange &range)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "the are invalid argument", K(ret), K(range));
   } else if (OB_FAIL(range.start_key_.to_store_rowkey(read_info_->get_columns_desc(), range_allocator_, range.start_key_.store_rowkey_))) {
-    STORAGE_LOG(WARN, "Failed to convert start key", K(ret), K(range));
   } else if (OB_FAIL(range.end_key_.to_store_rowkey(read_info_->get_columns_desc(), range_allocator_, range.end_key_.store_rowkey_))) {
-    STORAGE_LOG(WARN, "Failed to convert end key", K(ret), K(range));
   } else if (OB_FAIL(scan_merge_->open(range))) {
-    STORAGE_LOG(WARN, "failed to open ObMultipleScanMerge", K(ret), K(range));
   } else {
     has_opened_range_ = true;
   }
@@ -819,11 +779,9 @@ int ObBlockSampleIterator::get_next_rows(int64_t &count, int64_t capacity)
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "range is null", K(ret), K(block_num_));
         } else if (return_this_sample(block_num_++)) {
-          STORAGE_LOG(DEBUG, "open a range", K(*range), K_(block_num));
           micro_range_.reset();
           micro_range_ = *range;
           if (OB_FAIL(open_range(micro_range_))) {
-            STORAGE_LOG(WARN, "Failed to open range", K(ret), K(micro_range_), K(block_num_));
           }
         }
       }

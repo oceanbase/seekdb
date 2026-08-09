@@ -100,9 +100,7 @@ int VersionUtil::get_version(const ObString &verstr, uint64_t &version)
   version = 0;
   if (OB_FAIL(databuff_printf(
           buf, sizeof(buf), "%.*s", verstr.length(), verstr.ptr()))) {
-    COMMON_LOG(WARN, "failed to copy version string", K(ret), K(verstr));
   } else if (OB_FAIL(get_version(buf, version))) {
-    COMMON_LOG(WARN, "failed to parse version", K(ret), K(buf));
   }
   return ret;
 }
@@ -113,7 +111,6 @@ int VersionUtil::get_version(const char *verstr, uint64_t &version)
   uint64_t items[MAX_VERSION_ITEM] = {0};
   version = 0;
   if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", K(ret), KP(verstr));
   } else {
     version = cal_version(items[MAJOR_POS],
                           items[MINOR_POS],
@@ -133,7 +130,6 @@ int64_t VersionUtil::print_vsn(char *buf, const int64_t buf_len, uint64_t versio
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
               version, major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print vsn", K(ret), K(version));
   }
   return OB_SUCC(ret) ? pos : OB_INVALID_INDEX;
 }
@@ -148,7 +144,6 @@ int64_t VersionUtil::print_version_str(char *buf, const int64_t buf_len, uint64_
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%u.%u.%u.%u",
               major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print version str", K(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;

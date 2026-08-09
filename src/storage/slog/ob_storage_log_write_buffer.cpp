@@ -103,8 +103,6 @@ int ObStorageLogWriteBuffer::copy_log_item(const ObStorageLogItem *item)
 
   }
 
-  STORAGE_REDO_LOG(DEBUG, "Write buffer after copy",
-      K_(write_len), K_(log_data_len), "log item", *item);
   return ret;
 }
 
@@ -136,7 +134,6 @@ int ObStorageLogWriteBuffer::move_buffer(int64_t &backward_size)
     backward_size = lower_align_offset;
   }
 
-  STORAGE_REDO_LOG(DEBUG, "Successfully move", K_(write_len), K_(log_data_len));
   return ret;
 }
 

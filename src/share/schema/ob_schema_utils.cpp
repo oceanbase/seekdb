@@ -230,15 +230,10 @@ int ObSchemaUtils::convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sysvar_schema.set_name(ObString::make_string(sysparam.name_)))) {
-    LOG_WARN("set sysvar schema name failed", K(ret));
   } else if (OB_FAIL(sysvar_schema.set_value(ObString::make_string(sysparam.value_)))) {
-    LOG_WARN("set sysvar schema value failed", K(ret));
   } else if (OB_FAIL(sysvar_schema.set_min_val(ObString::make_string(sysparam.min_val_)))) {
-    LOG_WARN("set sysvar schema min val failed", K(ret));
   } else if (OB_FAIL(sysvar_schema.set_max_val(ObString::make_string(sysparam.max_val_)))) {
-    LOG_WARN("set sysvar schema max val failed", K(ret));
   } else if (OB_FAIL(sysvar_schema.set_info(ObString::make_string(sysparam.info_)))) {
-    LOG_WARN("set sysvar schema info failed", K(ret));
   } else {
     sysvar_schema.set_flags(sysparam.flags_);
     
@@ -263,9 +258,7 @@ int ObSchemaUtils::get_runtime_int_variable(
   schema::ObSchemaGetterGuard schema_guard;
   ObObj value;
   if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
-    LOG_WARN("fail to get runtime variable", K(value), K(var_id), K(ret));
   } else if (OB_FAIL(value.get_int(v))) {
-    LOG_WARN("get int from value failed", K(ret), K(value));
   }
   return ret;
 }
@@ -281,12 +274,8 @@ int ObSchemaUtils::get_runtime_varchar_variable(
   ObObj value;
   ObString tmp;
   if (OB_FAIL(get_runtime_variable(schema_service, schema_guard, var_id, value))) {
-    LOG_WARN("fail to get runtime variable", K(value), K(var_id), K(ret));
   } else if (OB_FAIL(value.get_varchar(tmp))) {
-    LOG_WARN("get varchar from value failed", K(ret), K(value));
   } else if (OB_FAIL(ob_write_string(allocator, tmp, v))) {
-    // must be deep copy, otherwise very low probability v will reference illegal memory
-    LOG_WARN("fail deep copy string", K(ret));
   }
   return ret;
 }
@@ -299,15 +288,12 @@ int ObSchemaUtils::get_runtime_variable(ObMultiVersionSchemaService &schema_serv
   int ret = OB_SUCCESS;
   const schema::ObSysVarSchema *var_schema = NULL;
   if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_system_variable(
               var_id, var_schema))) {
-    LOG_WARN("fail to get system variable", K(ret), K(var_id));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   }
   return ret;
 }
@@ -353,7 +339,6 @@ int ObSchemaUtils::construct_runtime_space_full_table(
   // index
   const int64_t table_id = table.get_table_id();
   if (OB_FAIL(ObSysTableChecker::fill_sys_index_infos(table))) {
-    LOG_WARN("fail to fill sys indexes", KR(ret), K(table_id));
   }
   // lob aux
   if (OB_SUCC(ret) && is_system_table(table_id)) {
@@ -396,17 +381,12 @@ int ObSchemaUtils::add_sys_table_lob_aux_table(
       if (OB_ALL_CORE_TABLE_TID == data_table_id) {
         // do nothing
       } else if (OB_FAIL(get_sys_table_lob_aux_schema(data_table_id, lob_meta_schema, lob_piece_schema))) {
-        LOG_WARN("fail to get sys table lob aux schema", KR(ret), K(data_table_id));
       } else if (OB_FAIL(ObSchemaUtils::construct_runtime_space_full_table(
                   lob_meta_schema))) {
-        LOG_WARN("fail to construct runtime space table", KR(ret));
       } else if (OB_FAIL(ObSchemaUtils::construct_runtime_space_full_table(
                   lob_piece_schema))) {
-        LOG_WARN("fail to construct runtime space table", KR(ret));
       } else if (OB_FAIL(table_schemas.push_back(lob_meta_schema))) {
-        LOG_WARN("fail to push back table schema", KR(ret), K(lob_meta_schema));
       } else if (OB_FAIL(table_schemas.push_back(lob_piece_schema))) {
-        LOG_WARN("fail to push back table schema", KR(ret), K(lob_piece_schema));
       }
     }
   }
@@ -443,30 +423,22 @@ int ObSchemaUtils::construct_inner_table_schemas(ObSArray<ObTableSchema> &tables
         table_schema.reset();
         bool exist = false;
         if (OB_FAIL((*creator_ptr)(table_schema))) {
-          LOG_WARN("fail to gen sys table schema", KR(ret));
         } else if (!construct_all
             && table_schema.get_table_id() == OB_ALL_CORE_TABLE_TID) {
           // server runtime's __all_core_table's schema is built separately in bootstrap
         } else if (OB_FAIL(ObSchemaUtils::construct_runtime_space_full_table(
                 table_schema))) {
-          LOG_WARN("fail to construct runtime space table", KR(ret));
         } else if (OB_FAIL(ObSysTableChecker::is_inner_table_exist(
                 table_schema, exist))) {
-          LOG_WARN("fail to check inner table exist",
-              KR(ret), K(table_schema));
         } else if (!construct_all && !exist) {
           // skip
         } else if (OB_FAIL(tables.push_back(table_schema))) {
-          LOG_WARN("fail to push back table schema", KR(ret), K(table_schema));
         } else if (OB_FAIL(ObSysTableChecker::append_sys_table_index_schemas(
                 table_schema.get_table_id(), tables))) {
-          LOG_WARN("fail to append sys table index schemas",
-              KR(ret), "table_id", table_schema.get_table_id());
         }
         const int64_t data_table_id = table_schema.get_table_id();
         if (OB_SUCC(ret) && exist) {
           if (OB_FAIL(add_sys_table_lob_aux_table(data_table_id, tables))) {
-            LOG_WARN("fail to add lob table to sys table", KR(ret), K(data_table_id));
           }
         } // end lob aux table
       }
@@ -490,7 +462,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
   int ret = OB_SUCCESS;
   hash::ObHashMap<uint64_t, ObTableSchema *> tid2table;
   if (OB_FAIL(tid2table.create(tables.count(), "Tid2Table"))) {
-    LOG_WARN("failed to create tid2table", KR(ret), K(tables.count()));
   } else {
     int64_t current_schema_version = (HARD_CODE_SCHEMA_VERSION_BEGIN + tables.count()) * ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
     ObArray<uint64_t> table_id_in_schema_version_order;
@@ -499,7 +470,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pointer is null", KR(ret), KP(table));
       } else if (OB_FAIL(tid2table.set_refactored(table->get_table_id(), table))) {
-        LOG_WARN("failed to add tid to table", KR(ret), K(table));
       }
     }
     for (int64_t i = tables.count() - 1; i >= 0 && OB_SUCC(ret); i--) {
@@ -507,7 +477,6 @@ int ObSchemaUtils::generate_hard_code_schema_version(ObIArray<ObTableSchema> &ta
       table.set_schema_version(OB_INVALID_VERSION);
       if (table.is_index_table() && is_virtual_table(table.get_data_table_id())) {
         if (OB_FAIL(table_id_in_schema_version_order.push_back(table.get_data_table_id()))) {
-          LOG_WARN("failed to push data_table_id", KR(ret), K(table));
         }
       }
       if (FAILEDx(table_id_in_schema_version_order.push_back(table.get_table_id()))) {
@@ -582,8 +551,6 @@ int ObSchemaUtils::batch_get_latest_table_schemas(
       schema_version,
       table_ids,
       table_schemas))) {
-    LOG_WARN("batch get table schemas by version failed",
-        KR(ret), K(table_ids), K(schema_version));
   }
   return ret;
 }
@@ -613,7 +580,6 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
       sql_client,
       table_ids,
       table_schema_versions))) {
-    LOG_WARN("get table latest schema versions failed", KR(ret), K(table_ids));
   } else if (OB_FAIL(batch_get_table_schemas_from_cache_(
       multi_version_schema_service,
       allocator,
@@ -621,7 +587,6 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
       table_schema_versions,
       need_refresh_table_schema_keys,
       table_schemas))) {
-    LOG_WARN("batch get table schemas from cache failed", KR(ret), K(table_schema_versions));
   } else if (OB_FAIL(batch_get_table_schemas_from_inner_table_(
       multi_version_schema_service,
       sql_client,
@@ -629,10 +594,7 @@ int ObSchemaUtils::batch_get_table_schemas_by_version(
       schema_version,
       need_refresh_table_schema_keys,
       table_schemas_from_inner_table))) {
-    LOG_WARN("batch get table_schemas from inner table failed", KR(ret), K(need_refresh_table_schema_keys));
   } else if (OB_FAIL(common::append(table_schemas, table_schemas_from_inner_table))) {
-    LOG_WARN("append failed", KR(ret), "table_schemas count", table_schemas.count(),
-        "table_schemas_from_inner_table count", table_schemas_from_inner_table.count());
   } else if (table_ids.count() != table_schemas.count()) {
     LOG_INFO("get less table_schemas, some tables have been deleted",
         "table_ids count", table_ids.count(), "table_schemas count", table_schemas.count(),
@@ -669,16 +631,12 @@ int ObSchemaUtils::check_sys_table_exist_by_sql(
       if (OB_FAIL(sql.append_fmt(
           "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu",
           OB_ALL_TABLE_TNAME, table_id))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(res = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get mysql result failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->next())) {
-        LOG_WARN("next failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->get_bool("exist", exist))) {
-        LOG_WARN("get bool value failed", KR(ret), K(sql));
       }
     }
   }
@@ -700,14 +658,12 @@ int ObSchemaUtils::get_latest_table_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(table_id));
   } else if (OB_FAIL(table_ids.push_back(table_id))) {
-    LOG_WARN("push back failed", KR(ret), K(table_id), K(table_ids));
   } else if (OB_FAIL(batch_get_latest_table_schemas(
       schema_service,
       sql_client,
       allocator,
       table_ids,
       table_schemas))) {
-    LOG_WARN("batch get latest table schema failed", KR(ret), K(table_id));
   } else if (table_schemas.empty()) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist when get latest table schema", KR(ret), K(table_id));
@@ -740,7 +696,6 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
     LOG_WARN("multiversion_schema_service is null", KR(ret));
   } else if (OB_FAIL(multi_version_schema_service->get_runtime_schema_guard(
       schema_guard))) {
-    LOG_WARN("get schema guard failed", KR(ret));
   } else {
     ARRAY_FOREACH(table_schema_versions, idx) {
       const ObSimpleTableSchemaV2 *cached_table_schema = NULL;
@@ -752,7 +707,6 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
       } else if (OB_FAIL(schema_guard.get_simple_table_schema(
           table_schema_version.get_table_id(),
           cached_table_schema))) {
-        LOG_WARN("get simple table schema failed", KR(ret), K(table_schema_version));
       } else if (OB_ISNULL(cached_table_schema)
           || (cached_table_schema->get_schema_version() < table_schema_version.get_schema_version())
           || (cached_table_schema->get_schema_version() > specified_schema_version)) {
@@ -761,12 +715,9 @@ int ObSchemaUtils::batch_get_table_schemas_from_cache_(
         
         table_schema_key.table_id_ = table_schema_version.get_table_id();
         if (OB_FAIL(need_refresh_table_schema_keys.push_back(table_schema_key))) {
-          LOG_WARN("push back failed", KR(ret), K(table_schema_version));
         }
       } else if (OB_FAIL(alloc_schema(allocator, *cached_table_schema, new_table_schema))) {
-        LOG_WARN("fail to alloc schema", KR(ret), KPC(cached_table_schema));
       } else if (OB_FAIL(table_schemas.push_back(new_table_schema))) {
-        LOG_WARN("push back failed", KR(ret), KP(new_table_schema));
       }
     } // end ARRAY_FOREACH
   }
@@ -802,8 +753,6 @@ int ObSchemaUtils::batch_get_table_schemas_from_inner_table_(
       schema_version,
       need_refresh_table_schema_keys,
       table_schemas))) {
-    LOG_WARN("get batch tables failed", KR(ret),
-        K(schema_status), K(schema_version), K(need_refresh_table_schema_keys));
   }
   return ret;
 }
@@ -829,16 +778,12 @@ int ObSchemaUtils::check_whether_column_exist(common::ObISQLClient &sql_client,
       if (OB_FAIL(sql.append_fmt(
           "SELECT count(*) = 1 AS exist FROM %s WHERE table_id = %lu and column_name = '%.*s'",
           OB_ALL_COLUMN_TNAME, table_id, column_name.length(), column_name.ptr()))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(res = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get mysql result failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->next())) {
-        LOG_WARN("next failed", KR(ret), K(sql));
       } else if (OB_FAIL(res->get_bool("exist", exist))) {
-        LOG_WARN("get max task id failed", KR(ret), K(sql));
       }
     }
   }

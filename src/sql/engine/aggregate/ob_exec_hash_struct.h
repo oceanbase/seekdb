@@ -86,7 +86,6 @@ public:
       int64_t bucket_num = get_bucket_num();
       buckets_->reuse();
       if (OB_FAIL(buckets_->init(bucket_num))) {
-        SQL_ENG_LOG(ERROR, "resize bucket array failed", K(size_), K(bucket_num), K(get_bucket_num()));
       }
     }
     size_ = 0;
@@ -127,7 +126,6 @@ public:
       Item *item = buckets_->at(i).item_;
       while (NULL != item && OB_SUCC(ret)) {
         if (OB_FAIL(cb(*item))) {
-          SQL_ENG_LOG(WARN, "call back failed", K(ret));
         } else {
           item = item->next();
         }
@@ -190,7 +188,6 @@ int ObExtendHashTable<Item>::init(
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(extend())) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     }
   }
   return ret;
@@ -203,7 +200,6 @@ int ObExtendHashTable<Item>::resize(ObIAllocator *allocator, int64_t bucket_num)
   if (bucket_num < get_bucket_num() / 2) {
     destroy();
     if (OB_FAIL(init(allocator, mem_attr_, bucket_num))) {
-      SQL_ENG_LOG(WARN, "failed to reuse with bucket", K(bucket_num), K(ret));
     }
   } else {
     reuse();
@@ -241,7 +237,6 @@ int ObExtendHashTable<Item>::set(Item &item)
   int ret = common::OB_SUCCESS;
   if (size_ * SIZE_BUCKET_SCALE >= get_bucket_num()) {
     if (OB_FAIL(extend())) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -252,7 +247,6 @@ int ObExtendHashTable<Item>::set(Item &item)
   } else {
     uint64_t hash_val = 0;
     if (OB_FAIL(hf(item, hash_val))) {
-      SQL_ENG_LOG(WARN, "hash failed", K(ret));
     } else {
       Bucket *bucket = const_cast<Bucket *>(&locate_bucket(*buckets_, hash_val));
       if (NULL == bucket->item_) {
@@ -276,8 +270,6 @@ int ObExtendHashTable<Item>::extend()
   int64_t new_bucket_num = 0 == pre_bucket_num ?
                           (0 == initial_bucket_num_ ? INITIAL_SIZE : initial_bucket_num_)
                           : pre_bucket_num * 2;
-  SQL_ENG_LOG(DEBUG, "extend hash table", K(ret), K(new_bucket_num), K(initial_bucket_num_),
-              K(pre_bucket_num));
   if (new_bucket_num <= pre_bucket_num) {
   } else {
     BucketArray *new_buckets = NULL;
@@ -294,7 +286,6 @@ int ObExtendHashTable<Item>::extend()
       ret = OB_INVALID_ARGUMENT;
       SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(buckets_));
     } else if (OB_FAIL(new_buckets->init(new_bucket_num))) {
-      SQL_ENG_LOG(WARN, "resize bucket array failed", K(ret), K(new_bucket_num));
     } else {
       const int64_t size = get_bucket_num();
       for (int64_t i = 0; i < size; i++) {
@@ -450,7 +441,6 @@ public:
     } else {
       cnt_ = next_pow2(ratio * size);
       if (OB_FAIL(bits_.reserve(cnt_))) {
-        SQL_ENG_LOG(WARN, "bit set reserve failed", K(ret));
       } else {
         // cnt_ is int64_t; __builtin_clzl takes `unsigned long` which is
         // 32-bit on Windows LLP64 and would truncate. Use __builtin_clzll.

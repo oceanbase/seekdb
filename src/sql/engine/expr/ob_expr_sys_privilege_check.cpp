@@ -87,22 +87,18 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
   allow_show = true;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
-      LOG_WARN("fail to get session priv info", K(ret));
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_db_show(
                   session_priv, enable_role_id_array, db_name, allow_show))) {
-        LOG_WARN("Check db show failed", K(ret));
       }
     } else if (0 == level_str.case_compare("table_acc")) {
       //if (OB_FAIL(priv_mgr.check_table_show(session_priv,
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_table_show(
                   session_priv, enable_role_id_array, db_name, obj_name, allow_show))) {
-        LOG_WARN("Check table show failed", K(ret));
       }
     } else if (0 == level_str.case_compare("routine_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_routine_show(
                   session_priv, enable_role_id_array, db_name, obj_name, allow_show, routine_type))) {
-        LOG_WARN("Check routine show failed", K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -130,13 +126,11 @@ int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
   ObDatum *routine_type = NULL;
   bool allow_show = true;
   if (OB_FAIL(expr.eval_param_value(ctx, level, db, obj, routine_type))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (OB_FAIL(check_show_priv(allow_show, ctx.exec_ctx_,
                                      level->is_null() ? ObString() : level->get_string(),
                                      (NULL == db || db->is_null()) ? ObString() : db->get_string(),
                                      (NULL == obj || obj->is_null()) ? ObString() : obj->get_string(),
                                      (NULL == routine_type || routine_type->is_null()) ? 0 : routine_type->get_int()))) {
-    LOG_WARN("check show privilege failed", K(ret));
   } else {
     expr_datum.set_int(allow_show ? 0 : -1);
   }

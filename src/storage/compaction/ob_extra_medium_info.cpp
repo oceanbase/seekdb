@@ -77,12 +77,10 @@ int ObExtraMediumInfo::deserialize(const char *buf, const int64_t data_len, int6
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, info_))) {
-    STORAGE_LOG(WARN, "failed to decode medium list format", K(ret), K(data_len), K(pos));
   } else if (OB_UNLIKELY(MEDIUM_LIST_FORMAT_VERSION != format_version_ || 0 != reserved_)) {
     ret = OB_NOT_SUPPORTED;
     STORAGE_LOG(WARN, "medium list format mismatch", K(ret), K_(format_version), K_(reserved));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, last_medium_scn_))) {
-    STORAGE_LOG(WARN, "failed to decode last medium scn", K(ret), K(data_len), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "extra medium info is invalid", K(ret), KPC(this));

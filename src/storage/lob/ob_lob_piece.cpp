@@ -44,7 +44,6 @@ int ObLobPieceUtil::transform_macro_id(blocksstable::ObDatumRow* row, ObLobPiece
   ObString ser_macro_id = row->storage_datums_[2].get_string();;
   int64_t pos = 0;
   if (OB_FAIL(info.macro_id_.deserialize(ser_macro_id.ptr(), ser_macro_id.length(), pos))) {
-    LOG_WARN("deserialize macro id from buffer failed.", K(ret), K(ser_macro_id));
   }
   return ret;
 }

@@ -55,7 +55,6 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
     
     bool is_primary = true;
     if (OB_FAIL(ObShareUtil::check_if_server_role_is_primary(is_primary))) {
-      LOG_WARN("fail to execute check_if_server_role_is_primary", KR(ret));
     } else if (OB_UNLIKELY(!is_primary)) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "analyze table on a standby database");
@@ -64,13 +63,10 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
   if (FAILEDx(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
     LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
-    LOG_WARN("failed to cancel async gather stats", K(ret));
   } else if (OB_FAIL(stmt.fill_table_stat_params(ctx, params))) {
-    LOG_WARN("failed to fill table stat param", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); ++i) {
       if (OB_FAIL(pl::ObDbmsStats::process_not_size_manual_column(ctx, params.at(i)))) {
-        LOG_WARN("failed to process not size_manual column", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -84,25 +80,19 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
           ObArenaAllocator tmp_alloc("DeleteStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
           params.at(0).allocator_ = &tmp_alloc;//use the temp allocator to free memory after delete stats.
           if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, params.at(0)))) {
-            LOG_WARN("failed to check stat locked", K(ret));
           } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, params.at(0), cascade_columns))) {
-            LOG_WARN("failed to delete table stats", K(ret));
           } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(params.at(0)))) {
-            LOG_WARN("failed to update stat cache", K(ret));
           } else if (cascade_indexes && params.at(0).part_name_.empty()) {
             if (OB_FAIL(pl::ObDbmsStats::delete_table_index_stats(ctx, params.at(0)))) {
-              LOG_WARN("failed to delete index stats", K(ret));
             } else {/*do nothing*/}
           }
         }
-        LOG_TRACE("succeed to drop table stats", K(params));
       } else {
         int64_t task_cnt = params.count();
         int64_t start_time = ObTimeUtility::current_time();
         ObOptStatTaskInfo task_info;
         if (OB_FAIL(pl::ObDbmsStats::init_gather_task_info(ctx, ObOptStatGatherType::MANUAL_GATHER,
                                                           start_time, task_cnt, task_info))) {
-          LOG_WARN("failed to init gather task info", K(ret));
         } else {
           int64_t i = 0;
           for (; OB_SUCC(ret) && i < params.count(); ++i) {
@@ -115,24 +105,16 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
             ObOptStatGatherAudit audit(tmp_alloc);
             ObOptStatRunningMonitor running_monitor(ctx.get_allocator(), start_time, param.allocator_->used(), gather_stat, audit);
             if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_PREPARE))) {
-              LOG_WARN("failed to add add monitor info", K(ret));
             } else if (OB_FAIL(running_monitor.add_table_info(param))) {
-              LOG_WARN("failed to add table info", K(ret));
             } else if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, param))) {
-              LOG_WARN("failed check stat locked", K(ret));
             } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx, false, true))) {
-              LOG_WARN("failed to do flush database monitoring info", K(ret));
             } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(ctx, param, running_monitor))) {
-              LOG_WARN("failed to gather table stats", K(ret));
             } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(param))) {
-              LOG_WARN("failed to update stat cache", K(ret));
             } else {
-              LOG_TRACE("succeed to gather table stats", K(param));
             }
             if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {
               int tmp_ret = ret;
               if (OB_FAIL(running_monitor.flush_gather_audit())) {
-                LOG_WARN("failed to flush gather audit", K(ret));
               } else {
                 ret = tmp_ret;
               }

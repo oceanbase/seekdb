@@ -354,7 +354,6 @@ int UserMdsNode<K, V>::fill_virtual_info(MdsNodeInfoForVirtualTable &mds_node_in
   int64_t pos = 0;
   if (FALSE_IT(databuff_printf(stack_buffer, buffer_size, pos, user_data_))) {
   } else if (OB_FAIL(mds_node_info.user_data_.assign(ObString(pos, stack_buffer)))) {
-    MDS_LOG(WARN, "fail construct ObStringHolder", K(*this));
   } else {
     if (OB_LIKELY(has_valid_link_back_ptr_())) {
       mds_node_info.tablet_id_ = p_mds_row_->p_mds_unit_->p_mds_table_->get_tablet_id();
@@ -385,7 +384,6 @@ void UserMdsNode<K, V>::report_event_(const char (&event_str)[N],
   if (OB_UNLIKELY(!has_valid_link_back_ptr_())) {
     // do nothing
   } else if (OB_FAIL(fill_event_(event, event_str, stack_buffer, buffer_size))) {
-    MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
     MdsEventKey key(p_mds_row_->p_mds_unit_->p_mds_table_->tablet_id_);
     ObMdsEventBuffer::append(key, event, p_mds_row_->p_mds_unit_->p_mds_table_, file, line, function_name);
@@ -444,7 +442,6 @@ int UserMdsNode<K, V>::assign(const UserMdsNode<K, V> &rhs)
   end_scn_ = rhs.end_scn_;
   trans_version_ = rhs.trans_version_;
   if (OB_FAIL(meta::copy_or_assign(rhs.user_data_, user_data_, DefaultAllocator::get_instance()))) {
-    MDS_LOG(WARN, "fail to do no_link_assign", KR(ret), K(*this));
   }
   return ret;
 }

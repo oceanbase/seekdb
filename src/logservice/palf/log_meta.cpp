@@ -40,7 +40,6 @@ int LogMeta::generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(INFO, "invalid argument", KPC(this), K(access_mode), K(palf_base_info));
   } else if (OB_FAIL(log_snapshot_meta_.generate(palf_base_info.curr_lsn_, palf_base_info.prev_log_info_, palf_base_info.curr_lsn_))) {
-    PALF_LOG(WARN, "generate snapshot_meta failed", K(ret), K(palf_base_info));
   } else {
     const SCN &prev_scn = palf_base_info.prev_log_info_.scn_;
     const SCN init_ref_scn = (prev_scn.is_valid() ? prev_scn: SCN::min_scn());
@@ -59,7 +58,6 @@ int LogMeta::load(const char *buf, int64_t buf_len)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf), K(buf_len));
   } else if (OB_FAIL(this->deserialize(buf, buf_len, pos))) {
-    PALF_LOG(ERROR, "deserialize failed", K(ret));
   }
   return ret;
 }
@@ -122,7 +120,6 @@ DEFINE_DESERIALIZE(LogMeta)
   if (OB_UNLIKELY(NULL == buf || data_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version_))) {
-    PALF_LOG(ERROR, "decode LogMeta version failed", K(ret), K(data_len), K(new_pos));
   } else if (LOG_META_VERSION != version_) {
     ret = OB_NOT_SUPPORTED;
     PALF_LOG(ERROR, "unsupported LogMeta version", K(ret), K_(version));

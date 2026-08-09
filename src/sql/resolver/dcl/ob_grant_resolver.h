@@ -138,9 +138,7 @@ int ObGrantResolver::resolve_col_names_mysql(
         const ObSimpleTableSchemaV2 *table_schema = NULL;
         if (OB_FAIL(ob_write_string(allocator, ObString(static_cast<int32_t>(child_node->str_len_), 
                                             const_cast<char *>(child_node->str_value_)), column_name))) {
-          SQL_RESV_LOG(WARN, "ob write string failed", K(ret));
         } else if (OB_FAIL(grant_stmt->add_column_privs(column_name, priv_type))) {
-          SQL_RESV_LOG(WARN, "push back failed", K(ret));
         }
       }
     }
@@ -195,7 +193,6 @@ int ObGrantResolver::resolve_priv_set(
             if (OB_FAIL(resolve_col_names_mysql(grant_stmt, priv_type,
                                                 privs_node->children_[i]->children_[0],
                                                 schema_checker, session_info, allocator))) {
-              SQL_RESV_LOG(WARN, "resolve col names failed", K(ret));
             }
           } else {
             priv_set |= priv_type;

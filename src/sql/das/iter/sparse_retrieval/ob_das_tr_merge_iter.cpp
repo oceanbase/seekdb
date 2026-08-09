@@ -85,7 +85,6 @@ int create_das_text_retrieval_engine(
     ret = OB_NOT_INIT;
     LOG_ERROR("DAS text retrieval composition provider is not installed", K(ret));
   } else if (OB_FAIL(factory(allocator, engine))) {
-    LOG_WARN("failed to create DAS text retrieval engine", K(ret));
   } else if (OB_ISNULL(engine)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("text retrieval engine factory returned null", K(ret));
@@ -115,7 +114,6 @@ int build_das_text_retrieval_query(
   } else if (OB_FAIL(query_builder(
       ir_ctdef, ir_rtdef, allocator, query_tokens, boost_values, root_node,
       has_duplicate_boolean_tokens))) {
-    LOG_WARN("failed to build DAS text retrieval query", K(ret));
   }
   return ret;
 }
@@ -139,10 +137,8 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
     LOG_WARN("invalid DAS iter param type for text retrieval", K(ret), K(param));
   } else if (OB_FAIL(create_das_text_retrieval_engine(
       engine_allocator_, engine_))) {
-    LOG_WARN("failed to create text retrieval engine", K(ret));
   } else if (OB_FAIL(engine_->init(
       static_cast<ObDASTRMergeIterParam &>(param)))) {
-    LOG_WARN("failed to initialize text retrieval engine", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -156,7 +152,6 @@ int ObDASTRMergeIter::set_related_tablet_ids(
   if (OB_ISNULL(engine_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(engine_->set_related_tablet_ids(related_tablet_ids))) {
-    LOG_WARN("failed to set text retrieval source ids", K(ret), K(related_tablet_ids));
   }
   return ret;
 }
@@ -168,9 +163,7 @@ int ObDASTRMergeIter::do_table_scan()
     ret = OB_NOT_INIT;
     LOG_WARN("text retrieval facade is not initialized", K(ret));
   } else if (OB_FAIL(engine_->bind_source_tree(children_, children_cnt_))) {
-    LOG_WARN("failed to bind text retrieval source tree", K(ret), K_(children_cnt));
   } else if (OB_FAIL(engine_->do_table_scan())) {
-    LOG_WARN("failed to start text retrieval scan", K(ret));
   }
   return ret;
 }
@@ -181,9 +174,7 @@ int ObDASTRMergeIter::inner_reuse()
   if (IS_NOT_INIT || OB_ISNULL(engine_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(engine_->bind_source_tree(children_, children_cnt_))) {
-    LOG_WARN("failed to bind text retrieval source tree for reuse", K(ret));
   } else if (OB_FAIL(engine_->reuse())) {
-    LOG_WARN("failed to reuse text retrieval engine", K(ret));
   }
   return ret;
 }
@@ -194,9 +185,7 @@ int ObDASTRMergeIter::rescan()
   if (IS_NOT_INIT || OB_ISNULL(engine_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(engine_->bind_source_tree(children_, children_cnt_))) {
-    LOG_WARN("failed to bind text retrieval source tree for rescan", K(ret));
   } else if (OB_FAIL(engine_->rescan())) {
-    LOG_WARN("failed to rescan text retrieval engine", K(ret));
   }
   return ret;
 }
@@ -238,10 +227,8 @@ int ObDASTRMergeIter::set_children_iter_rangekey(
   if (IS_NOT_INIT || OB_ISNULL(engine_)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(engine_->bind_source_tree(children_, children_cnt_))) {
-    LOG_WARN("failed to bind lookup retrieval source tree", K(ret));
   } else if (OB_FAIL(engine_->set_lookup_keys(
       virtual_rangekeys, batch_size))) {
-    LOG_WARN("failed to set text retrieval lookup keys", K(ret), K(batch_size));
   }
   return ret;
 }

@@ -42,7 +42,6 @@ int ObServerRuntimeConfig::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(resource_config_.assign(resource_config))) {
-    LOG_WARN("failed to assign resource config", KR(ret), K(resource_config));
   } else {
     mode_ = compat_mode;
     has_memstore_ = has_memstore;
@@ -69,7 +68,6 @@ int ObServerRuntimeConfig::assign(const ObServerRuntimeConfig &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     if (OB_FAIL(resource_config_.assign(other.resource_config_))) {
-      LOG_WARN("failed to assign resource config", KR(ret), K(other));
     } else {
       mode_ = other.mode_;
       has_memstore_ = other.has_memstore_;

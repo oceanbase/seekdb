@@ -45,9 +45,7 @@ int ObMajorMergeInfoManager::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.init(sql_proxy))) {
-    LOG_WARN("fail to init global_merge_mgr", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
-    LOG_WARN("fail to init freeze_info_mgr", KR(ret));
   } else {
     
     is_inited_ = true;
@@ -63,7 +61,6 @@ int ObMajorMergeInfoManager::try_reload()
   if (freeze_info_mgr_.is_valid()) {
     // do nothing
   } else if (OB_FAIL(reload())) {
-    LOG_WARN("fail to reload", KR(ret));
   }
   return ret;
 }
@@ -79,9 +76,7 @@ int ObMajorMergeInfoManager::reload(const bool force_reload_global_info)
   } else if (!force_reload_global_info && OB_FAIL(global_merge_mgr_.try_reload())) {
     LOG_WARN("fail to try reload global merge info", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.get_global_broadcast_scn(global_broadcast_scn))) {
-    LOG_WARN("fail to get broadcast version", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.reload(global_broadcast_scn))) {
-    LOG_WARN("fail to update freeze info", KR(ret), K(global_broadcast_scn));
   } else {
     LOG_INFO("succ to reload merge info manager");
   }
@@ -100,7 +95,6 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
   ObFreezeInfo freeze_info;
 
   if (OB_FAIL(try_reload())) {
-    LOG_WARN("inner stat error", KR(ret));
   } else {
     ObFreezeInfoProxy freeze_info_proxy{};
     // freeze get_schema_version need interactive with ddl trans but don't use gen_new_schema_version so no need check_in_rs
@@ -109,26 +103,19 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
 
     // In 'ddl_sql_transaction.start()', it implements the semantics of 'lock_all_ddl_operation'.
     if (OB_FAIL(trans.start(GCTX.sql_proxy_, fake_schema_version))) {
-      LOG_WARN("fail to start transaction", KR(ret), K(fake_schema_version));
-    // 1. lock snapshot_gc_ts in __all_global_stat
     } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(
               trans, remote_snapshot_gc_scn))) {
-      LOG_WARN("fail to select for update", KR(ret));
     } else {
       int64_t schema_version_in_frozen_ts = 0;
       // 2. generate new frozen_scn
       if (OB_FAIL(generate_frozen_scn(remote_snapshot_gc_scn, new_frozen_scn))) {
-        LOG_WARN("fail to generate frozen timestamp", KR(ret));
-      // 3. get schema_version at frozen_scn
       } else if (OB_FAIL(get_schema_version(new_frozen_scn, schema_version_in_frozen_ts))) {
-        LOG_WARN("fail to get schema version", KR(ret), K(new_frozen_scn));
       } else {
         freeze_info.frozen_scn_ = new_frozen_scn;
         freeze_info.schema_version_ = schema_version_in_frozen_ts;
         freeze_info.data_version_ = DATA_CURRENT_VERSION;
         // 4. insert freeze info
         if (OB_FAIL(freeze_info_proxy.set_freeze_info(trans, freeze_info))) {
-          LOG_WARN("fail to set freeze info", KR(ret), K(freeze_info));
         }
       }
     }
@@ -179,7 +166,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
   if (FAILEDx(freeze_info_proxy.get_max_freeze_info(*GCTX.sql_proxy_, max_frozen_status))) {
     LOG_WARN("fail to get freeze info with max frozen_scn", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_latest_freeze_info(latest_frozen_status))) {
-    LOG_WARN("fail to get latest frozen_scn", KR(ret), K(latest_frozen_status));
   } else if (FALSE_IT(local_max_frozen_scn = latest_frozen_status.frozen_scn_)) {
   } else if (max_frozen_status.frozen_scn_ != local_max_frozen_scn) {
     // after new leader updates epoch and reloads freeze_info, old leader generates one new
@@ -195,7 +181,6 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
                K(local_max_frozen_scn), K(max_frozen_status));
     }
   } else if (OB_FAIL(get_gts(tmp_frozen_scn))) {
-    LOG_WARN("fail to get gts", KR(ret));
   } else if ((tmp_frozen_scn <= snapshot_gc_scn)
              || (tmp_frozen_scn <= local_max_frozen_scn)
              || (tmp_frozen_scn <= snapshot_info.snapshot_scn_)) {
@@ -230,7 +215,6 @@ int ObMajorMergeInfoManager::get_schema_version(
     status.snapshot_timestamp_ = frozen_scn.get_val_for_inner_table_field();
 
     if (OB_FAIL(server_schema_service->fetch_schema_version(status, *GCTX.sql_proxy_, schema_version))) {
-      LOG_WARN("fail to fetch schema version", KR(ret), K(status));
     }
   }
 
@@ -245,9 +229,7 @@ int ObMajorMergeInfoManager::get_local_latest_frozen_scn(SCN &frozen_scn)
   share::ObFreezeInfo latest_freeze_info;
 
   if (OB_FAIL(try_reload())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_latest_freeze_info(latest_freeze_info))) {
-    LOG_WARN("inner stat error", KR(ret), K(latest_freeze_info));
   } else {
     frozen_scn = latest_freeze_info.frozen_scn_;
   }
@@ -266,17 +248,13 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
   new_snapshot_gc_scn = SCN::min_scn();
 
   if (OB_FAIL(try_reload())) {
-    LOG_WARN("inner error", KR(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("fail to start transaction", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans,
       cur_snapshot_gc_scn))) {
-    LOG_WARN("fail to select snapshot_gc_scn for update", KR(ret));
   }
   // no need to minus max_stale_time_for_weak_consistency since 4.1, because the collection of
   // multi-version data no longer depends on snapshot_gc_scn since 4.1
   else if (OB_FAIL(get_gts(new_snapshot_gc_scn))) {
-    LOG_WARN("fail to get gts", KR(ret));
   } else if (FALSE_IT(latest_snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn())) {
   } else if ((new_snapshot_gc_scn <= latest_snapshot_gc_scn)
              || (cur_snapshot_gc_scn >= new_snapshot_gc_scn)) {
@@ -285,12 +263,10 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
       K(latest_snapshot_gc_scn));
   } else if (OB_FAIL(ObGlobalStatProxy::update_snapshot_gc_scn(trans, new_snapshot_gc_scn,
       affected_rows))) {
-    LOG_WARN("fail to update snapshot_gc_scn", KR(ret), K(new_snapshot_gc_scn));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows expected to be one", KR(ret), K(affected_rows));
   } else if (OB_FAIL(freeze_info_mgr_.update_snapshot_gc_scn(new_snapshot_gc_scn))) {
-    LOG_WARN("fail to update snapshot_gc_scn", KR(ret), K(new_snapshot_gc_scn));
   }
 
   ret = trans.handle_trans_in_the_end(ret);
@@ -313,7 +289,6 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   SCN cur_gts_scn;
   SCN min_frozen_scn;
   if (OB_FAIL(get_gts(cur_gts_scn))) {
-    LOG_WARN("fail to get gts", KR(ret));
   } else {
     min_frozen_scn = SCN::minus(cur_gts_scn, MAX_KEEP_INTERVAL_NS);
   }
@@ -326,11 +301,8 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
   if (FAILEDx(try_reload())) {
     LOG_WARN("fail to try reload", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("fail to start transaction", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans, cur_snapshot_gc_scn))) {
-    LOG_WARN("fail to select snapshot_gc_scn for update", KR(ret));
   } else if (OB_FAIL(freeze_info_proxy.get_all_freeze_info(trans, all_freeze_info))) {
-    LOG_WARN("fail to get all freeze info", KR(ret));
   } else {
     const int64_t freeze_info_cnt = all_freeze_info.count();
     if (freeze_info_cnt > MIN_REMAINED_VERSION_COUNT) {
@@ -339,7 +311,6 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
 
       min_frozen_scn = MIN(min_frozen_scn, tmp_frozen_scn);
       if (OB_FAIL(freeze_info_proxy.batch_delete(trans, min_frozen_scn))) {
-        LOG_WARN("fail to batch delete freeze info", KR(ret), K(min_frozen_scn));
       } else {
         // reload will later
         freeze_info_mgr_.reset_freeze_info();
@@ -358,7 +329,6 @@ int ObMajorMergeInfoManager::try_reload_merge_info()
   ObRecursiveMutexGuard guard(lock_);
 
   if (OB_FAIL(try_reload())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   }
   return ret;
 }
@@ -369,14 +339,10 @@ int ObMajorMergeInfoManager::inner_get_min_freeze_info(ObFreezeInfo &freeze_info
   SCN global_last_merged_scn;
 
   if (OB_FAIL(try_reload())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.try_reload())) {
-    LOG_WARN("fail to reload global merge info", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.get_global_last_merged_scn(global_last_merged_scn))) {
-    LOG_WARN("fail to get global_last_merged_scn", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_min_freeze_info_greater_than(
              global_last_merged_scn, freeze_info))) {
-    LOG_WARN("fail to get freeze info", KR(ret), K(global_last_merged_scn));
   }
   return ret;
 }
@@ -388,10 +354,8 @@ int ObMajorMergeInfoManager::check_need_broadcast(bool &need_broadcast)
 
   ObFreezeInfo freeze_info;
   if (OB_FAIL(inner_get_min_freeze_info(freeze_info))) {
-    LOG_WARN("fail to get min freeze info", KR(ret));
   } else if (freeze_info.is_valid()) {
     if (OB_FAIL(global_merge_mgr_.check_need_broadcast(freeze_info.frozen_scn_, need_broadcast))) {
-      LOG_WARN("fail to check need broadcast", KR(ret), K(freeze_info));
     }
   }
   return ret;
@@ -404,10 +368,8 @@ int ObMajorMergeInfoManager::broadcast_freeze_info()
 
   ObFreezeInfo freeze_info;
   if (OB_FAIL(inner_get_min_freeze_info(freeze_info))) {
-    LOG_WARN("fail to get min freeze info", KR(ret));
   } else if (freeze_info.is_valid()) {
     if (OB_FAIL(global_merge_mgr_.set_global_freeze_info(freeze_info.frozen_scn_))) {
-      LOG_WARN("fail to set global freeze info", KR(ret), K(freeze_info));
     }
   }
   return ret;
@@ -420,7 +382,6 @@ int ObMajorMergeInfoManager::adjust_global_merge_info()
     ret = OB_NOT_INIT;
     LOG_WARN("merge info mgr not inited", KR(ret));
   } else if (OB_FAIL(global_merge_mgr_.adjust_global_merge_info())) {
-    LOG_WARN("fail to adjust global merge info", KR(ret));
   }
   return ret;
 }
@@ -431,7 +392,6 @@ int ObMajorMergeInfoManager::get_gts(SCN &gts_scn) const
   const int64_t timeout_us = 10 * 1000 * 1000;
 
   if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, gts_scn))) {
-    LOG_WARN("fail to get ts sync", K(ret), K(timeout_us));
   }
   return ret;
 }

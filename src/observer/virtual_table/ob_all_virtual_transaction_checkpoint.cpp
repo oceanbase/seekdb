@@ -55,15 +55,12 @@ int ObAllVirtualTransCheckpointInfo::prepare_to_read_()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (FALSE_IT(infos.reset())) {
   } else if (OB_FAIL(ls_->get_common_checkpoint_info(infos))) {
-    SERVER_LOG(WARN, "get commoncheckpoint info failed", K(ret), KPC(ls_));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_common_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_common_checkpoint_iter push failed", K(ret), KPC(ls_));
       }
     }
   }
@@ -120,7 +117,6 @@ int ObAllVirtualTransCheckpointInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(common_checkpoint_type_to_string(ObCommonCheckpointType(common_checkpoint.checkpoint_type),
                                                        checkpoint_type_buf_,
                                                        sizeof(checkpoint_type_buf_)))) {
-            SERVER_LOG(WARN, "get common_checkpoint type buf failed", K(ret), K(common_checkpoint));
           } else {
             checkpoint_type_buf_[MAX_CHECKPOINT_TYPE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(checkpoint_type_buf_);

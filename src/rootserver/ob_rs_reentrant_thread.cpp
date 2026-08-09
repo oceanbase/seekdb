@@ -96,7 +96,6 @@ int ObRsReentrantThread::destroy()
   int ret = OB_SUCCESS;
   const char *thread_name = get_thread_name();
   if (OB_FAIL(share::ObReentrantThread::destroy())) {
-    LOG_INFO("fail to destroy reentraint thread", KR(ret), K(thread_name));
   }  else if (last_run_timestamp_ != -1) {
     LOG_INFO("rs_monitor_check : reentrant thread check unregister success", 
         K(thread_name), K_(last_run_timestamp));

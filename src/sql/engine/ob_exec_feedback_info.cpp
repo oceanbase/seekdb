@@ -40,7 +40,6 @@ int ObExecFeedbackInfo::merge_feedback_info(const ObExecFeedbackInfo &feedback_i
 {
   int ret = OB_SUCCESS;
   if (!is_valid() || !feedback_info.is_valid()) {
-    LOG_TRACE("feedback info is not valid", K(ret), K(is_valid_), K(feedback_info.is_valid_));
   } else if (nodes_.count() < feedback_info.get_feedback_nodes().count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the count of feedback info is unexpected", K(nodes_.count()), K(feedback_info.get_feedback_nodes().count()));

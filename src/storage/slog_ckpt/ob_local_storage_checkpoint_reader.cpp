@@ -42,7 +42,6 @@ int ObLocalStorageCheckpointReader::iter_read_meta_item(
   if (OB_UNLIKELY(IS_EMPTY_BLOCK_LIST(entry_block))) {
     LOG_INFO("has no storage metadata checkpoint", K(ret));
   } else if (OB_FAIL(item_reader.init(entry_block, mem_attr))) {
-    LOG_WARN("failed to init storage metadata item reader");
   } else {
     char *item_buf = nullptr;
     int64_t item_buf_len = 0;
@@ -56,7 +55,6 @@ int ObLocalStorageCheckpointReader::iter_read_meta_item(
           break;
         }
       } else if (OB_FAIL(op(addr, item_buf, item_buf_len))) {
-        LOG_WARN("failed to call op", K(ret));
       }
     }
 
@@ -65,7 +63,6 @@ int ObLocalStorageCheckpointReader::iter_read_meta_item(
       // the list in the item_reader is in reverse order, adjust to normal order
       for (int64_t i = macro_block_list.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
         if (OB_FAIL(block_list.push_back(macro_block_list.at(i)))) {
-          LOG_WARN("fail to push back macro block", K(ret));
         }
       }
     }
@@ -95,7 +92,6 @@ int ObLocalStorageCheckpointReader::read_single_meta_item(
   };
 
   if (OB_FAIL(iter_read_meta_item(entry_block, count_item_op, block_list))) {
-    LOG_WARN("failed to validate singleton metadata checkpoint", K(ret), K(entry_block));
   } else if (OB_UNLIKELY(!IS_EMPTY_BLOCK_LIST(entry_block) && 1 != item_count)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("singleton metadata checkpoint contains no item", K(ret), K(entry_block));
@@ -117,7 +113,6 @@ int ObLocalStorageCheckpointReader::read_tablet_checkpoint_by_addr(
     LOG_WARN("invalid argument", K(ret), K(addr));
   } else if (OB_FAIL(
                ObLinkedMacroBlockItemReader::read_item(block_list, addr, item_buf, item_buf_len))) {
-    LOG_WARN("failed to read tablet item", K(ret));
   }
   return ret;
 }

@@ -476,7 +476,6 @@ void ObSSTablePrinter::print_store_row(
         ObTxData tx_data;
         tx_data.tx_id_ = tx_id;
         if (OB_FAIL(tx_data_allocator->init("PRINT_TX_DATA_SST"))) {
-          STORAGE_LOG(WARN, "init tx data allocator failed", KR(ret), K(str));
         } else if (OB_FAIL(tx_data.deserialize(str.ptr(), str.length(), pos, *tx_data_allocator))) {
           STORAGE_LOG(WARN, "deserialize tx data failed", KR(ret), K(str));
           hex_dump(str.ptr(), str.length(), true, OB_LOG_LEVEL_WARN);
@@ -501,8 +500,6 @@ void ObSSTablePrinter::print_store_row(
     for (int64_t i = 0; i < type_array_column_cnt; ++i) {
       ObObjMeta column_meta = obj_metas[i];
       if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, column_meta))) {
-        STORAGE_LOG(WARN, "Fail to transform storage datum to obj", K(ret), K(i), K(column_meta),
-                    KPC(row));
       } else {
         print_cell(obj);
       }
@@ -512,8 +509,6 @@ void ObSSTablePrinter::print_store_row(
         ObObjMeta column_meta;
         column_meta.set_varbinary();
         if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, column_meta))) {
-          STORAGE_LOG(WARN, "Fail to transform storage datum to obj", K(ret), K(i), K(column_meta),
-                      KPC(row));
         } else {
           print_cell(obj);
         }
@@ -534,9 +529,7 @@ void ObSSTablePrinter::print_store_row_hex(const ObDatumRow *row, const ObObjMet
     for (int64_t i = 0; i < row->get_column_count(); ++i) {
       int64_t pos = 0;
       if (OB_FAIL(row->storage_datums_[i].to_obj_enhance(obj, obj_metas[i]))) {
-        STORAGE_LOG(WARN, "Fail to transform storage datum to obj", K(ret), K(i), K(obj_metas[i]), KPC(row));
       } else if (OB_FAIL(obj.print_smart(hex_print_buf, buf_size, pos))) {
-        STORAGE_LOG(WARN, "Failed to print obj to hex buf", K(ret), K(i), K(obj));
       } else {
         P_VALUE_STR_B(hex_print_buf);
       }

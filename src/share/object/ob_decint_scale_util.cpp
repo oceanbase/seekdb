@@ -136,9 +136,7 @@ int scale_const_decimalint_expr(const ObDecimalInt *decint, const int32_t int_by
   } else {
     int cmp_max = 0, cmp_min = 0;
     if (OB_FAIL(wide::compare(res, min_v, cmp_min))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (OB_FAIL(wide::compare(res, max_v, cmp_max))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (cmp_max < 0 && cmp_min > 0) { // max(P, S) >= res >= min(P, S)
       if (expected_int_bytes > res.get_int_bytes()) {
         res.extend(expected_int_bytes);
@@ -177,11 +175,8 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     min_v.from(wide::ObDecimalIntConstValue::get_min_lower(out_prec), check_int_bytes);
     if (OB_FAIL(
           wide::common_scale_decimalint(decint, int_bytes, in_scale, out_scale, scaled_val))) {
-      LOG_WARN("scale decimal int failed", K(ret));
     } else if (OB_FAIL(wide::compare(scaled_val, min_v, cmp_min))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (OB_FAIL(wide::compare(scaled_val, max_v, cmp_max))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (cmp_min > 0 && cmp_max < 0) {
       ret = align_decint_precision_unsafe(scaled_val.get_decimal_int(), scaled_val.get_int_bytes(),
                                           check_int_bytes, val);
@@ -204,7 +199,6 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
   } else {
     if (OB_FAIL(
           wide::common_scale_decimalint(decint, int_bytes, in_scale, out_scale, scaled_val))) {
-      LOG_WARN("scale decimal int failed", K(ret));
     }
     int32_t expected_int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
     if (OB_UNLIKELY(out_prec == PRECISION_UNKNOWN_YET)) {
@@ -216,7 +210,6 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
     } else if (OB_FAIL(align_decint_precision_unsafe(scaled_val.get_decimal_int(),
                                                      scaled_val.get_int_bytes(), expected_int_bytes,
                                                      val))) {
-      LOG_WARN("align decimal int precision failed", K(ret));
     }
   }
   return ret;

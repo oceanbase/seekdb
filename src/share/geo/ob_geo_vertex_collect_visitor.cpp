@@ -36,7 +36,6 @@ int ObGeoVertexCollectVisitor::visit(ObIWkbPoint *geo)
   vertex.x = geo->x();
   vertex.y = geo->y();
   if (OB_FAIL(vertexes_.push_back(vertex))) {
-    LOG_WARN("failed to add vertex to cached geo", K(ret));
   } else {
     if (std::isnan(x_min_)) {
       x_min_ = vertex.x;

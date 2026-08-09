@@ -34,9 +34,7 @@ int ObStrings::add_string(const ObString &str, int64_t *idx/*=NULL*/)
   int ret = OB_SUCCESS;
   ObString stored_str;
   if (OB_FAIL(ob_write_string(buf_, str, stored_str))) {
-    LOG_WARN("failed to write string", K(ret), K(str));
   } else if (OB_FAIL(strs_.push_back(stored_str))) {
-    LOG_WARN("failed to push into array", K(ret));
   } else {
     if (NULL != idx) {
       *idx = strs_.count() - 1;
@@ -52,7 +50,6 @@ int ObStrings::get_string(int64_t idx, ObString &str) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(idx), "string count", strs_.count());
   } else if (OB_FAIL(strs_.at(idx, str))) {
-    LOG_WARN("failed to get string", K(ret), K(idx));
   }
   return ret;
 }
@@ -72,11 +69,9 @@ DEFINE_SERIALIZE(ObStrings)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, strs_.count()))) {
-    LOG_WARN("encode int failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < strs_.count(); ++i) {
       if (OB_FAIL(strs_.at(i).serialize(buf, buf_len, pos))) {
-        LOG_WARN("serialize string failed", K(ret));
       }
     }
   }
@@ -89,14 +84,11 @@ DEFINE_DESERIALIZE(ObStrings)
   reuse();
   int64_t count = 0;
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    LOG_WARN("decode int failed", K(ret));
   } else {
     ObString str;
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(str.deserialize(buf, data_len, pos))) {
-        LOG_WARN("deserialize string failed", K(ret));
       } else if (OB_FAIL(add_string(str))) {
-        LOG_WARN("add string string failed", K(ret));
       }
     }
   }

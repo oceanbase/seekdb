@@ -97,13 +97,11 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
 
   // get geo
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, gis_datum))) {
-    LOG_WARN("eval geo args failed", K(ret));
   } else if (gis_datum->is_null()) {
     is_null_result = true;
   } else if (num_args > 1) { // get maxdecimaldigits
     ObDatum *precsion_data = NULL;
     if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[1], ctx, precsion_data))) {
-      LOG_WARN("eval maxdecimaldigits args failed", K(ret));
     } else if (precsion_data->is_null()){
       is_null_result = true;
     } else {
@@ -117,14 +115,11 @@ int ObExprPrivSTAsEwkt::eval_priv_st_asewkt(const ObExpr &expr, ObEvalCtx &ctx, 
       res.set_null();
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, tmp_allocator, *gis_datum,
                expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,
                                                   res_wkt,
                                                   tmp_allocator,
                                                   maxdecimaldigits))) {
-      LOG_WARN("eval geo to ewkt failed", K(ret), K(wkb), K(maxdecimaldigits));
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkt))) {
-      LOG_WARN("fail to pack geo res", K(ret));
     }
   }
 
@@ -162,18 +157,14 @@ int ObExprPrivSTAsEwkt::calc_resultN(common::ObObj &result,
       LOG_WARN("execution context is null", K(ret));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                    *expr_ctx.exec_ctx_, &tmp_allocator, objs[0], wkb))) {
-      LOG_WARN("fail to get real data", K(ret), K(objs[0]), K(wkb));
     } else if (OB_FAIL(ObGeoTypeUtil::geo_to_ewkt(wkb,
                                                   res_wkt,
                                                   tmp_allocator,
                                                   maxdecimaldigits))) {
-      LOG_WARN("eval geo to ewkt failed", K(ret), K(wkb), K(maxdecimaldigits));
     } else {
       common::ObTextStringObObjResult text_result(ObGeometryType, nullptr, &result, true);
       if (OB_FAIL(text_result.init(res_wkt.length(), expr_ctx.calc_buf_))) {
-        LOG_WARN("init lob result failed");
       } else if (OB_FAIL(text_result.append(res_wkt.ptr(), res_wkt.length()))) {
-        LOG_WARN("failed to append realdata", K(ret), K(res_wkt), K(text_result));
       } else {
         text_result.set_result();
       }

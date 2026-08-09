@@ -58,7 +58,6 @@ int ObDropLobTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", KR(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_arg, ddl_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", KR(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     
@@ -100,7 +99,6 @@ int ObDropLobTask::init(
     if (nullptr != task_record.message_.ptr()) {
       int64_t pos = 0;
       if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
-        LOG_WARN("deserialize params from message failed", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -123,7 +121,6 @@ int ObDropLobTask::prepare(const ObDDLTaskStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropLobTask has not been inited", KR(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", KR(ret));
   }
   return ret;
 }
@@ -139,14 +136,11 @@ int ObDropLobTask::drop_lob_impl()
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local_management_service is nullptr", KR(ret));
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
-    LOG_WARN("get data table schema failed", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("data table schema is null", KR(ret), K(object_id_));
   } else if (OB_FAIL(drop_lob_sql.assign(ddl_arg_.ddl_stmt_str_))) {
-    LOG_WARN("assign user drop index sql failed", KR(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
     obcall::ObDropLobArg arg;
@@ -159,10 +153,8 @@ int ObDropLobTask::drop_lob_impl()
     arg.session_id_ = data_table_schema->get_session_id();
     arg.ddl_stmt_str_ = drop_lob_sql.string();
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(2 * data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
-      LOG_WARN("failed to get ddl rpc timeout", KR(ret));
     } else if (FALSE_IT(schema_guard.reset())) {
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_lob(arg); }))) {
-      LOG_WARN("drop lob failed", KR(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("finish drop lob", KR(ret), K(arg));
   }
@@ -173,9 +165,7 @@ int ObDropLobTask::drop_lob(const ObDDLTaskStatus new_status)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(drop_lob_impl())) {
-    LOG_WARN("send drop lob rpc failed", KR(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", KR(ret));
   }
   return ret;
 }
@@ -189,9 +179,7 @@ int ObDropLobTask::fail()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(drop_lob_impl())) {
-    LOG_WARN("drop lob impl failed", KR(ret));
   } else if (OB_FAIL(cleanup())) {
-    LOG_WARN("cleanup failed", KR(ret));
   }
   return ret;
 }
@@ -204,12 +192,10 @@ int ObDropLobTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-    LOG_WARN("report error code failed", KR(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
-    LOG_WARN("delete task record failed", KR(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }
@@ -231,33 +217,27 @@ int ObDropLobTask::process()
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ_())) {
-    LOG_WARN("check need retry failed", KR(ret));
   } else {
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
       case ObDDLTaskStatus::PREPARE:
         if (OB_FAIL(prepare(WAIT_TRANS_END_FOR_UNUSABLE))) {
-          LOG_WARN("prepare failed", KR(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_TRANS_END_FOR_UNUSABLE:
         if (OB_FAIL(wait_trans_end(wait_trans_ctx_, DROP_SCHEMA))) {
-          LOG_WARN("wait trans end failed", KR(ret));
         }
         break;
       case ObDDLTaskStatus::DROP_SCHEMA:
         if (OB_FAIL(drop_lob(SUCCESS))) {
-          LOG_WARN("drop lob failed", KR(ret));
         }
         break;
       case ObDDLTaskStatus::SUCCESS:
         if (OB_FAIL(succ())) {
-          LOG_WARN("do succ procedure failed", KR(ret));
         }
         break;
       case ObDDLTaskStatus::FAIL:
         if (OB_FAIL(fail())) {
-          LOG_WARN("do fail procedure failed", KR(ret));
         }
         break;
       default:
@@ -282,11 +262,8 @@ int ObDropLobTask::check_switch_succ_()
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", KR(ret));
   } else if (OB_FAIL(refresh_schema_version())) {
-    LOG_WARN("refresh schema version failed", KR(ret));
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema failed", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema_ptr))) {
-    LOG_WARN("faild to get_table_schema", KR(ret), K(object_id_));
   } else if (OB_ISNULL(data_table_schema_ptr)) {
     // drop lob task may retry because rpc timeout, and data table dropped before retry, so we should ignore this situation
     task_status_ = ObDDLTaskStatus::SUCCESS;
@@ -311,10 +288,8 @@ int ObDropLobTask::deep_copy_ddl_arg(common::ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", KR(ret), K(serialize_size));
   } else if (OB_FAIL(src_ddl_arg.ObDDLArg::serialize(buf, serialize_size, pos))) {
-    LOG_WARN("serialize source index arg failed", KR(ret));
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_ddl_arg.ObDDLArg::deserialize(buf, serialize_size, pos))) {
-    LOG_WARN("deserialize failed", KR(ret));
   }
   return ret;
 }
@@ -326,9 +301,7 @@ int ObDropLobTask::serialize_params_to_message(char *buf, const int64_t buf_size
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
-    LOG_WARN("ObDDLTask serialize failed", KR(ret));
   } else if (OB_FAIL(ddl_arg_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("serialize failed", KR(ret));
   }
   return ret;
 }
@@ -341,11 +314,8 @@ int ObDropLobTask::deserialize_params_from_message(const char *buf, const int64_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
-    LOG_WARN("ObDDLTask deserlize failed", KR(ret));
   } else if (OB_FAIL(tmp_ddl_arg.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("deserialize failed", KR(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, tmp_ddl_arg, ddl_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", KR(ret));
   }
   return ret;
 }

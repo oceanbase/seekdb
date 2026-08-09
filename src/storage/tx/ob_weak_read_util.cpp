@@ -72,7 +72,6 @@ int ObWeakReadUtil::generate_min_weak_read_version(SCN &scn)
   max_stale_time = std::max(max_stale_time, static_cast<int64_t>(DEFAULT_REPLICA_KEEPALIVE_INTERVAL));
   SCN tmp_scn;
   if (OB_FAIL(OB_TS_MGR.get_gts(tmp_scn))) {
-    TRANS_LOG(WARN, "get gts cache error", K(ret));
   } else {
     // the unit of max_stale_time is us, we should change to ns
     scn.convert_from_ts(tmp_scn.convert_to_ts() - max_stale_time);

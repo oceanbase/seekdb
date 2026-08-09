@@ -302,7 +302,6 @@ protected:
       __builtin_prefetch(mid_key.get_ptr(), 0, 3);
       int cmp_ret = 0;
       if (OB_FAIL(nh.compare(key, mid_key, cmp_ret))) {
-        OB_LOG(ERROR, "failed to compare", K(key), K(mid_key));
       } else if (0 == cmp_ret) {
         is_equal = true;
         end = mid + 1;

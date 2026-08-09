@@ -412,11 +412,8 @@ int ObDiagnoseSessionInfo::add(ObDiagnoseSessionInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(event_stats_.add(other.event_stats_))) {
-    LOG_WARN("failed to add wait event stats", K(ret));
   } else if (OB_FAIL(event_history_.add(other.event_history_))) {
-    LOG_WARN("failed to add wait event history", K(ret));
   } else if (OB_FAIL(stat_add_stats_.add(other.stat_add_stats_))) {
-    LOG_WARN("failed to add session statistic events", K(ret));
   }
   return ret;
 }
@@ -459,7 +456,6 @@ int ObDiagnoseSessionInfo::notify_wait_end(ObDiagnoseRuntimeInfo *runtime_info,
   } else if (OB_ISNULL(event_desc)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(event_history_.calc_wait_time(event_desc))) {
-    LOG_WARN("failed to calculate wait time", K(ret));
   } else {
     ObWaitEventStat *event_stat = event_stats_.get(event_desc->event_no_);
     if (OB_ISNULL(event_stat)) {
@@ -570,11 +566,8 @@ int ObDiagnoseRuntimeInfo::add(const ObDiagnoseRuntimeInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(add_wait_event(other))) {
-    LOG_WARN("failed to add runtime wait event stats", K(ret));
   } else if (OB_FAIL(add_stat_event(other))) {
-    LOG_WARN("failed to add runtime statistic events", K(ret));
   } else if (OB_FAIL(add_latch_stat(other))) {
-    LOG_WARN("failed to add runtime latch stats", K(ret));
   }
   return ret;
 }

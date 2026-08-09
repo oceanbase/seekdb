@@ -80,9 +80,7 @@ int ObAllVirtualIOCalibrationStatus::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else if (OB_FAIL(ObIOCalibration::get_instance().get_benchmark_status(start_ts_, finish_ts_, ret_code_))) {
-    LOG_WARN("get io benchmark timestamp failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -181,9 +179,7 @@ int ObAllVirtualIOBenchmark::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else if (OB_FAIL(ObIOCalibration::get_instance().get_io_ability(io_ability_))) {
-    LOG_WARN("get io ability failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -307,7 +303,6 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
       ObRefHolder<ObIOService> service_holder;
@@ -319,9 +314,7 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
           LOG_WARN("io service does not exist", K(ret));
         }
       } else if (OB_FAIL(record_user_group( service_holder.get_ptr()->get_io_usage(), service_holder.get_ptr()->get_io_config()))) {
-        LOG_WARN("fail to record user group item", K(ret), K(service_holder.get_ptr()->get_io_config()));
       } else if (OB_FAIL(record_sys_group( service_holder.get_ptr()->get_sys_io_usage()))) {
-        LOG_WARN("fail to record sys group item", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -360,7 +353,6 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
                                                group_min,
                                                group_max,
                                                group_weight))) {
-          LOG_WARN("get group config failed", K(ret), K(group_config_index));
         } else {
           LOG_INFO("get group config", K(ret), K(group_config_index), K(io_config), K(item), K(group_min), K(group_max), K(group_weight));
         }
@@ -380,7 +372,6 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObIOServic
           item.min_iops_ = group_min == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_min * iops_scale);
           item.max_iops_ = group_max == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_max * iops_scale);
           if (OB_FAIL(quota_infos_.push_back(item))) {
-            LOG_WARN("push back io group item failed", K(i), K(ret), K(item));
           } else {
             LOG_INFO("push back item", K(ret), K(item));
           }
@@ -416,7 +407,6 @@ int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
         item.io_delay_us_ = info.at(i).avg_device_delay_us_;
         item.total_us_ = info.at(i).avg_total_delay_us_;
         if (OB_FAIL(quota_infos_.push_back(item))) {
-          LOG_WARN("push back io group item failed", K(i), K(ret), K(item));
         }
       }
     }
@@ -540,7 +530,6 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
       ObRefHolder<ObIOService> service_holder;
@@ -553,9 +542,7 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
             LOG_WARN("io service does not exist", K(ret));
           }
         } else if (OB_FAIL(record_user_group_io_status(service_holder.get_ptr()))) {
-          LOG_WARN("fail to record group io status", K(ret));
         } else if (OB_FAIL(record_sys_group_io_status(service_holder.get_ptr()))) {
-          LOG_WARN("fail to record sys group io status", K(ret));
         }
       }
     }
@@ -577,9 +564,7 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
   } else {
     ObIOUsage io_usage;
     if (OB_FAIL(io_usage.init(2))) {
-      LOG_WARN("init io usage failed", K(ret));
     } else if (OB_FAIL(io_usage.assign(io_manager->get_io_usage()))) {
-      LOG_WARN("assign io usage failed", K(ret));
     } else {
       int tmp_ret = OB_SUCCESS;
       const ObIOServiceConfig io_config = io_manager->get_io_config();
@@ -607,7 +592,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
                                                       group_min_iops,
                                                       group_max_iops,
                                                       group_iops_weight))) {
-            LOG_WARN("get group io config failed", K(ret), K(group_config_index));
           } else {
             GroupIoStat read_item;
             
@@ -622,7 +606,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
             read_item.norm_iops_ = oceanbase::common::get_norm_iops(
                 info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
             if (OB_FAIL(group_io_stats_.push_back(read_item))) {
-              LOG_WARN("push back group io stat failed", K(ret), K(read_item));
             }
             if (OB_FAIL(ret)) {
             } else {
@@ -639,7 +622,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
               write_item.norm_iops_ = oceanbase::common::get_norm_iops(
                   info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
               if (OB_FAIL(group_io_stats_.push_back(write_item))) {
-                LOG_WARN("push back group io stat failed", K(ret), K(write_item));
               }
             }
           }
@@ -662,9 +644,7 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     ObIOUsage sys_io_usage;
     if (OB_FAIL(sys_io_usage.init(2))) {
-      LOG_WARN("init io usage failed", K(ret));
     } else if (OB_FAIL(sys_io_usage.assign(io_manager->get_sys_io_usage()))) {
-      LOG_WARN("assign io usage failed", K(ret));
     } else {
       sys_io_usage.calculate_io_usage();
       const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
@@ -688,7 +668,6 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
           read_item.norm_iops_ = oceanbase::common::get_norm_iops(
               info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
           if (OB_FAIL(group_io_stats_.push_back(read_item))) {
-            LOG_WARN("push back group io stat failed", K(ret), K(read_item));
           } else {
             GroupIoStat write_item;
             write_item.mode_ = ObIOMode::WRITE;
@@ -700,7 +679,6 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
             write_item.norm_iops_ = oceanbase::common::get_norm_iops(
                 info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
             if (OB_FAIL(group_io_stats_.push_back(write_item))) {
-              LOG_WARN("push back group io stat failed", K(ret), K(write_item));
             }
           }
         }

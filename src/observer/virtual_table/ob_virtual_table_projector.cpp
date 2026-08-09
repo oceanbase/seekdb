@@ -98,11 +98,8 @@ int ObSimpleVirtualTableIterator::inner_open()
     ret = OB_NOT_INIT;
     LOG_WARN("schema_service_ not init", K(ret));
   } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard_))) {
-    LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(get_table_schema( table_id_))) {
-    LOG_WARN("fail to get table schema", K(ret));
   } else if (OB_FAIL(init_all_data())) {
-    LOG_WARN("fail to init all data", K(ret));
   }
   return ret;
 }
@@ -111,7 +108,6 @@ int ObSimpleVirtualTableIterator::get_table_schema( uint64_t table_id)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema_))) {
-    LOG_WARN("fail to get table schema", K(table_id), K(ret));
   } else if (NULL == table_schema_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is null", K(ret), K(table_id));
@@ -129,7 +125,6 @@ int ObSimpleVirtualTableIterator::inner_get_next_row(
       LOG_WARN("fail to get full row", K(ret));
     }
   } else if (OB_FAIL(project_row(columns_, cur_row_))) {
-    LOG_WARN("fail to project row", K(columns_), K(ret));
   } else {
     row = &cur_row_;
   }

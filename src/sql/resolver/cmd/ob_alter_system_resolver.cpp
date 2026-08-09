@@ -65,7 +65,6 @@ int ObAlterSystemResolverUtil::resolve_tablet_id(const ParseNode *opt_tablet_id,
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("opt_tablet_id should not be null");
   } else if (OB_FAIL(sanity_check(opt_tablet_id, T_TABLET_ID))) {
-    LOG_WARN("sanity check failed");
   } else {
     tablet_id = opt_tablet_id->children_[0]->value_;
     FLOG_INFO("resolve tablet_id", K(tablet_id));
@@ -139,7 +138,6 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("major freeze has an unexpected target", KR(ret));
       } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
-        LOG_WARN("resolve major freeze target failed", KR(ret));
       }
     } else if (2 == parse_tree.children_[0]->value_) {  // MINOR FREEZE
       freeze_stmt->set_major_freeze(false);
@@ -147,7 +145,6 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("minor freeze has an unexpected target", KR(ret));
       } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
-        LOG_WARN("resolve minor freeze target failed", KR(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -280,7 +277,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("session info should not be null", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                 schema_guard))) {
-      SERVER_LOG(WARN, "get_schema_guard failed", K(ret));
     } else {
       // do nothing
     }
@@ -317,7 +313,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
         }
         if(!db_name.empty()) {
           if (OB_FAIL(db_name_list.push_back(db_name))) {
-            SERVER_LOG(WARN, "failed to add database name", K(ret));
           }
         }
       } // for database name end
@@ -330,7 +325,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_BAD_DATABASE;
         SERVER_LOG(WARN, "database not exist", K(db_name_list.at(i)), K(ret));
       } else if (OB_FAIL(stmt->flush_cache_arg_.push_database(db_id))) {
-        SERVER_LOG(WARN, "fail to push database id", K(db_name_list.at(i)), K(db_id), K(ret));
       }
     }
     LOG_INFO("resolve flush command finished!", K(ret),
@@ -377,7 +371,6 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
               } else {
                 ObString cache_name(node->str_len_, node->str_value_);
                 if (OB_FAIL(stmt->cache_name_.assign(cache_name))) {
-                  LOG_WARN("assign cache name failed", K(cache_name), K(ret));
                 }
               }
             }
@@ -515,7 +508,6 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
     if (OB_ISNULL(storage_name_node) || storage_name_node->num_child_ <= 0) {
       // allow null, do nothing
     } else if (OB_FAIL(Util::resolve_string(storage_name_node->children_[0], param->storage_name_))) {
-      LOG_WARN("resolve storage name failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -544,9 +536,7 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
             break;
           }
         } else if (OB_FAIL(ObIOCalibration::parse_calibration_string(calibration_string, item))) {
-          LOG_WARN("parse calibration info failed", K(ret), K(calibration_string), K(i));
         } else if (OB_FAIL(param->calibration_list_.push_back(item))) {
-          LOG_WARN("push back calibration item failed", K(ret), K(i), K(item));
         }
       }
     }
@@ -559,7 +549,6 @@ static int alter_system_set_reset_add_config_item(obcall::ObAdminSetConfigArg &r
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rpc_arg.items_.push_back(item))) {
-    LOG_WARN("add config item failed", K(ret), K(item));
   }
   return ret;
 }
@@ -695,7 +684,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
 
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(alter_system_set_reset_add_config_item(stmt->get_rpc_arg(), item))) {
-                    LOG_WARN("constraint check failed", K(ret));
                   }
                 }
               }
@@ -847,12 +835,10 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("task_id node is null", K(ret));
       } else if (OB_FAIL(Util::resolve_string(task_id, task_id_str))) {
-        LOG_WARN("resolve string failed", K(ret));
       }
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cancel_task->set_task_id(task_id_str))) {
-          LOG_WARN("failed to set cancel task id", K(ret), K(task_id_str));
         }
       }
     }
@@ -952,7 +938,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   ObString name(name_node->str_len_, name_node->str_value_);
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                   if (OB_FAIL(item.name_.assign(name))) {
-                    LOG_WARN("assign config name failed", K(name), K(ret));
                   }
                 }
                 if (OB_FAIL(ret)) {
@@ -1000,7 +985,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(alter_system_set_reset_add_config_item(
                       setconfig_stmt->get_rpc_arg(), item))) {
-                    LOG_WARN("add config item failed", K(ret));
                   } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                     LOG_WARN("can not set default_table_organization", "item", item);
                     LOG_USER_NOTE(OB_NOT_SUPPORTED, "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax is");
@@ -1055,7 +1039,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(ob_write_string(*allocator_, var_name,
                                             var_node.variable_name_))) {
-                  LOG_WARN("Can not malloc space for variable name", K(ret));
                 } else {
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI,
                                     var_node.variable_name_);
@@ -1070,7 +1053,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   ParseNode value_node;
                   MEMCPY(&value_node, set_param_node->children_[1], sizeof(ParseNode));
                   if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, value_node, var_node.value_expr_, NULL))) {
-                    LOG_WARN("resolve variable value failed", K(ret));
                   }
                 }
               }
@@ -1137,7 +1119,6 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                                 action_node->children_[0]->str_value_);
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                   if (OB_FAIL(item.name_.assign(name))) {
-                    LOG_WARN("assign config name failed", K(name), K(ret));
                   } else {
                     ObConfigItem * const *config_item =
                         GCONF.get_container().get(ObConfigStringKey(item.name_.ptr()));
@@ -1145,10 +1126,8 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
                       LOG_WARN("unknown config", K(ret), K(item));
                     } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
-                      LOG_WARN("assign config value failed", K(ret));
                     } else if (OB_FAIL(alter_system_set_reset_add_config_item(
                                    stmt->get_rpc_arg(), item))) {
-                      LOG_WARN("constraint check failed", K(ret));
                     }
                   }
                 }
@@ -1251,7 +1230,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 ObString name(name_node->str_len_, name_node->str_value_);
                 ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                 if (OB_FAIL(item.name_.assign(name))) {
-                  LOG_WARN("assign config name failed", K(name), K(ret));
                 }
               }
               if (OB_FAIL(ret)) {
@@ -1264,12 +1242,10 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 ret = OB_ERR_SYS_CONFIG_UNKNOWN;
                 LOG_WARN("unknown config", KR(ret), K(item));
               } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
-                LOG_WARN("assign config value failed", K(ret));
               }
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(alter_system_set_reset_add_config_item(
                     setconfig_stmt->get_rpc_arg(), item))) {
-                  LOG_WARN("add config item failed", KR(ret));
                 }
               }
             }

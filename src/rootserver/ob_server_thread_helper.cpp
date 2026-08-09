@@ -38,7 +38,6 @@ int ObServerThreadHelper::create(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid thread count", KR(ret), K(thread_cnt));
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
-    LOG_WARN("fail to init cond, ", KR(ret));
   } else {
     thread_name_ = thread_name;
     thread_cnt_ = thread_cnt;
@@ -56,14 +55,11 @@ int ObServerThreadHelper::start()
     LOG_WARN("not init", KR(ret));
   } else if (is_first_time_to_start_) {
     if (OB_FAIL(share::ObReentrantThread::create(thread_cnt_, thread_name_))) {
-      LOG_WARN("fail ed to start at first time", KR(ret), K(thread_cnt_), K(thread_name_));
     } else if (OB_FAIL(share::ObReentrantThread::logical_start())) {
-      LOG_WARN("failed to logical start at first time", KR(ret), K(thread_cnt_), K(thread_name_));
     } else {
       is_first_time_to_start_ = false;
     }
   } else if (OB_FAIL(share::ObReentrantThread::logical_start())) {
-    LOG_WARN("failed to start", KR(ret));
   }
   LOG_INFO("[SERVER THREAD] thread start", KR(ret), K(thread_cnt_), K(thread_name_));
   return ret;
@@ -147,11 +143,9 @@ int ObServerThreadHelper::switch_to_leader()
   int ret = OB_SUCCESS;
   LOG_INFO("[SERVER THREAD] thread start", K(thread_cnt_), K(thread_name_));
   if (OB_FAIL(start())) {
-    LOG_WARN("failed to start thread", KR(ret));
   } else {
     ObThreadCondGuard guard(thread_cond_);
     if (OB_FAIL(thread_cond_.broadcast())) {
-      LOG_WARN("failed to weakup thread cond", KR(ret));
     }
   }
   LOG_INFO("[SERVER THREAD] thread start finish", K(thread_cnt_), K(thread_name_));

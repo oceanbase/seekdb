@@ -128,7 +128,6 @@ int ObTmpBlockCache::init(const char *cache_name)
   int ret = OB_SUCCESS;
   if (OB_FAIL((common::ObKVCache<ObTmpBlockCacheKey, ObTmpBlockCacheValue>::init(
       cache_name)))) {
-    STORAGE_LOG(WARN, "Fail to init kv cache, ", KR(ret));
   }
   return ret;
 }
@@ -170,7 +169,6 @@ int ObTmpBlockCache::put_block(ObKVCacheInstHandle &inst_handle,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(inst_handle), KP(kvpair), K(block_handle));
   } else if (OB_FAIL(put_kvpair(inst_handle, kvpair, block_handle.handle_, false/*overwrite*/))) {
-    STORAGE_LOG(WARN, "fail to put tmp block to block cache", KR(ret));
   } else {
     // refresh the block cache score by calling get_block() to prevent eviction,
     // otherwise new block's score is 0 and may be evicted immediately
@@ -196,10 +194,8 @@ int ObTmpBlockCache::prealloc_block(const ObTmpBlockCacheKey &key, ObKVCacheInst
   } else if (OB_FAIL(alloc(key.size(),
                      sizeof(ObTmpBlockCacheValue) + ObTmpFileGlobal::SN_BLOCK_SIZE,
                      kvpair, block_handle.handle_, inst_handle))) {
-    STORAGE_LOG(WARN, "failed to alloc kvcache buf", KR(ret), K(key));
   } else if (OB_FAIL(key.deep_copy(reinterpret_cast<char *>(kvpair->key_),
                      key.size(), kvpair->key_))) {
-    STORAGE_LOG(WARN, "failed to deep copy key", KR(ret), K(key));
   } else {
     char *buf = reinterpret_cast<char *>(kvpair->value_);
     block_handle.value_ = new (buf) ObTmpBlockCacheValue(buf + sizeof(ObTmpBlockCacheValue));
@@ -384,11 +380,9 @@ int ObTmpPageCacheReadInfo::async_read(ObTmpPageCache::ObITmpPageIOCallback *cal
     
     read_info.io_desc_.set_sys_module_id(ObIOModule::TMP_PAGE_CACHE_IO);
     if (OB_FAIL(object_handle_->async_read(read_info))) {
-      STORAGE_LOG(WARN, "fail to async read block", KR(ret), K(read_info));
     }
   }
 
-  STORAGE_LOG(DEBUG, "async read tmp page cache", KR(ret), KPC(this), KPC(callback));
 
   return ret;
 }
@@ -405,7 +399,6 @@ int ObTmpPageCache::init(const char *cache_name)
   int ret = OB_SUCCESS;
   if (OB_FAIL((common::ObKVCache<ObTmpPageCacheKey, ObTmpPageCacheValue>::init(
       cache_name)))) {
-    STORAGE_LOG(WARN, "Fail to init kv cache, ", KR(ret));
   }
   return ret;
 }
@@ -446,7 +439,6 @@ void ObTmpPageCache::try_put_page_to_cache(const ObTmpPageCacheKey &key,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(key), K(value));
   } else if (OB_FAIL(put(key, value, false/*overwrite*/))) {
-    STORAGE_LOG(WARN, "fail to put tmp page into cache", KR(ret), K(key), K(value));
   } else {
     // refresh the page cache score by calling get_page() to prevent eviction,
     // otherwise its score is 0 and may be evicted immediately
@@ -472,10 +464,8 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
   } else if (OB_FAIL(alloc(key.size(),
       sizeof(ObTmpPageCacheValue) + ObTmpFileGlobal::ALLOC_PAGE_SIZE,
       kvpair, p_handle.handle_, inst_handle))) {
-    STORAGE_LOG(WARN, "failed to alloc kvcache buf", KR(ret), K(key));
   } else if (OB_FAIL(key.deep_copy(reinterpret_cast<char *>(kvpair->key_),
       key.size(), kvpair->key_))) {
-    STORAGE_LOG(WARN, "failed to deep copy key", KR(ret), K(key));
   } else {
     char *buf = reinterpret_cast<char *>(kvpair->value_);
     p_handle.value_ = new (buf) ObTmpPageCacheValue(buf + sizeof(ObTmpPageCacheValue));
@@ -491,17 +481,12 @@ int ObTmpPageCache::load_page(const ObTmpPageCacheKey &key,
     ObTmpPageCacheReadInfo read_info;
 
     if (OB_FAIL(block_manager.get_macro_block_id(key.get_block_id(), macro_block_id))) {
-      STORAGE_LOG(WARN, "failed to get macro block id", KR(ret), K(key));
     } else if (OB_FAIL(read_info.init_read(macro_block_id, ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                            key.get_page_id() * ObTmpFileGlobal::ALLOC_PAGE_SIZE,
                                            io_desc, io_timeout_ms,
                                            &obj_handle))) {
-      STORAGE_LOG(WARN, "failed to get macro block id", KR(ret), K(macro_block_id), K(key),
-                                                        K(io_desc), K(io_timeout_ms), K(obj_handle));
     } else if (OB_FAIL(direct_read(read_info, *callback_allocator))) {
-      STORAGE_LOG(WARN, "failed to alloc kvcache buf", KR(ret), K(read_info), KP(callback_allocator));
     } else if (OB_FAIL(obj_handle.wait())) {
-      STORAGE_LOG(WARN, "fail to do handle read wait", KR(ret), K(read_info));
     } else {
       MEMCPY(p_handle.value_->get_buffer(), obj_handle.get_buffer(), ObTmpFileGlobal::ALLOC_PAGE_SIZE);
     }
@@ -539,7 +524,6 @@ int ObTmpPageCache::direct_read(ObTmpPageCacheReadInfo &read_info,
     callback->cache_ = this;
     callback->allocator_ = &callback_allocator;
     if (OB_FAIL(inner_read_io_(read_info, callback))) {
-      STORAGE_LOG(WARN, "fail to inner read io", KR(ret), K(read_info));
     }
     // There is no need to handle error cases (freeing the memory of the
     // callback) because inner_read_io_ will handle error cases and free the
@@ -578,7 +562,6 @@ int ObTmpPageCache::cached_read(const common::ObIArray<ObTmpPageCacheKey> &page_
       callback->~ObTmpCachedReadPageIOCallback();
       callback_allocator.free(callback);
     } else if (OB_FAIL(inner_read_io_(read_info, callback))) {
-      STORAGE_LOG(WARN, "fail to inner read io", KR(ret), K(read_info));
     }
     // There is no need to handle error cases (freeing the memory of the
     // callback) because inner_read_io_ will handle error cases and free the
@@ -617,7 +600,6 @@ int ObTmpPageCache::aggregate_read(const common::ObIArray<std::pair<ObTmpPageCac
       callback->~ObTmpAggregatePageIOCallback();
       callback_allocator.free(callback);
     } else if (OB_FAIL(inner_read_io_(read_info, callback))) {
-      STORAGE_LOG(WARN, "fail to inner read io", KR(ret), K(read_info));
     }
     // There is no need to handle error cases (freeing the memory of the
     // callback) because inner_read_io_ will handle error cases and free the
@@ -640,7 +622,6 @@ int ObTmpPageCache::inner_read_io_(ObTmpPageCacheReadInfo &read_info,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(read_info.async_read(callback))) {
-    STORAGE_LOG(WARN, "fail to async read", KR(ret), K(read_info), KP(callback));
   }
 
   // if read successful, callback will be freed after user calls ObTmpFileIOHandle::wait()
@@ -684,7 +665,6 @@ int ObTmpPageCache::ObITmpPageIOCallback::process_page(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", KR(ret), K(key), K(value));
   } else if (OB_FAIL(cache_->put(key, value, true/*overwrite*/))) {
-    STORAGE_LOG(WARN, "fail to put tmp page into cache", KR(ret), K(key), K(value));
   }
   return ret;
 }
@@ -716,7 +696,6 @@ int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *dat
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "invalid data buffer size", KR(ret), K(size), K(page_keys_.count()));
   } else if (OB_FAIL(alloc_data_buf(data_buffer, size))) {
-    STORAGE_LOG(WARN, "Fail to allocate memory, ", KR(ret), K(size));
   } else if (FALSE_IT(time_guard.click("alloc_data_buf"))) {
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < page_keys_.count(); i++) {
@@ -724,7 +703,6 @@ int ObTmpPageCache::ObTmpCachedReadPageIOCallback::inner_process(const char *dat
       value.set_buffer(data_buf_ + i * ObTmpFileGlobal::ALLOC_PAGE_SIZE);
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(process_page(page_keys_.at(i), value))) {
-        STORAGE_LOG(WARN, "fail to process tmp page cache in callback", KR(tmp_ret));
       }
     }
     time_guard.click("process_page");
@@ -759,7 +737,6 @@ int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "invalid data buffer size", KR(ret), K(size), KP(data_buffer));
   } else if (OB_FAIL(alloc_data_buf(data_buffer, size))) {
-    STORAGE_LOG(WARN, "Fail to allocate memory, ", KR(ret), K(size));
   } else if (FALSE_IT(time_guard.click("alloc_data_buf"))) {
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < page_infos_.count(); i++) {
@@ -767,7 +744,6 @@ int ObTmpPageCache::ObTmpAggregatePageIOCallback::inner_process(const char *data
       value.set_buffer(data_buf_ + page_infos_.at(i).second);
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(process_page(page_infos_.at(i).first, value))) {
-        STORAGE_LOG(WARN, "fail to process tmp page cache in callback", KR(tmp_ret));
       }
     }
     time_guard.click("process_page");
@@ -791,7 +767,6 @@ int ObTmpPageCache::ObTmpDirectReadPageIOCallback::inner_process(const char *dat
     ret = OB_INVALID_DATA;
     STORAGE_LOG(WARN, "invalid data buffer size", KR(ret), K(size), KP(data_buffer));
   } else if (OB_FAIL(alloc_data_buf(data_buffer, size))) {
-    STORAGE_LOG(WARN, "Fail to allocate memory, ", KR(ret), K(size));
   } else if (FALSE_IT(time_guard.click("alloc_data_buf"))) {
   }
   if (OB_FAIL(ret) && NULL != allocator_ && NULL != data_buf_) {

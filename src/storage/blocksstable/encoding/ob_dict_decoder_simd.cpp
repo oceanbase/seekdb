@@ -89,8 +89,6 @@ struct DictCmpRefAVX512Func_T<1, CMP_TYPE>
             K(pd_filter_info), K(result.at(row_id)));
       }
     }
-    LOG_DEBUG("[SIMD filter] fast cmp dict ref for 1 byte",
-        K(row_cnt), K(op), K(dict_ref), K(dict_cnt), K(casted_dict_ref), K(casted_dict_cnt));
   }
 };
 
@@ -158,8 +156,6 @@ struct DictCmpRefAVX512Func_T<2, CMP_TYPE>
             K(pd_filter_info), K(result.at(row_id)));
       }
     }
-    LOG_DEBUG("[SIMD filter] fast cmp dict ref for 2 bytes",
-        K(row_cnt), K(op), K(dict_ref), K(dict_cnt), K(casted_dict_ref), K(casted_dict_cnt));
   }
 };
 #endif

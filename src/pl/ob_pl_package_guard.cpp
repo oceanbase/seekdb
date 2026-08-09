@@ -43,7 +43,6 @@ int ObPLPackageGuard::init()
         common::hash::cal_next_prime(256),
         common::ObModIds::OB_HASH_BUCKET,
         common::ObModIds::OB_HASH_NODE))) {
-    LOG_WARN("failed to create package guard map!", K(ret));
   }
   return ret;
 }

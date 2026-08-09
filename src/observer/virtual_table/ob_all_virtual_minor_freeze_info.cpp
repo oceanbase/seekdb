@@ -134,7 +134,6 @@ int ObAllVirtualMinorFreezeInfo::inner_get_next_row(ObNewRow *&row)
         case OB_APP_MIN_COLUMN_ID + 9:
           // memtables_info
           if (OB_FAIL(freeze_stat.get_memtables_info(memtables_info_))) {
-            TRANS_LOG(WARN, "fail to get_memtables_info", K(ret));
           } else {
             generate_memtables_info();
             cur_row_.cells_[i].set_varchar(memtables_info_string_);
@@ -165,12 +164,10 @@ int ObAllVirtualMinorFreezeInfo::get_next_freeze_stat(ObFreezerStat &freeze_stat
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_ISNULL(freezer = ls_->get_freezer())) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "freezer is null", K(ret));
   } else if (OB_FAIL(freezer->get_stat().deep_copy_to(freeze_stat))) {
-    SERVER_LOG(WARN, "fail to deep copy", K(ret));
   } else if (!freeze_stat.is_valid()) {
     ret = OB_ITER_END;
   }
@@ -197,17 +194,11 @@ int ObAllVirtualMinorFreezeInfo::generate_memtables_info()
       const char *unsynced_cnt_str = nullptr;
       const char *current_right_boundary_str = nullptr;
       if (OB_FAIL(helper.convert(memtables_info_[i].tablet_id_.id(), tablet_id_str))) {
-         SERVER_LOG(WARN, "fail to conver tablet_id", "tablet_id", memtables_info_[i].tablet_id_.id(), K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].start_scn_, start_scn_str))) {
-        SERVER_LOG(WARN, "fail to conver start_scnd", "start_scn", memtables_info_[i].start_scn_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].end_scn_, end_scn_str))) {
-        SERVER_LOG(WARN, "fail to conver end_scn", "end_scn", memtables_info_[i].end_scn_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].write_ref_cnt_, write_ref_cnt_str))) {
-        SERVER_LOG(WARN, "fail to conver write_ref_cnt", "write_ref_cnt", memtables_info_[i].write_ref_cnt_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].unsubmitted_cnt_, unsubmitted_cnt_str))) {
-        SERVER_LOG(WARN, "fail to conver unsubmitted_cnt", "unsubmitted_cnt", memtables_info_[i].unsubmitted_cnt_, K(ret));
       } else if (OB_FAIL(helper.convert(memtables_info_[i].current_right_boundary_, current_right_boundary_str))) {
-        SERVER_LOG(WARN, "fail to conver current_right_boundary", "current_right_boundary", memtables_info_[i].current_right_boundary_, K(ret));
       } else {
         // tablet_id
         append_memtable_info_string(MEMTABLE_INFO_MEMBER[0], tablet_id_str, size);

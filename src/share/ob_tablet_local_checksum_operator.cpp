@@ -67,7 +67,6 @@ int ObTabletColumnChecksumMeta::init(const ObIArray<int64_t> &column_checksums)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(column_checksums_.assign(column_checksums))) {
-    LOG_WARN("fail to assign column_checksums", KR(ret));
   } else {
     checksum_bytes_ = (sizeof(int16_t) + sizeof(int64_t) + sizeof(int8_t)) * 2;
     checksum_method_ = 0; // TODO
@@ -85,7 +84,6 @@ int ObTabletColumnChecksumMeta::assign(const ObTabletColumnChecksumMeta &other)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret));
     } else if (OB_FAIL(column_checksums_.assign(other.column_checksums_))) {
-      LOG_WARN("fail to assign column_checksums", KR(ret));
     } else {
       compat_version_ = other.compat_version_;
       checksum_method_ = other.checksum_method_;
@@ -104,15 +102,10 @@ int ObTabletColumnChecksumMeta::serialize(char *buf, const int64_t buf_len, int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments.", KP(buf), KR(ret), K(serialize_size), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, MAGIC_NUMBER))) {
-    LOG_WARN("fail to encode magic number", KR(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, compat_version_))) {
-    LOG_WARN("fail to encode compat version", KR(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, checksum_method_))) {
-    LOG_WARN("fail to encode checksum method", KR(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, checksum_bytes_))) {
-    LOG_WARN("fail to encode checksum bytes", KR(ret));
   } else if (OB_FAIL(column_checksums_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize column_checksums", KR(ret));
   }
   return ret;
 }
@@ -137,18 +130,13 @@ int ObTabletColumnChecksumMeta::deserialize(const char *buf, const int64_t buf_l
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", KR(ret), K(buf), K(buf_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, buf_len, pos, &magic_number))) {
-    LOG_WARN("fail to decode magic number", KR(ret));
   } else if (OB_UNLIKELY(MAGIC_NUMBER != magic_number)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid column checksum metadata magic number", KR(ret), K(magic_number));
   } else if (OB_FAIL(serialization::decode_i8(buf, buf_len, pos, &compat_version_))) {
-    LOG_WARN("fail to deserialize compat version", KR(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, buf_len, pos, &checksum_method_))) {
-    LOG_WARN("fail to deserialize checksum method", KR(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, buf_len, pos, &checksum_bytes_))) {
-    LOG_WARN("fail to deserialize checksum bytes", KR(ret));
   } else if (OB_FAIL(column_checksums_.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to deserialize column checksums", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -226,7 +214,6 @@ int ObTabletColumnChecksumMeta::check_all_checksums(
     const int64_t column_ckm_cnt = column_checksums_.count();
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && (i < column_ckm_cnt); ++i) {
       if (OB_FAIL(check_checksum(other, i, is_equal))) {
-        LOG_WARN("fail to check checksum", KR(ret), K(i), K(column_ckm_cnt));
       }
     }
   }
@@ -246,7 +233,6 @@ int ObTabletColumnChecksumMeta::check_equal(
     is_equal = false;
     LOG_ERROR("checksum method is different !", K(*this), K(other));
   } else if (OB_FAIL(check_all_checksums(other, is_equal))) {
-    LOG_WARN("fail to check all checksum", KR(ret), K(*this), K(other));
   }
   return ret;
 }
@@ -255,7 +241,6 @@ int ObTabletColumnChecksumMeta::set_with_str(const ObString &str)
 {
   int ret = set_with_serialize_str(str);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to set column meta with serialize str", K(ret), K(str));
   }
   return ret;
 }
@@ -270,10 +255,8 @@ int ObTabletColumnChecksumMeta::set_with_str(
     LOG_WARN("invalid column checksum type", K(type));
   } else if (is_normal_column_checksum_type(type)) {
     if (OB_FAIL(set_with_serialize_str(str))) {
-      LOG_WARN("failed to set column meta with serialize str", K(ret), K(str));
     }
   } else if (OB_FAIL(set_with_hex_str(str))) {
-    LOG_WARN("failed to set column meta with hex str", K(ret), K(str));
   }
   return ret;
 }
@@ -295,9 +278,7 @@ int ObTabletColumnChecksumMeta::set_with_hex_str(const common::ObString &hex_str
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret), K(deserialize_size));
     } else if (OB_FAIL(hex_to_cstr(hex_str.ptr(), hex_str_len, deserialize_buf, deserialize_size))) {
-      LOG_WARN("fail to get cstr from hex", KR(ret), K(hex_str_len), K(deserialize_size));
     } else if (OB_FAIL(deserialize(deserialize_buf, deserialize_size, deserialize_pos))) {
-      LOG_WARN("fail to deserialize from str to build column meta", KR(ret), "column_meta_str", hex_str.ptr());
     } else if (deserialize_pos > deserialize_size) {
       ret = OB_SIZE_OVERFLOW;
       LOG_WARN("deserialize size overflow", KR(ret), K(deserialize_pos), K(deserialize_size));
@@ -315,7 +296,6 @@ int ObTabletColumnChecksumMeta::set_with_serialize_str(const common::ObString &s
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(serialize_len), K(serialize_str));
   } else if (OB_FAIL(deserialize(serialize_str.ptr(), serialize_len, pos))) {
-    LOG_WARN("fail to deserialize from str to build column meta", KR(ret), "column_meta_str", serialize_str.ptr());
   }
   return ret;
 }
@@ -332,12 +312,10 @@ int ObTabletColumnChecksumMeta::get_str_obj(
     LOG_WARN("invalid argument", K(ret), K(type));
   } else if (is_normal_column_checksum_type(type)) {
     if (OB_FAIL(get_serialize_str(allocator, str))) {
-      LOG_WARN("get serialize column meta str failed", K(ret));
     } else {
       obj.set_varbinary(str);
     }
   } else if (OB_FAIL(get_hex_str(allocator, str))) {
-    LOG_WARN("get hex column meta failed", K(ret));
   } else {
     obj.set_varchar(str);
   }
@@ -365,7 +343,6 @@ int ObTabletColumnChecksumMeta::get_hex_str(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc buf", KR(ret), K(serialize_size));
   } else if (OB_FAIL(serialize(serialize_buf, serialize_size, serialize_pos))) {
-    LOG_WARN("failed to serialize column meta", KR(ret), K(*this), K(serialize_size), K(serialize_pos));
   } else if (OB_UNLIKELY(serialize_pos > serialize_size)) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("serialize error", KR(ret), K(serialize_pos), K(serialize_size));
@@ -373,7 +350,6 @@ int ObTabletColumnChecksumMeta::get_hex_str(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", KR(ret), K(hex_size));
   } else if (OB_FAIL(hex_print(serialize_buf, serialize_pos, hex_buf, hex_size, hex_pos))) {
-    LOG_WARN("fail to print hex", KR(ret), K(serialize_pos), K(hex_size), K(serialize_buf));
   } else if (OB_UNLIKELY(hex_pos > hex_size)) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("encode error", KR(ret), K(hex_pos), K(hex_size));
@@ -402,7 +378,6 @@ int ObTabletColumnChecksumMeta::get_serialize_str(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SHARE_LOG(WARN, "fail to alloc buf", KR(ret), K(serialize_size));
   } else if (OB_FAIL(serialize(serialize_buf, serialize_size, serialize_pos))) {
-    LOG_WARN("failed to serialize column meta", KR(ret), K(*this), K(serialize_size), K(serialize_pos));
   } else if (OB_UNLIKELY(serialize_pos > serialize_size)) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("serialize error", KR(ret), K(serialize_pos), K(serialize_size));
@@ -458,7 +433,6 @@ int ObTabletLocalChecksumItem::assign(const ObTabletLocalChecksumItem &other)
   if (this != &other) {
     reset();
     if (OB_FAIL(column_meta_.assign(other.column_meta_))) {
-      LOG_WARN("fail to assign column meta", KR(ret), K(other));
     } else {
       tablet_id_ = other.tablet_id_;
       row_count_ = other.row_count_;
@@ -486,7 +460,6 @@ int ObTabletLocalChecksumOperator::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("SQLite connection pool is null", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
-    LOG_WARN("failed to init storage", K(ret));
   }
   return ret;
 }
@@ -524,7 +497,6 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
 
     ObSQLiteStmt *stmt = nullptr;
     if (OB_FAIL(conn->prepare_execute(upsert_sql, stmt))) {
-      LOG_WARN("failed to prepare execute", K(ret));
     } else {
       common::ObArenaAllocator allocator;
       for (int64_t i = 0; OB_SUCC(ret) && i < items.count(); ++i) {
@@ -537,11 +509,9 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
           LOG_WARN("invalid local checksum item", K(ret), K(item));
         } else {
           if (OB_FAIL(get_visible_column_meta(item.column_meta_, allocator, column_checksums_str))) {
-            LOG_WARN("failed to get visible column meta", K(ret));
           } else {
             common::ObObj obj;
             if (OB_FAIL(item.column_meta_.get_str_obj(item.data_checksum_type_, allocator, obj, b_column_checksums_str))) {
-              LOG_WARN("failed to get hex column meta str", K(ret));
             }
           }
         }
@@ -567,7 +537,6 @@ int ObTabletLocalChecksumOperator::batch_update_with_trans(
           };
 
           if (OB_FAIL(conn->step_execute(stmt, binder))) {
-            LOG_WARN("failed to step execute", K(ret), K(i));
           }
         }
       }
@@ -601,7 +570,6 @@ int ObTabletLocalChecksumOperator::batch_remove_with_trans(
 
     ObSQLiteStmt *stmt = nullptr;
     if (OB_FAIL(conn->prepare_execute(delete_sql, stmt))) {
-      LOG_WARN("failed to prepare execute", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_count; ++i) {
         const ObTabletRuntimeInfo &tablet_info = tablet_infos.at(i);
@@ -615,7 +583,6 @@ int ObTabletLocalChecksumOperator::batch_remove_with_trans(
           };
 
           if (OB_FAIL(conn->step_execute(stmt, binder))) {
-            LOG_WARN("failed to step execute", K(ret), K(i));
           }
         }
       }
@@ -642,15 +609,12 @@ int ObTabletLocalChecksumOperator::get_tablet_checksums(const ObIArray<compactio
     for (int64_t i = 0; OB_SUCC(ret) && i < pairs_cnt; ++i) {
       const compaction::ObTabletCheckInfo &check_info = pairs.at(i);
       if (OB_FAIL(tablet_ids.push_back(check_info.get_tablet_id()))) {
-        LOG_WARN("failed to push back tablet id", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ret = storage_.batch_get(tablet_ids, SCN(), tablet_checksum_items, false);
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to batch get from storage", K(ret));
       } else {
-        LOG_TRACE("success to get local tablet checksum items", KR(ret), K(pairs_cnt));
       }
     }
   }
@@ -694,8 +658,6 @@ int ObTabletLocalChecksumOperator::get_local_tablet_checksum_items(
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_get(tablet_ids, compaction_scn,
         items, false/*include_larger_than*/))) {
-    LOG_WARN("fail to batch get tablet checksum item", KR(ret), K(compaction_scn),
-      "tablet_count", tablet_ids.count());
   } else if (items.get_tablet_cnt() < tablet_ids.count()) {
     ret = OB_ITEM_NOT_MATCH;
     LOG_WARN("fail to get local tablet checksum items", KR(ret), K(compaction_scn),

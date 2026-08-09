@@ -112,21 +112,13 @@ DEFINE_SERIALIZE(ObRecordHeader)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arguments.", KP(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, magic_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(magic), K(ret));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_length_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_length), K(ret));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, version_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(version), K(ret));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_checksum_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_checksum), K(ret));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, timestamp_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(timestamp), K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, data_length_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_length), K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, data_zlength_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_zlength), K(ret));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, data_checksum_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_checksum), K(ret));
   }
 
   return ret;
@@ -140,21 +132,13 @@ DEFINE_DESERIALIZE(ObRecordHeader)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arguments.", KP(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &magic_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(magic), K(ret));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_length_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_length), K(ret));
   }  else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &version_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(version), K(ret));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_checksum_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(header_checksum), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &timestamp_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(timestamp), K(ret));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &data_length_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_length), K(ret));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &data_zlength_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_zlength), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &data_checksum_))) {
-    COMMON_LOG(WARN, "encode data failed..", KP(buf), K_(data_checksum), K(ret));
   }
   // Subsequent new members should use header_length_ as the limit for deserialization length to ensure upgrade compatibility
 

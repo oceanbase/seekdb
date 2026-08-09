@@ -37,8 +37,6 @@ ObExprTopNFilterContext::~ObExprTopNFilterContext()
   cmp_funcs_.reset();
   int ret = OB_SUCCESS;
   double filter_rate = filter_count_ / double(check_count_ + 1);
-  LOG_TRACE("[TopN Filter] print the filter rate", K(total_count_), K(check_count_),
-            K(filter_count_), K(filter_rate));
 }
 
 void ObExprTopNFilterContext::reset_for_rescan()
@@ -78,7 +76,6 @@ int ObExprTopNFilterContext::state_machine(const ObExpr &expr, ObEvalCtx &ctx, A
       }
       case FilterState::CHECK_READY: {
         if (OB_FAIL(check_filter_ready())) {
-          LOG_WARN("fail to check filter ready", K(ret));
         }
         // result not filled, so while loop continues
         break;
@@ -140,7 +137,6 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
             ++total_count;
             return OB_SUCCESS;
           }))) {
-    LOG_WARN("failed to flip_foreach");
   } else if (FALSE_IT(total_count_ += total_count)) {
   } else if (!dynamic_disable()) {
     // if msg not ready, add n_times_ and check ready every ROW_COUNT_CHECK_INTERVAL
@@ -199,7 +195,6 @@ inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ct
   int ret = OB_SUCCESS;
   if (OB_FAIL(topn_filter_msg_->prepare_storage_white_filter_data(dynamic_filter, ctx, params,
                                                                   is_data_prepared))) {
-    LOG_WARN("fail to prepare_storage_white_filter_data", K(ret));
   } else {
     if (topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())) {
       dynamic_filter.cmp_func_ =
@@ -235,8 +230,6 @@ int ObExprTopNFilterContext::check_filter_ready()
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(basic_msg)) {
-    LOG_TRACE("[TopN Filter] succ get msg from P2PDH", K(topn_filter_key_), K(basic_msg),
-              K(total_count_));
   }
   // try check msg ready
   if (OB_SUCC(ret)) {
@@ -358,7 +351,6 @@ int ObExprTopNFilter::update_storage_white_filter_data(const ObExpr &expr,
     LOG_WARN("topn_filter_ctx must not null during update stage");
   } else if (OB_FAIL(topn_filter_ctx->topn_filter_msg_->update_storage_white_filter_data(
                  dynamic_filter, params, is_update))) {
-    LOG_WARN("Failed to update_storage_white_filter_data");
   }
   return ret;
 }

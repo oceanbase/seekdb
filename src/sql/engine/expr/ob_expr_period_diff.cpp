@@ -70,9 +70,7 @@ int ObExprPeriodDiff::calc(
   uint64_t rmonth = 0;
   int64_t diff = 0;
   if (OB_FAIL(get_year_month(lvalue, lyear, lmonth))) {
-    LOG_WARN("get_year_month failed", K(ret), K(lvalue), K(lyear), K(lmonth));
   } else if (OB_FAIL(get_year_month(rvalue, ryear, rmonth))) {
-    LOG_WARN("get_year_month failed", K(ret), K(rvalue), K(ryear), K(rmonth));
   } else {
     diff = static_cast<int64_t> ((lyear - ryear) * MONS_PER_YEAR + lmonth - rmonth);
     result.set_int(diff);
@@ -108,7 +106,6 @@ int ObExprPeriodDiff::calc_perioddiff(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   ObDatum *param_datum1 = NULL;
   ObDatum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (OB_UNLIKELY(param_datum1->is_null() || param_datum2->is_null())) {
     expr_datum.set_null();
   } else {
@@ -156,7 +153,6 @@ int ObExprPeriodAdd::calc(
     // not consistent with Mysql, by design.
     result.set_int(0);
   } else if (OB_FAIL(get_year_month(static_cast<uint64_t>(lvalue), lyear, lmonth))) {
-    LOG_WARN("get_year_month failed", K(ret), K(lvalue), K(lyear), K(lmonth));
   } else {
     int64_t res_months = lyear * MONS_PER_YEAR + lmonth + rvalue;
     int64_t year = (res_months - 1) / MONS_PER_YEAR;
@@ -203,7 +199,6 @@ int ObExprPeriodAdd::calc_periodadd(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
   ObDatum *param_datum1 = NULL;
   ObDatum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (OB_UNLIKELY(param_datum1->is_null() || param_datum2->is_null())) {
     expr_datum.set_null();
   } else {

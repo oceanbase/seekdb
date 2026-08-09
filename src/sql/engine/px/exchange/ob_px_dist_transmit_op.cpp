@@ -35,7 +35,6 @@ int ObPxDistTransmitOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxTransmitOp::inner_open())) {
-    LOG_WARN("PX transmit open failed", K(ret));
   } else if (!MY_SPEC.sampling_saving_row_.empty()) {
     if (MY_SPEC.is_vectorized()) {
       OZ(brs_holder_.init(MY_SPEC.sampling_saving_row_, eval_ctx_));
@@ -116,7 +115,6 @@ int ObPxDistTransmitOp::next_batch(const int64_t max_row_cnt)
     // otherwise data ptr is not reset to frame, table scan may fail.
     if (OB_SUCC(ret) && brs_holder_.is_saved()) {
       if (OB_FAIL(brs_holder_.restore())) {
-        LOG_WARN("store holder failed", K(ret));
       } else {
         brs_holder_.reset();
       }
@@ -147,7 +145,6 @@ int ObPxDistTransmitOp::do_transmit()
         dfc_,
         task_channels_,
         phy_plan_ctx->get_timeout_timestamp()))) {
-      LOG_WARN("failed to init chs agent", K(ret));
     }
   }
 
@@ -158,55 +155,46 @@ int ObPxDistTransmitOp::do_transmit()
     switch (MY_SPEC.dist_method_) {
       case ObPQDistributeMethod::HASH: {
         if (OB_FAIL(do_hash_dist())) {
-          LOG_WARN("do hash distribution failed", K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::BC2HOST: {
         if (OB_FAIL(do_bc2host_dist())) {
-          LOG_WARN("do BC2HOST distribution failed", K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::RANDOM: {
         if (OB_FAIL(do_random_dist())) {
-          LOG_WARN("do random distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::BROADCAST: {
         if (OB_FAIL(do_broadcast_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::SM_BROADCAST: {
         if (OB_FAIL(do_sm_broadcast_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::PARTITION_HASH: {
         if (OB_FAIL(do_sm_pkey_hash_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
        case ObPQDistributeMethod::RANGE: {
         if (OB_FAIL(do_range_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::HYBRID_HASH_BROADCAST: {
         if (OB_FAIL(do_hybrid_hash_broadcast_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
       case ObPQDistributeMethod::HYBRID_HASH_RANDOM: {
         if (OB_FAIL(do_hybrid_hash_random_dist())) {
-          LOG_WARN("do broadcast distribution failed",  K(ret));
         }
         break;
       }
@@ -234,7 +222,6 @@ int ObPxDistTransmitOp::do_hash_dist()
       LOG_WARN("unexpected status: MY_SPEC.is_wf_hybrid_ is true",
                K(ret), K(MY_SPEC.is_wf_hybrid_));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::NULL_AWARE_HASH>(slice_id_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
     }
   } else if (MY_SPEC.is_wf_hybrid_) {
     ObWfHybridDistSliceIdCalc wf_hybrid_slice_id_calc(
@@ -243,7 +230,6 @@ int ObPxDistTransmitOp::do_hash_dist()
         &MY_SPEC.dist_exprs_, &MY_SPEC.dist_hash_funcs_,
         true);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::WF_HYBRID>(wf_hybrid_slice_id_calc))) {
-      LOG_WARN("row wf hybrid distribution failed", K(ret));
     }
   } else {
     ObHashSliceIdCalc slice_id_calc(
@@ -252,7 +238,6 @@ int ObPxDistTransmitOp::do_hash_dist()
                     &MY_SPEC.dist_exprs_, &MY_SPEC.dist_hash_funcs_,
                     true);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::HASH>(slice_id_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -265,7 +250,6 @@ int ObPxDistTransmitOp::do_bc2host_dist()
   ObBc2HostSliceIdCalc::HostIdxArray host_idx;
   for (int64_t i = 0; i < task_channels_.count() && OB_SUCC(ret); i++) {
     if (OB_FAIL(channel_idx.push_back(i))) {
-      LOG_WARN("array push back failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && !channel_idx.empty()) {
@@ -273,7 +257,6 @@ int ObPxDistTransmitOp::do_bc2host_dist()
     local_host.begin_ = 0;
     local_host.end_ = channel_idx.count();
     if (OB_FAIL(host_idx.push_back(local_host))) {
-      LOG_WARN("array push back failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -284,7 +267,6 @@ int ObPxDistTransmitOp::do_bc2host_dist()
                                        host_idx,
                                        MY_SPEC.null_row_dist_method_);
     if (OB_FAIL(send_rows<ObSliceIdxCalc::BC2HOST>(slice_id_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -295,7 +277,6 @@ int ObPxDistTransmitOp::do_random_dist()
   int ret = OB_SUCCESS;
   ObRandomSliceIdCalc slice_id_calc(ctx_.get_allocator(), task_channels_.count());
   if (OB_FAIL(send_rows<ObSliceIdxCalc::RANDOM>(slice_id_calc))) {
-    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -307,7 +288,6 @@ int ObPxDistTransmitOp::do_broadcast_dist()
                                        task_channels_.count(),
                                        MY_SPEC.null_row_dist_method_);
   if (OB_FAIL(broadcast_rows(slice_id_calc))) {
-    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -322,7 +302,6 @@ int ObPxDistTransmitOp::do_hybrid_hash_random_dist()
       &MY_SPEC.popular_values_hash_,
       true);
   if (OB_FAIL(send_rows<ObSliceIdxCalc::HYBRID_HASH_RANDOM>(slice_id_calc))) {
-    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -337,7 +316,6 @@ int ObPxDistTransmitOp::do_hybrid_hash_broadcast_dist()
       &MY_SPEC.popular_values_hash_,
       true);
   if (OB_FAIL(send_rows<ObSliceIdxCalc::HYBRID_HASH_BROADCAST>(slice_id_calc))) {
-    LOG_WARN("row distribution failed", K(ret));
   }
   return ret;
 }
@@ -349,9 +327,7 @@ int ObPxDistTransmitOp::do_range_dist()
   if (!sample_done_) {
     ObDynamicSamplePieceMsg piece_msg;
     if (OB_FAIL(build_ds_piece_msg(task_channels_.count(), piece_msg))) {
-      LOG_WARN("fail to buil ds piece msg", K(ret));
     } else if (OB_FAIL(do_datahub_dynamic_sample(MY_SPEC.id_, piece_msg))) {
-      LOG_WARN("fail to do dynamic sample");
     } else {
       sample_done_ = true;
     }
@@ -363,9 +339,7 @@ int ObPxDistTransmitOp::do_range_dist()
       range, &MY_SPEC.dist_exprs_, MY_SPEC.sort_cmp_funs_, MY_SPEC.sort_collations_, MY_SPEC.ddl_slice_id_expr_);
     if (ObPxSampleType::OBJECT_SAMPLE == MY_SPEC.sample_type_) {
       if (OB_FAIL(child_->rescan())) {
-        LOG_WARN("fail to rescan child", K(ret));
       } else if (OB_FAIL(ObOperator::inner_rescan())) {
-        LOG_WARN("fail to inner rescan", K(ret));
       } else {
         iter_end_ = false;
         consume_first_row_ = true;
@@ -389,16 +363,13 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
     LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
       schema_guard))) {
-    LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
-    LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("table schema is null. repart sharding requires a table in dfo",
              K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-    LOG_WARN("fail to get channel affinity map", K(ret));
   } else {
     ObSlaveMapBcastIdxCalc slice_idx_calc(ctx_,
                                           *table_schema,
@@ -409,9 +380,7 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
                                           part_ch_info_,
                                           MY_SPEC.repartition_type_);
     if (OB_FAIL(slice_idx_calc.init())) {
-      LOG_WARN("init slice calc failed", K(ret));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::SM_BROADCAST>(slice_idx_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
     }
   }
   return ret;
@@ -430,17 +399,14 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
     LOG_WARN("input is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
       schema_guard))) {
-    LOG_WARN("faile to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema(
     repart_ref_table_id, table_schema))) {
-    LOG_WARN("faile to get table schema", K(ret), K(repart_ref_table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("table schema is null. repart sharding requires a table in dfo",
              K(repart_ref_table_id), K(ret));
   } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                           ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-    LOG_WARN("fail to get channel affinity map", K(ret));
   } else {
     ObSlaveMapPkeyHashIdxCalc slice_idx_calc(ctx_,
                                              *table_schema,
@@ -454,9 +420,7 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
                                              MY_SPEC.repartition_type_,
                                              true);
     if (OB_FAIL(slice_idx_calc.init())) {
-      LOG_WARN("failed to init slice idx calc", K(ret));
     } else if (OB_FAIL(send_rows<ObSliceIdxCalc::SM_REPART_HASH>(slice_idx_calc))) {
-      LOG_WARN("row distribution failed", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = slice_idx_calc.destroy())) {
@@ -492,8 +456,6 @@ int ObPxDistTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
   int ret = OB_SUCCESS;
   piece_msg.reset();
   if (OB_FAIL(piece_msg.tablet_ids_.push_back(0))) {
-    // just generate one partition
-    LOG_WARN("fail to push back parititon ids", K(ret));
   } else if (FALSE_IT(piece_msg.sample_type_ = MY_SPEC.sample_type_)) {
   } else if (is_row_sample()) {
     OZ(build_row_sample_piece_msg(expected_range_count, piece_msg));
@@ -559,7 +521,6 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxTransmitSpec::register_to_datahub(ctx))) {
-    LOG_WARN("failed to register init channel msg", K(ret));
   } else if (ObPQDistributeMethod::RANGE == dist_method_) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
       ret = OB_ERR_UNEXPECTED;
@@ -573,7 +534,6 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
           new (buf)ObDynamicSampleWholeMsg::WholeMsgProvider();
         ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
         if (OB_FAIL(sqc_ctx.add_whole_msg_provider(id_, dtl::DH_DYNAMIC_SAMPLE_WHOLE_MSG, *provider))) {
-          LOG_WARN("fail add whole msg provider", K(ret));
         } else {
           char *chunk_buf = (char *)ctx.get_allocator().alloc(sizeof(ObChunkDatumStore));
           if (OB_ISNULL(chunk_buf)) {
@@ -583,10 +543,8 @@ int ObPxDistTransmitSpec::register_to_datahub(ObExecContext &ctx) const
             ObChunkDatumStore *sample_store = new (chunk_buf) ObChunkDatumStore("DYN_SAMPLE_CTX");
             if (OB_FAIL(sample_store->init(0,
                   ObCtxIds::DEFAULT_CTX_ID, "DYN_SAMPLE_CTX", false/*enable dump*/))) {
-              LOG_WARN("init sample chunk store failed", K(ret));
             } else if (OB_FAIL(ctx.get_sqc_handler()->get_sqc_proxy().
                   get_piece_sample_msg().row_stores_.push_back(sample_store))) {
-              LOG_WARN("fail to push back sample store", K(ret));
             }
             if (OB_FAIL(ret) && nullptr != sample_store) {
               sample_store->~ObChunkDatumStore();

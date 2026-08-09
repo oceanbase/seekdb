@@ -47,9 +47,7 @@ int ObMdsTableMgr::init(ObLS *ls)
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(ERROR, "invalid ls when init mds table mgr", KR(ret), KPC(ls), KPC(this));
   } else if (OB_FAIL(ls->get_tx_svr()->register_common_checkpoint(checkpoint::MDS_TABLE_TYPE, this))) {
-    MDS_LOG(WARN, "register common checkpoint failed", KR(ret), KPC(this));
   } else if (OB_FAIL(mds_table_map_.init("MdsTableMgr"))) {
-    MDS_LOG(ERROR, "fail to init mds table map", KR(ret), KPC(ls), KPC(this));
   } else {
     ls_ = ls;
     is_inited_ = true;
@@ -67,7 +65,6 @@ int ObMdsTableMgr::reset()
   ref_cnt_ = 0;
   ls_ = nullptr;
   if (OB_FAIL(mds_table_map_.reset())) {
-    MDS_LOG(WARN, "fail to reset mds_table_map", KR(ret));
   }
   return ret;
 }
@@ -88,7 +85,6 @@ int ObMdsTableMgr::register_to_mds_table_mgr(MdsTableBase *p_mds_table)
     MDS_LOG(ERROR, "invalid mdstable handle", KR(ret), KP(p_mds_table));
   } else if (FALSE_IT(tablet_id = p_mds_table->get_tablet_id())) {
   } else if (OB_FAIL(mds_table_map_.insert(tablet_id, p_mds_table))) {
-    MDS_LOG(ERROR, "fail to insert mds table to map", KR(ret), KPC(p_mds_table));
   } else {
     MDS_LOG(INFO, "register to mds table mgr success", KR(ret), KPC(p_mds_table));
   }
@@ -113,7 +109,6 @@ int ObMdsTableMgr::unregister_from_mds_table_mgr(MdsTableBase *p_mds_table)
     MDS_LOG(ERROR, "invalid mdstable handle", KR(ret), KP(p_mds_table));
   } else if (FALSE_IT(tablet_id = p_mds_table->get_tablet_id())) {
   } else if (OB_FAIL(mds_table_map_.erase_if(tablet_id, op))) {
-    MDS_LOG(WARN, "fail to erase kv", KR(ret), K(tablet_id));
   } else {
     MDS_LOG(INFO, "unregister success", KR(ret), KPC(p_mds_table));
   }

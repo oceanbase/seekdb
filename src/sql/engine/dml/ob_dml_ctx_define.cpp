@@ -50,7 +50,6 @@ OB_DEF_DESERIALIZE(ObTriggerColumnsInfo)
   OB_UNIS_DECODE(flags_count);
   if (flags_count > 0) {
     if (OB_FAIL(init(flags_count))) {
-      LOG_WARN("failed to init trigger column infos", K(ret));
     } else {
       OB_UNIS_DECODE_ARRAY(flags_, flags_count);
       count_ = flags_count;

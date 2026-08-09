@@ -48,14 +48,12 @@ int ObExprZipf::ObExprZipfCtx::initialize(ObEvalCtx &ctx, const ObExpr &expr)
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "zipf second argument. must be a constant expression between 1 and 16777215 inclusive");
   } else if (OB_FAIL(probe_cp_.reserve(n))) {
-    LOG_WARN("fail allocate memory", K(ret), K(n));
   } else {
     double acc_sum = 0.0;
     for (int64_t i = 1; OB_SUCC(ret) && i <= n; ++i) {
       double f = 1.0 / pow(i, alpha);
       acc_sum += f;
       if (OB_FAIL(probe_cp_.push_back(acc_sum))) {
-        LOG_WARN("fail push value", K(acc_sum), K(f), K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < n; ++i) {
@@ -112,16 +110,13 @@ int ObExprZipf::eval_next_value(const ObExpr &expr,
   ObExecContext &exec_ctx = ctx.exec_ctx_;
 
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-      LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_ISNULL(zipf_ctx = static_cast<ObExprZipfCtx *>(
               exec_ctx.get_expr_op_ctx(op_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, zipf_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
     } else if (OB_ISNULL(zipf_ctx)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("zipf ctx is NULL", K(ret));
     } else if (OB_FAIL(zipf_ctx->initialize(ctx, expr))) {
-      LOG_WARN("fail init zipf context", K(ret));
     }
   }
 
@@ -133,7 +128,6 @@ int ObExprZipf::eval_next_value(const ObExpr &expr,
       int64_t	seed = rand_val.get_int();
       int64_t next_value_res = 0;
       if (OB_FAIL(zipf_ctx->generate_next_value(seed, next_value_res))) {
-        LOG_WARN("fail generate next zipf value", K(ret), K(seed));
       } else {
         res_datum.set_int(next_value_res);
       }

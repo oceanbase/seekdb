@@ -131,7 +131,6 @@ int LSNAllocator::inc_update_last_log_info(const LSN &lsn, const int64_t log_id,
         } else if (CAS128(&lsn_ts_meta_, last, next)) {
           log_id_base_ = log_id;
           scn_base_ = scn.get_val_for_logservice();
-          PALF_LOG(TRACE, "inc_update_last_log_info success", K(lsn), K(scn), K(log_id));
         } else {
           ret = OB_ERR_UNEXPECTED;
           PALF_LOG(ERROR, "CAS128 failed, unexpected", K(ret));
@@ -231,8 +230,6 @@ SCN LSNAllocator::get_max_scn() const
     max_scn = scn_base_ + last.scn_delta_;
     int ret = OB_SUCCESS;
     if (OB_FAIL(result.convert_for_logservice(max_scn))) {
-      PALF_LOG(ERROR, "failed to convert_for_logservice", K(max_scn),
-               K(scn_base_), K(last.scn_delta_));
     }
   }
   return result;
@@ -510,11 +507,8 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
 
           uint64_t scn_val = scn_base_ + output_next_scn_delta;
           if (OB_FAIL(scn.convert_for_logservice(scn_val))) {
-            PALF_LOG(ERROR, "failed to convert scn", K(ret), K(base_scn), K(scn));
           }
 
-          PALF_LOG(TRACE, "alloc_lsn_ts succ", K(ret), K(base_scn), K(size), K(lsn), K(last.lsn_val_),
-               K(next.lsn_val_), "next.is_need_cut", next.is_need_cut_, K(log_id), K(scn));
           break;
         } else {
           PAUSE();

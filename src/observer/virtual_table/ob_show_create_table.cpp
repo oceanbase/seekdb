@@ -50,12 +50,10 @@ int ObShowCreateTable::inner_get_next_row(common::ObNewRow *&row)
     const ObTableSchema *table_schema = NULL;
     uint64_t show_table_id = OB_INVALID_ID;
     if (OB_FAIL(calc_show_table_id(show_table_id))) {
-      SERVER_LOG(WARN, "fail to calc show table id", K(ret), K(show_table_id));
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_table_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this table is used for show clause, can't be selected");
     } else if (OB_FAIL(sql_schema_guard_.get_table_schema( show_table_id, table_schema))) {
-      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
@@ -66,10 +64,7 @@ int ObShowCreateTable::inner_get_next_row(common::ObNewRow *&row)
       SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_table_id));
     } else {
       if (OB_FAIL(fill_row_cells_with_retry(show_table_id, *table_schema))) {
-        SERVER_LOG(WARN, "fail to fill row cells", K(ret),
-                  K(show_table_id), K(table_schema->get_table_name_str()));
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-        SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -184,9 +179,7 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "table_def_buf is null", K(ret), K(table_def_buf_size));
   } else if (OB_FAIL(session_->get_show_ddl_in_compat_mode(strict_mode))) {
-    SERVER_LOG(WARN, "failed to get _show_ddl_in_compat_mode", K(ret));
   } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
-    SERVER_LOG(WARN, "failed to get sql quote show create", K(ret));
   } else {
     IS_ANSI_QUOTES(session_->get_sql_mode(), ansi_quotes);
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
@@ -217,8 +210,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                                                             TZ_INFO(session_),
                                                             false,
                                                             session_->get_sql_mode()))) {
-              SERVER_LOG(WARN, "Generate view definition failed",
-                         KR(ret), K(show_table_id));
             }
           } else if (table_schema.is_index_table()) {
             if (OB_FAIL(schema_printer.print_index_table_definition(show_table_id,
@@ -227,15 +218,12 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                                                                     pos,
                                                                     TZ_INFO(session_),
                                                                     false))) {
-              SERVER_LOG(WARN, "Generate index definition failed",
-                         KR(ret), K(show_table_id));
             }
           } else {
             const ObLengthSemantics default_length_semantics = session_->get_default_length_semantics();
             // get auto_increment from auto_increment service, not from table option
             ObCharsetType charset_type = CHARSET_INVALID;
             if (OB_FAIL(session_->get_character_set_results(charset_type))) {
-              LOG_WARN("get character set results failed", K(ret));
             } else if (OB_FAIL(schema_printer.print_table_definition(show_table_id,
                                                               table_def_buf,
                                                               table_def_buf_size,
@@ -245,8 +233,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                                                               false,
                                                               session_->get_sql_mode(),
                                                               charset_type))) {
-              SERVER_LOG(WARN, "Generate table definition failed",
-                        KR(ret), K(show_table_id));
             }
           }
           if (OB_SUCC(ret)) {

@@ -29,7 +29,6 @@ ObHashJoinBatch::~ObHashJoinBatch()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(close())) {
-    LOG_WARN("close hash join batch failed", K(ret));
   }
 }
 
@@ -44,7 +43,6 @@ int ObHashJoinBatch::finish_dump(bool memory_need_dump)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(chunk_row_store_.finish_add_row(memory_need_dump))) {
-    LOG_WARN("failed to finish chunk row store", K(ret));
   } else if (memory_need_dump && 0 != chunk_row_store_.get_mem_used()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect memroy is 0", K(ret), K(chunk_row_store_.get_mem_used()));
@@ -59,7 +57,6 @@ int ObHashJoinBatch::dump(bool all_dump, int64_t dumped_size)
     // ret = OB_ERR_UNEXPECTED;
     // LOG_WARN("unexpect chunk row store use memory", K(ret), K(chunk_row_store_.get_mem_used()));
   } else if (OB_FAIL(chunk_row_store_.dump(false, all_dump, dumped_size))) {
-    LOG_WARN("failed to dump data to chunk row store", K(ret));
   }
   return ret;
 }
@@ -70,7 +67,6 @@ int ObHashJoinBatch::add_row(
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *hash_store_row = nullptr;
   if (OB_FAIL(chunk_row_store_.add_row(exprs, eval_ctx, &hash_store_row))) {
-    LOG_WARN("failed to add row", K(ret));
   } else {
     stored_row = static_cast<ObHashJoinStoredJoinRow *>(hash_store_row);
     ++n_add_rows_;
@@ -98,7 +94,6 @@ int ObHashJoinBatch::add_row(
   int ret = OB_SUCCESS;
   ObChunkDatumStore::StoredRow *hash_store_row = nullptr;
   if (OB_FAIL(chunk_row_store_.add_row(*src_stored_row, &hash_store_row))) {
-    LOG_WARN("failed to add row", K(ret));
   } else {
     stored_row = static_cast<ObHashJoinStoredJoinRow *>(hash_store_row);
     ++n_add_rows_;
@@ -111,7 +106,6 @@ int ObHashJoinBatch::convert_row(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_iter_.convert_to_row(stored_row, exprs, eval_ctx))) {
-    LOG_WARN("failed to convert row", K(ret));
   }
   return ret;
 }
@@ -133,7 +127,6 @@ int ObHashJoinBatch::get_next_row(
     } else {
       stored_row = static_cast<const ObHashJoinStoredJoinRow *>(inner_stored_row);
       if (OB_FAIL(convert_row(stored_row, exprs, eval_ctx))) {
-        LOG_WARN("failed to convert row", K(ret));
       }
       ++n_get_rows_;
     }
@@ -224,7 +217,6 @@ int ObHashJoinBatch::init_progressive_iterator()
   int ret = OB_SUCCESS;
   store_iter_.reset();
   if (OB_FAIL(chunk_row_store_.begin(store_iter_))) {
-    LOG_WARN("failed to set row store iterator", K(ret));
   }
   n_get_rows_ = 0;
   return ret;
@@ -239,7 +231,6 @@ int ObHashJoinBatch::set_iterator()
     LOG_WARN("buf_mgr_ is null", K(ret));
   } else {
     if (OB_FAIL(chunk_row_store_.begin(store_iter_))) {
-      LOG_WARN("failed to set row store iterator", K(ret));
     }
   }
   n_get_rows_ = 0;
@@ -251,7 +242,6 @@ int ObHashJoinBatch::init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(chunk_row_store_.init(0,
     common::ObCtxIds::WORK_AREA, common::ObModIds::OB_ARENA_HASH_JOIN, true, 8))) {
-    LOG_WARN("failed to init chunk row store", K(ret));
   } else {
     chunk_row_store_.set_callback(buf_mgr_);
   }
@@ -299,7 +289,6 @@ int ObHashJoinBatchMgr::next_batch(ObHashJoinBatchPair &batch_pair) {
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_ITER_END;
   } else if (OB_SUCCESS != ret) {
-    LOG_WARN("fail to pop front", K(ret));
   }
   return ret;
 }
@@ -348,7 +337,6 @@ int ObHashJoinBatchMgr::remove_undumped_batch(int64_t cur_dumped_partition, int3
           K(left->get_batchno()), K(left->get_part_level()), K(left->get_batchno() >> 32),
           K(left->get_batchno() & PARTITION_IDX_MASK));
         if (OB_FAIL(batch_list_.erase(iter))) {
-          LOG_WARN("failed to remove iter", K(left->get_part_level()), K(left->get_batchno()));
         } else {
           free(left);
           free(right);
@@ -368,7 +356,6 @@ int ObHashJoinBatchMgr::remove_undumped_batch(int64_t cur_dumped_partition, int3
     }
   }
   if (0 < erase_cnt) {
-    LOG_TRACE("trace remove undumped batch", K(ret), K(erase_cnt));
   }
   if (OB_SUCC(ret) && erase_cnt + batch_list_.size() != size) {
     ret = OB_ERR_UNEXPECTED;
@@ -419,9 +406,7 @@ int ObHashJoinBatchMgr::get_or_create_batch(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(batch_list_.push_front(batch_pair))) {
-        LOG_WARN("fail to push batch pair to batch list", K(ret));
       } else {
-        LOG_DEBUG("push front batch", K(batchno), K(is_left));
         if (is_left) {
           batch = batch_pair.left_;
         } else {
@@ -470,20 +455,15 @@ int ObHashJoinPartition::init(
     LOG_WARN("buf mgr or batch_mgr is null", K(ret), K(part_level_), K(part_id_),
       K(is_left), K(buf_mgr), K(batch_mgr));
   } else if (OB_FAIL(batch_mgr_->get_or_create_batch(part_level_, part_shift, (tmp_batch_round << 32) + part_id_, is_left, batch_))) {
-    LOG_WARN("fail to get batch", K(ret), K(part_level_), K(part_id_), K(is_left));
   } else if (OB_ISNULL(batch_)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("fail to get batch ", K(ret), K(part_level_), K(part_id_), K(is_left));
   } else if (OB_FAIL(check())) {
-    LOG_WARN("fail to check partition", K(ret), K(part_level_), K(part_id_), K(is_left));
   } else if (OB_FAIL(batch_->init())) {
-    LOG_WARN("fail to init batch", K(ret), K(part_level_), K(part_id_), K(is_left));
   } else {
     batch_->get_chunk_row_store().set_callback(callback);
     batch_->get_chunk_row_store().set_dir_id(dir_id);
     batch_->get_chunk_row_store().set_io_event_observer(io_event_observer);
-    LOG_DEBUG("debug init batch", K(part_level), K(part_id_),
-      K((tmp_batch_round << 32) + part_id_), K(tmp_batch_round));
   }
   return ret;
 }
@@ -510,7 +490,6 @@ int ObHashJoinPartition::init_iterator()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("batch_ is null", K(ret));
   } else if (OB_FAIL(batch_->set_iterator())) {
-    LOG_WARN("failed to set iterator", K(ret));
   }
   return ret;
 }
@@ -522,7 +501,6 @@ int ObHashJoinPartition::init_progressive_iterator()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("batch_ is null", K(ret));
   } else if (OB_FAIL(batch_->init_progressive_iterator())) {
-    LOG_WARN("failed to set iterator", K(ret));
   }
   return ret;
 }
@@ -551,7 +529,6 @@ int ObHashJoinPartition::add_row(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_->add_row(exprs, eval_ctx, stored_row))) {
-    LOG_WARN("failed to add row to chunk row store");
   }
   return ret;
 }
@@ -573,7 +550,6 @@ int ObHashJoinPartition::add_row(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_->add_row(src_stored_row, stored_row))) {
-    LOG_WARN("failed to add row to chunk row store");
   }
   return ret;
 }
@@ -582,7 +558,6 @@ int ObHashJoinPartition::finish_dump(bool memory_need_dump)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_->finish_dump(memory_need_dump))){
-    LOG_WARN("fail to finish batch dump", K(ret));
   }
   return ret;
 }
@@ -590,7 +565,6 @@ int ObHashJoinPartition::finish_dump(bool memory_need_dump)
 int ObHashJoinPartition::dump(bool all_dump, int64_t dumped_size) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(batch_->dump(all_dump, dumped_size))) {
-    LOG_WARN("failed to dump data to chunk row store", K(ret));
   }
   return ret;
 }

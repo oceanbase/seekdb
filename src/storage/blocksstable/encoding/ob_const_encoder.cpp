@@ -47,10 +47,7 @@ int ObConstEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx),
-        K(column_index), "row count", rows.count());
   } else if (OB_FAIL(dict_encoder_.init(ctx, column_index, rows))) {
-    LOG_WARN("failed to init dict encoder", K(ret), K(ctx), K(column_index));
   } else {
     column_header_.type_ = type_;
     sc_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
@@ -72,7 +69,6 @@ int ObConstEncoder::traverse(bool &suitable)
   } else if (ht_->get_nope_list().size_ - 1 > MAX_EXCEPTION_SIZE + 1) {
     suitable = false;
   } else if (OB_FAIL(dict_encoder_.traverse(suitable))) {
-    LOG_WARN("failed to traverse dict", K(ret));
   } else {
     // FIXME: maybe we can decide whether CONST is sutiable by ?
     suitable = true;
@@ -167,7 +163,6 @@ int ObConstEncoder::store_meta_without_dict(ObBufferWriter &buf_writer)
     int64_t size = sizeof(ObConstMetaHeader);
     if (desc_.has_null_ || desc_.has_nope_) { // null or nope
       if (OB_FAIL(buf_writer.advance_zero(size))) {
-        LOG_WARN("failed to advance buf writer", K(ret), K(size));
       } else {
         const_meta_header_->reset();
         const_meta_header_->count_ = 0;
@@ -178,14 +173,11 @@ int ObConstEncoder::store_meta_without_dict(ObBufferWriter &buf_writer)
       const ObDatum &datum = *const_list_header_->datum_;
       int64_t cell_len = 0;
       if (OB_FAIL(get_cell_len(datum, cell_len))) {
-        LOG_WARN("failed to get cell len", K(ret), K(datum));
       } else {
         size += cell_len;
         buf += sizeof(ObConstMetaHeader);
         if (OB_FAIL(buf_writer.advance_zero(size))) {
-          LOG_WARN("failed to advance buf writer", K(ret), K(size));
         } else if (OB_FAIL(store_value(datum, buf))) {
-          LOG_WARN("failed to store value", K(ret), K(datum));
         } else {
           const_meta_header_->reset();
           const_meta_header_->count_ = 0;
@@ -194,7 +186,6 @@ int ObConstEncoder::store_meta_without_dict(ObBufferWriter &buf_writer)
         }
       }
     }
-    LOG_DEBUG("const meta header", K_(column_index), K_(*const_meta_header));
   }
   return ret;
 }
@@ -277,7 +268,6 @@ int ObConstEncoder::get_encoding_store_meta_need_space(int64_t &need_size) const
     const ObDatum &datum = *const_list_header_->datum_;
     int64_t cell_len = 0;
     if (OB_FAIL(get_cell_len(datum, cell_len))) {
-      LOG_WARN("failed to get cell len", K(ret), K(datum));
     } else {
       need_size = cell_len + 2 * sizeof(ObConstMetaHeader);
     }
@@ -286,7 +276,6 @@ int ObConstEncoder::get_encoding_store_meta_need_space(int64_t &need_size) const
         + count_ * (row_id_byte_ + 1);
     int64_t dict_encoder_need_size = 0;
     if (OB_FAIL(dict_encoder_.get_encoding_store_meta_need_space(dict_encoder_need_size))) {
-      LOG_WARN("failed to get_encoding_store_meta_need_space", K(ret));
     } else {
       need_size += dict_encoder_need_size;
     }
@@ -303,7 +292,6 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
     LOG_WARN("not init", K(ret));
   } else if (0 == count_) {
     if (OB_FAIL(store_meta_without_dict(buf_writer))) {
-      LOG_WARN("failed to store meta without dict", K(ret));
     }
   } else {
     const int64_t ref_byte = 1;
@@ -312,14 +300,12 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
     int64_t size = sizeof(ObConstMetaHeader)
         + count_ * (row_id_byte_ + ref_byte);
     if (OB_FAIL(buf_writer.advance_zero(size))) {
-      LOG_WARN("failed to advance buf_writer", K(ret), K(size));
     } else {
       const_meta_header_->reset();
       const_meta_header_->offset_ = static_cast<uint16_t>(size);
       const_meta_header_->count_ = static_cast<uint8_t>(count_);
       const_meta_header_->row_id_byte_ = row_id_byte_ & 0x7;
       if (OB_FAIL(dict_encoder_.store_meta(buf_writer))) {
-        LOG_WARN("failed to store dict meta", K(ret));
       } else {
         // store_meta might recalculate dict_ref for all nodes in ht,
         // if dict needs to be sorted
@@ -330,9 +316,7 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
         ObIntegerArrayGenerator row_id_gen;
         ObIntegerArrayGenerator dict_ref_gen;
         if (OB_FAIL(dict_ref_gen.init(buf, ref_byte))) {
-          LOG_WARN("failed to init dict_ref_gen", K(ret));
         } else if (OB_FAIL(row_id_gen.init(buf + count_ * ref_byte, row_id_byte_))) {
-          LOG_WARN("failed to init row_id_gen", K(ret));
         } else {
           const ObEncodingHashNode *node_list = ht_->get_node_list();
           int64_t idx = 0;
@@ -354,7 +338,6 @@ int ObConstEncoder::store_meta(ObBufferWriter &buf_writer)
         }
       }
     }
-    LOG_DEBUG("test const meta header", K_(column_index), K_(*const_meta_header));
   }
   return ret;
 }

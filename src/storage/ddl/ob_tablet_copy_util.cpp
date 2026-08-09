@@ -49,7 +49,6 @@ int ObTabletCopyUtil::get_clipped_storage_schema_on_demand(
   } else if (!clipped_schemas_map.created() && OB_FAIL(clipped_schemas_map.create(8/*bucket_num*/, "ClippedSchema"))) {
     LOG_WARN("create clipped schema map failed", K(ret));
   } else if (OB_FAIL(sstable.get_meta(meta_handle))) {
-    LOG_WARN("get sstable meta failed", K(ret), K(sstable));
   } else {
     int64_t schema_stored_cols_cnt = 0;
     ObStorageSchema *target_storage_schema = nullptr;
@@ -71,9 +70,7 @@ int ObTabletCopyUtil::get_clipped_storage_schema_on_demand(
           latest_schema/*old_schema*/,
           false/*skip_column_info*/,
           schema_stored_cols_cnt))) {
-        LOG_WARN("init storage schema failed", K(ret), K(schema_stored_cols_cnt));
       } else if (OB_FAIL(clipped_schemas_map.set_refactored(table_key, target_storage_schema))) {
-        LOG_WARN("set clipped schema failed", K(ret), K(table_key));
       } else {
         target_storage_schema->schema_version_ = meta_handle.get_sstable_meta().get_schema_version();
         target_storage_schema->progressive_merge_round_ = meta_handle.get_sstable_meta().get_progressive_merge_round();
@@ -117,9 +114,7 @@ int ObTabletCopyUtil::check_need_fill_empty_sstable(
   if (is_minor_sstable) {
     if (OB_FAIL(ObDDLStorageUtil::ddl_get_tablet(ls, dst_tablet_id, dst_tablet_handle,
         ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-      LOG_WARN("get tablet failed", K(ret), K(dst_tablet_id));
     } else if (OB_FAIL(dst_tablet_handle.get_obj()->fetch_table_store(table_store_handle))) {
-      LOG_WARN("fetch table store failed", K(ret), K(dst_tablet_id));
     } else {
       ObITable *first_dst_table = table_store_handle.get_member()->get_minor_sstables().get_boundary_table(false/*is_last*/);
       const share::SCN dst_start_scn = nullptr != first_dst_table
@@ -150,7 +145,6 @@ int ObTabletCopyUtil::build_create_empty_sstable_param(
       table_key.get_end_scn()/*start_scn*/,
       end_scn,
       meta))) {
-    LOG_WARN("init empty sstable param failed", K(ret), K(meta), K(table_key), K(dst_tablet_id), K(end_scn));
   }
   return ret;
 }

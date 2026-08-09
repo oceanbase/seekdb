@@ -51,7 +51,6 @@ int ObAllVirtualPsStat::fill_cells(ObPsCache &ps_cache)
       case share::ALL_VIRTUAL_PS_STAT_CDE::MEM_HOLD: {
         int64_t mem_total = 0;
         if (OB_FAIL(ps_cache.mem_total(mem_total))) {
-          SERVER_LOG(WARN, "ps_cache.mem_total failed", K(ret));
         } else {
           cells[i].set_int(mem_total);
         }
@@ -78,13 +77,9 @@ int ObAllVirtualPsStat::inner_get_next_row()
     SERVER_MODULE_SCOPE {
       ObPsCache *ps_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
       if (OB_ISNULL(ps_cache)) {
-        SERVER_LOG(DEBUG, "ps_cache is NULL, ignore this", K(ret));
       } else if (false == ps_cache->is_inited()) {
-        SERVER_LOG(DEBUG, "ps_cache is not init, ignore this", K(ret));
       } else if (OB_FAIL(fill_cells(*ps_cache))) {
-        SERVER_LOG(WARN, "fill_cells failed", K(ret));
       } else {
-        SERVER_LOG(DEBUG, "fill_cells succeed");
       }
     }
     // ignore error

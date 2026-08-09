@@ -68,7 +68,6 @@ int ObExprConcatWs::calc_result_typeN(ObExprResType &type,
     types[0].set_calc_type(type.get_type());
     type.set_length(len);
     if (OB_FAIL(aggregate_charsets_for_string_result(type, types, param_num, type_ctx))) {
-      LOG_WARN("aggregate_charsets_for_string_result failed", K(ret));
     } else {
       for (int64_t i = 0; i < param_num; i++) {
         types[i].set_calc_collation_type(type.get_collation_type());
@@ -177,7 +176,6 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
         for (int64_t i = 1; OB_SUCC(ret) && i < words.count(); ++i) {
           const ObString &word = words.at(i);
           if (OB_FAIL(concat_ws(sep_str, word, alloc_len, &res_buf, buf_pos))) {
-            LOG_WARN("concat ws failed", K(ret), K(sep_str), K(word), K(i));
           }
         }
         if (OB_SUCC(ret)) {
@@ -205,7 +203,6 @@ int ObExprConcatWs::calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObSEArray<ObExpr*, 32> words;
 
   if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, temp_allocator, sep_datum, sep_expr->datum_meta_, sep_expr->obj_meta_.has_lob_header(), sep_str))) {
-    LOG_WARN("fail to get real data.", K(ret), K(sep_datum));
   }
 
   for (int64_t i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
@@ -217,7 +214,6 @@ int ObExprConcatWs::calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(calc_text(expr, ctx, sep_str, words, temp_allocator, res))) {
-    LOG_WARN("calc_text fail", K(ret), K(expr), K(words), K(sep_str));
   }
   return ret;
 }
@@ -244,7 +240,6 @@ int ObExprConcatWs::calc_text(
       ObLobLocatorV2 locator(v.get_string(), word_expr->obj_meta_.has_lob_header());
       int64_t lob_data_byte_len = 0;
       if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
-        LOG_WARN("get lob data byte length failed", K(ret), K(locator));
       } else {
         res_len += lob_data_byte_len;
       }
@@ -261,7 +256,6 @@ int ObExprConcatWs::calc_text(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("res_len is less than zero", K(ret), K(res_len));
   } else if (OB_FAIL(output_result.init(res_len))) {
-    LOG_WARN("output_result init failed", K(ret), K(res_len));
   } else {
     int64_t append_data_len = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < words.count(); i++) {
@@ -276,12 +270,10 @@ int ObExprConcatWs::calc_text(
       ObString src_block_data;
       if (OB_FAIL(ObTextStringHelper::build_text_iter(
               input_iter, ctx.exec_ctx_, &temp_allocator))) {
-        LOG_WARN("init input_iter fail", K(ret), K(input_iter));
       }
       while (OB_SUCC(ret)
               && (state = input_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
         if (OB_FAIL(output_result.append(src_block_data))) {
-          LOG_WARN("output_result append fail", K(ret), K(src_block_data));
         } else {
           append_data_len += src_block_data.length();
         }
@@ -298,7 +290,6 @@ int ObExprConcatWs::calc_text(
       } else if (i == words.count() - 1) {
         // last word is not need sep_str
       } else if (OB_FAIL(output_result.append(sep_str))) {
-        LOG_WARN("output_result append sep fail", K(ret), K(sep_str));
       } else {
         append_data_len += sep_str.length();
       }
@@ -325,12 +316,10 @@ int ObExprConcatWs::calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, sep))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (sep->is_null()) {
     res.set_null();
   } else if (ob_is_text_tc(res_type)) {
     if (OB_FAIL(calc_text(expr, ctx, res))) {
-      LOG_WARN("calc concat text ws failed", K(ret));
     }
   } else {
     ObSEArray<ObString, 32> words;
@@ -348,7 +337,6 @@ int ObExprConcatWs::calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
         const ObString &sep_str = expr.locate_param_datum(ctx, 0).get_string();
         ObExprStrResAlloc res_alloc(expr, ctx);
         if (OB_FAIL(calc(sep_str, words, res_alloc, res_str))) {
-          LOG_WARN("calc concat ws failed", K(ret));
         } else {
           res.set_string(res_str);
         }

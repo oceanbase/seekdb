@@ -52,13 +52,10 @@ int ObLogFunctionTable::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(generate_access_exprs())) {
-    LOG_WARN("failed to generate access exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (NULL != value_expr_ && OB_FAIL(all_exprs.push_back(value_expr_))) {
     LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -70,14 +67,12 @@ int ObLogFunctionTable::allocate_expr_post(ObAllocExprContext &ctx)
   for (int64_t i = 0; OB_SUCC(ret) && i < access_exprs_.count(); ++i) {
     ObRawExpr *value_col = access_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
-      LOG_WARN("makr expr produced failed", K(ret));
     } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
       LOG_WARN("add expr no duplicate key failed", K(ret));
     } else { /*do nothing*/ }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
-      LOG_WARN("failed to allocate expr post", K(ret));
     }
   }
   return ret;
@@ -88,7 +83,6 @@ int ObLogFunctionTable::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else if (OB_ISNULL(get_value_expr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null value expr", K(ret));

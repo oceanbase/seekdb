@@ -80,7 +80,6 @@ int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
                                                         params.session_info_,
                                                         params.allocator_,
                                                         table_def))) {
-      LOG_WARN("failed to resolve values table from inlist", K(ret));
     } else if (OB_FAIL(resolve_subquery_from_values_table(params.stmt_factory_,
                                                           params.session_info_,
                                                           params.allocator_,
@@ -90,7 +89,6 @@ int ObInListResolver::resolve_inlist(ObInListInfo &inlist_info)
                                                           params.is_prepare_protocol_ && params.is_prepare_stage_,
                                                           column_cnt,
                                                           inlist_info.in_list_expr_))) {
-      LOG_WARN("failed to alloc and init values stmt", K(ret));
     }
   }
   return ret;
@@ -139,7 +137,6 @@ int ObInListResolver::resolve_values_table_from_inlist(const ParseNode *in_list,
                                                      allocator, is_prepare_stage, is_called_in_sql, *table_def))) {
     LOG_WARN("failed to resolve access obj values table", K(ret));
   } else if (OB_FAIL(cur_resolver_->estimate_values_table_stats(*table_def))) {
-    LOG_WARN("failed to estimate values table stats", K(ret));
   }
   return ret;
 }
@@ -162,7 +159,6 @@ int ObInListResolver::resolve_subquery_from_values_table(ObStmtFactory *stmt_fac
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(stmt_factory->create_stmt(subquery))) {
-    LOG_WARN("failed to create stmt", K(ret));
   } else if (OB_ISNULL(subquery)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create stmt success, but stmt is null");
@@ -176,17 +172,13 @@ int ObInListResolver::resolve_subquery_from_values_table(ObStmtFactory *stmt_fac
     query_ref->set_is_set(true);
     query_ref->set_output_column(column_cnt);
     if (OB_FAIL(subquery->set_stmt_id())) {
-      LOG_WARN("fail to set stmt id", K(ret));
     } else if (OB_FAIL(ObResolverUtils::create_values_table_query(session_info, allocator,
                                                                   expr_factory, query_ctx, subquery,
                                                                   table_def))) {
-      LOG_WARN("failed to resolve values table query", K(ret));
     } else if (OB_FAIL(cur_resolver_->get_stmt()->add_subquery_ref(query_ref))) {
-      LOG_WARN("failed to add subquery reference", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; i++) {
         if (OB_FAIL(query_ref->add_column_type(table_def->column_types_.at(i)))) {
-          LOG_WARN("add column type to subquery ref expr failed", K(ret));
         }
       }
     }
@@ -217,7 +209,6 @@ int ObInListResolver::get_inlist_rewrite_info(const ParseNode &in_list,
     rewrite_info.is_valid_as_values_table_ = true;
     while (OB_SUCC(ret) && rewrite_info.param_types_.count() < column_cnt) {
       if (OB_FAIL(rewrite_info.param_types_.push_back(DistinctObjMeta()))) {
-        LOG_WARN("failed to push back empty param type", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && rewrite_info.is_valid_as_values_table_ && i < row_cnt; ++i) {
@@ -313,8 +304,6 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
              || T_EXPR_LIST != in_list.type_
              || is_need_print
              || is_in_pl_prepare) {
-    LOG_TRACE("no need rewrite inlist", 
-              K(is_root_condition), K(scope), K(in_list.type_), K(op_type), K(is_need_print));
   } else {
     if (NULL == stmt) {
       threshold = session_info->get_inlist_rewrite_threshold();
@@ -328,13 +317,11 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         const ObGlobalHint &global_hint = stmt->get_query_ctx()->get_global_hint();
         if (OB_FAIL(global_hint.opt_params_.get_integer_opt_param(
                                               ObOptParamHint::INLIST_REWRITE_THRESHOLD, threshold))) {
-          LOG_WARN("failed to get integer opt param", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (in_list.num_child_ < threshold) {
-        LOG_TRACE("check rewrite inlist threshold", K(threshold), K(in_list.num_child_));
       } else {
         is_enable = true;
       }
@@ -355,9 +342,7 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
         OB_UNLIKELY(column_cnt > 1 && in_list.children_[0]->num_child_ != column_cnt)) {
       is_enable = false;  /* delay return error code */
     } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
-      LOG_WARN("fail to get collation_connection", K(ret));
     } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-      LOG_WARN("fail to check enable decimal int", K(ret));
     } else {
       ObInListsResolverHelper helper(alloc, 
                                      param_store, 
@@ -369,7 +354,6 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
       InListRewriteInfo rewrite_info;
       for (int64_t j = 0; OB_SUCC(ret) && is_enable && j < column_cnt; ++j) {
         if (OB_FAIL(get_inlist_rewrite_info(in_list, column_cnt, j, helper, rewrite_info))) {
-          LOG_WARN("failed to get inlist const param type", K(ret));
         } else if (!rewrite_info.is_valid_as_values_table_) {
           is_enable = false;
         } else if (helper.is_prepare_stmt_ && rewrite_info.is_question_mark_) {
@@ -404,7 +388,6 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
@@ -422,7 +405,6 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
       res_type.set_result_flag(obj_param.get_result_flag());
       if (i == 0) {
         if (OB_FAIL(table_def.column_types_.push_back(res_type))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       } else {
         // is not same ObExprResType, than compute a new one
@@ -432,13 +414,10 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
         ObExprTypeCtx type_ctx;
         ObSQLUtils::init_type_ctx(session_info, type_ctx);
         if (OB_FAIL(tmp_res_types.push_back(table_def.column_types_.at(j)))) {
-          LOG_WARN("failed to push back res type", K(ret));
         } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
-          LOG_WARN("failed to push back res type", K(ret));
         } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                            &tmp_res_types.at(0), 2, type_ctx,
                            true, false, is_called_in_sql))) {
-          LOG_WARN("failed to aggregate result type for merge", K(ret));
         } else {
           table_def.column_types_.at(j) = new_res_type;
         }
@@ -482,12 +461,9 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got unexpected NULL ptr", K(ret));
   } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-    LOG_WARN("fail to check enable decimal int", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
                        enable_mysql_compatible_dates))) {
-    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     length_semantics = session_info->get_actual_length_semantics();
     timezone_info = session_info->get_timezone_info();
@@ -516,16 +492,13 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
                                                  enable_mysql_compatible_dates,
                                                  session_info->get_min_const_integer_precision(),
                                                  is_from_pl))) {
-        LOG_WARN("failed to resolve const", K(ret));
       } else if (OB_FAIL(table_def.access_objs_.push_back(obj_param))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         res_type.set_meta(obj_param.get_param_meta());
         res_type.set_accuracy(obj_param.get_accuracy());
         res_type.set_result_flag(obj_param.get_result_flag());
         if (i == 0) {
           if (OB_FAIL(table_def.column_types_.push_back(res_type))) {
-            LOG_WARN("failed to push back", K(ret));
           }
         } else if (is_prepare_stage 
                    && (ObUnknownType == res_type.get_type()
@@ -543,13 +516,10 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
           ObExprTypeCtx type_ctx;
           ObSQLUtils::init_type_ctx(session_info, type_ctx);
           if (OB_FAIL(tmp_res_types.push_back(table_def.column_types_.at(j)))) {
-            LOG_WARN("failed to push back res type", K(ret));
           } else if (OB_FAIL(tmp_res_types.push_back(res_type))) {
-            LOG_WARN("failed to push back res type", K(ret));
           } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type,
                             &tmp_res_types.at(0), 2,
                             type_ctx, true, false, is_called_in_sql))) {
-            LOG_WARN("failed to aggregate result type for merge", K(ret));
           } else {
             table_def.column_types_.at(j) = new_res_type;
           }
@@ -606,7 +576,6 @@ int ObInListResolver::merge_two_in_nodes(ObIAllocator &alloc,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to create new in node", K(ret));
     } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, src_in_node, dst_in_node))) {
-      LOG_WARN("failed to deep copy IN node", K(ret));
     } else if (FALSE_IT(dst_in_node->children_[0] = src_in_node->children_[0])) { // shallow copy left child
     } else if (OB_ISNULL(dst_in_node->children_[1] = new_node(&alloc, src_in_node->children_[1]->type_, 0))) {
       ret = OB_ERR_UNEXPECTED;
@@ -664,7 +633,6 @@ int ObInListResolver::check_can_merge_inlists(const ParseNode *last_in_node,
       LOG_WARN("fail to get param type for inlist", K(ret));
     } else if (OB_FAIL(get_inlist_rewrite_info(*cur_in_node->children_[1],
                                                column_cnt, j, helper, cur_info))) {
-      LOG_WARN("fail to get param type for inlist", K(ret));
     } else if (!last_info.is_valid_as_values_table_ 
                || !cur_info.is_valid_as_values_table_) {
       can_merge = false;  // CAN NOT merge inlists if one cannot be converted to values table
@@ -709,7 +677,6 @@ int ObInListResolver::do_merge_inlists(ObIAllocator &alloc,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to create new node", K(ret));
   } else if (OB_FAIL(deep_copy_parse_node_base(&alloc, root_node, merged_node))) {
-    LOG_WARN("failed to deep copy parse node base", K(ret));
   } else {
     merged_node->value_ = 0;  // it is necessary to set capacity to 0
     merged_node->num_child_ = 0;
@@ -776,7 +743,6 @@ int ObInListResolver::do_merge_inlists(ObIAllocator &alloc,
         // copy it to a new node and push it back to merged_node
         ParseNode *new_in_node = NULL;
         if (OB_FAIL(merge_two_in_nodes(alloc, last_in_node, new_in_node))) {
-          LOG_WARN("fail to merge in node", K(ret), K(new_in_node));
         } else if (OB_ISNULL(merged_node = push_back_child(&alloc, &parser_ret, merged_node, new_in_node))
                    || OB_FAIL(parser_ret)) {
           ret = OB_SUCCESS == parser_ret ? OB_ERR_UNEXPECTED : parser_ret;
@@ -792,7 +758,6 @@ int ObInListResolver::do_merge_inlists(ObIAllocator &alloc,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(merge_two_in_nodes(alloc, in_node, 
                                             merged_node->children_[merged_node->num_child_ - 1]))) {
-        LOG_WARN("fail to merge in node", K(ret));
       } else {
         last_in_node = merged_node->children_[merged_node->num_child_ - 1];
       }
@@ -842,10 +807,6 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
              || !is_root_condition                       // not root condition
              || NULL != resolve_ctx.secondary_namespace_ // is pl prepare stage
              ) {            
-    LOG_TRACE("no need to merge inlists", 
-              K(resolve_ctx.current_scope_), 
-              K(resolve_ctx.is_need_print_),
-              K(is_root_condition));
   } else {
     if (NULL == stmt) {
     } else if (OB_ISNULL(stmt->get_query_ctx())) {
@@ -861,9 +822,7 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
   if (OB_FAIL(ret) || !is_enable) {
   } else if (FALSE_IT(nchar_collation = session_info->get_nls_collation_nation())) {
   } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-    LOG_WARN("fail to check enable decimal int", K(ret));
   } else {
     ObInListsResolverHelper helper(alloc, 
                                    resolve_ctx.param_list_, 
@@ -873,7 +832,6 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
                                    enable_decimal_int,
                                    is_prepare_stmt);
     if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
-      LOG_WARN("fail to merge inlist", K(ret));
     }
   }
   return ret;

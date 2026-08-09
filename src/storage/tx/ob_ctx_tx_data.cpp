@@ -54,7 +54,6 @@ int ObCtxTxData::init(const int64_t abs_expire_time, ObLSTxCtxMgr *ctx_mgr, int6
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "tx table is null", KR(ret), K(*this));
     } else if (OB_FAIL(tx_table->alloc_tx_data(tx_data_guard_, true, abs_expire_time))) {
-      TRANS_LOG(WARN, "get tx data failed", KR(ret));
     } else if (OB_ISNULL(tx_data_guard_.tx_data())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "tx data is unexpected null", KR(ret));
@@ -85,14 +84,12 @@ int ObCtxTxData::insert_into_tx_table()
   WLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret));
   } else {
     ObTxTable *tx_table = nullptr;
     GET_TX_TABLE_(tx_table)
     if (OB_FAIL(ret)) {
     } else {
       if (OB_FAIL(insert_tx_data_(tx_table, tx_data_guard_.tx_data()))) {
-        TRANS_LOG(WARN, "insert tx data failed", K(ret), K(*this));
       } else {
         read_only_ = true;
       }
@@ -119,14 +116,12 @@ int ObCtxTxData::recover_tx_data(ObTxData *tmp_tx_data)
   GET_TX_TABLE_(tx_table);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else if (OB_ISNULL(tmp_tx_data)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(tmp_tx_data));
   } else {
     tx_data_guard_.reset();
     if (OB_FAIL(tx_data_guard_.init(tmp_tx_data))) {
-      TRANS_LOG(WARN, "init tx data guard failed", KR(ret), KPC(tmp_tx_data));
     } else {
       recovered_from_tx_table_ = true;
     }
@@ -140,9 +135,7 @@ int ObCtxTxData::free_tmp_tx_data(ObTxData *&tmp_tx_data)
   RLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else if (OB_FAIL(revert_tx_data_(tmp_tx_data))) {
-    TRANS_LOG(WARN, "free tx data failed", K(ret), KPC(tmp_tx_data), K(*this));
   }
 
   return ret;
@@ -166,7 +159,6 @@ int ObCtxTxData::set_state(int32_t state)
   RLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else {
     ATOMIC_STORE(&(tx_data_guard_.tx_data()->state_), state);
   }
@@ -181,13 +173,9 @@ int ObCtxTxData::add_abort_op(SCN op_scn)
 
   ObTxOp abort_op;
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", KR(ret), K(*this));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->init_tx_op())) {
-    TRANS_LOG(WARN, "init_tx_op failed", KR(ret));
   } else if (OB_FAIL(abort_op.init(ObTxOpCode::ABORT_OP, op_scn, &DEFAULT_TX_DUMMY_OP, 0))) {
-    TRANS_LOG(WARN, "init_tx_op failed", KR(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->op_guard_->add_tx_op(abort_op))) {
-    TRANS_LOG(WARN, "add_tx_op failed", KR(ret));
   }
   return ret;
 }
@@ -197,11 +185,8 @@ int ObCtxTxData::reserve_tx_op_space(int64_t count)
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", KR(ret), K(*this));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->init_tx_op())) {
-    TRANS_LOG(WARN, "init_tx_op failed", KR(ret));
   } else if (OB_FAIL(tx_data_guard_.tx_data()->op_guard_->reserve_tx_op_space(count))) {
-    TRANS_LOG(WARN, "reserve tx_op space failed", KR(ret));
   }
   return ret;
 }
@@ -212,7 +197,6 @@ int ObCtxTxData::set_commit_version(const SCN &commit_version)
   RLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else {
     tx_data_guard_.tx_data()->commit_version_.atomic_store(commit_version);
   }
@@ -227,7 +211,6 @@ int ObCtxTxData::set_start_log_ts(const SCN &start_ts)
   RLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else {
     tx_data_guard_.tx_data()->start_scn_.atomic_store(start_ts);
   }
@@ -241,7 +224,6 @@ int ObCtxTxData::set_end_log_ts(const SCN &end_scn)
   RLockGuard guard(lock_);
 
   if (OB_FAIL(check_tx_data_writable_())) {
-    TRANS_LOG(WARN, "tx data is not writeable", K(ret), K(*this));
   } else {
     tx_data_guard_.tx_data()->end_scn_.atomic_store(end_scn);
   }
@@ -349,7 +331,6 @@ int ObCtxTxData::insert_tx_data_(ObTxTable *tx_table, ObTxData *tx_data)
     TRANS_LOG(INFO, "tx_data is nullptr, no need to insert", KP(tx_data), K(*this));
     // no need to insert, do nothing
   } else if (OB_FAIL(tx_table->insert(tx_data))) {
-    TRANS_LOG(WARN, "insert into tx_table failed", K(ret), KPC(tx_data));
   }
 
   return ret;

@@ -44,9 +44,7 @@ int ObReadRow::iterate_row(
   int ret = OB_SUCCESS;
   bitmap.reuse();
   if (OB_FAIL(iterate_row_key(key, row))) {
-    TRANS_LOG(WARN, "Failed to iterate_row_key", K(ret), K(key));
   } else if (OB_FAIL(iterate_row_value_(read_info, value_iter, row, bitmap, row_scn))) {
-    TRANS_LOG(WARN, "Failed to iterate_row_value", K(ret), K(key));
   } else {
     if (!bitmap.is_empty()) {
       bitmap.set_nop_datums(row.storage_datums_);
@@ -63,7 +61,6 @@ int ObReadRow::iterate_row_key(const ObStoreRowkey &rowkey, ObDatumRow &row)
   const ObObj *obj_ptr = rowkey.get_obj_ptr();
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey.get_obj_cnt(); ++i) {
     if (OB_FAIL(row.storage_datums_[i].from_obj_enhance(obj_ptr[i]))) {
-      TRANS_LOG(WARN, "Failed to transform obj to datum", K(ret), K(i), K(rowkey));
     } else if (OB_UNLIKELY(row.storage_datums_[i].is_nop_value())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "col in rowkey is unexpected nop", K(ret), K(i), K(rowkey));
@@ -91,7 +88,6 @@ int ObReadRow::iterate_row_value_(const ObITableReadInfo &read_info,
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "trans node is null", K(ret), KP(tnode));
     } else if (OB_FAIL(fill_in_row_with_tx_node_(read_info, value_iter, tx_node, row, bitmap, row_scn, read_finished))) {
-      STORAGE_LOG(WARN, "fill in row with tx node failed", KR(ret));
     }
   }
 
@@ -129,11 +125,9 @@ int ObReadRow::fill_in_row_with_tx_node_(const storage::ObITableReadInfo &read_i
     if (row.snapshot_version_ == INT64_MAX) {
       row.set_have_uncommited_row();
     }
-    TRANS_LOG(DEBUG, "row snapshot version", K(row.snapshot_version_));
 
     if (OB_FAIL(
             reader.read_memtable_row(mtd->buf_, mtd->buf_len_, read_info, row, bitmap, read_finished, row_header))) {
-      TRANS_LOG(WARN, "Failed to read memtable row", K(ret));
     } else if (0 == row_scn) {
       const ObTransID snapshot_tx_id = value_iter.get_snapshot_tx_id();
       const ObTransID reader_tx_id = value_iter.get_reader_tx_id();
@@ -147,7 +141,6 @@ int ObReadRow::fill_in_row_with_tx_node_(const storage::ObITableReadInfo &read_i
     }
     if (OB_SUCC(ret) && ObDmlFlag::DF_INSERT == mtd->dml_flag_) {
       read_finished = true;
-      STORAGE_LOG(DEBUG, "chaser debug iter memtable row", KPC(mtd), K(read_finished));
     }
   }
   return ret;

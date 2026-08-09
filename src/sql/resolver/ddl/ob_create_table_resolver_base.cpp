@@ -47,7 +47,6 @@ int ObCreateTableResolverBase::resolve_partition_option(
       if (OB_FAIL(ret)) {
       } else if (!is_partition_option_node_with_opt) {
         if (OB_FAIL(resolve_partition_node(create_table_stmt, node, table_schema))) {
-          LOG_WARN("failed to resolve partition option", KR(ret));
         }
       } else if (T_PARTITION_OPTION == node->type_) {
         if (node->num_child_ < 1 || node->num_child_ > 2) {
@@ -59,7 +58,6 @@ int ObCreateTableResolverBase::resolve_partition_option(
         } else {
           ParseNode *partition_node = node->children_[0]; // ordinary partition node
           if (OB_FAIL(resolve_partition_node(create_table_stmt, partition_node, table_schema))) {
-            LOG_WARN("failed to resolve partition option", KR(ret));
           }
         }
       } else {
@@ -116,11 +114,9 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected store format type", K_(store_format), K(ret));
         } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
-          LOG_WARN("fail to get_row_store_type", K(ret), K(store_format_));
         }
       }
     } else if (OB_FAIL(ObDDLResolver::get_row_store_type(store_format_, row_store_type_))) {
-      LOG_WARN("fail to get_row_store_type", K(ret),  K(store_format_));
     }
 
     if (OB_SUCC(ret)) {
@@ -137,7 +133,6 @@ int ObCreateTableResolverBase::set_table_option_to_schema(ObTableSchema &table_s
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("default compress func name is not set in server config", K(ret));
         } else if (OB_FAIL(GCONF.default_compress_func.copy(compress_func_str, sizeof(compress_func_str)))) {
-          LOG_WARN("Failed to copy default compress func", K(ret));
         } else {
           bool found = false;
           for (int i = 0; i < ARRAYSIZEOF(common::compress_funcs) && !found; ++i) {
@@ -216,7 +211,6 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
     LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS, column_name.length(), column_name.ptr());
     SQL_RESV_LOG(WARN, "column does not exists", K(ret), K(column_name));
   } else if (OB_FAIL(check_add_column_as_pk_allowed(*col))) {
-    LOG_WARN("the column can not be primary key", K(ret));
   } else if (col->get_rowkey_position() > 0) {
     ret = OB_ERR_COLUMN_DUPLICATE;
     LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, column_name.length(), column_name.ptr());
@@ -226,11 +220,9 @@ int ObCreateTableResolverBase::add_primary_key_part(const ObString &column_name,
   } else if (OB_FALSE_IT(col->set_nullable(false))
              || OB_FALSE_IT(col->set_rowkey_position(cur_rowkey_size + 1))) {
   } else if (OB_FAIL(table_schema.set_rowkey_info(*col))) {
-    LOG_WARN("failed to set rowkey info", K(ret));
   } else if (!col->is_string_type()) {
     /* do nothing */
   } else if (OB_FAIL(col->get_byte_length(length, false))) {
-    SQL_RESV_LOG(WARN, "fail to get byte length of column", KR(ret));
   } else if (length <= 0) {
     ret = OB_ERR_WRONG_KEY_COLUMN;
     LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, column_name.length(), column_name.ptr());

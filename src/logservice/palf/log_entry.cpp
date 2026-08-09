@@ -69,8 +69,6 @@ DEFINE_SERIALIZE(LogEntry)
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf),
         K(buf_len));
   } else if (OB_FAIL(header_.serialize(buf, buf_len, new_pos))) {
-    PALF_LOG(WARN, "LogEntryHeader serialize failed",
-        K(ret), K(buf_len), K(new_pos));
   } else if (buf_len  - new_pos < data_len) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(WARN, "LogEntry buffer not enough",
@@ -91,7 +89,6 @@ DEFINE_DESERIALIZE(LogEntry)
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf),
         K(data_len));
   } else if (OB_FAIL(header_.deserialize(buf, data_len, new_pos))) {
-    PALF_LOG(WARN, "LogEntryHeader deserialize error", K(ret), K(data_len), K(new_pos));
   } else if (data_len  - new_pos < header_.get_data_len()) {
     ret = OB_BUF_NOT_ENOUGH;
   } else {

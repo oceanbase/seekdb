@@ -112,7 +112,6 @@ private:
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid args", KP(buf));
     } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, &v))) {
-      COMMON_LOG(WARN, "fail to decode_vi32", K(ret));
     } else {
       item = static_cast<T>(v);
     }

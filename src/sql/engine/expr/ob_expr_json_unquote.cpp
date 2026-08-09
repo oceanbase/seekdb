@@ -85,19 +85,15 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_ARGUMENT);
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
-    LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else {
     ObIJsonBase *j_base = NULL;
     ObString j_str = data.get_string();
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(type);
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(
             ctx.exec_ctx_, *allocator, data, meta, has_lob_header, j_str))) {
-      LOG_WARN("fail to get real data.", K(ret), K(j_str));
     } else if (ob_is_string_type(type) && (j_str.length() < 2 || j_str[0] != '"' || j_str[j_str.length() - 1] != '"')) {
       if (OB_FAIL(j_buf.reserve(j_str.length()))) {
-        LOG_WARN("failed to reserve j_buf", K(ret), K(j_str.length()));
       } else if (OB_FAIL(j_buf.append(j_str, 0))) {
-        LOG_WARN("failed: copy original string", K(ret), K(j_str));
       }
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(allocator, j_str, j_in_type,
                                                         j_in_type, j_base, 0, 
@@ -110,7 +106,6 @@ int ObExprJsonUnquote::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta met
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_TEXT_IN_PARAM);
       }
     } else if (OB_FAIL(j_base->print(j_buf, false))) {
-      LOG_WARN("failed: print json string", K(ret));
     }
   }
 
@@ -132,11 +127,9 @@ int ObExprJsonUnquote::eval_json_unquote(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ret = OB_ERR_INVALID_DATATYPE;
     LOG_WARN("error, eval json args datum failed", K(ret));
   } else if (OB_FAIL(calc(ctx, *json_datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &temp_allocator, j_buf, is_null))) {
-    LOG_WARN("fail to calc json unquote result in new engine", K(ret), K(arg->datum_meta_));
   } else if (is_null) {
     res.set_null();
   } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, j_buf))) {
-    LOG_WARN("fail to pack json result", K(ret));
   }
   return ret;
 }

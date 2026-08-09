@@ -189,8 +189,7 @@ int ObExprDiv::calc_result_type2(ObExprResType &type,
       type.set_precision(precision);
     } else if (ObCollectionSQLTC == result_tc) {
       // only support vector / int now
-      if (OB_FAIL(ObArrayExprUtils::calc_cast_type(type_, type1, type_ctx, true/*only_vector*/))) { // here only to avoid type1 cast
-        LOG_WARN("failed to calc cast type", K(ret), K(type1));
+      if (OB_FAIL(ObArrayExprUtils::calc_cast_type(type_, type1, type_ctx, true/*only_vector*/))) {
       } else {
         type.set_collection(type1.get_subschema_id());
         type2.set_calc_type(ObFloatType);
@@ -334,14 +333,12 @@ int ObExprDiv::div_number(ObObj &res,
   } else if (OB_UNLIKELY(right.get_number().is_zero())) {
     res.set_null();
   } else if (OB_FAIL(left.get_number().div_v3(right.get_number(), res_nmb, *allocator))) {
-    LOG_WARN("failed to div numbers", K(ret), K(left), K(right));
   } else {
 
     if (calc_scale >= 0) {
       //calc_scale is calc_scale ,not res_scale.
       //trunc with calc_scale and round with res_scale
       if (OB_FAIL(res_nmb.trunc(calc_scale))) {
-        LOG_WARN("failed to trunc result number", K(ret), K(res_nmb), K(calc_scale));
       }
     }
     if (OB_SUCC(ret)) {
@@ -379,7 +376,6 @@ struct ObFloatDivFunc
       LOG_WARN("float out of range", K(ret), K(left_f), K(right_f));
     } else {
       res.set_float(result_f);
-      LOG_DEBUG("succ to div float", K(left_f), K(right_f), K(result_f));
     }
     return ret;
   }
@@ -429,7 +425,6 @@ struct ObDoubleDivFunc
       } else {
         res.set_double(result_d);
       }
-      LOG_DEBUG("succ to div double", K(left_d), K(right_d), K(result_d));
     }
     return ret;
   }
@@ -468,7 +463,6 @@ struct ObNumberDivFunc
         ret = OB_DIVISION_BY_ZERO;
       } else {
         res.set_null();
-        LOG_DEBUG("divisor is equal to zero", K(l), K(ret));
       }
     } else {
       number::ObNumber lnum(l.get_number());
@@ -478,11 +472,9 @@ struct ObNumberDivFunc
       ObNumber result_num;
 
       if (OB_FAIL(lnum.div_v3(rnum, result_num, local_alloc))) {
-        LOG_WARN("add number failed", K(ret));
       } else {
         int64_t div_pi = 0;
         if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_pi))) {
-          LOG_WARN("get_div_precision_increment failed", K(ret));
         } else {
           //          const int64_t scale1 = lnum.get_scale();
           //          const int64_t scale2 = rnum.get_scale();
@@ -497,9 +489,6 @@ struct ObNumberDivFunc
           } else {
             res.set_number(result_num);
           }
-          LOG_DEBUG("finish div", K(ret), K(calc_scale),
-                    /*K(scale1), K(scale2), K(new_scale1), K(new_scale2),*/
-                    K(div_pi), K(result_num), K(lnum), K(rnum));
         }
       }
     }
@@ -636,7 +625,6 @@ struct ObDecintDivWrap : public ObArithOpWrap<Base>
         ret = OB_DIVISION_BY_ZERO;
       } else {
         res.set_null();
-        LOG_DEBUG("divisor is equal to zero", K(l), K(ret));
       }
     } else if (*reinterpret_cast<const typename Base::L_RAW_TYPE *>(l.ptr_) == 0) {
       *const_cast<typename Base::RES_RAW_TYPE *>(
@@ -826,7 +814,6 @@ int ObExprDiv::cg_expr(ObExprCGCtx &op_cg_ctx,
   rt_expr.inner_functions_ = NULL;
   rt_expr.may_not_need_raw_check_ = false;
   rt_expr.div_calc_scale_ = raw_expr.get_extra_calc_scale();
-  LOG_DEBUG("arrive here cg_expr", K(ret), K(raw_expr), K(rt_expr), K(rt_expr.div_calc_scale_));
   switch (rt_expr.datum_meta_.type_) {
     case ObFloatType: {
       SET_DIV_FUNC_PTR(div_float);

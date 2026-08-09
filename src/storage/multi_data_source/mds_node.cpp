@@ -186,9 +186,7 @@ int MdsNodeInfoForVirtualTable::assign(const MdsNodeInfoForVirtualTable &rhs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(user_key_.assign(rhs.user_key_))) {
-    MDS_LOG(WARN, "fail to copy user key", KR(ret));
   } else if (OB_FAIL(user_data_.assign(rhs.user_data_))) {
-    MDS_LOG(WARN, "fail to copy user data", KR(ret));
   } else {
     tablet_id_ = rhs.tablet_id_;
     unit_id_ = rhs.unit_id_;

@@ -121,7 +121,6 @@ int ObSysVariableMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private sys_variable manager twice", K(ret));
   } else if (OB_FAIL(sys_variable_map_.init())) {
-    LOG_WARN("init private sys_variable map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -147,9 +146,7 @@ int ObSysVariableMgr::assign(const ObSysVariableMgr &other)
     LOG_WARN("sys_variable manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(sys_variable_map_.assign(other.sys_variable_map_))) {
-      LOG_WARN("assign sys_variable map failed", K(ret));
     } else if (OB_FAIL(sys_variable_infos_.assign(other.sys_variable_infos_))) {
-      LOG_WARN("assign sys_variable infos vector failed", K(ret));
     }
   }
   return ret;
@@ -171,7 +168,6 @@ int ObSysVariableMgr::deep_copy(const ObSysVariableMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(sys_variable_info), K(ret));
       } else if (OB_FAIL(add_sys_variable(*sys_variable_info))) {
-        LOG_WARN("add sys variable failed", K(*sys_variable_info), K(ret));
       }
     }
   }
@@ -192,7 +188,6 @@ int ObSysVariableMgr::get_sys_variable_schema(
     if (OB_FAIL(sys_variable_map_.get_refactored(hash_wrap, tmp_schema))) {
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
-        LOG_DEBUG("sys_variable is not exist");
       }
     } else {
       sys_variable_schema = tmp_schema;
@@ -217,7 +212,6 @@ int ObSysVariableMgr::add_sys_variable(const ObSimpleSysVariableSchema &sys_vari
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  sys_variable_schema,
                                                  new_sys_variable_schema))) {
-    LOG_WARN("alloca sys_variable schema failed", K(ret));
   } else if (OB_ISNULL(new_sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(new_sys_variable_schema), K(ret));
@@ -226,11 +220,9 @@ int ObSysVariableMgr::add_sys_variable(const ObSimpleSysVariableSchema &sys_vari
                                         compare_sys_variable,
                                         equal_sys_variable,
                                         replaced_sys_variable))) {
-      LOG_WARN("failed to add sys_variable schema", K(ret));
   } else {
     ObSysVariableHashWrapper hash_wrapper;
     if (OB_FAIL(sys_variable_map_.set_refactored(hash_wrapper, new_sys_variable_schema, overwrite))) {
-      LOG_WARN("build sys_variable hash map failed", K(ret));
     }
   }
   if (sys_variable_infos_.count() != sys_variable_map_.item_count()) {
@@ -239,13 +231,11 @@ int ObSysVariableMgr::add_sys_variable(const ObSimpleSysVariableSchema &sys_vari
              "sys_variable map item count", sys_variable_map_.item_count());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObSysVariableMgr::rebuild_sys_variable_hashmap(sys_variable_infos_, sys_variable_map_))) {
-      LOG_WARN("rebuild sys_variable hashmap failed", K(tmp_ret));
     }
   }
   if (OB_SUCC(ret)) { //for debug
     const ObSimpleSysVariableSchema *tmp_schema = NULL;
     if (OB_FAIL(get_sys_variable_schema( tmp_schema))) {
-      LOG_WARN("fail to get sys variable schema", K(ret), K(sys_variable_schema));
     } else if (OB_ISNULL(tmp_schema)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -269,7 +259,6 @@ int ObSysVariableMgr::rebuild_sys_variable_hashmap(const SysVariableInfos &sys_v
       bool overwrite = true;
       ObSysVariableHashWrapper hash_wrapper;
       if (OB_FAIL(sys_variable_map.set_refactored(hash_wrapper, sys_variable_schema, overwrite))) {
-        LOG_WARN("build sys_variable hash map failed", K(ret));
       }
     }
   }
@@ -281,7 +270,6 @@ int ObSysVariableMgr::add_sys_variables(const common::ObIArray<ObSimpleSysVariab
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < sys_variable_schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_sys_variable(sys_variable_schemas.at(i)))) {
-      LOG_WARN("push sys_variable failed", K(ret));
     }
   }
   return ret;
@@ -294,7 +282,6 @@ int ObSysVariableMgr::del_sys_variable()
   ObSimpleSysVariableSchema *schema_to_del = NULL;
   const ObSimpleSysVariableSchema *tmp_schema = NULL;
   if (OB_FAIL(get_sys_variable_schema( tmp_schema))) {
-    LOG_WARN("fail to get sys variable schema", K(ret));
   } else if (OB_ISNULL(tmp_schema)) {
     // sys variable schema is null, no need to del
   } else if (FALSE_IT(schema_to_del = sys_variable_infos_.begin() == sys_variable_infos_.end() ? NULL : *sys_variable_infos_.begin())) {
@@ -318,7 +305,6 @@ int ObSysVariableMgr::del_sys_variable()
              "sys_variable map item count", sys_variable_map_.item_count());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObSysVariableMgr::rebuild_sys_variable_hashmap(sys_variable_infos_, sys_variable_map_))) {
-      LOG_WARN("rebuild sys_variable hashmap failed", K(tmp_ret));
     }
   }
   return ret;

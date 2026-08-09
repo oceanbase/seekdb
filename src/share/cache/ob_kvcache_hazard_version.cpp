@@ -161,7 +161,6 @@ int ObKVCacheHazardStation::init(const int64_t waiting_node_threshold, const int
     slot_num_ = slot_num;
     inited_ = true;
   }
-  COMMON_LOG(DEBUG, "Hazard station init details", K(ret), K(waiting_node_threshold_), K(slot_num_));
 
   return ret;
 }
@@ -258,7 +257,6 @@ void ObKVCacheHazardStation::release(const int64_t slot_id)
   }
 
   if (OB_FAIL(ret)) {
-    COMMON_LOG(ERROR, "Fail to release version", K(ret));
   }
 }
 
@@ -311,7 +309,6 @@ int ObKVCacheHazardStation::print_current_status() const
           } else if (OB_FAIL(ret = databuff_printf(buf, BUFLEN, ctxpos,
                   "[KVCACHE-HAZARD] i=%8ld | acquire_version=%12lu | waiting_nodes_count=%8ld | last_retire_version=%8lu |\n",
                   i, acquired_version, waiting_nodes_count, slot.get_last_retire_version()))) {
-            COMMON_LOG(WARN, "Fail to write data buf", K(ret), K(ctxpos), K(BUFLEN));
           }
         }
         if (OB_SUCC(ret)) {

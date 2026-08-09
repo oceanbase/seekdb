@@ -38,7 +38,6 @@ int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
     LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
   } else if (OB_FAIL(session->set_client_id(client_id))) {
-    LOG_WARN("failed to set client id", K(ret));
   }
   return ret;
 }
@@ -63,11 +62,9 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get wrong param in set identifier", K(ret), K(params.at(0)));
   } else if (OB_FAIL(params.at(0).get_varchar(client_id))) {
-    LOG_WARN("failed to get param", K(ret), K(params.at(0)));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(session->set_client_id(client_id))) {
-    LOG_WARN("failed to set client id", K(ret));
   }
 
   return ret;

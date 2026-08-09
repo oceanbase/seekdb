@@ -46,7 +46,6 @@ inline int ObExprInnerTrim::calc_result_type3(ObExprResType &type,
   CK(&trim_type + 1 == &trim_pattern);
   CK(&trim_type + 2 == &text);
   OZ(ObExprTrim::deduce_result_type(type, &trim_type, 3, type_ctx));
-  LOG_DEBUG("inner trim", K(type), K(text), K(trim_pattern));
 
   return ret;
 }

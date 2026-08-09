@@ -658,7 +658,6 @@ inline int ObTxDesc::get_and_inc_tx_seq(const int16_t branch,
   int ret = OB_SUCCESS;
   int64_t seq = 0;
   if (OB_FAIL(ObSequence::get_and_inc_max_seq_no(N, seq))) {
-    TRANS_LOG(ERROR, "inc max seq no failed", K(ret), K(N));
   } else {
     tx_seq = ObTxSEQ(seq - seq_base_, branch);
   }
@@ -682,7 +681,6 @@ inline int ObTxDesc::inc_and_get_tx_seq(const int16_t branch,
   int ret = OB_SUCCESS;
   int64_t seq = 0;
   if (OB_FAIL(ObSequence::inc_and_get_max_seq_no(N, seq))) {
-    TRANS_LOG(ERROR, "inc max seq no failed", K(ret), K(N));
   } else {
     tx_seq = ObTxSEQ(seq - seq_base_, branch);
   }

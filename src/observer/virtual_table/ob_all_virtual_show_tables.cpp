@@ -75,9 +75,7 @@ int ObAllVirtualShowTables::inner_open()
         const ObDatabaseSchema *db_schema = NULL;
         if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_id_,
                                                                  table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(database_id_));
         } else if (OB_FAIL(schema_guard_->get_database_schema( database_id_, db_schema))) {
-          SERVER_LOG(WARN, "Failed to get database schema", K(ret), K_(database_id));
         } else if (OB_ISNULL(db_schema)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(database_id));
@@ -194,10 +192,8 @@ int ObAllVirtualShowTables::inner_get_next_row()
               } else {
                 priv_info.reset();
                 if (OB_FAIL(session_->get_session_priv_info(priv_info))) {
-                  SERVER_LOG(WARN, "fail to get session priv info", K(ret));
                 } else if (OB_FAIL(schema_guard_->check_table_show(priv_info, session_->get_enable_role_array(), database_name_,
                                                             table_schema->get_table_name_str(), is_allow))) {
-                  SERVER_LOG(WARN, "check show table priv failed", K(ret));
                 }
               }
             }

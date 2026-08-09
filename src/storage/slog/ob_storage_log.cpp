@@ -178,11 +178,8 @@ int ObEmptyShellTabletLog::serialize(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode(buf, data_len, pos, version_))) {
-    STORAGE_LOG(WARN, "deserialize version_ failed", K(ret), KP(data_len), K(pos));
   } else if (OB_FAIL(tablet_id_.serialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tablet_id_ failed", K(ret), KP(data_len), K(pos));
   } else if (OB_FAIL(tablet_->serialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tablet failed", K(ret), KP(data_len), K(pos));
   }
 
   return ret;
@@ -195,9 +192,7 @@ int ObEmptyShellTabletLog::deserialize_id(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode(buf, data_len, pos, version_))) {
-    STORAGE_LOG(WARN, "deserialize version_ failed", K(ret), KP(data_len), K(pos));
   } else if (OB_FAIL(tablet_id_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tablet_id_ failed", K(ret), KP(data_len), K(pos));
   }
   return ret;
 }
@@ -210,11 +205,8 @@ int ObEmptyShellTabletLog::deserialize(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode(buf, data_len, pos, version_))) {
-    STORAGE_LOG(WARN, "deserialize version_ failed", K(ret), KP(data_len), K(pos));
   } else if (OB_FAIL(tablet_id_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tablet_id_ failed", K(ret), KP(data_len), K(pos));
   } else if (OB_FAIL(tablet_->deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tablet failed", K(ret), KP(data_len), K(pos));
   }
 
   return ret;

@@ -82,13 +82,9 @@ int ObExprSleep::get_usec(const number::ObNumber &nmb, int64_t &value, ObIAlloca
     uint64_t tmp = 0;
     number::ObNumber tmp_nmb;
     if (OB_FAIL(other.from(nsecs_per_sec, alloc))) {
-      LOG_WARN("copy nmb failed", K(ret), K(nmb));
     } else if (OB_FAIL(tmp_nmb.from(nmb, alloc))) {
-      LOG_WARN("copy nmb failed", K(ret), K(nmb));
     } else if (OB_FAIL(tmp_nmb.round(SCALE_OF_SECOND))) {
-      LOG_WARN("round nmb failed", K(ret), K(tmp_nmb));
     } else if (OB_FAIL(tmp_nmb.mul(other, res, alloc))) {
-      LOG_WARN("mul op failed", K(ret), K(other), K(tmp_nmb));
     } else if (!res.is_valid_uint64(tmp)) { //based on the behaviour of mysql.
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("out of range", K(ret), K(res), K(tmp));
@@ -108,7 +104,6 @@ int ObExprSleep::eval_sleep(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObIAllocator &calc_alloc = alloc_guard.get_allocator();
   int64_t usec = 0;
   if (OB_FAIL(expr.eval_param_value(ctx, sec))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (sec->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sleep");

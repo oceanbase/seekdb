@@ -37,7 +37,6 @@ int ObAllPxP2PDatahubTable::P2PMsgTraverseCall::operator() (
     node.trace_id_ = entry.second->get_trace_id();
     node.timeout_ts_ = entry.second->get_timeout_ts();
     if (OB_FAIL(node_array_.push_back(node))) {
-      SERVER_LOG(WARN, "fail to push back node", K(ret));
     }
   }
   return ret;
@@ -64,7 +63,6 @@ int ObAllPxP2PDatahubTable::p2p_datahub_map_to_array()
   int ret = OB_SUCCESS;
   P2PMsgTraverseCall call(node_array_);
   if (OB_FAIL(PX_P2P_DH.get_map().foreach_refactored(call))) {
-    SERVER_LOG(WARN,  "fail to convert map to array", K(ret));
   }
   return ret;
 }
@@ -82,7 +80,6 @@ int ObAllPxP2PDatahubTable::inner_get_next_row(ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(p2p_datahub_map_to_array())) {
-         SERVER_LOG(WARN, "fail to convert map to array", K(ret));
       }
     }
     if (index_ >= node_array_.size()) {

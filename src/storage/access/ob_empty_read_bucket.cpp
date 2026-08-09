@@ -35,7 +35,6 @@ int ObEmptyReadBucket::init()
 {
   int ret = OB_SUCCESS;
   char *buf = NULL;
-  STORAGE_LOG(DEBUG, "bucket number", K(BUCKET_SIZE));
   if (OB_ISNULL(buf = static_cast<char*>(allocator_.alloc(sizeof(ObEmptyReadCell) * BUCKET_SIZE)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Fail to allocate memory, ", K(ret));
@@ -50,7 +49,6 @@ int ObEmptyReadBucket::server_module_init(ObEmptyReadBucket *&bucket)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bucket->init())) {
-    STORAGE_LOG(WARN, "failed to init EmptyReadBucket, ", K(ret));
   }
   return ret;
 }

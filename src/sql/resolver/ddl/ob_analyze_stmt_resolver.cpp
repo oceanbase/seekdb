@@ -51,20 +51,16 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
   } else if (FALSE_IT((void)0)) {
     /*do nothing*/
   } else if (OB_FAIL(session_info_->get_force_parallel_query_dop(parallel_degree))) {
-    LOG_WARN("failed to get force parallel query dop", K(ret));
   } else if (T_MYSQL_ANALYZE == parse_tree.type_) {
     if (OB_FAIL(resolve_analyze_table(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve analyze stmt", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_UPDATE_HISTOGRAM == parse_tree.type_) {
     if (OB_FAIL(resolve_mysql_update_histogram(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve mysql update histogram info", K(ret));
     } else { /*do nothing*/ }
   } else if (T_MYSQL_DROP_HISTOGRAM == parse_tree.type_) {
     // TODO link.zt drop is not supported at the present
     analyze_stmt->set_is_drop();
     if (OB_FAIL(resolve_mysql_delete_histogram(parse_tree, *analyze_stmt))) {
-      LOG_WARN("failed to resolve mysql update histogram info", K(ret));
     } else { /*do nothing*/ }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -80,17 +76,14 @@ int ObAnalyzeStmtResolver::resolve(const ParseNode &parse_tree)
       for (int64_t i = 0 ; OB_SUCC(ret) && i < table.get_column_params().count(); ++i) {
         if (table.get_column_params().at(i).need_col_stat()) {
           if (OB_FAIL(new_column_params.push_back(table.get_column_params().at(i)))) {
-            LOG_WARN("failed to push back", K(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table.get_column_params().assign(new_column_params))) {
-          LOG_WARN("failed to assign", K(ret));
         }
       }
     }
-    LOG_DEBUG("analyze statement", K(*analyze_stmt));
   }
   return ret;
 }
@@ -110,11 +103,8 @@ int ObAnalyzeStmtResolver::resolve_analyze_table(const ParseNode &parse_node,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null parse node", K(table_node), K(ret));
     } else if (OB_FAIL(recursive_resolve_table_info(table_node, analyze_stmt))) {
-      LOG_WARN("failed to resolve table info", K(ret));
     } else if (OB_FAIL(resolve_partition_info(part_node, analyze_stmt))) {
-      LOG_WARN("failed to resolve partition info", K(ret));
     } else if (OB_FAIL(resolve_default_column_info(analyze_stmt))) {
-      LOG_WARN("failed to resolve default column info", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -141,13 +131,10 @@ int ObAnalyzeStmtResolver::resolve_mysql_update_histogram(const ParseNode &parse
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null parse node", K(table_node), K(column_node), K(ret));
     } else if (OB_FAIL(resolve_table_info(table_node, analyze_stmt))) {
-      LOG_WARN("failed to resolve table info", K(ret));
     } else if (OB_FAIL(resolve_partition_info(NULL, analyze_stmt))) {
-      LOG_WARN("failed to resolve partition info", K(ret));
     } else if (OB_FAIL(resolve_mysql_column_bucket_info(column_node,
                                                         bkt_num,
                                                         analyze_stmt))) {
-      LOG_WARN("failed to resolve column bucket info", K(ret));
     } else {
       ObAnalyzeSampleInfo sample_info;
       sample_info.is_sample_ = true;
@@ -174,12 +161,9 @@ int ObAnalyzeStmtResolver::resolve_mysql_delete_histogram(const ParseNode &parse
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null parse node", K(ret));
     } else if (OB_FAIL(resolve_table_info(table_node, analyze_stmt))) {
-      LOG_WARN("failed to resolve table info", K(ret));
     } else if (OB_FAIL(resolve_partition_info(NULL, analyze_stmt))) {
-      LOG_WARN("failed to resolve partition info", K(ret));
     } else if (OB_FAIL(resolve_mysql_column_bucket_info(column_node, 0,
                                                         analyze_stmt))) {
-      LOG_WARN("failed to resolve column bucket info", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -197,7 +181,6 @@ int ObAnalyzeStmtResolver::resolve_mysql_column_bucket_info(const ParseNode *col
     LOG_WARN("invalid params", K(ret), K(column_node), K(schema_checker_));
   } else if (OB_FAIL(schema_checker_->get_table_schema( table_info.get_table_id(),
                                                        table_schema))) {
-    LOG_WARN("failed to get table schema", K(table_info.get_table_id()), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null table schema", K(ret));
@@ -236,12 +219,9 @@ int ObAnalyzeStmtResolver::recursive_resolve_table_info(const ParseNode *table_l
     LOG_WARN("null point", K(ret), KP(table_list_node));
   } else if (T_LINK_NODE == table_list_node->type_) {
     if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[0], analyze_stmt)))) {
-      LOG_WARN("recursive resolve table list node failed", K(ret));
     } else if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[1], analyze_stmt)))) {
-      LOG_WARN("recursive resolve table list node failed", K(ret));
     }
   } else if (OB_FAIL(resolve_table_info(table_list_node, analyze_stmt))) {
-    LOG_WARN("resolve table info failed", K(ret));
   }
   return ret;
 }
@@ -260,31 +240,24 @@ int ObAnalyzeStmtResolver::resolve_table_info(const ParseNode *table_node,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null point", K(table_node), K(schema_checker_), K(ret));
   } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
-    LOG_WARN("failed to resolve table relation node", K(ret));
   } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
-    LOG_WARN("failed to get database id", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( database_name,
                                                        table_name, false, table_schema))){
-    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("null table schema", K(ret));
   } else if (OB_FAIL(analyze_stmt.add_table(database_name, database_id, table_name,
                            table_schema->get_table_id(),
                            table_schema->get_table_type()))) {
-    LOG_WARN("add table failed", K(ret));
   } else {
     ObAnalyzeTableInfo &last_table = analyze_stmt.get_tables().at(analyze_stmt.get_tables().count() - 1);
     if (OB_FAIL(pl::ObDbmsStats::init_column_stat_params(*allocator_,
                                                         *schema_checker_->get_schema_guard(),
                                                         *table_schema,
                                                         last_table.get_column_params()))) {
-      LOG_WARN("failed to init column stat param", K(ret));
     } else if (OB_FAIL(pl::ObDbmsStats::init_column_group_stat_param(*table_schema,
                                                                      last_table.get_column_group_params()))) {
-      LOG_WARN("failed to init column stat param", K(ret));
     } else {
-      LOG_TRACE("succeed to resolve table info", K(last_table));
     }
   }
   return ret;
@@ -297,7 +270,6 @@ int ObAnalyzeStmtResolver::resolve_partition_info(const ParseNode *part_node,
   ObIArray<ObAnalyzeTableInfo> &tables = analyze_stmt.get_tables();
   for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
     if (OB_FAIL(inner_resolve_partition_info(part_node, tables.at(i)))) {
-      LOG_WARN("resolve table partition info failed", K(ret));
     }
   }
   return ret;
@@ -319,7 +291,6 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null schema checker", K(schema_checker_), K(params_.allocator_), K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null table schema", K(ret));
@@ -329,17 +300,12 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
                                                       subpart_infos,
                                                       part_ids,
                                                       subpart_ids))) {
-    LOG_WARN("failed to get part infos", K(ret));
   } else if (OB_FAIL(table_info.set_all_part_infos(part_infos))) {
-    LOG_WARN("failed to set part infos", K(ret));
   } else if (OB_FAIL(table_info.set_all_subpart_infos(subpart_infos))) {
-    LOG_WARN("failed to set subpart infos", K(ret));
   } else if (NULL == part_node) {
     table_info.set_part_level(table_schema->get_part_level());
     if (OB_FAIL(table_info.set_part_infos(part_infos))) {
-      LOG_WARN("failed to set part infos", K(ret));
     } else if (OB_FAIL(table_info.set_subpart_infos(subpart_infos))) {
-      LOG_WARN("failed to set subpart infos", K(ret));
     }
   } else if (is_virtual_table(table_id) &&
              table_schema->get_part_option().get_part_num() > 1) {
@@ -366,7 +332,6 @@ int ObAnalyzeStmtResolver::inner_resolve_partition_info(const ParseNode *part_no
                      table_info.get_part_infos(),
                      table_info.get_subpart_infos(),
                      is_subpart_name))) {
-        LOG_WARN("failed to find selected part infos", K(ret));
       } else {
         table_info.set_is_sepcify_subpart(is_subpart_name);
       }
@@ -387,12 +352,10 @@ int ObAnalyzeStmtResolver::resolve_default_column_info(ObAnalyzeStmt &analyze_st
   for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
     bool is_hist_subpart = false;
     if (OB_FAIL(schema_checker_->get_table_schema(tables.at(i).get_table_id(), table_schema))) {
-      LOG_WARN("failed to get table schema", K(tables.at(i).get_table_id()), K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null table schema", K(ret));
     } else if (OB_FAIL(pl::ObDbmsStats::set_default_column_params(tables.at(i).get_column_params()))) {
-      LOG_WARN("failed to set default column params", K(ret));
     } else {
       if (share::schema::ObPartitionLevel::PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
         is_hist_subpart = is_range_part(table_schema->get_sub_part_option().get_part_func_type()) ||

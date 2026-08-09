@@ -88,7 +88,6 @@ int ObExprNot::eval_not(const ObExpr &expr,
     // The value of the parameter must be an int (0 or 1)
     ObDatum *param = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-      LOG_WARN("failed to eval", K(ret));
     } else if (param->is_null()) {
       expr_datum.set_null();
     } else {
@@ -113,7 +112,6 @@ int ObExprNot::eval_not_batch(const ObExpr &expr,
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval", K(ret));
     } else {
       ObDatum *results = expr.locate_batch_datums(ctx);
       for (int64_t i = 0; i < batch_size; ++i) {

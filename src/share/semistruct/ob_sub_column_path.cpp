@@ -176,7 +176,6 @@ int ObSubColumnPath::encode(char *buf, const int64_t buf_len, int64_t &pos) cons
   OB_UNIS_ENCODE(count);
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     if (OB_FAIL(items_[i].encode(buf, buf_len, pos))) {
-      LOG_WARN("encode failed", K(ret), K(i), K(count), K(pos), K(buf_len));
     }
   }
   return ret;
@@ -192,7 +191,6 @@ int ObSubColumnPath::decode(const char *buf, const int64_t data_len, int64_t &po
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     if (OB_FAIL(items_.at(i).decode(buf, data_len, pos))) {
-      LOG_WARN("decode failed", K(ret), K(i), K(count), K(pos), K(data_len));
     }
   }
   return ret;
@@ -229,12 +227,10 @@ int ObSubColumnPath::deep_copy(ObIAllocator& allocator, const ObSubColumnPath &o
   int ret = OB_SUCCESS;
   int64_t path_cnt = other.items_.count();
   if (OB_FAIL(items_.reserve(path_cnt))) {
-    LOG_WARN("reserve fail", K(ret), K(path_cnt));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < path_cnt; ++i) {
       const ObSubColumnPathItem& item = other.items_.at(i);
       if (OB_FAIL(items_.push_back(item))) {
-        LOG_WARN("push back fail", K(ret), K(i), K(item));
       } else if (item.type_ == ObSubColumnPathItem::OBJECT && OB_FAIL(ob_write_string(allocator, item.key_, items_.at(i).key_))) {
         LOG_WARN("ob_write_string fail", K(ret), K(i), K(item));
       }
@@ -280,7 +276,6 @@ int ObSubColumnPath::parse_sub_column_path(const ObString& json_path, ObSubColum
         }
         ObString key(i - start, ptr + start);
         if (OB_FAIL(col_path.add_path_item(ObSubColumnPathItem::OBJECT, key))) {
-          LOG_WARN("add path item fail", K(ret), K(start), K(i), K(key), K(json_path));
         }
       }
     } else if (ptr[i] == '[') {
@@ -306,7 +301,6 @@ int ObSubColumnPath::parse_sub_column_path(const ObString& json_path, ObSubColum
             ret = OB_NOT_SUPPORTED;
             LOG_INFO("not support json path for semistruct", K(i), K(json_path));
           } else if (OB_FAIL(col_path.add_path_item(ObSubColumnPathItem::ARRAY, array_idx))) {
-            LOG_WARN("add path item fail", K(ret), K(start), K(i), K(array_idx), K(json_path));
           } else {
             ++i; // ']'
           }

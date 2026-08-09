@@ -50,14 +50,12 @@ int ObMPSetOption::deserialize()
 
 int ObMPSetOption::process()
 {
-  LOG_TRACE("set option", K_(set_opt));
   int ret = common::OB_SUCCESS;
   bool need_disconnect = true;
   ObSQLSessionInfo *session = NULL;
   bool need_response_error = true;
   ObSMConnection *conn = NULL;
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null pointer");
@@ -96,9 +94,7 @@ int ObMPSetOption::process()
     if (OB_FAIL(ret)) {
         // do nothing
     } else if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
     } else if (OB_FAIL(revert_session(session))) {
-      LOG_ERROR("failed to revert session", K(ret));
     } else {
       // do nothing
     }
@@ -108,8 +104,7 @@ int ObMPSetOption::process()
     if (need_disconnect && is_conn_valid()) {
       force_disconnect();
       LOG_WARN("disconnect connection when process query", K(ret));
-    } else  if (OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
-      LOG_WARN("failed to send error packet", K(ret));
+    } else  if (OB_FAIL(send_error_packet(ret, NULL))) {
     }
   }
 

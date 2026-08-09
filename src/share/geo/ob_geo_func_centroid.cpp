@@ -56,11 +56,9 @@ private:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc memory for result grometry", K(ret));
       } else if (OB_FAIL(const_cast<ObGeometry *>(g)->do_visit(tree_visitor))) {
-        LOG_WARN("failed to transform gc to tree", K(ret));
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
               *static_cast<const ObCartesianGeometrycollection *>(tree_visitor.get_geometry()),
-                  mpt, ml, mpo))) { // only split, do not union
-        LOG_WARN("failed to do gc split", K(ret));
+                  mpt, ml, mpo))) {
       } else if (OB_ISNULL(mpt) || OB_ISNULL(ml) || OB_ISNULL(mpo)) {
         ret = OB_ERR_GIS_INVALID_DATA;
         LOG_WARN("unexpected null geometry collection split", K(ret), KP(mpt), KP(ml), KP(mpo));

@@ -61,7 +61,6 @@ int ObDropIndexTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", K(ret));
   } else {
   
     object_id_ = data_table_id;
@@ -105,7 +104,6 @@ int ObDropIndexTask::init(
     if (nullptr != task_record.message_.ptr()) {
       int64_t pos = 0;
       if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
-        LOG_WARN("deserialize params from message failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -132,11 +130,8 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
       schema_guard, schema_version_))) {
-    LOG_WARN("fail to get schema guard", K(ret), K(target_object_id_), K(schema_version_));
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
-    LOG_WARN("schema_guard is not formal", K(ret), K(target_object_id_));
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
-    LOG_WARN("fail to get table schema", K(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("fail to get table schema", K(ret));
@@ -152,11 +147,8 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     DEBUG_SYNC(BEFORE_UPDATE_GLOBAL_INDEX_STATUS);
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
             *GCTX.schema_service_, table_id, ddl_rpc_timeout))) {
-      LOG_WARN("get ddl rpc timeout fail", K(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(task_id_));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
-      LOG_WARN("update index status failed", K(ret), K(arg));
     } else {
       LOG_INFO("notify index status changed finish", K(new_status), K(target_object_id_));
     }
@@ -174,7 +166,6 @@ int ObDropIndexTask::prepare(const ObDDLTaskStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropIndexTask has not been inited", K(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", K(ret));
   }
   return ret;
 }
@@ -187,7 +178,6 @@ int ObDropIndexTask::set_write_only(const share::ObDDLTaskStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropIndexTask has not been inited", K(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", K(ret));
   }
   return ret;
 }
@@ -199,9 +189,7 @@ int ObDropIndexTask::set_unusable(const ObDDLTaskStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropIndexTask has not been inited", K(ret));
   } else if (OB_FAIL(update_index_status(INDEX_STATUS_UNUSABLE))) {
-    LOG_WARN("update index status failed", K(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", K(ret));
   }
   return ret;
 }
@@ -219,27 +207,20 @@ int ObDropIndexTask::drop_index_impl()
   if (OB_ISNULL(GCTX.schema_service_) ) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
-    LOG_WARN("check table exist failed", K(ret), K(target_object_id_));
   } else if (!is_index_exist) {
     // by pass
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
-    LOG_WARN("get index schema failed", K(ret), K(target_object_id_));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("index schema is null", K(ret), K(target_object_id_));
   } else if (OB_FAIL(index_schema->get_index_name(index_name))) {
-    LOG_WARN("get index name failed", K(ret), K(index_schema->get_table_type()), KPC(index_schema));
   } else if (OB_FAIL(schema_guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
-    LOG_WARN("get database schema failed", K(ret), K(index_schema->get_database_id()));
   } else if (OB_FAIL(schema_guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
-    LOG_WARN("get data table schema failed", K(ret), K(index_schema->get_data_table_id()));
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null schema", K(ret), KP(database_schema), KP(data_table_schema));
   } else if (OB_FAIL(drop_index_sql.assign(drop_index_arg_.ddl_stmt_str_))) {
-    LOG_WARN("assign user drop index sql failed", K(ret));
   } else {
     int64_t ddl_rpc_timeout = 0;
     obcall::ObDropIndexArg drop_index_arg;
@@ -258,11 +239,8 @@ int ObDropIndexTask::drop_index_impl()
     drop_index_arg.task_id_           = task_id_;
     drop_index_arg.is_hidden_         = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
-      LOG_WARN("failed to get ddl rpc timeout", K(ret));
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(task_id_));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
-      LOG_WARN("drop index failed", K(ret), K(ddl_rpc_timeout));
     }
     LOG_INFO("drop index", K(ret), K(drop_index_sql.ptr()), K(drop_index_arg));
   }
@@ -273,9 +251,7 @@ int ObDropIndexTask::drop_index(const ObDDLTaskStatus new_status)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(drop_index_impl())) {
-    LOG_WARN("send drop index rpc failed", K(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", K(ret));
   }
   return ret;
 }
@@ -289,9 +265,7 @@ int ObDropIndexTask::fail()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(drop_index_impl())) {
-    LOG_WARN("drop index impl failed", K(ret));
   } else if (OB_FAIL(cleanup())) {
-    LOG_WARN("cleanup failed", K(ret));
   }
   return ret;
 }
@@ -304,12 +278,10 @@ int ObDropIndexTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-    LOG_WARN("report error code failed", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
-    LOG_WARN("delete task record failed", K(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }
@@ -331,28 +303,23 @@ int ObDropIndexTask::process()
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ())) {
-    LOG_WARN("check need retry failed", K(ret));
   } else {
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
       case ObDDLTaskStatus::PREPARE:
         if (OB_FAIL(prepare(SET_WRITE_ONLY))) {
-          LOG_WARN("prepare failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::SET_WRITE_ONLY:
         if (OB_FAIL(set_write_only(WAIT_TRANS_END_FOR_WRITE_ONLY))) {
-          LOG_WARN("set write only failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_TRANS_END_FOR_WRITE_ONLY:
         if (OB_FAIL(wait_trans_end(wait_trans_ctx_, SET_UNUSABLE))) {
-          LOG_WARN("wait trans end failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::SET_UNUSABLE:
         if (OB_FAIL(set_unusable(WAIT_TRANS_END_FOR_UNUSABLE))) {
-          LOG_WARN("set unusable failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_TRANS_END_FOR_UNUSABLE:
@@ -360,23 +327,19 @@ int ObDropIndexTask::process()
         ObDDLTaskStatus next_status = drop_index_arg_.only_set_status_?
                                       SUCCESS : DROP_SCHEMA;
         if (OB_FAIL(wait_trans_end(wait_trans_ctx_, next_status))) {
-          LOG_WARN("wait trans end failed", K(ret));
         }
         break;
         }
       case ObDDLTaskStatus::DROP_SCHEMA:
         if (OB_FAIL(drop_index(SUCCESS))) {
-          LOG_WARN("drop index failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::SUCCESS:
         if (OB_FAIL(succ())) {
-          LOG_WARN("do succ procedure failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::FAIL:
         if (OB_FAIL(fail())) {
-          LOG_WARN("do fail procedure failed", K(ret));
         }
         break;
       default:
@@ -407,11 +370,8 @@ int ObDropIndexTask::check_switch_succ()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(refresh_schema_version())) {
-    LOG_WARN("refresh schema version failed", K(ret));
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("get runtime schema failed", K(ret));
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
-    LOG_WARN("check table exist failed", K(ret), K(target_object_id_));
   } else if (!is_index_exist) {
     task_status_ = ObDDLTaskStatus::SUCCESS;
   } 
@@ -430,10 +390,8 @@ int ObDropIndexTask::deep_copy_index_arg(common::ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret), K(serialize_size));
   } else if (OB_FAIL(src_index_arg.serialize(buf, serialize_size, pos))) {
-    LOG_WARN("serialize source index arg failed", K(ret));
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_index_arg.deserialize(buf, serialize_size, pos))) {
-    LOG_WARN("deserialize failed", K(ret));
   }
   if (OB_FAIL(ret) && nullptr != buf) {
     allocator.free(buf);
@@ -449,9 +407,7 @@ int ObDropIndexTask::serialize_params_to_message(char *buf, const int64_t buf_si
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
-    LOG_WARN("ObDDLTask serialize failed", K(ret));
   } else if (OB_FAIL(drop_index_arg_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("serialize failed", K(ret));
   }
   return ret;
 }
@@ -464,11 +420,8 @@ int ObDropIndexTask::deserialize_params_from_message(const char *buf, const int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
-    LOG_WARN("ObDDLTask deserlize failed", K(ret));
   } else if (OB_FAIL(tmp_drop_index_arg.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("deserialize failed", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, tmp_drop_index_arg, drop_index_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", K(ret));
   }
   return ret;
 }

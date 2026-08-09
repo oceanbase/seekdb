@@ -71,7 +71,6 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("relation_node is NULL", K(ret));
       } else if (OB_FAIL(resolve_table_relation_node(relation_node, table_name, database_name))) {
-        LOG_WARN("failed to resolve table relation node!", K(ret));
       } else {
         drop_index_stmt->set_table_name(table_name);
         drop_index_stmt->set_database_name(database_name);
@@ -113,13 +112,11 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
               table_schema->get_table_id(),
               index_name,
               index_table_name))) {
-            LOG_WARN("build_index_table_name failed", K(table_schema->get_table_id()), K(index_name), K(ret));
           } else if (OB_FAIL(schema_checker_->get_table_schema(
               drop_index_stmt->get_database_name(),
               index_table_name,
               true /* index table */,
               index_table_schema))) {
-            LOG_WARN("fail to get index table schema", K(ret));
           } else if (OB_ISNULL(index_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("table schema is NULL", K(ret));
@@ -127,10 +124,8 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
                                                         *index_table_schema,
                                                         *schema_checker_,
                                                         has_other_indexes_on_same_cols))) {
-            LOG_WARN("check indexes on same cols failed", K(ret));
           } else if (!has_other_indexes_on_same_cols) {
             if (OB_FAIL(check_index_columns_equal_foreign_key(*table_schema, *index_table_schema))) {
-              LOG_WARN("failed to check_index_columns_equal_foreign_key", K(ret), K(index_table_name));
             }
           }
         }

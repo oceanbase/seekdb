@@ -33,7 +33,6 @@ int ObTmpFileSwapJob::init(int64_t expect_swap_size, uint32_t timeout_ms)
   } else if (timeout_ms <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(swap_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
-    STORAGE_LOG(WARN, "ObTmpFileSwapJob init cond failed", KR(ret));
   } else {
     is_inited_ = true;
     ret_code_ = OB_SUCCESS;
@@ -94,7 +93,6 @@ int ObTmpFileSwapJob::signal_swap_complete(int ret_code)
     ATOMIC_SET(&ret_code_, ret_code);
     ATOMIC_SET(&is_finished_, true);
     if (OB_FAIL(swap_cond_.signal())) {
-      STORAGE_LOG(WARN, "ObTmpFileSwapJob signal swap complete failed", KR(ret));
     }
   }
   return ret;

@@ -139,7 +139,6 @@ int ObTabletCreateDeleteMdsUserData::set_tablet_gc_trigger()
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-    LOG_WARN("failed to get ls", K(ret));
   } else {
     tenant_ls->get_tablet_gc_handler()->set_tablet_gc_trigger();
   }
@@ -151,7 +150,6 @@ int ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger()
   int ret = OB_SUCCESS;
   ObLS *tenant_ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-    LOG_WARN("failed to get ls", K(ret));
   } else {
     tenant_ls->get_tablet_empty_shell_handler()->set_empty_shell_trigger(true);
     LOG_INFO("set tablet empty shell trigger", K(ret),

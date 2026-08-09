@@ -240,7 +240,6 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
   } else if (!session->is_in_transaction()) {
     if (!is_rollback && OB_NOT_NULL(callback)) {
       if (OB_FAIL(inc_session_ref(session))) {
-        LOG_WARN("fail to inc session ref", K(ret));
       } else {
         callback->handout();
         callback->callback(OB_SUCCESS);
@@ -300,7 +299,6 @@ int ObSqlTransControl::end_trans_before_cmd_execute(ObSQLSessionInfo &session,
                                             false,   // is_explicit
                                             nullptr, // callback
                                             !keep_trans_variable))) {
-    LOG_WARN("implicit end trans fail", KR(ret), K(cmd_type), K(need_disconnect));
   } else if (session.need_recheck_txn_readonly() && session.get_tx_read_only()) {
     ret = OB_ERR_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION;
     LOG_WARN("cmd can not execute because txn is read only", K(ret));
@@ -430,7 +428,6 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     data_plane::finish_transaction_deadlock(data_plane::tx_desc_id(tx_ptr));
   }
   if (OB_FAIL(SQL_DO_END_TX_FAIL)) {
-    LOG_WARN("do end trans failed", K(ret));
   } else {
     /*
      * normal transaction control
@@ -443,12 +440,10 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     data_plane::ObITransactionService *txs = NULL;
     
     if (OB_FAIL(get_tx_service(session, txs))) {
-      LOG_ERROR("fail to get trans service", K(ret));
     } else if (is_rollback) {
       ret = txs->rollback_tx(*tx_ptr);
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
-        LOG_WARN("fail to inc session ref", K(ret));
       } else {
         callback->handout();
         if(OB_FAIL(txs->submit_commit_tx(*tx_ptr, expire_ts, *callback))) {
@@ -460,8 +455,6 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
       }
     } else {
       if (OB_FAIL(txs->commit_tx(*tx_ptr, expire_ts))) {
-        LOG_WARN("sync commit tx fail", K(ret), K(expire_ts),
-                 "tx_desc", data_plane::ObTxDescLogView(tx_ptr));
       }
     }
   }
@@ -692,7 +685,6 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
       }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to get snapshot", K(ret), KPC(session));
     }
   }
   return ret;
@@ -709,9 +701,7 @@ int ObSqlTransControl::stmt_refresh_snapshot(ObExecContext &exec_ctx) {
     // INSERT statements do not see the evaluated results of before statement triggers,
     // so there is no need to refresh the snapshot.
   } else if (OB_FAIL(get_tx_service(session, txs))) {
-    LOG_WARN("failed to get transaction service", K(ret));
   } else if (OB_FAIL(stmt_setup_snapshot_(session, das_ctx, plan, plan_ctx, txs, exec_ctx))) {
-    LOG_WARN("failed to set snapshot", K(ret));
   }
   return ret;
 }
@@ -730,14 +720,12 @@ int ObSqlTransControl::set_fk_check_snapshot(ObExecContext &exec_ctx)
     ObTxDesc &tx_desc = *session->get_tx_desc();
     int64_t stmt_expire_ts = get_stmt_expire_ts(plan_ctx, *session);
     if (OB_FAIL(get_tx_service(session, txs))) {
-      LOG_WARN("failed to get transaction service", K(ret));
     } else {
       ret = txs->get_read_snapshot(tx_desc,
                                    session->get_tx_isolation(),
                                    stmt_expire_ts,
                                    snapshot);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fail to get snapshot", K(ret), KPC(session));
       }
     }
   }
@@ -789,9 +777,7 @@ int ObSqlTransControl::get_read_snapshot(ObSQLSessionInfo *session,
   data_plane::ObITransactionService *txs = NULL;
   transaction::ObTxDesc &tx_desc = *session->get_tx_desc();
   if (OB_FAIL(get_tx_service(session, txs))) {
-    LOG_WARN("failed to get transaction service", K(ret));
   } else if (OB_FAIL(txs->get_read_snapshot(tx_desc, isolation, expire_ts, snapshot))) {
-    LOG_WARN("failed to set snapshot", K(ret));
   } else if (!snapshot.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected invalid snapshot", K(ret),
@@ -986,7 +972,6 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
   if (!ObSQLUtils::is_nested_sql(&exec_ctx) && OB_NOT_NULL(session)) {
     int tmp_ret = session->set_end_stmt();
     if (OB_SUCCESS != tmp_ret) {
-      LOG_ERROR("set_end_stmt fail", K(tmp_ret));
     }
     ret = COVER_SUCC(tmp_ret);
   }

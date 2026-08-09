@@ -48,7 +48,6 @@ int ObCreateIndexStmt::add_sort_column(const ObColumnSortItem &sort_column)
     ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
     LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
   } else if (OB_FAIL(create_index_arg_.index_columns_.push_back(sort_column))) {
-    LOG_WARN("add index column failed", K(ret));
   } else {}
   return ret;
 }

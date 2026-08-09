@@ -73,7 +73,6 @@ int ObExprToType::assign(const ObExprOperator &other)
     expect_type_ = other_op.expect_type_;
     cast_mode_ = other_op.cast_mode_;
     if (OB_FAIL(ObFuncExprOperator::assign(other_op))) {
-      LOG_WARN("assign other op failed", K(ret));
     }
   }
   return ret;
@@ -125,7 +124,6 @@ int ObExprToType::calc_result_type_for_literal(ObExprResType &type, ObExprResTyp
                        &res_accuracy);
     ObObj out;
     if (OB_FAIL(ObObjCaster::to_type(expect_type_, cast_ctx, in, out))) {
-      LOG_WARN("failed to cast obj", K(ret), K(in), K(expect_type_));
     } else {
       type.set_type(expect_type_);
       type.set_accuracy(res_accuracy);

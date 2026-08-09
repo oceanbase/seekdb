@@ -94,31 +94,24 @@ int ObTransformJoinLimitPushDown::transform_one_stmt(common::ObIArray<ObParentDM
   } else if (!stmt->is_select_stmt()) {
     // do nothing
   } else if (OB_FAIL(check_stmt_validity(stmt, helpers, is_valid))) {
-    LOG_WARN("failed to check stmt validity", K(ret));
   } else if (!is_valid) {
     // do nothing
   } else if (OB_FAIL(sort_pushdown_helpers(helpers))) {
-    LOG_WARN("failed to sort pushdown helpers", K(ret));
   } else if (is_valid) {
-    LOG_TRACE("start to pushdown limit into join", K(helpers));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < helpers.count(); ++i) {
     if (OB_ISNULL(helpers.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null helper", K(ret));
     } else if (OB_FAIL(do_transform(static_cast<ObSelectStmt *>(stmt), *helpers.at(i)))) {
-      LOG_WARN("failed to push limit before join", K(ret));
     } else {
       trans_happened = true;
     }
   }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(stmt->rebuild_tables_hash())) {
-      LOG_WARN("failed to rebuild table hash", K(ret));
     } else if (OB_FAIL(stmt->update_column_item_rel_id())) {
-      LOG_WARN("failed to update column rel ids", K(ret));
     } else if (OB_FAIL(add_transform_hint(*stmt))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   //destruct helpers
@@ -172,14 +165,12 @@ int ObTransformJoinLimitPushDown::check_stmt_validity(ObDMLStmt *stmt,
              select_stmt->has_distinct()) {
     is_valid = false;
   } else if (OB_FAIL(check_limit(select_stmt, is_valid_limit))) {
-    LOG_WARN("failed to check the validity of limit expr", K(ret));
   } else if (!is_valid_limit) {
     is_valid = false;
   } else if (OB_FAIL(split_cartesian_tables(select_stmt, 
                                             helpers, 
                                             is_valid,
                                             has_cartesian))) {
-    LOG_WARN("failed to check cartesian product", K(ret));
   } else if (!is_valid) {
     //do nothing
   } else {
@@ -193,11 +184,9 @@ int ObTransformJoinLimitPushDown::check_stmt_validity(ObDMLStmt *stmt,
                                                               helper->pushdown_tables_,
                                                               helper->expr_relation_ids_,
                                                               helper->lazy_join_tables_))) {
-        LOG_WARN("failed to get lazy left join", K(ret));
       } else if (OB_FAIL(check_lazy_join_is_unique(helper->lazy_join_tables_, 
                                                    stmt,
                                                    is_all_unique_join))) {
-        LOG_WARN("failed to check lazy join is unique", K(ret));
       } else {
         helper->all_lazy_join_is_unique_join_ &= is_all_unique_join;
       }
@@ -238,12 +227,10 @@ int ObTransformJoinLimitPushDown::check_lazy_join_is_unique(ObIArray<ObTransform
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null table item", K(ret));
     } else if (OB_FAIL(stmt->get_table_rel_ids(*right_table, right_table_ids))) {
-      LOG_WARN("failed to get table rel ids", K(ret));
     } else if (OB_FAIL(ObTransformUtils::get_join_keys(lazy_join.at(i).join_conditions_, 
                                                       right_table_ids, 
                                                       join_keys, 
                                                       is_simply_join))) {
-      LOG_WARN("failed to get right table join keys", K(ret));
     } else if (!is_simply_join) {
       is_unique_join = false;
     } else if (OB_FAIL(ObTransformUtils::check_exprs_unique(*stmt, 
@@ -252,7 +239,6 @@ int ObTransformJoinLimitPushDown::check_lazy_join_is_unique(ObIArray<ObTransform
                                                             ctx_->session_info_,
                                                             ctx_->schema_checker_, 
                                                             is_unique_join))) {
-      LOG_WARN("failed to check exprs unique", K(ret));
     }
   }
   return ret;
@@ -302,31 +288,25 @@ int ObTransformJoinLimitPushDown::split_cartesian_tables(ObSelectStmt *select_st
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObTransformUtils::check_contain_correlated_function_table(select_stmt,
                                                                                is_contain))) {
-    LOG_WARN("failed to check contain correlated function table", K(ret));
   } else if (is_contain) {
     OPT_TRACE("contain correlated function table, do not push down limit");
   } else if (OB_FAIL(ObTransformUtils::check_contain_correlated_json_table(select_stmt,
                                                                            is_contain))) {
-    LOG_WARN("failed to check contain correlated json table", K(ret));
   } else if (is_contain) {
     OPT_TRACE("contain correlated json table, do not push down limit");
   } else if (OB_FAIL(ObTransformUtils::check_contain_correlated_lateral_table(select_stmt, 
                                                                               is_contain))) {
-    LOG_WARN("failed to check contain correlated lateral table", K(ret));
   } else if (is_contain) {
     OPT_TRACE("contain correlated lateral derived table, do not push down limit");
   } else {
     int64_t N = select_stmt->get_from_item_size();
     UnionFind uf(N);
     if (OB_FAIL(uf.init())) {
-      LOG_WARN("failed to initialize union find", K(ret));
     } else if (OB_FAIL(check_cartesian(select_stmt, uf, is_valid))) {
-      LOG_WARN("failed to check cartesian", K(ret));
     } else if (!is_valid) {
     } else if (OB_FAIL(collect_cartesian_infos(select_stmt,
                                                uf,
                                                helpers))) {
-      LOG_WARN("failed to generate cartesian infos", K(ret));
     } else {
       has_cartesian = uf.count_ > 1;
       is_valid = !helpers.empty();
@@ -353,7 +333,6 @@ int ObTransformJoinLimitPushDown::check_cartesian(ObSelectStmt *stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(from_tables.push_back(cur_table))) {
-        LOG_WARN("failed to push back table id", K(ret));
       }
     }
     bool is_cond_valid = true;
@@ -370,9 +349,7 @@ int ObTransformJoinLimitPushDown::check_cartesian(ObSelectStmt *stmt,
         OPT_TRACE("condition has subquery/rand func/state func");
       } else if (OB_FAIL(ObRawExprUtils::extract_table_ids(cond,
                                                           where_table_ids))) {
-        LOG_WARN("failed to extract table ids", K(ret));
       } else if (OB_FAIL(ObTransformUtils::connect_tables(where_table_ids, from_tables, uf))) {
-        LOG_WARN("failed to connect tables", K(ret));
       }
     }
     // 3. collect connect infos according to the semi infos
@@ -383,7 +360,6 @@ int ObTransformJoinLimitPushDown::check_cartesian(ObSelectStmt *stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ObTransformUtils::connect_tables(semi->left_table_ids_, from_tables, uf))) {
-        LOG_WARN("failed to connect tables", K(ret));
       }
     }
     // 4. collect connect infos according to the order by items
@@ -403,9 +379,7 @@ int ObTransformJoinLimitPushDown::check_cartesian(ObSelectStmt *stmt,
       } else if (!expr->has_flag(CNT_COLUMN)) {
         // do nothing
       } else if (OB_FAIL(ObRawExprUtils::extract_table_ids(expr, orderby_table_ids))) {
-        LOG_WARN("failed to collect orderby table sets", K(ret));
       }  else if (OB_FAIL(ObTransformUtils::connect_tables(orderby_table_ids, from_tables, uf))) {
-        LOG_WARN("failed to connect tables", K(ret));
       }
     }
     is_valid = OB_SUCC(ret) && is_cond_valid && is_orderby_valid;
@@ -436,7 +410,6 @@ int ObTransformJoinLimitPushDown::collect_cartesian_infos(ObSelectStmt *stmt,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(connected_tables.push_back(table_item1))) {
-        LOG_WARN("failed to push back table item", K(ret));
       } else {
         for (int64_t j = i + 1; OB_SUCC(ret) && j < N; ++j) {
           bool connected = false;
@@ -445,32 +418,24 @@ int ObTransformJoinLimitPushDown::collect_cartesian_infos(ObSelectStmt *stmt,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpeceted null table item", K(ret));
           } else if (OB_FAIL(uf.is_connected(i, j, connected))) {
-            LOG_WARN("failed to check is connected", K(ret), K(i), K(j));
           } else if (!connected) {
             // do nothing
           } else if (OB_FAIL(connected_tables.push_back(table_item2))) {
-            LOG_WARN("failed to push back table item", K(ret));
           } else if (OB_FAIL(visited.push_back(j))) {
-            LOG_WARN("failed to push back visited info", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           bool is_valid = false;
           if (OB_FAIL(check_table_validity(connected_tables, is_valid))) {
-            LOG_WARN("failed to check table is valid", K(ret));
           } else if (!is_valid) {
             //do nothing
           } else if (OB_FAIL(LimitPushDownHelper::alloc_helper(*ctx_->allocator_, helper))) {
-            LOG_WARN("failed to allocate helper", K(ret));
           } else if (OB_ISNULL(helper)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpect null helper", K(ret));
           } else if (OB_FAIL(helper->pushdown_tables_.assign(connected_tables))) {
-            LOG_WARN("failed to assign pushdown tables", K(ret));
           } else if (OB_FAIL(collect_cartesian_exprs(stmt, helper))) {
-            LOG_WARN("failed to collect cartesian exprs", K(ret));
           } else if (OB_FAIL(helpers.push_back(helper))) {
-            LOG_WARN("failed to push back helper", K(ret));
           } else {
             helper->all_lazy_join_is_unique_join_ = uf.count_ == 1;
           }
@@ -572,7 +537,6 @@ int ObTransformJoinLimitPushDown::collect_cartesian_exprs(ObSelectStmt *stmt,
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(helper->pushdown_tables_,
                                              table_rel_ids))) {
-    LOG_WARN("failed to get table rel ids", K(ret));
   }
   // 1. extract condition infos
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
@@ -583,9 +547,7 @@ int ObTransformJoinLimitPushDown::collect_cartesian_exprs(ObSelectStmt *stmt,
     } else if (!cond->get_relation_ids().overlap(table_rel_ids)) {
       // do nothing
     } else if (OB_FAIL(helper->pushdown_conds_.push_back(cond))) {
-      LOG_WARN("failed to push back conditions", K(ret));
     } else if (OB_FAIL(helper->expr_relation_ids_.add_members(cond->get_relation_ids()))) {
-      LOG_WARN("failed to add members", K(ret));
     }
   }
   // 2. extract semi infos
@@ -599,13 +561,10 @@ int ObTransformJoinLimitPushDown::collect_cartesian_exprs(ObSelectStmt *stmt,
     } else if (OB_FAIL(ObTransformUtils::get_left_rel_ids_from_semi_info(stmt, 
                                                                          semi_info, 
                                                                          left_table_ids))) {
-      LOG_WARN("failed to get left table rel ids", K(ret));
     } else if (!left_table_ids.overlap(table_rel_ids)) {
       //do nothing
     } else if (OB_FAIL(helper->pushdown_semi_infos_.push_back(semi_info))) {
-      LOG_WARN("failed to push back semi info", K(ret));
     } else if (OB_FAIL(helper->expr_relation_ids_.add_members(left_table_ids))) {
-      LOG_WARN("failed to add members", K(ret));
     }
   }
   // 3. extract order item
@@ -617,9 +576,7 @@ int ObTransformJoinLimitPushDown::collect_cartesian_exprs(ObSelectStmt *stmt,
     } else if (!item.expr_->get_relation_ids().overlap(table_rel_ids)) {
       // do nothing
     } else if (OB_FAIL(helper->pushdown_order_items_.push_back(item))) {
-      LOG_WARN("failed to push back order item", K(ret));
     } else if (OB_FAIL(helper->expr_relation_ids_.add_members(item.expr_->get_relation_ids()))) {
-      LOG_WARN("failed to add members", K(ret));
     }
   }
   return ret;
@@ -649,7 +606,6 @@ int ObTransformJoinLimitPushDown::check_limit(ObSelectStmt *select_stmt,
     bool is_offset_valid;
     bool is_limit_valid;
     if (OB_FAIL(check_offset_limit_expr(limit_expr, is_limit_valid))) {
-      LOG_WARN("failed to check limit expr", K(ret));
     } else if (!is_limit_valid) {
       is_valid = false;
       OPT_TRACE("limit value is invalid");
@@ -717,17 +673,13 @@ int ObTransformJoinLimitPushDown::do_transform(ObSelectStmt *select_stmt,
     LOG_WARN("failed to remove lazy left join table", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::remove_item(select_stmt->get_condition_exprs(),
                                                   helper.pushdown_conds_))) {
-    LOG_WARN("failed to remove conditions from stmt", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::remove_item(select_stmt->get_semi_infos(),
                                                   helper.pushdown_semi_infos_))) {
-    LOG_WARN("failed to remove semi infos from stmt", K(ret));
   } else if (OB_FAIL(ObTransformUtils::add_new_table_item(ctx_,
                                                   select_stmt,
                                                   NULL,
                                                   helper.view_table_))) {
-    LOG_WARN("failed to create table item", K(ret));
   } else if (OB_FAIL(select_stmt->add_from_item(helper.view_table_->table_id_, false))) {
-    LOG_WARN("failed to add from item", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < helper.pushdown_tables_.count(); ++i) {
@@ -737,16 +689,13 @@ int ObTransformJoinLimitPushDown::do_transform(ObSelectStmt *select_stmt,
       LOG_WARN("table is null", K(ret), K(table));
     } else if (OB_FAIL(ObTransformUtils::replace_table_in_semi_infos(
                          select_stmt, helper.view_table_, table))) {
-      LOG_WARN("failed to replace table in semi infos", K(ret));
     } else if (OB_FAIL(ObTransformUtils::replace_table_in_joined_tables(
                          select_stmt, helper.view_table_, table))) {
-      LOG_WARN("failed to replace table in joined tables", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && !helper.lazy_join_tables_.empty()) {
     if (OB_FAIL(build_lazy_left_join(select_stmt, helper))) {
-      LOG_WARN("failed to build lazy left join table", K(ret));
     }
   } 
   
@@ -762,11 +711,9 @@ int ObTransformJoinLimitPushDown::do_transform(ObSelectStmt *select_stmt,
                                                           NULL,
                                                           NULL,
                                                           &helper.pushdown_order_items_))) {
-    LOG_WARN("failed to create inline view", K(ret));
   } else if (OB_FAIL(add_limit_for_view(helper.view_table_->ref_query_,
                                         select_stmt,
                                         helper.all_lazy_join_is_unique_join_))) {
-    LOG_WARN("failed to add order by limit for view", K(ret));
   }
   return ret;
 }
@@ -785,12 +732,10 @@ int ObTransformJoinLimitPushDown::remove_lazy_left_join(ObDMLStmt *stmt,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null table", K(ret));
     } else if (OB_FAIL(stmt->remove_from_item(table->table_id_))) {
-      LOG_WARN("failed to remove from item", K(ret));
     } else if (table->is_joined_table() && 
                OB_FAIL(stmt->remove_joined_table_item(static_cast<JoinedTable*>(table)))) {
       LOG_WARN("failed to remove joined table item", K(ret));
     } else if (OB_FAIL(inner_remove_lazy_left_join(table, helper))) {
-      LOG_WARN("failed to remove lazy left join", K(ret));
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect null table", K(ret));
@@ -799,7 +744,6 @@ int ObTransformJoinLimitPushDown::remove_lazy_left_join(ObDMLStmt *stmt,
       LOG_WARN("failed to adjust single table ids", K(ret));
     } else {
       helper.pushdown_tables_.at(i) = table;
-      LOG_TRACE("succeed to remove lazy left join", KPC(table));
     }
   }
   return ret;
@@ -817,9 +761,7 @@ int ObTransformJoinLimitPushDown::inner_remove_lazy_left_join(TableItem* &table,
   } else {
     JoinedTable *joined_table = static_cast<JoinedTable*>(table);
     if (OB_FAIL(SMART_CALL(inner_remove_lazy_left_join(joined_table->left_table_, helper)))) {
-      LOG_WARN("failed to remove lazy left join", K(ret));
     } else if (OB_FAIL(SMART_CALL(inner_remove_lazy_left_join(joined_table->right_table_, helper)))) {
-      LOG_WARN("failed to remove lazy left join", K(ret));
     } else if (helper.is_table_lazy_join(joined_table->right_table_)) {
       //remove it
       table = joined_table->left_table_;
@@ -839,7 +781,6 @@ int ObTransformJoinLimitPushDown::build_lazy_left_join(ObDMLStmt *stmt,
   } else if (helper.lazy_join_tables_.empty()) {
     //do nothing
   } else if (OB_FAIL(stmt->remove_from_item(helper.view_table_->table_id_))) {
-    LOG_WARN("failed to remove from item", K(ret));
   } else {
     TableItem *left_table = NULL;
     TableItem *right_table = NULL;
@@ -863,19 +804,14 @@ int ObTransformJoinLimitPushDown::build_lazy_left_join(ObDMLStmt *stmt,
         tmp_joined_table->right_table_ = right_table;
         cur_table = tmp_joined_table;
         if (OB_FAIL(tmp_joined_table->join_conditions_.assign(lazy_join.join_conditions_))) {
-          LOG_WARN("failed to push back join conditions", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObTransformUtils::adjust_single_table_ids(tmp_joined_table))) {
-      LOG_WARN("failed to adjust single table ids", K(ret));
     } else if (OB_FAIL(stmt->add_joined_table(tmp_joined_table))) {
-      LOG_WARN("failed to add joined table into stmt", K(ret));
     } else if (OB_FAIL(stmt->add_from_item(tmp_joined_table->table_id_, true))) {
-      LOG_WARN("failed to add from item", K(ret));
     } else {
-      LOG_TRACE("succeed to build lazy left join table", KPC(tmp_joined_table));
     }
   }
   return ret;
@@ -909,7 +845,6 @@ int ObTransformJoinLimitPushDown::add_limit_for_view(ObSelectStmt *generated_vie
                                                               limit_expr,
                                                               offset_expr,
                                                               new_limit_count_expr))) {
-        LOG_WARN("make pushdown limit expr failed", K(ret));
       } else {
         generated_view->set_limit_offset(new_limit_count_expr, NULL);
       }

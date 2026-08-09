@@ -264,7 +264,6 @@ bool check_rename_success(const char *src_name,
   bool dest_exist = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_file_exist(src_name, src_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && OB_FAIL(check_file_exist(dest_name, dest_exist))) {
     PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && dest_exist) {
@@ -289,7 +288,6 @@ bool check_renameat_success(const int src_dir_fd,
   bool dest_exist = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_file_exist(src_dir_fd, src_name, src_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && OB_FAIL(check_file_exist(dest_dir_fd, dest_name, dest_exist))) {
     PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && dest_exist) {
@@ -371,7 +369,6 @@ int fsync_with_retry(const int dir_fd)
       ob_usleep(RETRY_INTERVAL);
     } else {
       ret = OB_SUCCESS;
-      CLOG_LOG(TRACE, "fsync_until_success_ success", K(ret), K(dir_fd));
       break;
     }
   } while (OB_FAIL(ret));

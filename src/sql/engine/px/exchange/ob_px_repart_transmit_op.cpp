@@ -52,7 +52,6 @@ int ObPxRepartTransmitSpec::register_to_datahub(ObExecContext &exec_ctx) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxTransmitSpec::register_to_datahub(exec_ctx))) {
-    LOG_WARN("failed to register init channel msg", K(ret));
   } else if (OB_ISNULL(exec_ctx.get_sqc_handler())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null unexpected", K(ret));
@@ -66,7 +65,6 @@ int ObPxRepartTransmitSpec::register_to_datahub(ObExecContext &exec_ctx) const
       MsgProvider *provider = new (buf) MsgProvider();
       ObSqcCtx &sqc_ctx = exec_ctx.get_sqc_handler()->get_sqc_ctx();
       if (OB_FAIL(sqc_ctx.add_whole_msg_provider(get_id(), dtl::DH_DYNAMIC_SAMPLE_WHOLE_MSG, *provider))) {
-        LOG_WARN("fail add whole msg provider", K(ret));
       } else {
         buf = nullptr;
       }
@@ -89,9 +87,7 @@ ObPxRepartTransmitOp::ObPxRepartTransmitOp(
 int ObPxRepartTransmitOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  LOG_TRACE("Inner open px fifo transmit", "op_id", MY_SPEC.id_);
   if (OB_FAIL(ObPxTransmitOp::inner_open())) {
-    LOG_WARN("initialize operator context failed", K(ret));
   }
   return ret;
 }
@@ -122,17 +118,14 @@ int ObPxRepartTransmitOp::do_transmit()
     const ObTableSchema *table_schema = NULL;
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                 schema_guard))) {
-      LOG_WARN("faile to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(
                MY_SPEC.repartition_ref_table_id_, table_schema))) {
-      LOG_WARN("faile to get table schema", K(ret), K(MY_SPEC.repartition_ref_table_id_));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("table schema is null. repart sharding requires a table in dfo",
                K(MY_SPEC.repartition_ref_table_id_), K(ret));
     } else if (OB_FAIL(trans_input->get_part_ch_map(part_ch_info_,
                                                     phy_plan_ctx->get_timeout_timestamp()))) {
-      LOG_WARN("fail to get channel affinity map", K(ret));
     } else {
       switch (MY_SPEC.dist_method_) {
         case ObPQDistributeMethod::PARTITION_RANDOM: {
@@ -145,7 +138,6 @@ int ObPxRepartTransmitOp::do_transmit()
                                                        part_ch_info_,
                                                        MY_SPEC.repartition_type_);
           if (OB_FAIL(do_repart_transmit<ObSliceIdxCalc::SM_REPART_RANDOM>(repart_slice_calc))) {
-            LOG_WARN("failed to do repart transmit for pkey random", K(ret));
           }
           break;
         }
@@ -163,7 +155,6 @@ int ObPxRepartTransmitOp::do_transmit()
                                                       MY_SPEC.repartition_type_,
                                                       true);
           if (OB_FAIL(do_repart_transmit<ObSliceIdxCalc::SM_REPART_HASH>(repart_slice_calc))) {
-            LOG_WARN("failed to do repart transmit for pkey random", K(ret));
           }
           break;
         }
@@ -180,9 +171,7 @@ int ObPxRepartTransmitOp::do_transmit()
                                                       MY_SPEC.repartition_type_,
                                                       MY_SPEC.ddl_slice_id_expr_);
           if (OB_FAIL(dynamic_sample())) {
-            LOG_WARN("fail to do dynamic sample", K(ret));
           } else if (OB_FAIL(do_repart_transmit<ObSliceIdxCalc::SM_REPART_RANGE>(range_slice_calc))) {
-            LOG_WARN("failed to do repart transmit for pkey range", K(ret));
           }
           break;
         }
@@ -200,7 +189,6 @@ int ObPxRepartTransmitOp::do_transmit()
                                                                   &MY_SPEC.repartition_exprs_,
                                                                   true);
             if (OB_FAIL(do_repart_transmit<ObSliceIdxCalc::NULL_AWARE_AFFINITY_REPART>(repart_slice_calc))) {
-              LOG_WARN("failed to do repart transmit for pkey", K(ret));
             }
           } else {
             ObAffinitizedRepartSliceIdxCalc repart_slice_calc(ctx_,
@@ -215,7 +203,6 @@ int ObPxRepartTransmitOp::do_transmit()
                                                               &MY_SPEC.dist_hash_funcs_,
                                                               true);
             if (OB_FAIL(do_repart_transmit<ObSliceIdxCalc::AFFINITY_REPART>(repart_slice_calc))) {
-              LOG_WARN("failed to do repart transmit for pkey", K(ret));
             }
           }
           break;
@@ -232,9 +219,7 @@ int ObPxRepartTransmitOp::do_repart_transmit(ObRepartSliceIdxCalc &repart_slice_
   int ret = OB_SUCCESS;
   // init the ObRepartSliceIdxCalc cache map
   if (OB_FAIL(repart_slice_calc.init())) {
-    LOG_WARN("failed to init repart slice calc", K(ret));
   } else if (OB_FAIL(send_rows<CALC_TYPE>(repart_slice_calc))) {
-    LOG_WARN("failed to send rows", K(ret));
   }
 
   int tmp_ret = OB_SUCCESS;
@@ -255,7 +240,6 @@ int ObPxRepartTransmitOp::build_ds_piece_msg(int64_t expected_range_count,
   CK(!MY_SPEC.ds_tablet_ids_.empty());
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(piece_msg.tablet_ids_.assign(MY_SPEC.ds_tablet_ids_))) {
-    LOG_WARN("fail to assign partition ids", K(ret));
   } else if (FALSE_IT(piece_msg.sample_type_ = MY_SPEC.sample_type_)) {
   } else if (is_object_sample()) {
     OZ(build_object_sample_piece_msg(expected_range_count, piece_msg));
@@ -272,13 +256,9 @@ int ObPxRepartTransmitOp::dynamic_sample()
   if (!sample_done_) {
     ObDynamicSamplePieceMsg piece_msg;
     if (OB_FAIL(build_ds_piece_msg(task_channels_.count(), piece_msg))) {
-      LOG_WARN("fail to buil ds piece msg", K(ret));
     } else if (OB_FAIL(do_datahub_dynamic_sample(MY_SPEC.id_, piece_msg))) {
-      LOG_WARN("fail to do dynamic sample");
     } else if (OB_FAIL(child_->rescan())) {
-      LOG_WARN("fail to rescan child", K(ret));
     } else if (OB_FAIL(ObOperator::inner_rescan())) {
-      LOG_WARN("fail to inner rescan", K(ret));
     } else {
       iter_end_ = false;
       consume_first_row_ = true;

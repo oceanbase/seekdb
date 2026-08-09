@@ -74,7 +74,6 @@ bool ObDatumRowCompare::operator()(
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
               lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -136,7 +135,6 @@ bool ObMaxDatumRowCompare::operator()(
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
               lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {

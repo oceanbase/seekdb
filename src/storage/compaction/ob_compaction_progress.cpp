@@ -96,7 +96,6 @@ int ObCompactionProgressMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObInfoRingArray::init(SERVER_PROGRESS_MAX_CNT))) {
-    STORAGE_LOG(WARN, "failed to init ObInfoRingArray", K(ret));
   }
   return ret;
 }
@@ -116,9 +115,7 @@ int ObCompactionProgressMgr::loop_major_sstable_(
   ObLS *ls = nullptr;
   ObLSTabletIterator tablet_iter(ObMDSGetTabletMode::READ_WITHOUT_CHECK);
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-    LOG_WARN("failed to get single log stream", K(ret));
   } else if (OB_FAIL(ls->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
-    LOG_WARN("failed to build ls tablet iter", K(ret));
   } else {
     ObTabletHandle tablet_handle;
 
@@ -179,7 +176,6 @@ int ObCompactionProgressMgr::init_progress(const int64_t major_snapshot_version)
       progress.start_time_ = ObTimeUtility::fast_current_time();
       progress.status_ = share::ObIDag::DAG_STATUS_INITING;
       if (OB_FAIL(ObInfoRingArray::add_no_lock(progress))) {
-        LOG_WARN("failed to add progress", K(ret));
       } else {
         pos = get_last_pos();
         LOG_INFO("success to add progress", K(ret), K(major_snapshot_version), K(progress), K(size()));
@@ -230,11 +226,8 @@ int ObCompactionProgressMgr::finish_progress(const int64_t major_snapshot_versio
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (OB_FAIL(finish_progress_(array_[pos]))) {
-      LOG_WARN("failed to finish progress", K(ret), K(pos), K(major_snapshot_version));
     } else {
-      LOG_DEBUG("success to update status", K(ret), K(pos), K(major_snapshot_version), K(array_[pos]));
     }
   }
   return ret;
@@ -249,14 +242,10 @@ int ObCompactionProgressMgr::get_pos_(const int64_t major_snapshot_version, int6
     if (array_[pos].merge_version_ == major_snapshot_version) {
       break;
     } else if (array_[pos].merge_version_ > major_snapshot_version) {
-      LOG_DEBUG("merge_version is larger than major_snapshot_version", K(pos),
-        "merge_version", array_[pos].merge_version_,
-        K(major_snapshot_version));
       pos = pos == 0 ? max_cnt_ - 1 : pos - 1;
     } else {
       pos = -1;
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_DEBUG("entry not exits", K(ret), K(pos), K(major_snapshot_version));
       break;
     }
     --loop_cnt;
@@ -285,7 +274,6 @@ int ObCompactionProgressMgr::update_progress(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (share::ObIDag::DAG_STATUS_FINISH != array_[pos].status_) {
       if (finish_flag) {
         if (array_[pos].is_inited_ && OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_)) {
@@ -336,8 +324,6 @@ int ObCompactionProgressMgr::update_progress(
       if (ObPartitionMergeProgress::MAX_ESTIMATE_SPEND_TIME < array_[pos].estimated_finish_time_ - array_[pos].start_time_) {
         array_[pos].estimated_finish_time_ = array_[pos].start_time_ + ObPartitionMergeProgress::MAX_ESTIMATE_SPEND_TIME;
       }
-      LOG_DEBUG("success to update progress", K(ret), K(total_data_size_delta), K(major_snapshot_version), K(finish_flag), K(total_data_size_delta),
-          K(scanned_data_size_delta), K(array_[pos]));
     }
   }
   return ret;
@@ -356,7 +342,6 @@ int ObCompactionProgressMgr::update_unfinish_tablet(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_
             || array_[pos].unfinished_tablet_cnt_ < reduce_tablet_cnt
             || array_[pos].unfinished_data_size_ < reduce_data_size)) { // wait for calling finish merge progress
@@ -384,7 +369,6 @@ int ObCompactionProgressMgr::update_compression_ratio(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else {
       array_[pos].original_size_ += merge_history.block_info_.original_size_;
       array_[pos].compressed_size_ += merge_history.block_info_.compressed_size_;
@@ -407,7 +391,6 @@ int ObCompactionProgressIterator::open()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "server modules are not ready", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObCompactionProgressMgr>()->get_list(progress_array_))) {
-    LOG_WARN("failed to get compaction info", K(ret));
   } else {
     cur_idx_ = 0;
     is_opened_ = true;
@@ -451,7 +434,6 @@ int ObTabletCompactionProgressIterator::open()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "server modules are not ready", K(ret));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>()->get_all_compaction_dag_info(allocator_, progress_array_))) {
-    LOG_WARN("failed to get compaction info", K(ret));
   } else {
     cur_idx_ = 0;
     is_opened_ = true;

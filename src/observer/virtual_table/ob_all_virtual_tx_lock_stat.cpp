@@ -60,9 +60,7 @@ int ObGVTxLockStat::get_next_tx_lock_stat_iter_(transaction::ObTxLockStatIterato
   } else {
     tx_lock_stat_iter.reset();
     if (OB_FAIL(tx_ctx->iterate_tx_lock_stat(tx_lock_stat_iter))) {
-      SERVER_LOG(WARN, "fail to get lock op iter", K(ret));
     } else if (OB_FAIL(tx_lock_stat_iter.set_ready())) {
-      SERVER_LOG(WARN, "set lock_op_iter_ ready failed", K(ret));
     }
   }
   if (OB_NOT_NULL(tx_ctx)) {
@@ -105,11 +103,8 @@ int ObGVTxLockStat::prepare_start_to_read_()
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ls service is null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_))) {
-    SERVER_LOG(WARN, "get log stream failed", K(ret));
   } else if (OB_FAIL(ls_->iterate_tx_ctx(tx_ctx_iter_))) {
-    SERVER_LOG(WARN, "fail to get tx ctx iter", K(ret));
   } else if (OB_FAIL(get_next_tx_lock_stat_iter_(tx_lock_stat_iter_))) {
-    SERVER_LOG(WARN, "init tx_lock_stat_iter_ failed", K(ret));
   } else {
     start_to_read_ = true;
   }

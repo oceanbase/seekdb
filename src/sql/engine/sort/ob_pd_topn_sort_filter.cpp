@@ -81,11 +81,9 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(PX_P2P_DH.alloc_msg(mem_context_->get_malloc_allocator(),
                                   pd_topn_filter_info_->dh_msg_type_, p2p_msg))) {
-    LOG_WARN("fail to alloc msg", K(ret));
   } else if (FALSE_IT(pd_topn_filter_msg = static_cast<ObPushDownTopNFilterMsg *>(p2p_msg))) {
   } else if (OB_FAIL(pd_topn_filter_msg->init(pd_topn_filter_info, sort_collations,
                                               exec_ctx, px_seq_id, is_fetch_with_ties))) {
-    LOG_WARN("failed to init pushdown topn filter msg");
   } else if (!pd_topn_filter_info_->is_shuffle_
              && OB_FAIL(create_pd_topn_filter_ctx(pd_topn_filter_info, exec_ctx, px_seq_id))) {
     // for local topn filter pushdown, we directly create filter_ctx here;
@@ -107,7 +105,6 @@ int ObPushDownTopNFilter::init(bool is_fetch_with_ties,
     }
   }
 
-  LOG_TRACE("[TopN Filter] init topn filter msg");
   return ret;
 }
 
@@ -116,7 +113,6 @@ int ObPushDownTopNFilter::update_filter_data(ObChunkDatumStore::StoredRow *store
   int ret = OB_SUCCESS;
   bool is_updated = false;
   if (OB_FAIL(pd_topn_filter_msg_->update_filter_data(store_row, is_updated))) {
-    LOG_WARN("failed to update filter data", K(ret));
   } else if (FALSE_IT(set_need_update(false))) {
   } else if (is_updated && OB_FAIL(publish_topn_msg())) {
     LOG_WARN("failed to publish topn msg");
@@ -143,7 +139,6 @@ int ObPushDownTopNFilter::create_pd_topn_filter_ctx(
 
   if (nullptr == topn_filter_ctx) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(expr_ctx_id, topn_filter_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret), K(expr_ctx_id));
     } else {
       topn_filter_ctx_ = topn_filter_ctx;
       ObP2PDhKey dh_key(pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id);
@@ -173,13 +168,9 @@ int ObPushDownTopNFilter::publish_topn_msg()
   } else if (!msg_set_) {
     pd_topn_filter_msg_->set_is_ready(true);
     if (OB_FAIL(PX_P2P_DH.publish_local_msg(*pd_topn_filter_msg_))) {
-      LOG_WARN("fail to send local p2p msg", K(ret));
     } else {
       msg_set_ = true;
       if (topn_filter_ctx_) {
-        LOG_TRACE("[TopN Filter] success to set msg to local p2p datahub", K(pd_topn_filter_msg_),
-                  K(topn_filter_ctx_->topn_filter_key_), K(topn_filter_ctx_->total_count_),
-                  K(topn_filter_ctx_->check_count_), K(topn_filter_ctx_->filter_count_));
       }
     }
   }

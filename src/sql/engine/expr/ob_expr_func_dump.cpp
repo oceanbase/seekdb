@@ -108,7 +108,6 @@ int print_value(char *tmp_buf, const int64_t buff_size, int64_t &pos,
 
   if (OB_SUCC(ret)) {
     pos -= 1;
-    LOG_DEBUG("succ to print_value", K(value_string), K(print_value_string), K(fmt_enum), K(start_pos), K(print_value_len), K(pos));
   }
   return ret;
 }
@@ -161,18 +160,15 @@ static int databuff_print_decimalint(
     if (OB_FAIL(databuff_printf(buffer, length, pos,
                 "\"precision=%hd scale=%hd int_bytes=%d items=[",
                 precision, scale, int_bytes))) {
-      LOG_WARN("failed to databuff_printf", K(ret), K(precision), K(scale), K(int_bytes));
     } else {
       switch (int_bytes) {
         case sizeof(int32_t): {
           if (OB_FAIL(databuff_printf(buffer, length, pos, "%d", *(decint->int32_v_)))) {
-            LOG_WARN("failed to databuff_printf", K(ret), K(*(decint->int32_v_)));
           }
           break;
         }
         case sizeof(int64_t): {
           if (OB_FAIL(databuff_printf(buffer, length, pos, "%ld", *(decint->int64_v_)))) {
-            LOG_WARN("failed to databuff_printf", K(ret), K(*(decint->int64_v_)));
           }
           break;
         }
@@ -180,7 +176,6 @@ static int databuff_print_decimalint(
           for (int i = 0; OB_SUCC(ret) && i < 2; ++i) {
             if (OB_FAIL(databuff_printf(
                 buffer, length, pos, "%lu,", decint->int128_v_->items_[i]))) {
-              LOG_WARN("failed to databuff_printf", K(ret), K(i), K(decint->int128_v_->items_[i]));
             }
           }
           break;
@@ -189,7 +184,6 @@ static int databuff_print_decimalint(
           for (int i = 0; OB_SUCC(ret) && i < 4; ++i) {
             if (OB_FAIL(databuff_printf(
                 buffer, length, pos, "%lu,", decint->int256_v_->items_[i]))) {
-              LOG_WARN("failed to databuff_printf", K(ret), K(i), K(decint->int128_v_->items_[i]));
             }
           }
           break;
@@ -198,7 +192,6 @@ static int databuff_print_decimalint(
           for (int i = 0; OB_SUCC(ret) && i < 8; ++i) {
             if (OB_FAIL(databuff_printf(
                 buffer, length, pos, "%lu,", decint->int512_v_->items_[i]))) {
-              LOG_WARN("failed to databuff_printf", K(ret), K(i), K(decint->int128_v_->items_[i]));
             }
           }
           break;
@@ -211,7 +204,6 @@ static int databuff_print_decimalint(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(databuff_printf(buffer, length, pos, "]\""))) {
-          LOG_WARN("failed to databuff_printf", K(ret));
         }
       }
     }
@@ -233,7 +225,6 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
   int ret = OB_SUCCESS;
   ObDatum *input = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, input))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (input->is_null()) {
     expr_datum.set_null();
   } else {
@@ -249,7 +240,6 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
           ObString src_str(0, (int32_t)strlen(nmb_str), const_cast<char *>(nmb_str));
           if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
                       expr, ctx, expr_datum, src_str))) {
-            LOG_WARN("set ASCII result failed", K(ret));
           }
         }
         break;
@@ -259,10 +249,8 @@ int ObExprFuncDump::eval_dump(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
         int64_t buf_pos = 0;
         if (OB_FAIL(databuff_print_decimalint(
             expr.args_[0]->datum_meta_, *input, buf, sizeof(buf), buf_pos))) {
-          LOG_WARN("failed to databuff_print_decimalint", K(ret));
         } else if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
                             expr, ctx, expr_datum, ObString(buf_pos, buf)))) {
-          LOG_WARN("set ASCII result failed", K(ret));
         }
         break;
       }

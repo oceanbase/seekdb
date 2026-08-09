@@ -149,11 +149,9 @@ void ObLibXml2SaxHandler::start_document(void *ctx)
   INIT_SUCC(ret);
   ObLibXml2SaxParser* parser =  nullptr;
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->start_document())) {
-    LOG_WARN("parser start_document failed", K(ret));
   }
   if (OB_FAIL(ret)) {
     parser->stop_parse(ret);
@@ -166,11 +164,9 @@ void ObLibXml2SaxHandler::end_document(void *ctx)
   ObLibXml2SaxParser* parser =  nullptr;
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->end_document())) {
-    LOG_WARN("parser end_document failed", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -184,12 +180,10 @@ void ObLibXml2SaxHandler::start_element(void* ctx, const xmlChar* name, const xm
   INIT_SUCC(ret);
   ObLibXml2SaxParser* parser =  nullptr;
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->start_element(reinterpret_cast<const char*>(name),
                                            reinterpret_cast<const char**>(p)))) {
-    LOG_WARN("parser start_element failed", K(ret));
   }
   if (OB_FAIL(ret)) {
     parser->stop_parse(ret);
@@ -201,11 +195,9 @@ void ObLibXml2SaxHandler::end_element(void* ctx, const xmlChar* name)
   INIT_SUCC(ret);
   ObLibXml2SaxParser* parser =  nullptr;
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->end_element())) {
-    LOG_WARN("parser end_element failed", K(ret));
   }
   if (OB_FAIL(ret)) {
     parser->stop_parse(ret);
@@ -218,12 +210,10 @@ void ObLibXml2SaxHandler::characters(void *ctx, const xmlChar *ch, int len)
   ObLibXml2SaxParser* parser =  nullptr;
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->characters(reinterpret_cast<const char*>(ch),
                                 len))) {
-    LOG_WARN("parser characters failed", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -237,13 +227,11 @@ void ObLibXml2SaxHandler::cdata_block(void* ctx, const xmlChar* value, int len)
   ObLibXml2SaxParser* parser =  nullptr;
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->add_text_node(ObMulModeNodeType::M_CDATA,
                                    reinterpret_cast<const char*>(value),
                                    len))) {
-    LOG_WARN("parser cdata block failed", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -257,15 +245,12 @@ void ObLibXml2SaxHandler::comment(void* ctx, const xmlChar* value)
   ObLibXml2SaxParser* parser =  nullptr;
   const char *src_value = reinterpret_cast<const char*>(value);
   if (OB_ISNULL(src_value)) {
-    LOG_DEBUG("empty comment ignore");
   } else if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_FAIL(parser->add_text_node(ObMulModeNodeType::M_COMMENT,
                                    src_value,
                                    STRLEN(src_value)))) {
-    LOG_WARN("parser comment failed", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -283,11 +268,9 @@ void ObLibXml2SaxHandler::processing_instruction(void *ctx, const xmlChar *targe
   int data_len = src_data == nullptr ? 0 : STRLEN(src_data);
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", );         
   } else if (OB_FAIL(parser->processing_instruction(ObString(target_len, src_target), ObString(data_len, src_data)))) {
-      LOG_WARN("processing_instruction failed", K(ret)); 
     }
   if (OB_FAIL(ret)) {
     parser->stop_parse(ret);
@@ -304,7 +287,6 @@ void ObLibXml2SaxHandler::internal_subset(void *ctx,
   ObLibXml2SaxParser* parser =  nullptr;
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (OB_UNLIKELY(parser->is_stop_parse())) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else {
@@ -322,7 +304,6 @@ void ObLibXml2SaxHandler::entity_reference(void *ctx, const xmlChar *name)
   ObLibXml2SaxParser* parser =  nullptr;
 
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (parser->is_stop_parse()) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else {
@@ -342,14 +323,12 @@ void ObLibXml2SaxHandler::structured_error(void *ctx, const xmlError *error)
   INIT_SUCC(ret);
   ObLibXml2SaxParser* parser =  nullptr;
   if (OB_FAIL(get_parser(ctx, parser))) {
-    LOG_WARN("get_parser failed", K(ret));
   } else if (parser->is_stop_parse()) {
     LOG_INFO("parser is stopped", K(parser->get_last_errno()));
   } else if (OB_ISNULL(error)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input error_info is null", K(ret));
   } else if (OB_FAIL(parser->on_error(error->code))) {
-    LOG_WARN("parse error", K(error->code), K(error->line), K(error->int1), K(error->int2), KCSTRING(error->message));
   }
 }
 
@@ -425,11 +404,9 @@ int ObLibXml2SaxParser::init(const ObString& xml_text, bool skip_start_blank)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is null", K(ret));
   } else if (OB_FAIL(init_xml_text(xml_text, skip_start_blank))) {
-    LOG_WARN("init_xml_text failed", K(ret), K(xml_text));
   } else if (xml_text_.empty()) {
     // ignore empty
   } else if (OB_FAIL(init_parse_context())){
-    LOG_WARN("create parser ctxt failed", K(ret));
   }
   return ret;
 }
@@ -492,14 +469,12 @@ int ObLibXml2SaxParser::parse_document(const ObString& xml_text)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(init(xml_text, true))) {
-    LOG_WARN("init failed", K(ret));
   } else if (xml_text_.empty()) {
     ret = OB_ERR_PARSER_SYNTAX;
     LOG_WARN("xml_text_ is empty or blank", K(ret));
   } else {
     xmlParseDocument(ctxt_);
     if (OB_FAIL(this->get_last_errno())) {
-      LOG_WARN("parse failed", K(ret), K(xml_text));
     }
     ObLibXml2SaxHandler::reset_libxml_last_error();
   }
@@ -513,7 +488,6 @@ int ObLibXml2SaxParser::parse_content(const ObString& xml_text)
   // 1. Contains only text text, and there are blank characters at the beginning that need to be reserved
   // 2. Including the element node, the empty characters at the beginning and in the middle should not be reserved
   if (OB_FAIL(init(xml_text, false))) {
-    LOG_WARN("init failed", K(ret));
   } else if (OB_ISNULL(document_ = OB_NEWx(ObXmlDocument, allocator_, ObMulModeNodeType::M_CONTENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret));
@@ -526,12 +500,10 @@ int ObLibXml2SaxParser::parse_content(const ObString& xml_text)
     ctxt_->str_xml_ns = reinterpret_cast<const xmlChar*>(ObXmlConstants::XML_NAMESPACE_SPECIFICATION_URI);
     xmlParseContent(ctxt_);
     if (OB_FAIL(this->get_last_errno())) {
-      LOG_WARN("parse failed", K(ret), K(xml_text));
     } else if (OB_UNLIKELY(! is_parsed_all_input())) {
       ret = OB_ERR_PARSER_SYNTAX;
       LOG_WARN("input not parsed fullly", K(ret), K(xml_text.length()), K(get_parse_byte_num()));
     } else if (OB_FAIL(remove_prev_empty_text())) {
-      LOG_WARN("remove_prev_empty_text fail", K(ret));
     }
     ObLibXml2SaxHandler::reset_libxml_last_error();
   }
@@ -595,7 +567,6 @@ int ObLibXml2SaxParser::push_namespace(ObXmlAttribute* ns)
   } else {
     ns_cnt_stack_[ns_cnt_stack_.size()-1]++;
     if (OB_FAIL(ns_stack_.push_back(ns))) {
-      LOG_WARN("failed to push back ns", K(ret), KP(ns));
     }
   }
   return ret;
@@ -607,7 +578,6 @@ int ObLibXml2SaxParser::pop_namespace()
   int cur_ns_cnt = 0;
   if (ns_cnt_stack_.size() > 0) {
     if (OB_FAIL(ns_cnt_stack_.pop_back(cur_ns_cnt))) {
-      LOG_WARN("failed to pop back.", K(ret), K(cur_ns_cnt));
     }
     for (int i = 0; OB_SUCC(ret) && i < cur_ns_cnt; ++i) {
       ns_stack_.pop_back();
@@ -680,7 +650,6 @@ int ObLibXml2SaxParser::set_xml_decl(const ObString& xml_decl_str)
                                                    has_encoding_value,
                                                    src_standalone_str,
                                                    has_standalone_value))) {
-        LOG_WARN("parse_xml_decl failed", K(ret), K(has_xml_decl), K(xml_decl_str));
       } else {
         int version_length = src_version_str.length();
         int encoding_length = src_encoding_str.length();
@@ -716,20 +685,15 @@ int ObLibXml2SaxParser::start_document()
   INIT_SUCC(ret);
   ObString xml_decl_str;
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_ISNULL(document_ = OB_NEWx(ObXmlDocument, allocator_, ObMulModeNodeType::M_DOCUMENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret));
   } else if (OB_FAIL(document_->init())) {
-    LOG_WARN("document init failed", K(ret));
   } else {
     document_->set_flags(MEMBER_LAZY_SORTED);
     if (OB_FAIL(ObXmlParserBase::start_document(document_))) {
-      LOG_WARN("parser start_document failed", K(ret));
     } else if (OB_FAIL(get_xml_decl_str(ctxt_, xml_text_, xml_decl_str))) {
-      LOG_WARN("get xml decl string failed", K(ret));
     } else if (OB_FAIL(this->set_xml_decl(xml_decl_str))) {
-      LOG_WARN("set_xml_decl failed", K(ret));
     }
   }
   return ret;
@@ -761,7 +725,6 @@ int ObLibXml2SaxParser::set_element_name(ObXmlElement& element, const char* src_
       MEMCPY(elem_name, src_name, elem_name_length);
       qname.assign_ptr(elem_name, elem_name_length);
       if (OB_FAIL(ObXmlParserUtils::get_prefix_and_localname(qname, prefix, localname))) {
-        LOG_WARN("get_prefix_and_localname failed", K(ret), K(elem_name_length));
       } else {
         element.set_prefix(prefix);
         element.set_xml_key(localname);
@@ -784,7 +747,6 @@ int ObLibXml2SaxParser::escape_xml_text(const ObString& src_attr_value, ObString
     LOG_WARN("alloc failed", K(ret), K(dst_len));
   } else if (OB_FALSE_IT(attr_value.assign_buffer(attr_value_ptr, dst_len))) {
   } else if (OB_FAIL(ObXmlParserUtils::escape_xml_text(src_attr_value, attr_value))) {
-    LOG_WARN("escape_xml_text failed", K(ret), K(src_attr_value));
   } else {
     dst_attr_value.assign_ptr(attr_value_ptr, dst_len);
   }
@@ -798,7 +760,6 @@ int ObLibXml2SaxParser::construct_text_value(const ObString &src_attr_value, ObS
   int attr_value_len = 0;
   if (! is_entity_replace()) {
     if (OB_FAIL(escape_xml_text(src_attr_value, attr_value))) {
-      LOG_WARN("escape_attr_value failed", K(ret), K(src_attr_value));
     }
   } else {
     attr_value_len = src_attr_value.length();
@@ -849,7 +810,6 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
         MEMCPY(attr_name, src_attr_name, attr_name_length);
         qname.assign_ptr(attr_name, attr_name_length);
         if (OB_FAIL(ObXmlParserUtils::get_prefix_and_localname(qname, prefix, localname))) {
-          LOG_WARN("get_prefix_and_localname failed", K(ret), K(attr_name_length), KCSTRING(src_attr_name));
         } else {
           attr->set_prefix(prefix);
           attr->set_xml_key(localname);
@@ -859,7 +819,6 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
 
     if (OB_SUCC(ret) && attr_value_length > 0) {
       if (OB_FAIL(construct_text_value(src_attr_value_str, attr_value))) {
-        LOG_WARN("construct_text_value failed", K(ret), K(src_attr_value_str));
       } else {
         attr->set_value(attr_value);
       }
@@ -879,12 +838,9 @@ int ObLibXml2SaxParser::add_element_attr(ObXmlElement& element, const char* src_
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("ns is invalid", K(ret), KPC(attr), K(localname));
         } else if (OB_FAIL(element.add_attribute(attr))) {
-          LOG_WARN("add_attribute failed", K(ret)); 
         } else if (OB_FAIL(this->push_namespace(attr))) {
-          LOG_WARN("push_namespace failed", K(ret)); 
         }
       } else if (OB_FAIL(element.add_attribute(attr))) {
-        LOG_WARN("add_attribute failed", K(ret)); 
       }   
     }
   }
@@ -898,20 +854,17 @@ int ObLibXml2SaxParser::set_element_namespace(ObXmlElement& element) {
   ObLibContainerNode* attributes = nullptr;
 
   if (OB_FAIL(this->get_namespace(element.get_prefix(), true, elem_ns))) {
-    LOG_WARN("get element namespace failed", K(ret), K(element.get_prefix()));
   } else {
     element.set_ns(elem_ns);
     int attr_size = element.attribute_size();
     for (int i = 0; OB_SUCC(ret) && i < attr_size; ++i) {
       ObXmlAttribute* attr = NULL;
       if (OB_FAIL(element.get_attribute(attr, i))) {
-        LOG_WARN("get attribute failed", K(ret), K(i));
       } else if (OB_ISNULL(attr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get attr", K(ret));
       } else if (attr->type() == ObMulModeNodeType::M_ATTRIBUTE) {
         if (OB_FAIL(this->get_namespace(attr->get_prefix(), false, attr_ns))) {
-          LOG_WARN("get attribute namespace failed", K(ret), K(i));
         } else {
           attr->set_ns(attr_ns);
           attr_ns = nullptr;
@@ -927,32 +880,25 @@ int ObLibXml2SaxParser::start_element(const char* name, const char** attrs)
   INIT_SUCC(ret);
   ObXmlElement* element = nullptr;
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_ISNULL(element = OB_NEWx(ObXmlElement, allocator_, ObMulModeNodeType::M_ELEMENT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret));
   } else if (OB_FAIL(element->init())) {
-    LOG_WARN("element init failed", K(ret));
   } else if (FALSE_IT(element->set_flags(MEMBER_LAZY_SORTED))) {
   } else if(OB_FAIL(ns_cnt_stack_.push_back(0))) {
-    LOG_WARN("ns_cnt_stack_ current ns cnt init failed", K(ret));
   } else if (OB_FAIL(this->set_element_name(*element, name))) {
-    LOG_WARN("set_element_name failed", K(ret));
   }
   
   if (OB_SUCC(ret) && OB_NOT_NULL(attrs)) {
     for (const char** cur = attrs; OB_SUCC(ret) && cur && *cur; cur += 2) {
       if (OB_FAIL(this->add_element_attr(*element, *cur, *(cur + 1)))) {
-        LOG_WARN("add_element_attr failed", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(this->set_element_namespace(*element))) {
-      LOG_WARN("parser set_element_namespace failed", K(ret));
     } else if (OB_FAIL(ObXmlParserBase::start_element(element))) {
-      LOG_WARN("parser start_element failed", K(ret));
     }
   }
 
@@ -977,7 +923,6 @@ int ObLibXml2SaxParser::end_element()
   INIT_SUCC(ret);
   ObXmlElement* element = nullptr;
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_ISNULL(element = 
                 ObXmlUtil::xml_node_cast<ObXmlElement>(cur_node_, ObMulModeNodeType::M_ELEMENT))) {
     ret = OB_ERR_UNEXPECTED;
@@ -985,9 +930,7 @@ int ObLibXml2SaxParser::end_element()
   } else {
     element->set_empty(is_empty_element_tag(ctxt_));
     if (OB_FAIL(ObXmlParserBase::end_element())) {
-      LOG_WARN("parser end_element failed", K(ret));
     } else if (OB_FAIL(this->pop_namespace())) {
-      LOG_WARN("pop_namespace failed", K(ret));
     }
   } 
   return ret;
@@ -1001,7 +944,6 @@ int ObLibXml2SaxParser::alloc_text_node(ObMulModeNodeType type,
   INIT_SUCC(ret);
   char* str = nullptr; 
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_ISNULL(node = OB_NEWx(ObXmlText, allocator_, type, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret));
@@ -1022,14 +964,11 @@ int ObLibXml2SaxParser::add_text_node(ObMulModeNodeType type, const char* value,
   INIT_SUCC(ret);
   ObXmlText* cdata = nullptr;
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_FAIL(this->alloc_text_node(type,
                                            value,
                                            len,
                                            cdata))) {
-    LOG_WARN("alloc_text_node failed", K(ret));
   } else if (OB_FAIL(ObXmlParserBase::add_text_node(cdata))) {
-    LOG_WARN("cdata_block failed", K(ret));
   }
   return ret;
 }
@@ -1062,7 +1001,6 @@ int ObLibXml2SaxParser::characters(const char *ch, int len)
   INIT_SUCC(ret);
   ObString data;
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else {
     // libxml2 will replace entity ref, so if need replace, just copy.
     // when parse characters in libxml2, if is plain text, ctxt_->input->cur points same with ch.
@@ -1075,7 +1013,6 @@ int ObLibXml2SaxParser::characters(const char *ch, int len)
       data.assign_ptr(ch, len);
     }
     if (OB_FAIL(this->add_or_merge_text(data))) {
-      LOG_WARN("parser add or merge text failed", K(ret), K(data));
     }
   } 
   return ret;
@@ -1093,7 +1030,6 @@ int ObLibXml2SaxParser::processing_instruction(const ObString& target, const ObS
   char* value = nullptr;
 
   if (OB_FAIL(this->check())) {
-    LOG_WARN("check failed", K(ret));
   } else if (OB_ISNULL(pi = OB_NEWx(ObXmlAttribute, allocator_, ObMulModeNodeType::M_INSTRUCT, ctx_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc failed", K(ret));          
@@ -1109,7 +1045,6 @@ int ObLibXml2SaxParser::processing_instruction(const ObString& target, const ObS
     pi->set_xml_key(ObString(name_len, name));
     pi->set_value(ObString(value_len, value));
     if (OB_FAIL(ObXmlParserBase::processing_instruction(pi))) {
-      LOG_WARN("processing_instruction failed", K(ret)); 
     }
   }
   return ret;

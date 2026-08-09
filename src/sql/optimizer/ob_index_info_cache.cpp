@@ -72,14 +72,12 @@ int ObIndexInfoCache::get_query_range(const uint64_t table_id,
   } else {
     IndexInfoEntry *entry = NULL;
     if (OB_FAIL(get_index_info_entry(table_id, index_id, entry))) {
-      LOG_WARN("failed to get index_info entry", K(index_id), K(ret));
     } else if (OB_ISNULL(entry)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("entry should not be null", K(ret));
     } else if (entry->get_range_info().is_valid()){
       range_info = &entry->get_range_info();
     } else {
-      LOG_TRACE("entry is invalid", K(table_id), K(index_id));
     }
   }
   return ret;
@@ -100,7 +98,6 @@ int ObIndexInfoCache::get_access_path_ordering(const uint64_t table_id,
   } else {
     IndexInfoEntry *entry = NULL;
     if (OB_FAIL(get_index_info_entry(table_id, index_id, entry))) {
-      LOG_WARN("failed to get index_info entry", K(index_id), K(ret));
     } else if (OB_ISNULL(entry)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("entry should not be null", K(ret));
@@ -120,7 +117,6 @@ int ObIndexInfoCache::add_index_info_entry(IndexInfoEntry *entry)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("entry should not be null", K(ret));
   } else if (OB_FAIL(get_index_info_entry(table_id_, entry->get_index_id(), old_entry, &idx))) {
-    LOG_WARN("failed to get index info entry", KPC(entry), K(ret));
   } else if (old_entry != nullptr) {
     // update index info entry
     old_entry->~IndexInfoEntry();

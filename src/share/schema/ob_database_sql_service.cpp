@@ -71,7 +71,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
     if (OB_FAIL(ret)) {
     } else if (is_only_history) {
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute insert failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
@@ -84,7 +83,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
       LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_HISTORY_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute insert failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected", K(affected_rows), K(ret));
@@ -100,7 +98,6 @@ int ObDatabaseSqlService::insert_database(const ObDatabaseSchema &database_schem
       create_db_op.schema_version_ = database_schema.get_schema_version();
       create_db_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(create_db_op, sql_client))) {
-        LOG_WARN("log create database ddl operation failed", K(create_db_op), K(ret));
       }
     }
   }
@@ -170,7 +167,6 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
       alter_db_op.schema_version_ = database_schema.get_schema_version();
       alter_db_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(alter_db_op, sql_client))) {
-        SHARE_SCHEMA_LOG(WARN, "log update database ddl operation failed", K(alter_db_op), K(ret));
       }
     }
   }
@@ -194,9 +190,7 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
   if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE database_id = %lu",
                             OB_ALL_DATABASE_TNAME,
                             ObSchemaUtils::get_extract_schema_id(database_id)))) {
-    LOG_WARN("assign_fmt failed", K(ret));
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-    LOG_WARN("execute sql failed", K(sql), K(ret));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
@@ -208,7 +202,6 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
                                ObSchemaUtils::get_extract_schema_id(database_id),
                                new_schema_version, IS_DELETED))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
@@ -225,7 +218,6 @@ int ObDatabaseSqlService::delete_database(const ObDatabaseSchema &db_schema,
     delete_db_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
     delete_db_op.op_type_ = OB_DDL_DEL_DATABASE;
     if (OB_FAIL(log_operation(delete_db_op, sql_client))) {
-      LOG_WARN("log delete database ddl operation failed", K(delete_db_op), K(ret));
     }
   }
 

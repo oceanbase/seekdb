@@ -83,7 +83,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
         // do nothing in inner_sql
       } else if (OB_FAIL(mask_password_for_users(allocator_,
           session_info_->get_current_query_string(), users, 1, masked_sql))) {
-        LOG_WARN("fail to mask_password_for_users", K(ret));
       } else {
         create_user_stmt->set_masked_sql(masked_sql);
       }
@@ -100,7 +99,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
           ObString host_name;
 
           if (OB_FAIL(resolve_user_host(user_pass, user_name, host_name))) {
-            LOG_WARN("fail to resolve user_host");
           }
 
           ObString password;
@@ -135,7 +133,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
           }
           if (OB_SUCC(ret) && need_enc) {
             if (OB_FAIL(check_password_strength(password))) {
-              LOG_WARN("password don't satisfied current policy", K(ret));
             }
           }
           
@@ -144,7 +141,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
               ret = OB_WRONG_USER_NAME_LENGTH;
               LOG_USER_ERROR(OB_WRONG_USER_NAME_LENGTH, user_name.length(), user_name.ptr());
             } else if (OB_FAIL(create_user_stmt->add_user(user_name, host_name, password, need_enc_str))) {
-              LOG_WARN("Failed to add user to ObCreateUserStmt", K(user_name), K(host_name), K(password), K(ret));
             } else {
               //do nothing
             }
@@ -204,10 +200,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
                                                  infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_CIPHER)],
                                                  infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_ISSUER)],
                                                  infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_SUBJECT)]))) {
-        LOG_WARN("Failed to add_ssl_info", K(ssl_type),
-                 "CIPHER", infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_CIPHER)],
-                 "ISSUER", infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_ISSUER)],
-                 "SUBJECT", infos[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_SUBJECT)], K(ret));
       }
     }
     if (OB_SUCC(ret) && NULL != resource_options) {

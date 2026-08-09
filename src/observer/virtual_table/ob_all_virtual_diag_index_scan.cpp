@@ -48,7 +48,6 @@ int ObAllVirtualDiagIndexScan::set_index_ids(const common::ObIArray<common::ObNe
           if (ObIntType == start_key_obj_ptr[0].get_type()) {
             index_id = start_key_obj_ptr[0].get_int();
             if (OB_FAIL(add_var_to_array_no_dup(index_ids_, index_id))) {
-              SERVER_LOG(WARN, "index id invalid", K(index_id), K(ret));
             }
           } else {
             ret = OB_INVALID_ARGUMENT;

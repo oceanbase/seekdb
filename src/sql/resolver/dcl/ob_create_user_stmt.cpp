@@ -54,13 +54,9 @@ int ObCreateUserStmt::add_user(const common::ObString &user_name,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(users_.add_string(user_name))) {
-    LOG_WARN("failed to add user", K(ret));
   } else if (OB_FAIL(users_.add_string(host_name))) {
-    LOG_WARN("failed to add host_name", K(ret));
   } else if (OB_FAIL(users_.add_string(password))) {
-    LOG_WARN("failed to add password", K(ret));
   } else if (OB_FAIL(users_.add_string(need_enc))) {
-    LOG_WARN("failed to add need enc", K(ret));
   } else {
     //do nothing
   }
@@ -74,13 +70,9 @@ int ObCreateUserStmt::add_ssl_info(const common::ObString &ssl_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(users_.add_string(ssl_type))) {
-    LOG_WARN("failed to add ssl_type", K(ret));
   } else if (OB_FAIL(users_.add_string(ssl_cipher))) {
-    LOG_WARN("failed to add ssl_cipher", K(ret));
   } else if (OB_FAIL(users_.add_string(x509_issuer))) {
-    LOG_WARN("failed to add x509_issuer", K(ret));
   } else if (OB_FAIL(users_.add_string(x509_subject))) {
-    LOG_WARN("failed to add x509_subject", K(ret));
   } else {
     //do nothing
   }

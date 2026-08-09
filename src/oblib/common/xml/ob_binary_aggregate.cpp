@@ -88,25 +88,20 @@ int ObJsonBinAggSerializer::append_key_and_value(ObString key, ObStringBuffer &v
                         0 : key_info_.at(key_count-1)->offset_ + key_info_.at(key_count-1)->key_len_;
 
     if (OB_FAIL(json_val->get_total_value(value))) {
-      LOG_WARN("get total value failed", K(ret));
     } else if (OB_FAIL(key_.append(key.ptr(), key.length()))) {
-      LOG_WARN("failed to append key into key_", K(ret), K(key));
     } else {
       uint64_t need_size = value_.length() + value.length() + 8;
       if (check_three_allocator() || need_size <= value_.capacity() || need_size < REPLACE_MEMORY_SIZE_THRESHOLD) {
         if (OB_FAIL(value_.append(value.ptr(), value.length(), 0))) {
-          LOG_WARN("failed to append key into key_", K(ret), K(value));
         }
       } else {
         if (first_alloc_flag()) {
           if (OB_FAIL(copy_and_reset(back_allocator_, allocator_, value))) {
-            LOG_WARN("failed to copy and reset.", K(ret));
           } else {
             set_second_alloc();
           }
         } else {
           if (OB_FAIL(copy_and_reset(allocator_, back_allocator_, value))) {
-            LOG_WARN("failed to copy and reset.", K(ret));
           } else {
             set_first_alloc();
           }
@@ -188,12 +183,9 @@ int ObJsonBinAggSerializer::construct_header()
                                               count_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(header_serializer.serialize())) {
-    LOG_WARN("header serialize failed.", K(ret));
   } else if (OB_FALSE_IT(header_str = header_serializer.buffer()->string())) {
   } else if (OB_FAIL(buff_.reserve(total_size))) {
-    LOG_WARN("buff reserver failed.", K(ret), K(total_size));
   } else if (OB_FAIL(buff_.append(header_str.ptr(), header_str.length(), 0))) {
-    LOG_WARN("failed to append.", K(header_str));
   } else {
     header_ = header_serializer;
   }
@@ -225,7 +217,6 @@ int ObJsonBinAggSerializer::set_key(int64_t key_offset, int64_t key_len)
   INIT_SUCC(ret);
   char* write_buf = key_.ptr() + key_offset;
   if (OB_FAIL(buff_.append(write_buf, key_len, 0))) {
-    LOG_WARN("failed to append buff.", K(ret), K(buff_.length()), K(key_len));
   }
   return ret;
 }
@@ -235,7 +226,6 @@ int ObJsonBinAggSerializer::set_value(int64_t value_offset, int64_t value_len)
   INIT_SUCC(ret);
   char* write_buf = value_.ptr() + value_offset;
   if (OB_FAIL(buff_.append(write_buf, value_len, 0))) {
-    LOG_WARN("failed to append buff.", K(ret), K(buff_.length()), K(value_len));
   }
   return ret;
 }
@@ -246,7 +236,6 @@ int ObJsonBinAggSerializer::reserve_meta()
   int64_t pos = buff_.length();
   uint32_t reserve_size = key_start_ - index_start_;
   if (OB_FAIL(buff_.set_length(pos + reserve_size))) {
-    LOG_WARN("failed to set length.", K(ret), K(pos + reserve_size));
   }
   return ret;
 }
@@ -267,7 +256,6 @@ int ObJsonBinAggSerializer::construct_meta()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("key start unexpected.", K(ret), K(key_start_));
   } else if (OB_FAIL(reserve_meta())) {
-    LOG_WARN("failed to reserve meta.", K(ret), K(buff_.length()));
   } else {
     int64_t key_offset = 0;
     int64_t i_offset = 0;
@@ -305,14 +293,12 @@ int ObJsonBinAggSerializer::construct_key_and_value()
       if ((has_unique_flag() && key_info->is_duplicate_)) {
         // do nothing
       } else if (OB_FAIL(set_key(key_info->offset_, key_info->key_len_))) {
-        LOG_WARN("failed to set key.", K(ret), K(key_info->offset_), K(key_info->key_len_));
       }
     }
   }
 
   if (!has_unique_flag()) {
     if (OB_FAIL(buff_.append(value_.ptr(), value_.length(), 0))) {
-      LOG_WARN("failed to append value into buff_.", K(ret), K(value_.length()));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_info_.count(); i++) {
@@ -320,7 +306,6 @@ int ObJsonBinAggSerializer::construct_key_and_value()
       if (key_info->is_duplicate_) {
         // do nothing
       } else if (OB_FAIL(set_value(key_info->value_offset_, key_info->value_len_))) {
-        LOG_WARN("failed to set value", K(ret), K(key_info->value_offset_), K(key_info->value_len_));
       }
     }
   }
@@ -340,21 +325,15 @@ int ObJsonBinAggSerializer::copy_and_reset(ObIAllocator* new_allocator,
     ObAggBinKeyArray new_key_info;
 
     if (OB_FAIL(new_value.reserve(value_.length() + add_value.length()))) {
-      LOG_WARN("failed to reserve new value", K(ret), K(value_.length()), K(add_value.length()));
     } else if (OB_FAIL(new_value.append(value_.ptr(), value_.length(), 0))) {
-      LOG_WARN("failed to append value.", K(new_value.length()), K(value_.length()));
     } else if (OB_FAIL(new_value.append(add_value.ptr(), add_value.length(), 0))) {
-      LOG_WARN("failed to append add value.", K(new_value.length()), K(add_value));
     } else if (OB_FAIL(new_key.append(key_.ptr(), key_.length(), 0))) {
-      LOG_WARN("failed to reserve new key", K(ret), K(new_key.length()), K(key_.length()));
     } else {
       key_.reset();
       value_.reset();
       old_allocator->reset();
       if (OB_FAIL(key_.deep_copy(new_allocator, new_key))) {
-        LOG_WARN("failed to copy new key into key", K(key_), K(new_key));
       } else if (OB_FAIL(value_.deep_copy(new_allocator, new_value))) {
-        LOG_WARN("failed to copy new value into value", K(value_), K(new_value));
       }
     }
 
@@ -393,13 +372,10 @@ int ObJsonBinAggSerializer::serialize()
   INIT_SUCC(ret);
 
   if (!json_not_sort() && OB_FALSE_IT(do_json_sort())) {
-  } else if (OB_FAIL(construct_header())) { // calculate header
-    LOG_WARN("failed to construct header.", K(ret));
-  } else if (OB_FAIL(construct_meta())) { // construct meta_
-    LOG_WARN("failed to construct meta.", K(ret));
+  } else if (OB_FAIL(construct_header())) {
+  } else if (OB_FAIL(construct_meta())) {
   } else if (OB_FAIL(construct_key_and_value())) { // merge key_ and value_
-  } else if (OB_FAIL(rewrite_total_size())) { // write total
-    LOG_WARN("failed to rewrite total size.", K(ret));
+  } else if (OB_FAIL(rewrite_total_size())) {
   }
 
   return ret;

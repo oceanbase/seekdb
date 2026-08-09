@@ -78,7 +78,6 @@ int ObExprTimestampNvl::calc_timestampnvl(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *param_datum1 = NULL;
   ObDatum *param_datum2 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, param_datum1, param_datum2))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (param_datum1->is_null()) {
     if (param_datum2->is_null()) {
       expr_datum.set_null();

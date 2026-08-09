@@ -27,7 +27,6 @@ int ObLobMetaManager::write(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, in_row))) {
-    LOG_WARN("write lob meta failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -36,7 +35,6 @@ int ObLobMetaManager::batch_insert(ObLobAccessParam& param, blocksstable::ObDatu
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persistent_lob_adapter_.write_lob_meta(param, iter))) {
-    LOG_WARN("batch write lob meta failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -45,7 +43,6 @@ int ObLobMetaManager::batch_delete(ObLobAccessParam& param, blocksstable::ObDatu
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, iter))) {
-    LOG_WARN("batch write lob meta failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -66,7 +63,6 @@ int ObLobMetaManager::scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(iter.open(param, &persistent_lob_adapter_))) {
-    LOG_WARN("open lob scan iter failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -75,7 +71,6 @@ int ObLobMetaManager::open(ObLobAccessParam &param, ObLobMetaSingleGetter* gette
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(getter->open(param, &persistent_lob_adapter_))) {
-    LOG_WARN("open lob scan iter failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -85,7 +80,6 @@ int ObLobMetaManager::erase(ObLobAccessParam& param, ObLobMetaInfo& in_row)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persistent_lob_adapter_.erase_lob_meta(param, in_row))) {
-    LOG_WARN("erase lob meta failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -95,7 +89,6 @@ int ObLobMetaManager::update(ObLobAccessParam& param, ObLobMetaInfo& old_row, Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persistent_lob_adapter_.update_lob_meta(param, old_row, new_row))) {
-    LOG_WARN("update lob meta failed.");
   }
   return ret;
 }
@@ -105,10 +98,8 @@ int ObLobMetaManager::fetch_lob_id(ObLobAccessParam& param, uint64_t &lob_id)
   int ret = OB_SUCCESS;
   if (nullptr != param.lob_id_geneator_) {
     if (OB_FAIL(param.lob_id_geneator_->next_value(lob_id))) {
-      LOG_WARN("fail to get next lob_id", K(ret), KPC(param.lob_id_geneator_));
     }
   } else if (OB_FAIL(persistent_lob_adapter_.fetch_lob_id(param, lob_id))) {
-    LOG_WARN("fetch lob id failed.", K(ret), K(param));
   }
   return ret;
 }
@@ -119,7 +110,6 @@ int ObLobMetaManager::getlength(ObLobAccessParam &param, uint64_t &char_len)
   ObLobMetaScanIter meta_iter;
   ObLobMetaScanResult result;
   if (OB_FAIL(scan(param, meta_iter))) {
-    LOG_WARN("open lob scan iter failed.", K(ret), K(param));
   }
   while (OB_SUCC(ret)) {
     if (OB_FAIL(meta_iter.get_next_row(result))) {
@@ -127,7 +117,6 @@ int ObLobMetaManager::getlength(ObLobAccessParam &param, uint64_t &char_len)
         LOG_WARN("failed to get next row.", K(ret));
       }
     } else if (OB_FAIL(param.is_timeout())) {
-      LOG_WARN("access timeout", K(ret), K(param));
     } else {
       char_len += result.info_.char_len_;
     }

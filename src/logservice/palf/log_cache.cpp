@@ -58,7 +58,6 @@ int LogHotCache::init(IPalfHandleImpl *palf_handle_impl)
   } else {
     palf_handle_impl_ = palf_handle_impl;
     is_inited_ = true;
-    PALF_LOG(TRACE, "init hot cache successfully");
   }
   return ret;
 }
@@ -89,8 +88,6 @@ int LogHotCache::read(const LSN &read_begin_lsn,
     int64_t cost_ts = ObTimeUtility::fast_current_time() - start_ts;
     hit_cnt = ATOMIC_AAF(&hit_count_, 1);
     read_size = ATOMIC_AAF(&read_size_, out_read_size);
-    PALF_LOG(TRACE, "read_data_from_buffer success", K(ret), K(read_begin_lsn),
-        K(in_read_size), K(out_read_size));
   }
   read_cnt = ATOMIC_AAF(&read_count_, 1);
   if (palf_reach_time_interval(PALF_STAT_PRINT_INTERVAL_US, last_print_time_)) {
@@ -124,7 +121,6 @@ int LogCache::init(IPalfHandleImpl *palf_handle_impl)
     ret = OB_INIT_TWICE;
     PALF_LOG(WARN, "LogCache init failed", K(ret));
   } else if (OB_FAIL(hot_cache_.init(palf_handle_impl))){
-    PALF_LOG(WARN, "hot cache init failed", K(ret));
   } else {
     is_inited_ = true;
     PALF_LOG(INFO, "LogCache init successfully");
@@ -160,7 +156,6 @@ int LogCache::read(const LSN &lsn,
       io_ctx.inc_cache_miss_cnt();
       out_read_size = 0;
       ret = OB_ENTRY_NOT_EXIST;
-      PALF_LOG(TRACE, "miss log hot cache", K(ret), K(hot_ret), K(lsn), K(in_read_size), K(read_buf), K(out_read_size));
     } else {
       ret = hot_ret;
       PALF_LOG(WARN, "fail to read log hot cache", K(ret), K(lsn), K(in_read_size), K(read_buf), K(out_read_size));
@@ -179,12 +174,9 @@ int LogCache::read_hot_cache_(const LSN &read_begin_lsn,
   if (OB_SUCC(hot_cache_.read(read_begin_lsn, in_read_size, buf, out_read_size))
       && out_read_size > 0) {
     // read data from hot_cache successfully
-    PALF_LOG(TRACE, "read hot cache successfully", K(read_begin_lsn), K(in_read_size), K(out_read_size));
   } else if (OB_SUCCESS == ret && 0 == out_read_size){
     ret = OB_READ_NOTHING;
-    PALF_LOG(TRACE, "read nothing from hot cache", K(ret), K(read_begin_lsn), K(in_read_size), K(out_read_size));
   } else if (OB_ERR_OUT_OF_LOWER_BOUND == ret) {
-    PALF_LOG(TRACE, "miss hot cache", K(ret), K(read_begin_lsn), K(in_read_size), K(out_read_size));
   } else {
     PALF_LOG(WARN, "read hot cache failed", K(ret), K(read_begin_lsn), K(in_read_size), K(out_read_size));
   } 

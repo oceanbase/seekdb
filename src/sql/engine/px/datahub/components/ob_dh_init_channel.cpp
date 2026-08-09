@@ -36,13 +36,11 @@ int ObInitChannelPieceMsgListener::on_message(
   }
   if (OB_SUCC(ret)) {
     ctx.received_ += pkt.piece_count_;
-    LOG_TRACE("got a init channel picece msg", K(ctx.received_), K(ctx.task_cnt_), K(pkt), K(pkt.piece_count_));
   }
   // have received all piece from px receive
   // send whole msg to px transmit
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }
@@ -94,12 +92,8 @@ int ObInitChannelPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
-      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
-      LOG_WARN("fail flush dtl data", K(ret));
     } else {
-      LOG_DEBUG("dispatched winbuf whole msg",
-                K(idx), K(cnt), K(whole_msg_), K(*ch));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {

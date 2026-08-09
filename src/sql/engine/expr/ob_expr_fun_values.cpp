@@ -65,7 +65,6 @@ int ObExprFunValues::eval_values(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     // in insert update scope
     ObDatum *arg = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-      LOG_WARN("evaluate parameter value failed", K(ret));
     } else {
       expr_datum.set_datum(*arg);
     }

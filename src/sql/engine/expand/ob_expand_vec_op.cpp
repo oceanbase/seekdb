@@ -32,7 +32,6 @@ int ObExpandVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init())) {
-    LOG_WARN("init operator failed", K(ret));
   }
   return ret;
 }
@@ -47,13 +46,11 @@ int ObExpandVecOp::init()
   } else {
     datum_holder_ = new (holder_buf) ObBatchResultHolder();
     if (OB_FAIL(datum_holder_->init(child_->get_spec().output_, eval_ctx_))) {
-      LOG_WARN("init batch result holder failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else {
     reset_status();
-    LOG_TRACE("expand open", K(MY_SPEC.expand_exprs_), K(MY_SPEC.gby_exprs_));
   }
   return ret;
 }
@@ -69,7 +66,6 @@ int ObExpandVecOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("inner rescan failed", K(ret));
   }
   if (datum_holder_ != nullptr) {
     datum_holder_->reset();
@@ -95,7 +91,6 @@ int ObExpandVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     case DupStatus::Init: {
       const ObBatchRows *child_brs = nullptr;
       if (OB_FAIL(get_next_batch_from_child(MIN(MY_SPEC.max_batch_size_, max_row_cnt), child_brs))) {
-        LOG_WARN("get next batch from child failed", K(ret));
       } else if (child_brs->end_
                  && (0 == child_brs->size_
                      || child_brs->size_ == child_brs->skip_->accumulate_bit_cnt(child_brs->size_))) {
@@ -104,15 +99,12 @@ int ObExpandVecOp::inner_get_next_batch(const int64_t max_row_cnt)
         brs_.size_ = 0;
         do_output = true;
       } else if (OB_FAIL(backup_child_input(child_brs))) {
-        LOG_WARN("backup child input nulls failed", K(ret));
       } else if (OB_FAIL(duplicate_rollup_exprs())) {
-        LOG_WARN("duplicate rollup exprs failed", K(ret));
       }
       break;
     }
     case DupStatus::ORIG_ALL: {
       if (OB_FAIL(setup_grouping_id())) {
-        LOG_WARN("setup grouping id failed", K(ret));
       } else {
         copy_child_brs();
         do_output = true;
@@ -121,9 +113,7 @@ int ObExpandVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     }
     case DupStatus::DUP_PARTIAL: {
       if (OB_FAIL(do_dup_partial())) {
-        LOG_WARN("duplicate partial input failed", K(ret));
       } else if (OB_FAIL(setup_grouping_id())) {
-        LOG_WARN("set grouping id failed", K(ret));
       } else {
         do_output = true;
       }
@@ -137,7 +127,6 @@ int ObExpandVecOp::inner_get_next_batch(const int64_t max_row_cnt)
   }
   if (OB_SUCC(ret) && dup_status_ == DupStatus::END) {
     if (OB_FAIL(restore_child_input())) {
-      LOG_WARN("restore child input failed", K(ret));
     }
   }
   return ret;
@@ -185,12 +174,10 @@ int ObExpandVecOp::get_next_batch_from_child(int64_t max_row_cnt, const ObBatchR
   int ret = OB_SUCCESS;
   bool stop = false;
   if (OB_FAIL(restore_child_input())) {
-    LOG_WARN("restore child input nulls failed", K(ret));
   }
   while (!stop && OB_SUCC(ret)) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-      LOG_WARN("get child next batch failed", K(ret));
     } else if (child_brs->end_) {
       stop = true;
     } else {
@@ -209,7 +196,6 @@ int ObExpandVecOp::backup_child_input(const ObBatchRows *child_brs)
   if (OB_UNLIKELY(child_brs->size_ <= 0)) {
   } else {
     if (OB_FAIL(datum_holder_->save(child_brs->size_))) {
-      LOG_WARN("save result failed", K(ret));
     }
   }
   return ret;
@@ -220,7 +206,6 @@ int ObExpandVecOp::restore_child_input()
   int ret = OB_SUCCESS;
   if (child_input_size_ > 0) {
     if (OB_FAIL(datum_holder_->restore())) {
-      LOG_WARN("restore results failed", K(ret));
     }
     if (OB_SUCC(ret)) {
       child_input_size_ = 0;
@@ -260,7 +245,6 @@ int ObExpandVecOp::duplicate_rollup_exprs()
     ObExpr *org_expr = MY_SPEC.dup_expr_pairs_.at(i).org_expr_;
     ObExpr *dup_expr = MY_SPEC.dup_expr_pairs_.at(i).dup_expr_;
     if (OB_FAIL(org_expr->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
-      LOG_WARN("eval batch failed", K(ret));
     } else {
       ObDatum *to_datums = dup_expr->locate_datums_for_update(eval_ctx_, brs_.size_);
       ObDatumVector src_datums = org_expr->locate_expr_datumvector(eval_ctx_);

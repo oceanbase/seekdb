@@ -618,7 +618,6 @@ public:
     int ret = OB_SUCCESS;
     int64_t prefix_len = 0;
     if (OB_FAIL(ObRowkey::get_common_prefix_length(start_key_, end_key_, prefix_len))) {
-      STORAGE_LOG(WARN, "fail to get common prefix length", K(ret));
     } else {
       rowkey.assign(const_cast<ObObj *>(start_key_.get_obj_ptr()), prefix_len);
     }
@@ -653,11 +652,7 @@ int ObNewRange::deserialize(Allocator &allocator, const char *buf, const int64_t
   copy_range.start_key_.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
   copy_range.end_key_.assign(array + OB_MAX_ROWKEY_COLUMN_NUMBER, OB_MAX_ROWKEY_COLUMN_NUMBER);
   if (OB_FAIL(copy_range.deserialize(buf, data_len, pos))) {
-    COMMON_LOG(WARN, "deserialize range to shallow copy object failed.",
-               KP(buf), K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(deep_copy_range(allocator, copy_range, *this))) {
-    COMMON_LOG(WARN, "deep_copy_range failed.",
-               KP(buf), K(data_len), K(pos), K(copy_range), K(ret));
   }
 
   return ret;
@@ -668,9 +663,7 @@ inline int deep_copy_range(Allocator &allocator, const ObNewRange &src, ObNewRan
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(src.start_key_.deep_copy(dst.start_key_, allocator))) {
-    COMMON_LOG(WARN, "deep copy start key failed.", K(src.start_key_), K(ret));
   } else if (OB_FAIL(src.end_key_.deep_copy(dst.end_key_, allocator))) {
-    COMMON_LOG(WARN, "deep copy end key failed.", K(src.end_key_), K(ret));
   } else {
     dst.table_id_ = src.table_id_;
     dst.border_flag_ = src.border_flag_;
@@ -690,9 +683,7 @@ inline int deep_copy_range(Allocator &allocator, const ObNewRange &src, ObNewRan
   } else {
     dst = new(ptr) ObNewRange();
     if (OB_FAIL(src.start_key_.deep_copy(dst->start_key_, allocator))) {
-      COMMON_LOG(WARN, "deep copy start key failed.", K(src.start_key_), K(ret));
     } else if (OB_FAIL(src.end_key_.deep_copy(dst->end_key_, allocator))) {
-      COMMON_LOG(WARN, "deep copy end key failed.", K(src.end_key_), K(ret));
     } else {
       dst->table_id_ = src.table_id_;
       dst->border_flag_ = src.border_flag_;

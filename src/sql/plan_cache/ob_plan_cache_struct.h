@@ -83,15 +83,10 @@ struct ObPlanCacheKey : public ObILibCacheKey
     int ret = common::OB_SUCCESS;
     const ObPlanCacheKey &pc_key = static_cast<const ObPlanCacheKey&>(other);
     if (OB_FAIL(common::ob_write_string(allocator, pc_key.name_, name_))) {
-      SQL_PC_LOG(WARN, "write string failed", K(ret), K(pc_key.name_));
     } else if (OB_FAIL(common::ob_write_string(allocator, pc_key.sys_vars_str_,
                                                sys_vars_str_))) {
-      SQL_PC_LOG(WARN, "write sys vars str failed", K(ret),
-                 K(pc_key.sys_vars_str_));
     } else if (OB_FAIL(common::ob_write_string(allocator, pc_key.config_str_,
                                                 config_str_))) {
-      SQL_PC_LOG(WARN, "write config str failed", K(ret),
-                K(pc_key.config_str_));
     } else {
       db_id_ = pc_key.db_id_;
       key_id_ = pc_key.key_id_;
@@ -268,13 +263,9 @@ public:
     cache_params_ = other.cache_params_;
     question_mark_ctx_ = other.question_mark_ctx_;
     if (OB_FAIL(raw_params_.assign(other.raw_params_))) {
-      SQL_PC_LOG(WARN, "failed to assign fix array", K(ret));
     } else if (OB_FAIL(parameterized_params_.assign(other.parameterized_params_))) {
-      SQL_PC_LOG(WARN, "failed to assign fix array", K(ret));
     } else if (OB_FAIL(values_tokens_.assign(other.values_tokens_))) {
-      SQL_PC_LOG(WARN, "failed to assign fix array", K(ret));
     } else if (OB_FAIL(array_params_.assign(other.array_params_))) {
-      SQL_PC_LOG(WARN, "failed to assign array", K(ret));
     }
     return ret;
   }

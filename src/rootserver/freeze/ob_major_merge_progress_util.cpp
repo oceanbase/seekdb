@@ -154,9 +154,7 @@ int ObUncompactInfo::get_uncompact_info(
   int ret = OB_SUCCESS;
   SpinRLockGuard r_guard(diagnose_rw_lock_);
   if (OB_FAIL(input_tablets.assign(tablets_))) {
-    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(tablets));
   } else if (OB_FAIL(input_table_ids.assign(table_ids_))) {
-    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(table_ids));
   }
   return ret;
 }

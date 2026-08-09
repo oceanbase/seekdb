@@ -48,8 +48,6 @@ int ObStringPrefixDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum
     if (ctx.has_extend_value()) {
       if (OB_FAIL(bs.get(ctx.col_header_->extend_value_index_,
           ctx.micro_block_header_->extend_value_bit_, val))) {
-        LOG_WARN("get extend value failed",
-            K(ret), K(bs), K(ctx));
       }
     }
     if (OB_SUCC(ret)) {
@@ -60,8 +58,6 @@ int ObStringPrefixDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum
         int64_t cell_len = 0;
         if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len,
                 data, len, *ctx.micro_block_header_, *ctx.col_header_, *meta_header_))) {
-          LOG_WARN("locate cell data failed", K(ret), K(len),
-              K(ctx), "header", *meta_header_);
         } else {
           // get prefix
           const ObStringPrefixCellHeader *cell_header =
@@ -71,8 +67,6 @@ int ObStringPrefixDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum
             + (meta_header_->count_ - 1) * meta_header_->prefix_index_byte_;
           const char *prefix_str = NULL;
           if (OB_FAIL(meta_gen.init(meta_data_, meta_header_->prefix_index_byte_))) {
-            LOG_WARN("failed to init integer array generator", K(ret),
-                KP_(meta_data), "prefix index byte", meta_header_->prefix_index_byte_);
           } else {
             int64_t offset = 0;
             if (0 != cell_header->get_ref()) {
@@ -156,7 +150,6 @@ int ObStringPrefixDecoder::batch_decode(
     if (ctx.has_extend_value()) {
       if (OB_FAIL(set_null_datums_from_var_column(
           ctx, row_index, row_ids, row_cap, datums))) {
-        LOG_WARN("Failed to set null datums from var data", K(ret), K(ctx));
       }
     }
 
@@ -169,8 +162,6 @@ int ObStringPrefixDecoder::batch_decode(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to allocate memory", K(ret), K(buf_size));
       } else if (OB_FAIL(meta_gen.init(meta_data_, meta_header_->prefix_index_byte_))) {
-        LOG_WARN("Failed to init integer array generator", K(ret), KP_(meta_data),
-            "Prefix index byte", meta_header_->prefix_index_byte_);
       } else {
         const ObStringPrefixCellHeader *cell_header = nullptr;
         const char *var_data = meta_data_
@@ -186,10 +177,8 @@ int ObStringPrefixDecoder::batch_decode(
           if (ctx.has_extend_value() && datums[i].is_null()) {
             // Do nothing
           } else if (OB_FAIL(locate_row_data(ctx, row_index, row_id, row_data, row_len))) {
-            LOG_WARN("Failed to locate row data", K(ret), K(row_id));
           } else if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len, row_data, row_len,
               *ctx.micro_block_header_, *ctx.col_header_, *meta_header_))) {
-            LOG_WARN("Failed to locate cell data", K(ret), K(row_id), K(ctx));
           } else {
             cell_header = reinterpret_cast<const ObStringPrefixCellHeader *>(cell_data);
             int64_t offset = 0;
@@ -240,7 +229,6 @@ int ObStringPrefixDecoder::get_null_count(
       row_cap,
       meta_data_,
       null_count)) {
-    LOG_WARN("Failed to get null count", K(ctx), K(ret));
   }
   return ret;
 }

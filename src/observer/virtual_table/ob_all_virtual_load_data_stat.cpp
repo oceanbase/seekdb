@@ -44,7 +44,6 @@ int ObAllVirtualLoadDataStat::inner_open()
   int ret = OB_SUCCESS;
   sql::ObGlobalLoadDataStatMap *job_status_map = sql::ObGlobalLoadDataStatMap::getInstance();
   if (OB_FAIL(job_status_map->get_all_job_status(all_job_status_op_))) {
-    SERVER_LOG(WARN, "fail to get all job status", K(ret));
   }
   return ret;
 }

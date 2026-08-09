@@ -61,7 +61,6 @@ int ObTabletBindingInfo::assign(const ObTabletBindingInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hidden_tablet_ids_.assign(other.hidden_tablet_ids_))) {
-    LOG_WARN("failed to assign hidden tablet ids", K(ret));
   } else {
     redefined_ = other.redefined_;
     snapshot_version_ = other.snapshot_version_;
@@ -86,7 +85,6 @@ int ObTabletBindingInfo::deep_copy(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid type", K(ret));
   } else if (OB_FAIL(assign(*static_cast<const ObTabletBindingInfo *>(src)))) {
-    LOG_WARN("failed to copy tablet binding info", K(ret));
   }
   return ret;
 }

@@ -36,13 +36,8 @@ int ObUndoStatusList::serialize(char *buf, const int64_t buf_len, int64_t &pos) 
     STORAGE_LOG(WARN, "serialize ObUndoStatusList failed.", KR(ret), KP(buf), K(buf_len),
                 K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, UNIS_VERSION))) {
-    STORAGE_LOG(WARN, "encode UNIS_VERSION of undo status list failed.", KR(ret), KP(buf),
-                K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, len))) {
-    STORAGE_LOG(WARN, "encode length of undo status list failed.", KR(ret), KP(buf), K(buf_len),
-                K(pos));
   } else if (OB_FAIL(serialize_(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "serialize_ undo status list failed.", KR(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -56,7 +51,6 @@ int ObUndoStatusList::serialize_(char *buf, const int64_t buf_len, int64_t &pos)
   // generate undo status node stack
   while (OB_NOT_NULL(node)) {
     if (OB_FAIL(node_arr.push_back(node))) {
-      STORAGE_LOG(WARN, "push back undo status node failed", KR(ret), K(node_arr.count()));
     } else {
       node = node->next_;
     }
@@ -85,9 +79,7 @@ int ObUndoStatusList::deserialize(const char *buf,
   SpinWLockGuard guard(lock_);
 
   if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &version))) {
-    STORAGE_LOG(WARN, "decode version fail", K(version), K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &undo_status_list_len))) {
-    STORAGE_LOG(WARN, "decode data len fail", K(undo_status_list_len), K(data_len), K(pos), K(ret));
   } else if (version != UNIS_VERSION) {
     ret = OB_VERSION_NOT_MATCH;
     STORAGE_LOG(WARN, "object version mismatch", K(ret), K(version));
@@ -101,7 +93,6 @@ int ObUndoStatusList::deserialize(const char *buf,
     int64_t original_pos = pos;
     pos = 0;
     if (OB_FAIL(deserialize_(buf + original_pos, undo_status_list_len, pos, tx_data_allocator))) {
-      STORAGE_LOG(WARN, "deserialize_ fail", "slen", undo_status_list_len, K(pos), K(ret));
     }
     pos += original_pos;
   }
@@ -278,13 +269,9 @@ int ObTxData::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "serialize of ObTxDat failed.", KR(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, UNIS_VERSION))) {
-    STORAGE_LOG(WARN, "encode UNIS_VERSION of ObTxData failed.", KR(ret), KP(buf), K(buf_len),
-                K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, len))) {
-    STORAGE_LOG(WARN, "encode length of ObTxData failed.", KR(ret), KP(buf), K(buf_len), K(pos));
   } else if (FALSE_IT(pos_tmp = pos)) {
   } else if (OB_FAIL(serialize_(buf, pos + len, pos))) {
-    STORAGE_LOG(WARN, "serialize_ of ObTxData failed.", KR(ret), KP(buf), K(buf_len), K(pos), K(pos_tmp));
   }
   return ret;
 }
@@ -295,23 +282,16 @@ int ObTxData::serialize_(char *buf, const int64_t buf_len, int64_t &pos) const
   // LST_DO_CODE(OB_UNIS_ENCODE, state_, commit_version_, start_scn_, end_scn_);
 
   if (OB_FAIL(tx_id_.serialize(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "serialize tx_id fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, state_))) {
-    STORAGE_LOG(WARN, "serialize state fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(commit_version_.serialize(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "serialize commit_version fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(start_scn_.serialize(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "serialize start_scn fail.", KR(ret), K(pos), K(buf_len));
   } else if (OB_FAIL(end_scn_.serialize(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "serialize end_scn fail.", KR(ret), K(pos), K(buf_len));
   }
 
   if (OB_FAIL(ret)) {
   } else if (op_guard_.is_valid()) {
     if (OB_FAIL(op_guard_->get_undo_status_list().serialize(buf, buf_len, pos))) {
-      STORAGE_LOG(WARN, "serialize undo_status_list fail.", KR(ret), K(pos), K(buf_len));
     } else if (OB_FAIL(op_guard_->get_tx_op_list().serialize(buf, buf_len, pos))) {
-      STORAGE_LOG(WARN, "serialize tx_op_list fail.", KR(ret), K(pos), K(buf_len));
     }
   }
   return ret;
@@ -367,18 +347,15 @@ int ObTxData::deserialize(const char *buf,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments.", KP(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &version))) {
-    STORAGE_LOG(WARN, "deserialize version of tx data failed.", KR(ret), K(version));
   } else if (version != UNIS_VERSION) {
     ret = OB_VERSION_NOT_MATCH;
     STORAGE_LOG(WARN, "deserialize version of tx data failed.", KR(ret), K(version));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &len))) {
-    STORAGE_LOG(WARN, "length from deserialize is invalid.", KR(ret), K(pos), K(len), K(data_len));
   } else if (OB_UNLIKELY(pos + len > data_len)) {
     ret = OB_INVALID_SIZE;
     STORAGE_LOG(WARN, "length from deserialize is invalid.", KR(ret), K(pos), K(len), K(data_len));
   } else if (FALSE_IT(pos_tmp = pos)) {
   } else if (OB_FAIL(deserialize_(buf, pos + len, pos, slice_allocator))) {
-    STORAGE_LOG(WARN, "deserialize tx data failed.", KR(ret), K(buf), K(pos), K(len), K(pos_tmp), K(data_len));
   }
 
   return ret;
@@ -392,21 +369,14 @@ int ObTxData::deserialize_(const char *buf,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(tx_id_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize tx_id fail.", KR(ret), K(pos), K(data_len));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, &state_))) {
-    STORAGE_LOG(WARN, "deserialize state fail.", KR(ret), K(pos), K(data_len));
   } else if (OB_FAIL(commit_version_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize commit_version fail.", KR(ret), K(pos), K(data_len));
   } else if (OB_FAIL(start_scn_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize start_scn fail.", KR(ret), K(pos), K(data_len));
   } else if (OB_FAIL(end_scn_.deserialize(buf, data_len, pos))) {
-    STORAGE_LOG(WARN, "deserialize end_scn fail.", KR(ret), K(pos), K(data_len));
   }
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(init_tx_op())) {
-      STORAGE_LOG(WARN, "init tx op fail", KR(ret));
     } else if (OB_FAIL(op_guard_->get_undo_status_list().deserialize(buf, data_len, pos, tx_data_allocator))) {
-      STORAGE_LOG(WARN, "deserialize undo_status_list fail.", KR(ret), K(pos), K(data_len));
     } else if (pos < data_len && OB_FAIL(op_guard_->get_tx_op_list().deserialize(buf, data_len, pos,
             ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->tx_data_op_allocator()))) {
       STORAGE_LOG(WARN, "deserialize tx_op_list fail.", KR(ret), K(pos), K(data_len));
@@ -529,7 +499,6 @@ int ObTxData::add_undo_action(ObTxTable *tx_table, transaction::ObUndoAction &ne
     SpinWLockGuard guard(op_guard_->get_undo_status_list().lock_);
     ObUndoStatusNode *node = op_guard_->get_undo_status_list().head_;
     if (OB_FAIL(merge_undo_actions_(tx_data_table, node, new_undo_action))) {
-      STORAGE_LOG(WARN, "merge undo actions fail.", KR(ret), K(new_undo_action));
     } else if (!new_undo_action.is_valid()) {
       // if new_undo_action is merged, it will be set to invalid and skip insert
     } else {
@@ -540,7 +509,6 @@ int ObTxData::add_undo_action(ObTxTable *tx_table, transaction::ObUndoAction &ne
           new_node = undo_node;
           undo_node = NULL;
         } else if (OB_FAIL(tx_data_table->alloc_undo_status_node(new_node))) {
-          STORAGE_LOG(WARN, "alloc_undo_status_node() fail", KR(ret));
         }
 
         if (OB_SUCC(ret)) {

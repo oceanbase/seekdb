@@ -99,10 +99,7 @@ int ObLockUserResolver::resolve(const ParseNode &parse_tree)
                                                   session_info_->get_priv_user_id(),
                                                   user_name,
                                                   host_name))) {
-                LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
-                          K(ret), K(params_.session_info_->get_user_name()), K(user_name));
               } else if (OB_FAIL(lock_user_stmt->add_user(user_name, host_name))) {
-                SQL_RESV_LOG(WARN, "Add user error", K(user_name), K(host_name), K(ret));
               }
             }
           }

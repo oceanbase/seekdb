@@ -33,7 +33,6 @@ int ObTablePartitionInfo::assign(const ObTablePartitionInfo &other)
   int ret = OB_SUCCESS;
   table_location_ = other.table_location_;
   if (OB_FAIL(candi_table_loc_.assign(other.candi_table_loc_))) {
-    LOG_WARN("fail to assign candi_table_loc_", K(ret), K(candi_table_loc_));
   }
   return ret;
 }
@@ -61,7 +60,6 @@ int ObTablePartitionInfo::init_table_location(ObSqlSchemaGuard &schema_guard,
                                         dtc_params,
                                         is_dml_table,
                                         sort_exprs))) {
-      LOG_WARN("fail to init table location", K(ret));
     }
   }
   return ret;
@@ -85,7 +83,6 @@ int ObTablePartitionInfo::calculate_phy_table_location_info(
                        params,
                        candi_table_loc_.get_phy_part_loc_info_list_for_update(),
                        dtc_params))) {
-    LOG_WARN("Failed to calculate table location", K(ret));
   } else {
     candi_table_loc_.set_table_location_key(
         table_location_.get_table_id(), table_location_.get_ref_table_id());
@@ -114,13 +111,9 @@ int ObTablePartitionInfo::replace_final_location_key(ObExecContext &exec_ctx,
       loc_meta.related_table_ids_.set_capacity(1);
       ref_table_id = ref_table_id;
       if (OB_FAIL(loc_meta.related_table_ids_.push_back(ref_table_id))) {
-        LOG_WARN("store related table ids failed", K(ret));
       } else if (OB_FAIL(ObPhyLocationGetter::build_related_tablet_info(table_location_, exec_ctx, related_map))) {
-        LOG_WARN("build related tablet info failed", K(ret));
       } else if (OB_FAIL(candi_table_loc_.replace_local_index_loc(*related_map, ref_table_id))) {
-        LOG_WARN("replace local index loc failed", K(ret));
       } else if (OB_FAIL(table_location_.replace_ref_table_id(ref_table_id, exec_ctx))) {
-        LOG_WARN("replace ref table id failed", K(ret));
       }
       //need to clear the related info in location meta
       loc_meta.related_table_ids_.reset();
@@ -131,7 +124,6 @@ int ObTablePartitionInfo::replace_final_location_key(ObExecContext &exec_ctx,
     } else {
       //get the real table location info use the real table id
       if (OB_FAIL(table_location_.replace_ref_table_id(ref_table_id, exec_ctx))) {
-        LOG_WARN("replace ref table id failed", K(ret), K(ref_table_id));
       } else if (!is_das_dyn_prune_part) {
         candi_table_loc_.set_table_location_key(table_location_.get_table_id(), ref_table_id);
       }

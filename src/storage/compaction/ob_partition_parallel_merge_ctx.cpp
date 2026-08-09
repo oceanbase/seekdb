@@ -93,24 +93,19 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
           || (!enable_parallel_minor_merge && !is_major_merge_type(merge_type))
           || (is_mini_merge(merge_type) && ObCompactionMemPool::NORMAL_MODE != ::oceanbase::share::server_service<::oceanbase::storage::ObCompactionMemPool>()->get_memory_mode())) {
     if (OB_FAIL(init_serial_merge())) {
-      STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret), K(tablet_size), K(merge_ctx));
     }
   } else if (is_major_or_meta_merge_type(merge_type)) {
     if (OB_FAIL(init_parallel_major_merge(merge_ctx))) {
-      STORAGE_LOG(WARN, "Failed to init parallel major merge", K(ret));
     }
   } else if (is_mini_merge(merge_type)) {
     if (OB_FAIL(init_parallel_mini_merge(merge_ctx))) {
-      STORAGE_LOG(WARN, "Failed to init parallel setting for mini merge", K(ret));
     }
   } else if (is_minor_merge(merge_type)) {
     if (OB_FAIL(init_parallel_mini_minor_merge(merge_ctx))) {
-      STORAGE_LOG(WARN, "Failed to init parallel setting for mini minor merge", K(ret));
     }
   } else {
     // just use serial merge
     if (OB_FAIL(init_serial_merge())) {
-      STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret), K(tablet_size), K(merge_ctx));
     }
   }
 
@@ -153,7 +148,6 @@ int ObParallelMergeCtx::init(const compaction::ObMediumCompactionInfo &medium_in
         STORAGE_LOG(WARN, "failed to deep copy start key", K(ret), K(i), K(medium_info));
       } else if (i < paral_info.get_size()) {
         if (OB_FAIL(paral_info.deep_copy_datum_rowkey(i/*idx*/, allocator_, schema_rowkey_range.end_key_))) {
-          STORAGE_LOG(WARN, "failed to deep copy end key", K(ret), K(i), K(medium_info));
         }
       } else { // i == paral_info.get_size()
         schema_rowkey_range.end_key_.set_max_rowkey();
@@ -162,7 +156,6 @@ int ObParallelMergeCtx::init(const compaction::ObMediumCompactionInfo &medium_in
       if (FAILEDx(schema_rowkey_range.to_multi_version_range(allocator_, multi_version_range))) {
         STORAGE_LOG(WARN, "failed to convert multi_version range", K(ret), K(schema_rowkey_range));
       } else if (OB_FAIL(range_array_.push_back(multi_version_range))) {
-        STORAGE_LOG(WARN, "Failed to push back merge range to array", K(ret), K(multi_version_range));
       }
     }
     if (OB_SUCC(ret)) {
@@ -212,7 +205,6 @@ int ObParallelMergeCtx::init_serial_merge()
   merge_range.set_whole_range();
   range_array_.reset();
   if (OB_FAIL(range_array_.push_back(merge_range))) {
-    STORAGE_LOG(WARN, "Failed to push back merge range to array", K(ret), K(merge_range));
   } else {
     concurrent_cnt_ = 1;
     parallel_type_ = SERIALIZE_MERGE;
@@ -237,11 +229,8 @@ int ObParallelMergeCtx::init_parallel_major_merge(compaction::ObBasicTabletMerge
     const ObSSTable *first_sstable = static_cast<const ObSSTable *>(first_table);
     const int64_t macro_block_cnt = first_sstable->get_data_macro_block_count();
     if (OB_FAIL(get_concurrent_cnt(tablet_size, macro_block_cnt, concurrent_cnt_))) {
-      STORAGE_LOG(WARN, "failed to get concurrent cnt", K(ret), K(tablet_size), K(concurrent_cnt_),
-        KPC(first_sstable));
     } else if (1 >= concurrent_cnt_) {
       if (OB_FAIL(init_serial_merge())) {
-        STORAGE_LOG(WARN, "failed to init serial merge", K(ret), KPC(first_sstable));
       }
     } else if (OB_FAIL(get_major_parallel_ranges(
         first_sstable, tablet_size, merge_ctx.get_tablet()->get_rowkey_read_info()))) {
@@ -281,11 +270,9 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init parallel mini merge", K(ret), K(merge_ctx));
   } else if (OB_FAIL(merge_ctx.get_tables_handle().get_first_memtable(memtable))) {
-    STORAGE_LOG(WARN, "failed to get first memtable", K(ret), "merge tables", merge_ctx.get_tables_handle());
   } else if (memtable->is_data_memtable()) { // only data memtable has mt stat
     total_bytes = static_cast<memtable::ObMemtable *>(memtable)->get_mt_stat().row_size_;
   } else if (OB_FAIL(memtable->estimate_phy_size(nullptr, nullptr, total_bytes, total_rows))) {
-    STORAGE_LOG(WARN, "failed to estimate size from memtable", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -309,14 +296,11 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
     input_range.set_whole_range();
     if (concurrent_cnt_ <= 1) {
       if (OB_FAIL(init_serial_merge())) {
-        STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret));
       }
     } else if (OB_FAIL(memtable->get_split_ranges(input_range, concurrent_cnt_, store_ranges))) {
-      STORAGE_LOG(WARN, "Failed to get split ranges from memtable", K(ret));
     } else if (OB_UNLIKELY(store_ranges.count() != concurrent_cnt_)) {
       if (1 == store_ranges.count()) {
         if (OB_FAIL(init_serial_merge())) {
-          STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -326,9 +310,7 @@ int ObParallelMergeCtx::init_parallel_mini_merge(compaction::ObBasicTabletMergeC
       for (int64_t i = 0; OB_SUCC(ret) && i < store_ranges.count(); i++) {
         ObDatumRange datum_range;
         if (OB_FAIL(datum_range.from_range(store_ranges.at(i), allocator_))) {
-          STORAGE_LOG(WARN, "Failed to transfer store range to datum range", K(ret), K(i), K(store_ranges.at(i)));
         } else if (OB_FAIL(range_array_.push_back(datum_range))) {
-          STORAGE_LOG(WARN, "Failed to push back merge range to array", K(ret), K(datum_range));
         }
       }
       parallel_type_ = PARALLEL_MINI;
@@ -360,11 +342,8 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
     int64_t parallel_target_count = 0;
 
     if (OB_FAIL(merge_ctx.get_tables_handle().get_all_minor_sstables(tables))) {
-      STORAGE_LOG(WARN, "Failed to get all sstables from merge ctx", K(ret), K(merge_ctx));
     } else if (OB_FAIL(ranges.push_back(whole_range))) {
-      STORAGE_LOG(WARN, "Failed to push back whole range", K(ret));
     } else if (OB_FAIL(spliter.get_multi_range_size(ranges, rowkey_read_info, tables, total_size))) {
-      STORAGE_LOG(WARN, "Failed to init range spliter", K(ret));
     } else if (OB_UNLIKELY(tablet_size <= 0 || total_size < 0 || (tables.count() <= 1 && !merge_ctx.static_param_.is_backfill_))) {
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "Invalid argument to calc mini minor parallel degree", K(ret), K(tablet_size),
@@ -380,7 +359,6 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
     if (OB_FAIL(ret)) {
     } else if (parallel_target_count <= 1) {
       if (OB_FAIL(init_serial_merge())) {
-        STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret));
       }
     } else if (OB_FAIL(spliter.get_split_multi_ranges(ranges,
                                                       parallel_target_count,
@@ -389,11 +367,9 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
                                                       allocator_,
                                                       split_ranges,
                                                       true))) {
-      STORAGE_LOG(WARN, "Failed to split parallel ranges", K(ret));
     } else if (OB_UNLIKELY(split_ranges.count() <= 1)) {
       reset();
       if (OB_FAIL(init_serial_merge())) {
-        STORAGE_LOG(WARN, "Failed to init serialize merge", K(ret));
       } else {
         STORAGE_LOG(INFO, "parallel minor merge back to serialize merge");
       }
@@ -405,7 +381,6 @@ int ObParallelMergeCtx::init_parallel_mini_minor_merge(compaction::ObBasicTablet
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "Unexpected split result", K(ret), K(i), K(split_ranges.at(i)));
         } else if (OB_FAIL(range_array_.push_back(split_ranges.at(i).at(0)))) {
-          STORAGE_LOG(WARN, "Failed to push back merge range to array", K(ret), K(split_ranges.at(i)));
         }
       }
       STORAGE_LOG(INFO, "Succ to get parallel mini minor merge ranges", K_(concurrent_cnt), K_(range_array));
@@ -506,14 +481,10 @@ int ObParallelMergeCtx::get_major_parallel_ranges(
     query_range.set_whole_range();
     if (OB_FAIL(first_major_sstable->scan_secondary_meta(allocator_, query_range,
        rowkey_read_info, DATA_BLOCK_META, meta_iter))) {
-      STORAGE_LOG(WARN, "Failed to scan secondary meta", KR(ret), KPC(this));
     } else if (OB_FAIL(first_major_sstable->get_meta(sstable_meta_handle))) {
-      STORAGE_LOG(WARN, "failed to get sstable meta handle", K(ret));
     } else if (FALSE_IT(schema_rowkey_cnt = sstable_meta_handle.get_sstable_meta().get_schema_rowkey_column_count())) {
     } else if (OB_FAIL(rowkey_helper.reserve(schema_rowkey_cnt + 1))) {
-      STORAGE_LOG(WARN, "Failed to ", K(ret), K(schema_rowkey_cnt));
     } else if (OB_FAIL(multi_version_endkey.assign(rowkey_helper.get_datums(), schema_rowkey_cnt + 1))) {
-      STORAGE_LOG(WARN, "Failed to assign datums", K(ret), K(schema_rowkey_cnt));
     }
     // generate ranges
     for (int64_t i = 0; OB_SUCC(ret) && i < macro_block_cnt;) {
@@ -522,12 +493,10 @@ int ObParallelMergeCtx::get_major_parallel_ranges(
       // locate to the last macro-block meta in current range
       while (OB_SUCC(meta_iter->get_next(blk_meta)) && i++ < last);
       if (OB_FAIL(ret)) {
-        STORAGE_LOG(WARN, "Failed to get macro block meta", KR(ret), K(i - 1));
       } else if (OB_UNLIKELY(!blk_meta.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected invalid macro block meta", KR(ret), K(i - 1));
       } else if (OB_FAIL(blk_meta.get_rowkey(macro_endkey))) {
-        STORAGE_LOG(WARN, "Failed to get rowkey", KR(ret), K(blk_meta));
       } else if (OB_UNLIKELY(macro_endkey.datum_cnt_ < schema_rowkey_cnt)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected macro endkey", K(ret), K(macro_endkey));
@@ -542,11 +511,8 @@ int ObParallelMergeCtx::get_major_parallel_ranges(
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(range.end_key_.deep_copy(range.start_key_, allocator_))) {
-        STORAGE_LOG(WARN, "Failed to deep copy rowkey", KR(ret), K(range.get_end_key()), K(range.get_start_key()));
       } else if (OB_FAIL(multi_version_endkey.deep_copy(range.end_key_, allocator_))) {
-        STORAGE_LOG(WARN, "Failed to deep copy rowkey", KR(ret), K(multi_version_endkey), K(range.get_end_key()), K(range.get_start_key()));
       } else if (OB_FAIL(range_array_.push_back(range))) {
-        STORAGE_LOG(WARN, "Failed to push range", KR(ret), K(range_array_), K(range));
       }
     }
 

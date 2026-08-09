@@ -72,7 +72,6 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tablet->read_medium_info_list(allocator, medium_info_list))) {
-    SERVER_LOG(WARN, "tablet read medium info list failed", K(ret), K(tablet_handle_), KPC(tablet_handle_.get_obj()));
   } else {
     const int64_t col_count = output_column_ids_.count();
     int64_t max_sync_medium_scn = 0;
@@ -105,7 +104,6 @@ int ObAllVirtualTabletCompactionInfo::inner_get_next_row(common::ObNewRow *&row)
             MEMSET(medium_info_buf_, '\0', OB_MAX_VARCHAR_LENGTH);
             medium_info_list->gene_info(medium_info_buf_, OB_MAX_VARCHAR_LENGTH, pos);
             cur_row_.cells_[i].set_varchar(medium_info_buf_);
-            SERVER_LOG(DEBUG, "get medium info mgr", KPC(medium_info_list), K(medium_info_buf_));
           } else {
             cur_row_.cells_[i].set_varchar("");
           }

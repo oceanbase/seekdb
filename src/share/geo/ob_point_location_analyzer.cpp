@@ -32,7 +32,6 @@ int ObPointLocationAnalyzer::calculate_point_position(const ObPoint2d &test_poin
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should not be null.", K(ret));
     } else if (OB_FAIL(rtree_index_.construct_rtree_index(*(cache_geo_->get_segments())))) {
-      LOG_WARN("construct rtree index failed", K(ret));
     }
   } 
   if (OB_SUCC(ret)) {
@@ -42,7 +41,6 @@ int ObPointLocationAnalyzer::calculate_point_position(const ObPoint2d &test_poin
     box.set_box(std::min(cache_geo_->get_x_min() - 1.0, test_point.x), test_point.y,
                 std::max(cache_geo_->get_x_max() + 1.0, test_point.x), test_point.y);
     if (OB_FAIL(rtree_index_.query(QueryRelation::INTERSECTS, box, res))) {
-      LOG_WARN("failed to query rtree", K(ret));
     } else {
       bool is_on_boundary = false;
       for (uint32_t i = 0; i < res.size() && OB_SUCC(ret) && !is_on_boundary; i++) {

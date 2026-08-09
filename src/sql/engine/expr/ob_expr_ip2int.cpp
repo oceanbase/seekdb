@@ -99,7 +99,6 @@ int ObExprIp2int::ip2int_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("ip2int expr eval param value failed", K(ret));
   } else {
     ObDatum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -107,7 +106,6 @@ int ObExprIp2int::ip2int_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
     } else {
       ObString m_text = text.get_string();
       if (OB_FAIL(ip2int(expr_datum, m_text))) {
-        LOG_WARN("fail to convert ip to int", K(ret), K(m_text));
       }
     }
   }

@@ -51,9 +51,7 @@ int ObPartitionCreator::init(ObBootstrap* bootstrap, common::ObIArray<share::sch
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("bootstrap or table_schemas is null", K(ret), KP(bootstrap), KP(table_schemas));
   } else if (OB_FAIL(set_thread_count(get_thread_count()))) {
-    LOG_WARN("failed to set thread count", K(ret));
   } else if (OB_FAIL(start())) {
-    LOG_WARN("failed to start partition creator", K(ret));
   } else {
     bootstrap_ = bootstrap;
     table_schemas_ = table_schemas;
@@ -155,7 +153,6 @@ int ObPartitionCreator::process_create_partitions_task()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("bootstrap or table_schemas is null", K(ret), KP(bootstrap_), KP(table_schemas_));
   } else if (OB_FAIL(bootstrap_->create_sys_table_partitions(*table_schemas_))) {
-    LOG_WARN("create partitions failed", K(ret));
   } else {
     LOG_INFO("create partitions successfully");
   }

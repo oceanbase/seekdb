@@ -273,7 +273,6 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::push_b
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(ERROR, "Unexpected null array array ptr", K(ret), K_(count), K_(capacity));
   } else if (OB_FAIL(array_ptrs_[count_]->assign(other_array))) {
-    LIB_LOG(WARN, "Failed to assign other array", K(ret), K(other_array), K_(capacity));
   } else {
     count_++;
   }
@@ -295,7 +294,6 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::push_b
     LIB_LOG(ERROR, "Unexpected null array array ptr", K(ret), K_(count), K_(capacity), K(array_idx),
             KP_(array_ptrs));
   } else if (OB_FAIL(array_ptrs_[array_idx]->push_back(obj))) {
-    LIB_LOG(WARN, "Failed to assign other array", K(ret), K(obj), K(array_idx));
   }
 
   return ret;
@@ -364,7 +362,6 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::assign
     ret = reserve(N);
     for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
       if (OB_FAIL(array_ptrs_[i]->assign(other.at(i)))) {
-        LIB_LOG(WARN, "fail to assign array", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -381,12 +378,10 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::serial
 {
   int ret = OB_SUCCESS;
   if (OB_SUCCESS != (ret = serialization::encode_vi64(buf, buf_len, pos, count()))) {
-    LIB_LOG(WARN, "fail to encode ob array count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count(); i++) {
     const LocalArrayT &item = *array_ptrs_[i];
     if (OB_SUCCESS != (ret = serialization::encode(buf, buf_len, pos, item))) {
-      LIB_LOG(WARN, "fail to encode item", K(i), K(ret));
     }
   }
   return ret;
@@ -400,16 +395,13 @@ int ObArrayArray<T, LOCAL_ARRAY_SIZE, ARRAY_ARRAY_SIZE, BlockAllocatorT>::deseri
   int64_t count = 0;
   reset();
   if (OB_SUCCESS != (ret = serialization::decode_vi64(buf, data_len, pos, &count))) {
-    LIB_LOG(WARN, "fail to decode ob array count", K(ret));
   } else if (OB_SUCCESS != (ret = reserve(count))) {
-    LIB_LOG(WARN, "fail to allocate space", K(ret), K(count));
   } else {
     count_ = count;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     LocalArrayT &item = *array_ptrs_[i];
     if (OB_SUCCESS != (ret = serialization::decode(buf, data_len, pos, item))) {
-      LIB_LOG(WARN, "fail to decode array item", K(ret), K(i), K(count));
     }
   }
   return ret;

@@ -51,7 +51,6 @@ int ObMaterialOp::init_material_impl(int64_t row_count)
 {
   int ret = OB_SUCCESS;  
   if (OB_FAIL(material_impl_.init(&eval_ctx_, &ctx_, &io_event_observer_))) {
-    LOG_WARN("failed to init material impl");
   } else {
     material_impl_.set_input_rows(row_count);
     material_impl_.set_input_width(MY_SPEC.width_);
@@ -68,9 +67,7 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
-    LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(init_material_impl(row_count))) {
-    LOG_WARN("failed to init material impl");
   }
 
   while (OB_SUCCESS == ret) {
@@ -78,7 +75,6 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
     if (OB_FAIL(child_->get_next_row())) {
       // do nothing
     } else if (OB_FAIL(material_impl_.add_row(child_->get_spec().output_))) {
-      LOG_WARN("failed to add row to row store", K(ret));
     }
   }
   if (OB_UNLIKELY(OB_ITER_END != ret)) {
@@ -87,7 +83,6 @@ int ObMaterialOp::get_all_row_from_child(ObSQLSessionInfo &session)
     ret = OB_SUCCESS;
     // Last batch of data retain in memory
     if (OB_FAIL(material_impl_.finish_add_row())) {
-      LOG_WARN("failed to finish add row to row store", K(ret));
     } else {
       is_first_ = false;
     }
@@ -102,9 +97,7 @@ int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
   int64_t row_count = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
-    LOG_WARN("failed to get px size", K(ret));
   } else if (OB_FAIL(init_material_impl(row_count))) {
-    LOG_WARN("failed to init material impl");
   }
 
   const ObBatchRows *input_brs = nullptr;
@@ -112,10 +105,8 @@ int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
   while (OB_SUCCESS == ret && !iter_end) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-      LOG_WARN("failed to get next batch", K(ret));
     } else if (OB_FAIL(material_impl_.add_batch(child_->get_spec().output_,
                                                 *input_brs->skip_, input_brs->size_))) {
-      LOG_WARN("failed to add row to row store", K(ret));
     } else {
       iter_end = input_brs->end_;
     }
@@ -132,7 +123,6 @@ int ObMaterialOp::get_all_batch_from_child(ObSQLSessionInfo &session)
   if (OB_SUCC(ret)) {
     // Last batch of data retain in memory
     if (OB_FAIL(material_impl_.finish_add_row())) {
-      LOG_WARN("failed to finish add row to row store", K(ret));
     } else {
       is_first_ = false;
     }
@@ -146,7 +136,6 @@ int ObMaterialOp::inner_rescan()
   material_impl_.rescan();
   // restart material op
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("operator rescan failed", K(ret));
   }
   is_first_ = true;
   return ret;
@@ -155,8 +144,7 @@ int ObMaterialOp::inner_rescan()
 int ObMaterialOp::rewind()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOperator::inner_rescan())) {//do not cascade rescan
-    LOG_WARN("failed to do inner rescan", K(ret));
+  if (OB_FAIL(ObOperator::inner_rescan())) {
   } else {
     material_impl_.rewind();
   }
@@ -174,11 +162,9 @@ int ObMaterialOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (static_cast<ObMaterialOpInput *>(input_)->is_bypass()) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_row())) {
-      LOG_WARN("fail get next child row", K(ret));
     }
   } else {
     clear_evaluated_flag();
@@ -198,7 +184,6 @@ int ObMaterialOp::inner_get_next_batch(int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   int64_t read_rows = -1;
   if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (static_cast<ObMaterialOpInput *>(input_)->is_bypass()) {
     clear_evaluated_flag();
     const ObBatchRows *input_brs = nullptr;

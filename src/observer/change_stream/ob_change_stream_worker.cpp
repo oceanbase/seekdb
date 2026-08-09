@@ -63,7 +63,6 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
     LOG_WARN("ObCSExecutor set_thread_count failed", K(ret), K(executor_id));
     ObLinkQueueThreadPool::destroy();
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_num, task_queue_limit, name))) {
-    LOG_WARN("ObCSExecutor base init failed", K(ret), K(executor_id));
   } else {
     executor_id_ = executor_id;
     is_inited_ = true;
@@ -110,7 +109,6 @@ int ObCSExecutor::push_subtask(ObCSExecSubTask *sub_task)
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObCSExecutor push_subtask invalid", K(ret), K(executor_id_));
   } else if (OB_FAIL(push(sub_task))) {
-    LOG_WARN("ObCSExecutor push failed", K(ret), K(executor_id_));
   }
   return ret;
 }
@@ -248,15 +246,12 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
         int64_t affected_rows = 0;
         if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
                 ctx->trans_, true, curr_refresh_scn))) {
-          LOG_WARN("get_change_stream_refresh_scn fail", KR(ret));
         } else if (curr_refresh_scn.get_val_for_gts() > static_cast<uint64_t>(ctx->refresh_scn_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("refresh scn unexpected", KR(ret), K(ctx->refresh_scn_), K(curr_refresh_scn));
         } else if (OB_FAIL(ctx_refresh_scn.convert_for_tx(ctx->refresh_scn_))) {
-          LOG_WARN("convert scn failed", KR(ret));
         } else if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_refresh_scn(
                 ctx->trans_, ctx_refresh_scn, affected_rows))) {
-          LOG_WARN("advance refresh_scn failed", KR(ret));
         }
       }
 
@@ -449,7 +444,6 @@ int ObCSWorker::push_subtask(int64_t slice_id, ObCSExecSubTask *sub_task)
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("ObCSWorker executor is null", K(ret), K(slice_id));
   } else if (OB_FAIL(executors_[slice_id]->push_subtask(sub_task))) {
-    LOG_WARN("push subtask failed", K(ret));
   }
   return ret;
 }

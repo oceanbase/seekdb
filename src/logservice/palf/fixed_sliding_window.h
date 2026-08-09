@@ -138,7 +138,6 @@ public:
     if (IS_NOT_INIT) {
       PALF_LOG(WARN, "FixedSlidingWindow not init", K(is_inited_));
     } else if (OB_FAIL(clear_())) {
-      PALF_LOG(WARN, "fail to destroy FixedSlidingWindow");
     } else {
       is_inited_ = false;
       alloc_mgr_->ge_free(array_);
@@ -190,7 +189,6 @@ public:
       // we just require that idx is still in the legal range and array_[idx] hasn't been reset by slide() before return val
       if (OB_SUCC(check_id_in_range_(g_id))) {
         val = tmp_ptr;
-        PALF_LOG(TRACE, "get succ", K(g_id), K(array_[idx].ref_));
       } else if (OB_SUCC(revert_(g_id))) {
         // begin_sn_ inc and greater than g_id, so dec ref count and return common::OB_ERR_OUT_OF_LOWER_BOUND
         // must call revert rather than ATOMIC_DEC(&array_[idx].ref_);
@@ -253,17 +251,14 @@ private:
         PALF_LOG(ERROR, "FixedSlidingWindow revert error", KR(ret), K(r_id), K(begin_sn_), K(end_sn_), K(curr_ref));
       } else if (0 == curr_ref) {
         int64_t tmp_end = get_end_sn_();
-        PALF_LOG(DEBUG, "revert zero", K(r_id), K(begin_sn_), K(tmp_end));
         for (int64_t i = idx; i == calc_idx_(tmp_end) && tmp_id < get_begin_sn();) {
           // slot mutex lock for revert/slide, revert/revert
           ObByteLockGuard guard(array_[i].slot_lock_);
-          PALF_LOG(DEBUG, "try revert reset", K(i), K(tmp_end), K(begin_sn_));
           // double check end_sn_ to avoid that revert operation inc wrong end_sn_
           if (!(tmp_end == get_end_sn_() && 0 == ATOMIC_LOAD(&(array_[i].ref_)))) {
             break;
           } else {
             // Order is vital: 1. reset slot 2. inc end_sn_, for get/revert mutex
-            PALF_LOG(DEBUG, "do revert reset", K(i), K(tmp_end), K(begin_sn_));
             array_[i].reset();
             if (ATOMIC_BCAS(&(end_sn_), tmp_end, (tmp_end+1))) {
               i = calc_idx_(i+1);
@@ -278,7 +273,6 @@ private:
           }
         }
       } else {
-        PALF_LOG(DEBUG, "revert succ", K(r_id), K(curr_ref), K(begin_sn_), K(end_sn_));
       }
     }
     return ret;
@@ -337,25 +331,20 @@ public:
           }
           // Order is vital!!! For revert/slide mutex, first update begin_sn_, then get_end_sn
           curr_end = get_end_sn_();
-          PALF_LOG(TRACE, "slide plus begin", K(curr_begin), K(curr_end), K(array_[idx].ref_));
           if (0 == ATOMIC_LOAD(&(array_[idx].ref_)) && calc_idx_(curr_end) == idx) {
             // Order is vital: 1. reset slot 2. inc end_sn_, for get/slide mutex
             array_[idx].reset();
-            PALF_LOG(TRACE, "before slide reset", K(curr_begin), K(curr_end), K(array_[idx].ref_));
             if (!ATOMIC_BCAS(&(end_sn_), curr_end, (curr_end+1))) {
               // defensive code
               ret = OB_ERR_UNEXPECTED;
               PALF_LOG(ERROR, "end_sn_ changed when sliding", KR(ret), K(end_sn_), K(curr_end));
             }
-            PALF_LOG(TRACE, "after slide reset", K(ret), K(curr_begin), K(curr_end), K(begin_sn_),
-                K(end_sn_), K(array_[idx].ref_));
           }
         }
         if (OB_SUCC(ret) && (timeout_us != 0) && ((common::ObClockGenerator::getClock() - begin_time) > timeout_us)) {
           break;
         }
       }
-      PALF_LOG(TRACE, "slide end", K(ret), K(begin_sn_), K(end_sn_));
     }
 
     return ret;
@@ -386,7 +375,6 @@ public:
         // pass
       }
     } else if (OB_FAIL(range_truncate_(t_id, get_end_sn_()))) {
-      PALF_LOG(ERROR, "range_truncate_failed", KR(ret));
     } else {
       PALF_LOG(INFO, "FixedSlidingWindow truncate success", K(ret), K(t_id), K(begin_sn_), K(end_sn_));
     }
@@ -416,13 +404,11 @@ public:
       PALF_LOG(ERROR, "ref count is not zero before forward_truncate", KR(ret), K(begin_sn_), K(end_sn_));
     } else if (OB_FAIL(check_id_in_range_(t_id))) {
       if (OB_FAIL(range_truncate_(get_begin_sn(), get_end_sn_()))) {
-        PALF_LOG(ERROR, "reand_truncate failed", K_(begin_sn), K_(end_sn), K(t_id));
       } else {
         begin_sn_ = t_id;
         end_sn_ = t_id + size_;
       }
     } else if (OB_FAIL(range_truncate_(get_begin_sn(), t_id))) {
-      PALF_LOG(ERROR, "range_truncate failed", KR(ret), K(t_id));
     } else {
       begin_sn_ = t_id;
       end_sn_ = begin_sn_ + size_;

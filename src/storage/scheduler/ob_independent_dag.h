@@ -118,7 +118,6 @@ int ObDagExecutor::init(
     COMMON_LOG(WARN, "failed to alloc dag", K(ret));
   } else if (FALSE_IT(dag_ = static_cast<T *>(new_dag))) {
   } else if (OB_FAIL(dag_->init(param, dag_id))) {
-    COMMON_LOG(WARN, "failed to init dag", K(ret));
   } else {
     allocator_ = allocator;
     dag_status_ = ObIDag::DAG_STATUS_NODE_RUNNING;

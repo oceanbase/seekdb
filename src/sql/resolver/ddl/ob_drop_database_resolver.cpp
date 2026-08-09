@@ -83,15 +83,12 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
                                  static_cast<int32_t>(dbname_node->str_len_));
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
         if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-            LOG_WARN("fail to get name case mode", K(mode), K(ret));
         } else {
           bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
           ObCollationType cs_type = CS_TYPE_INVALID;
           if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-            LOG_WARN("fail to get collation_connection", K(ret));
           } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                       cs_type, perserve_lettercase, database_name))) {
-            LOG_WARN("fail to check and convert database name", K(database_name), K(ret));
           } else {
             ObString deep_copy_database_name;
             CK (OB_NOT_NULL(schema_checker_));
@@ -111,10 +108,8 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       int64_t coll_server_int64 = -1;
       if (OB_FAIL(session_info_->get_sys_variable(
                   share::SYS_VAR_CHARACTER_SET_SERVER, coll_cs_server_int64))) {
-        LOG_WARN("failed to get character_set_server", K(ret));
       } else if (OB_FAIL(session_info_->get_sys_variable(
                   share::SYS_VAR_COLLATION_SERVER, coll_server_int64))) {
-        LOG_WARN("failed to get server collation info", K(ret));
       } else if (false == ObCharset::is_valid_collation(coll_cs_server_int64)
                  || false == ObCharset::is_valid_collation(coll_server_int64)) {
         ret = OB_ERR_UNEXPECTED;
@@ -123,8 +118,6 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
       } else if (OB_FAIL(ObCharset::charset_name_by_coll(
                   static_cast<ObCollationType>(coll_cs_server_int64),
                   server_charset))) {
-        LOG_WARN("fail to get charset name by collation type", K(ret),
-                     K(coll_cs_server_int64));
       } else {
         drop_database_stmt->set_server_charset(server_charset);
         drop_database_stmt->set_server_collation(
@@ -134,7 +127,6 @@ int ObDropDatabaseResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       ObObj is_recyclebin_open;
       if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_RECYCLEBIN, is_recyclebin_open))){
-        LOG_WARN("get sys variable failed", K(ret));
       } else {
         drop_database_stmt->set_to_recyclebin(is_recyclebin_open.get_bool());
       }

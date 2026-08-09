@@ -53,7 +53,6 @@ int ObDBMSIndexManager::refresh(
     LOG_WARN("change stream service is not initialized", KR(ret));
   } else if (OB_FAIL(change_stream->wait_until_refreshed(
                  *mysql_proxy, timeout_us))) {
-    LOG_WARN("wait change stream refresh failed", KR(ret));
   }
   return ret;
 }

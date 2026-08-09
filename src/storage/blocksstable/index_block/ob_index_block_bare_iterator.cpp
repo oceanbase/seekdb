@@ -64,23 +64,15 @@ int ObIndexBlockBareIterator::open(
   } else if (OB_FAIL(ObMicroBlockBareIterator::open(
       macro_block_buf, macro_block_buf_size,
       need_check_data_integrity, false/*need_deserialize*/))) {
-    LOG_WARN("fail to open micro bare iterator", KR(ret), KP(macro_block_buf),
-        K(macro_block_buf_size), K(need_check_data_integrity));
   } else if (OB_FAIL(get_index_block(
       index_micro_block, true/*force_deserialize*/, is_macro_meta_block))) {
-    LOG_WARN("fail to get index micro block", KR(ret), K(is_macro_meta_block), KPC(this));
   } else if (OB_ISNULL(index_micro_block_header = index_micro_block.get_micro_header())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get index micro block header", KR(ret), K(index_micro_block), KPC(this));
   } else if (OB_FAIL(set_reader(get_row_type()))) {
-    LOG_WARN("fail to init reader for index block", KR(ret), KPC(this));
   } else if (OB_FAIL(reader_->init(index_micro_block, nullptr/*datum_utils*/))) {
-    LOG_WARN("fail to init reader for index block", KR(ret), K(index_micro_block), KPC(this));
   } else if (OB_FAIL(reader_->get_row_count(row_count_))) {
-    LOG_WARN("fail to get row count ", KR(ret), K(index_micro_block), KPC(this));
   } else if (OB_FAIL(row_.init(allocator_, index_micro_block_header->column_count_))) {
-    LOG_WARN("fail to init row ", KR(ret),
-        K(index_micro_block), KPC(index_micro_block_header), KPC(this));
   } else {
     is_inited_ = true;
     rowkey_column_count_ = index_micro_block_header->rowkey_column_count_;
@@ -110,11 +102,8 @@ int ObIndexBlockBareIterator::get_next_logic_micro_id(
     ret = OB_ITER_END;
     // skip log
   } else if (OB_FAIL(reader_->get_row(cur_row_idx_, row_))) {
-    LOG_WARN("fail to get row", KR(ret), KPC(this));
   } else if (OB_FAIL(idx_row_parser.init(rowkey_column_count_, row_))) {
-    LOG_WARN("fail to init idx row parser", KR(ret), K(row_), KPC(this));
   } else if (OB_FAIL(idx_row_parser.get_header(idx_row_header))) {
-    LOG_WARN("fail to get idx micro block header", KR(ret), K(idx_row_parser), K(row_), KPC(this));
   } else if (OB_ISNULL(idx_row_header)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("idx_row_header is NULL", KR(ret), K(idx_row_parser), K(row_), KPC(this));

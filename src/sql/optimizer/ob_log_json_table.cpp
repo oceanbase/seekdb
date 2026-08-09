@@ -55,7 +55,6 @@ int ObLogJsonTable::allocate_expr_post(ObAllocExprContext &ctx)
   for (int64_t i = 0; OB_SUCC(ret) && i < access_exprs_.count(); ++i) {
     ObRawExpr *value_col = access_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
-      LOG_WARN("makr expr produced failed", K(ret));
     } else if (!is_plan_root() && OB_FAIL(add_var_to_array_no_dup(output_exprs_, value_col))) {
       LOG_WARN("add expr no duplicate key failed", K(ret));
     } else { /*do nothing*/ }
@@ -63,7 +62,6 @@ int ObLogJsonTable::allocate_expr_post(ObAllocExprContext &ctx)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
-      LOG_WARN("failed to allocate expr post", K(ret));
     }
   }
   return ret;
@@ -75,9 +73,7 @@ int ObLogJsonTable::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   const ObDMLStmt *stmt = get_stmt();
   
   if (OB_FAIL(generate_access_exprs())) {
-    LOG_WARN("failed to generate access exprs", K(ret));
   } else if (OB_FAIL(append(all_exprs, access_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else {
     // add value expr into all exprs
     for (int64_t i = 0; OB_SUCC(ret) && i < value_exprs_.count(); i ++) {
@@ -109,7 +105,6 @@ int ObLogJsonTable::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else if (get_value_expr().empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null value expr", K(ret));
@@ -145,7 +140,6 @@ int ObLogJsonTable::set_namespace_arr(ObIArray<ObString> &namespace_arr)
   int ret = OB_SUCCESS;
   for (size_t i = 0; OB_SUCC(ret) && i < namespace_arr.count(); i++) {
     if (OB_FAIL(namespace_arr_.push_back(namespace_arr.at(i)))) {
-      LOG_WARN("fail to push ns to arr", K(ret), K(i));
     }
   }
   return ret;
@@ -156,7 +150,6 @@ int ObLogJsonTable::get_namespace_arr(ObIArray<ObString> &namespace_arr)
   int ret = OB_SUCCESS;
   for (size_t i = 0; OB_SUCC(ret) && i < namespace_arr_.count(); i++) {
     if (OB_FAIL(namespace_arr.push_back(namespace_arr_.at(i)))) {
-      LOG_WARN("fail to push ns to arr", K(ret), K(i));
     }
   }
   return ret;
@@ -167,7 +160,6 @@ int ObLogJsonTable::set_column_param_default_arr(ObIArray<ObColumnDefault> &colu
   int ret = OB_SUCCESS;
   for (size_t i = 0; OB_SUCC(ret) && i < column_param_default_exprs.count(); i++) {
     if (OB_FAIL(column_param_default_exprs_.push_back(column_param_default_exprs.at(i)))) {
-      LOG_WARN("fail to push ns to arr", K(ret), K(i));
     }
   }
   return ret;

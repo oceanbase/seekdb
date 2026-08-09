@@ -35,7 +35,6 @@ int ObTransformProjectPruning::transform_one_stmt(common::ObIArray<ObParentDMLSt
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(transform_table_items(stmt, false, trans_happened))) {
-    LOG_WARN("failed to transform table items", K(ret));
   }
   return ret;
 }
@@ -51,12 +50,10 @@ int ObTransformProjectPruning::transform_one_stmt_with_outline(ObIArray<ObParent
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(transform_table_items(stmt, true, trans_happened))) {
-    LOG_WARN("failed to transform table items", K(ret));
   } else if (!trans_happened) {
     //do nothing
   } else {
     trans_happened = true;
-    LOG_TRACE("succeed to do project prune with outline", K(ctx_->src_qb_name_));
   }
   return ret;
 }
@@ -92,23 +89,19 @@ int ObTransformProjectPruning::transform_table_items(ObDMLStmt *&stmt,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Ref query of generate_table is NULL", K(ret));
         } else if (OB_FAIL(check_hint_allowed_prune(*ref_query, is_valid))) {
-          LOG_WARN("failed to check hint allowed prune", K(ret));
         } else if (!is_valid) {
           //do nothing
           OPT_TRACE("hint reject transform");
         } else if (OB_FAIL(ObTransformUtils::check_project_pruning_validity(*ref_query, is_valid))) {
-          LOG_WARN("failed to check transform valid", K(ret));
         } else if (!is_valid) {
           //do nothing
         } else if (OB_FAIL(project_pruning(table_item->table_id_,
                                            *ref_query,
                                            *stmt,
                                            is_happened))) {
-          LOG_WARN("Failed to project pruning generated table", K(ret));
         } else if (!is_happened) {
           //do nothing
         } else if (OB_FAIL(transed_stmts.push_back(ref_query))) {
-          LOG_WARN("failed to push back transed stmts", K(ret));
         } else {
           trans_happened = true;
           if (with_outline) {
@@ -138,7 +131,6 @@ int ObTransformProjectPruning::is_const_expr(ObRawExpr* expr, bool &is_const)
     is_const = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_const && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(is_const_expr(expr->get_param_expr(i), is_const)))) {
-        LOG_WARN("failed to check is const expr", K(ret));
       }
     }
   }
@@ -155,7 +147,6 @@ int ObTransformProjectPruning::check_transform_validity(const ObSelectStmt &stmt
       stmt.is_recursive_union() || (stmt.is_set_stmt() && stmt.is_set_distinct())) {
     // do nothing
   } else if (OB_FAIL(ObTransformUtils::check_has_assignment(stmt, has_assign))) {
-    LOG_WARN("check has assign failed", K(ret));
   } else if (has_assign) {
     //do nothing
   } else if (stmt.get_select_item_size() == 1
@@ -172,7 +163,6 @@ int ObTransformProjectPruning::check_transform_validity(const ObSelectStmt &stmt
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child query is null", K(ret));
       } else if (OB_FAIL(SMART_CALL(check_transform_validity(*child_stmts.at(i), is_valid)))) {
-        LOG_WARN("failed to check transform validity", K(ret));
       }
     }
   } else {
@@ -204,7 +194,6 @@ int ObTransformProjectPruning::project_pruning(const uint64_t table_id,
                                                       child_stmt,
                                                       upper_stmt,
                                                       removed_idx))) {
-      LOG_WARN("failed to remove select items", K(ret));
     } else {
       trans_happened = true;
     }
@@ -266,7 +255,6 @@ int ObTransformProjectPruning::check_hint_allowed_prune(ObSelectStmt &ref_query,
       allowed = true;
     } else if (NULL != no_rewrite_hint || is_disable) {
       if (OB_FAIL(ctx_->add_used_trans_hint(no_rewrite_hint))) {
-        LOG_WARN("failed to add used transform hint", K(ret));
       } else if (is_disable && OB_FAIL(ctx_->add_used_trans_hint(myhint))) {
         LOG_WARN("failed to add used transform hint", K(ret));
       }
@@ -287,7 +275,6 @@ int ObTransformProjectPruning::construct_transform_hint(ObDMLStmt &stmt, void *t
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(ctx_));
   } else if (OB_FAIL(ctx_->add_src_hash_val(ctx_->src_qb_name_))) {
-    LOG_WARN("failed to add src hash val", K(ret));
   } else {
     ObTransHint *hint = NULL;
     ObString qb_name;
@@ -297,17 +284,12 @@ int ObTransformProjectPruning::construct_transform_hint(ObDMLStmt &stmt, void *t
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("transed_stmt is null", K(ret), K(i));
       } else if (OB_FAIL(ctx_->add_used_trans_hint(get_hint(cur_stmt->get_stmt_hint())))) {
-        LOG_WARN("failed to add used hint", K(ret));
       } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, get_hint_type(), hint))) {
-        LOG_WARN("failed to create hint", K(ret));
       } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
-        LOG_WARN("failed to push back hint", K(ret));
       } else if (OB_FAIL(cur_stmt->get_qb_name(qb_name))) {
-        LOG_WARN("failed to get qb name", K(ret));
       } else if (OB_FAIL(cur_stmt->adjust_qb_name(ctx_->allocator_,
                                                   qb_name,
                                                   ctx_->src_hash_val_))) {
-        LOG_WARN("adjust stmt id failed", K(ret));
       } else {
         hint->set_qb_name(qb_name);
       }

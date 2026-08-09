@@ -69,7 +69,6 @@ int ObOStreamBuf::do_callback()
   int64_t data_size = pptr() - pbase();
   if (0 < data_size) {
     if (OB_FAIL(cb_(pbase(), data_size, cb_param_))) {
-      LOG_WARN("failed to do callback", K(ret));
     } else {
       setp(data_, data_ + capacity_ - 1); // reset to clear write buffer
     }
@@ -175,8 +174,7 @@ ObIStreamBuf::int_type ObIStreamBuf::underflow()
 int ObIStreamBuf::do_callback()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cb_(data_, capacity_, capacity_, cb_param_))) { // use data_ instead of eback() to change data_
-    LOG_WARN("failed to do callback", K(ret));
+  if (OB_FAIL(cb_(data_, capacity_, capacity_, cb_param_))) {
   } else {
     setg(data_, data_, data_ + capacity_); // fill the read buffer
   }
@@ -209,7 +207,6 @@ int ObVectorIndexSerializer::serialize(void *index, ObOStreamBuf::CbParam &cb_pa
     } else {
       streambuf.check_finish(); // do last callback to ensure all the data is written
       if (OB_FAIL(streambuf.get_error_code())) {
-        LOG_WARN("failed to serialize", K(ret));
       }
     }
   }
@@ -300,7 +297,6 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
       if (OB_SUCC(ret) && OB_ISNULL(str_iter)) {
         // we should get next str_iter
         if (OB_FAIL(row_iter->get_next_row(row))) {
-          LOG_WARN("failed to get next row", K(ret));
         } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid row", K(ret), K(row));
@@ -312,7 +308,6 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to new ObTextStringIter", KR(ret));
           } else if (OB_FAIL(str_iter->init(0, param.lob_read_options_, allocator))) {
-            LOG_WARN("init lob str iter failed ", K(ret));
           } else if (index_type_ == VIAT_MAX) {
             ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);
             ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
@@ -330,27 +325,22 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
             } else if (idx_ipivf > 0) {
               index_type_ = VIAT_IPIVF;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_IPIVF))) {
-                LOG_WARN("failed to init sparse vector snap data", K(ret), K(index_type_));
               }
             } else if (idx_sq > 0) {
               index_type_ = VIAT_HNSW_SQ;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_SQ))) {
-                LOG_WARN("failed to init snap data", K(ret), K(index_type_));
               }
             } else if (idx_bq > 0) {
               index_type_ = VIAT_HNSW_BQ;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_BQ))) {
-                LOG_WARN("failed to init snap data", K(ret), K(index_type_));
               }
             } else if (hgraph_idx > 0) {
               index_type_ = VIAT_HGRAPH;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_HGRAPH))) {
-                LOG_WARN("failed to init snap data", K(ret), K(index_type_));
               }
             } else {
               index_type_ = VIAT_HNSW;
               if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW))) {
-                LOG_WARN("failed to init snap data", K(ret), K(index_type_));
               }
             }
             LOG_INFO("HgraphIndex vector index get key data from snap_index_table", K(ret), K(index_type_), K(key_datum.get_string()));
@@ -367,7 +357,6 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
         LOG_WARN("get invalid adp", K(ret));
       } else if (!adp_ptr->is_mem_data_init_atomic(VIRT_SNAP)) {
         if (OB_FAIL(adp_ptr->init_snap_data_without_lock(VIAT_HNSW))) {
-          LOG_WARN("failed to init hnsw mem data", K(ret));
         } else {
           ret = OB_ITER_END;
         }
@@ -403,7 +392,6 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
   lob_param.lob_common_ = nullptr;
   ret = lob_param.snapshot_.assign(*reinterpret_cast<transaction::ObTxReadSnapshot*>(param.snapshot_));
   if (OB_FAIL(ret)) {
-    LOG_WARN("assign snapshot fail", K(ret));
   } else {
     lob_param.tx_desc_ = reinterpret_cast<transaction::ObTxDesc*>(param.tx_desc_);
   }
@@ -412,13 +400,11 @@ int ObHNSWSerializeCallback::operator()(const char *data, const int64_t data_siz
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get lob manager nullptr", K(ret));
   } else if (OB_FAIL(lob_mngr->append(lob_param, src_lob))) {
-    LOG_WARN("lob append failed.", K(ret));
   } else {
     LOG_INFO("[vec index debug] success write one data into lob tablet", K(src_lob),
               K(lob_param.lob_meta_tablet_id_), KPC(lob_param.tx_desc_));
     ObString dest_str(lob_param.handle_size_, (char*)lob_param.lob_common_);
     if (OB_FAIL(vctx->get_vals().push_back(dest_str))) {
-      LOG_WARN("fail to push dest lob into ctx val array", K(ret));
     }
   }
   return ret;

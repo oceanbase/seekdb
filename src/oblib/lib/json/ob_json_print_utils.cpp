@@ -64,7 +64,6 @@ int ObStdJsonConvertor::convert(int64_t &out_len)
         } else if ('"' == *p) {
           in_string = false;
           if (OB_FAIL(output(p, begin, out_len))) {
-            LOG_WARN("fail to output", K(ret));
           } else {}
         } else {}
       } else {
@@ -79,13 +78,11 @@ int ObStdJsonConvertor::convert(int64_t &out_len)
           case '{':
           case '}': {
             if (OB_FAIL(output(p, begin, out_len))) {
-              LOG_WARN("fail to output", K(ret));
             } else {}
             break;
           }
           case ':': {
             if (OB_FAIL(quoted_output(p, begin, out_len))) {
-              LOG_WARN("fail to quoted output", K(ret));
             } else {}
             break;
           }
@@ -97,7 +94,6 @@ int ObStdJsonConvertor::convert(int64_t &out_len)
     }
     if (OB_SUCC(ret) && begin < p) {
       if (OB_FAIL(output(p - 1, begin, out_len))) {
-        LOG_WARN("fail to output", K(ret));
       } else {}
     }
   }
@@ -163,23 +159,17 @@ int ObStdJsonConvertor::quoted_output(const char *p, const char *&begin, int64_t
       }
       if (name_begin > name_end) { // no valid name
         if (OB_FAIL(output(p, begin, out_len))) {
-          LOG_WARN("fail to output", K(ret));
         } else {}
       } else {
         if (name_begin > begin) {
           if (OB_FAIL(output(name_begin - 1, begin, out_len))) {
-            LOG_WARN("fail to output", K(ret));
           } else {}
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(add_quote_mark(out_len))) {
-          LOG_WARN("fail to add quote mark", K(ret));
         } else if (OB_FAIL(output(name_end, begin, out_len))) {
-          LOG_WARN("fail to add output", K(ret));
         } else if (OB_FAIL(add_quote_mark(out_len))) {
-          LOG_WARN("fail to add quote mark", K(ret));
         } else if (OB_FAIL(output(p, begin, out_len))) {
-          LOG_WARN("fail to add output", K(ret));
         } else {}
       }
     }

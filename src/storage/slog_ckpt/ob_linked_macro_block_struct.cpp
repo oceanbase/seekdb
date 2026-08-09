@@ -45,7 +45,6 @@ int ObLinkedMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64_
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(previous_macro_block_id_.serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to serialize previous_macro_block_id", K(ret), K(*this));
     }
   }
   return ret;
@@ -90,7 +89,6 @@ int ObMetaBlockListHandle::add_macro_blocks(const ObIArray<blocksstable::MacroBl
   ObStorageObjectsHandle &new_handle = meta_handles_[1 - cur_handle_pos_];
   for (int64_t i = 0; OB_SUCC(ret) && i < block_list.count(); ++i) {
     if (OB_FAIL(new_handle.add(block_list.at(i)))) {
-      LOG_WARN("fail to add macro block handle", K(ret));
     }
   }
   if (OB_FAIL(ret)) {

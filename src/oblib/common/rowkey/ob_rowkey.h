@@ -331,11 +331,7 @@ int ObRowkey::deserialize(Allocator &allocator, const char *buf, const int64_t d
     COMMON_LOG(WARN, "invalid arguments.",
                KP(buf), K(data_len), K(ret));
   } else if (OB_FAIL(copy_rowkey.deserialize(buf, data_len, pos))) {
-    COMMON_LOG(WARN, "deserialize to shallow copy key failed.",
-               KP(buf), K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(copy_rowkey.deep_copy(*this, allocator))) {
-    COMMON_LOG(WARN, "deep copy to self failed.",
-               KP(buf), K(data_len), K(pos), K(ret));
   }
 
   return ret;
@@ -359,8 +355,6 @@ OB_INLINE int ObRowkey::deep_copy(char *ptr, int64_t size) const
 
     for (int64_t i = 0; i < obj_cnt_ && OB_SUCCESS == ret; ++i) {
       if (OB_FAIL(obj_ptr[i].deep_copy(obj_ptr_[i], ptr, size, pos))) {
-        COMMON_LOG(WARN, "deep copy object failed.",
-                   K(i), K(obj_ptr_[i]), K(size), K(pos), K(ret));
       }
     }
   }
@@ -387,7 +381,6 @@ OB_INLINE int ObRowkey::deep_copy(const ObRowkey &src, char *ptr, int64_t size, 
 
       for (int64_t i = 0; i < src.obj_cnt_ && OB_SUCC(ret); ++i) {
         if (OB_FAIL(obj_ptr[i].deep_copy(src.obj_ptr_[i], ptr, size, pos))) {
-          COMMON_LOG(WARN, "deep copy object failed.",  K(i), K(src.obj_ptr_[i]), K(size), K(pos), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -411,8 +404,6 @@ OB_INLINE int ObRowkey::deep_copy(ObRowkey &rhs, char *ptr, int64_t total_len) c
                KP_(obj_ptr), K_(obj_cnt), K(ret));
   } else if (obj_cnt_ > 0 && NULL != obj_ptr_) {
     if (OB_FAIL(deep_copy(ptr, total_len))) {
-      COMMON_LOG(WARN, "deep copy rowkey failed.",
-                 KP_(obj_ptr), KP_(obj_cnt), K(ret));
     } else {
       rhs.assign(reinterpret_cast<ObObj *>(ptr), obj_cnt_);
     }
@@ -437,7 +428,6 @@ int ObRowkey::deep_copy(ObRowkey &rhs, Allocator &allocator) const
     COMMON_LOG(WARN, "allocate mem for obj array failed.",
                K(total_len), K(ret));
   } else if (OB_FAIL(deep_copy(rhs, ptr, total_len))) {
-    COMMON_LOG(WARN, "failed to deep copy", K(ret));
   }
 
   if (OB_FAIL(ret) && NULL != ptr) {
@@ -469,7 +459,6 @@ int ObRowkey::to_collation_free_rowkey(ObRowkey &collation_free_rowkey, Allocato
       for (int64_t i = 0; OB_SUCC(ret) && i < obj_cnt_; ++i) {
         if (obj_ptr_[i].is_character_type()) {
           if (OB_FAIL(obj_ptr_[i].to_collation_free_obj(collation_free_rowkey.obj_ptr_[i], is_obj_collation_free_valid, allocator))) {
-            COMMON_LOG(WARN, "fail to convert obj to collation free obj", K(ret), K(obj_ptr_[i]));
           } else if (!is_obj_collation_free_valid) {
             collation_free_rowkey.assign(NULL, 0);
             break;
@@ -497,7 +486,6 @@ int ObRowkey::to_collation_free_rowkey_on_demand(ObRowkey &collation_free_rowkey
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(obj_cnt_), K(obj_ptr_));
   } else if (OB_FAIL(need_transform_to_collation_free(need_transform))) {
-    STORAGE_LOG(WARN, "fail to get if need to transform to collation free rowkey", K(ret));
   } else if (need_transform && OB_FAIL(to_collation_free_rowkey(collation_free_rowkey, allocator))) {
     STORAGE_LOG(WARN, "fail to get collation free rowkey", K(ret));
   }

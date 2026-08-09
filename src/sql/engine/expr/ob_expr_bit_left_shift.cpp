@@ -35,7 +35,6 @@ int ObExprBitLeftShift::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_e
   int ret = OB_SUCCESS;
   const BitOperator op = BIT_LEFT_SHIFT;
   if (OB_FAIL(cg_bitwise_expr(expr_cg_ctx, raw_expr, rt_expr, op))) {
-    LOG_WARN("cg_bitwise_expr failed", K(ret), K(rt_expr), K(op));
   }
 
   return ret;

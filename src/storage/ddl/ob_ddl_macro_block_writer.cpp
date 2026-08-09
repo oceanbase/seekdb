@@ -88,7 +88,6 @@ int ObDDLMacroBlockWriter::init(
     macro_seq_param.start_ = start_sequence.macro_data_seq_;
 
     if (OB_FAIL(pre_warm_param.init(table_key.tablet_id_))) {
-      LOG_WARN("fail to initialize pre warm param", K(ret), K(table_key.tablet_id_));
     } else if (OB_FAIL(data_desc_.init(true/*is ddl*/,
                                        *tablet_param.storage_schema_,
                                        table_key.get_tablet_id(),
@@ -99,10 +98,8 @@ int ObDDLMacroBlockWriter::init(
                                        0/*concurrent_cnt*/,
                                        SCN::min_scn(),
                                        need_submit_io))) {
-      LOG_WARN("fail to initialize data store desc", K(ret));
     } else if (OB_FAIL(index_builder_.init(
         data_desc_.get_desc(), ObSSTableIndexBuilder::ENABLE))) {
-      LOG_WARN("fail to initialize sstable index builder", K(ret), K(table_key), K(data_desc_));
     } else {
       // for build the tail index block in macro block
       data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
@@ -110,7 +107,6 @@ int ObDDLMacroBlockWriter::init(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDDLStorageWriteUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
-      LOG_WARN("get ddl write stat failed", K(ret), K(table_key), K(param), KPC(ddl_write_stat));
     } else if (OB_ISNULL(ddl_redo_callback_ = ddl_redo_callback = OB_NEW(
                            ObDDLRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -129,7 +125,6 @@ int ObDDLMacroBlockWriter::init(
       init_param.macro_meta_store_ = macro_meta_store;
       init_param.write_stat_ = ddl_write_stat;
       if (OB_FAIL(ddl_redo_callback->init(init_param))) {
-        LOG_WARN("fail to initialize redo log callback", K(ret), K(init_param));
       }
     }
 
@@ -139,8 +134,6 @@ int ObDDLMacroBlockWriter::init(
                                            macro_seq_param,
                                            pre_warm_param,
                                            ddl_redo_callback_))) {
-        LOG_WARN("fail to open macro block writer",
-            K(ret), K(table_key), K(data_desc_), K(start_sequence));
       }
     }
   }
@@ -157,7 +150,6 @@ int ObDDLMacroBlockWriter::append_row(const ObDatumRow &curr_row)
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_row(curr_row))) {
-    LOG_WARN("write row failed", K(ret), K(curr_row));
   }
   return ret;
 }
@@ -169,7 +161,6 @@ int ObDDLMacroBlockWriter::append_batch(const blocksstable::ObBatchDatumRows &cu
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_batch(curr_rows))) {
-    LOG_WARN("write rows failed", K(ret), K(curr_rows));
   }
   return ret;
 }
@@ -181,7 +172,6 @@ int ObDDLMacroBlockWriter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.close())) {
-    LOG_WARN("fail to close macro block writer", K(ret));
   }
   return ret;
 }

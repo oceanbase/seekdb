@@ -417,7 +417,6 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
         char *data = chunk->blk_data(block);
         if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
             (len & (ps - 1)) != 0) {
-          _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
         } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
         } else {
           int error_code = 0;

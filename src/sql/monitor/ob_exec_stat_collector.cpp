@@ -40,7 +40,6 @@ int ObExecStatCollector::get_extend_info(ObIAllocator &allocator, ObString &str)
   int ret = OB_SUCCESS;
   const ObString tmp_str(length_, extend_buf_);
   if (OB_FAIL(ob_write_string(allocator, tmp_str, str))) {
-    LOG_WARN("fail to write string", K(tmp_str), K(ret));
   }
   return ret;
 }

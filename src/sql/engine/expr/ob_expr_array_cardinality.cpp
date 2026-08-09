@@ -56,7 +56,6 @@ int ObExprArrayCardinality::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
@@ -78,11 +77,9 @@ int ObExprArrayCardinality::eval_array_cardinality(const ObExpr &expr, ObEvalCtx
   const uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
   ObIArrayType *src_arr = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (datum->is_null()) {
     res.set_null();
-  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, datum->get_string(), src_arr))) { 
-    LOG_WARN("construct array obj failed", K(ret));
+  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, datum->get_string(), src_arr))) {
   } else {
     res.set_uint32(src_arr->cardinality());
   }
@@ -101,7 +98,6 @@ int ObExprArrayCardinality::eval_array_cardinality_batch(const ObExpr &expr, ObE
   ObIArrayType *src_arr = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -111,8 +107,7 @@ int ObExprArrayCardinality::eval_array_cardinality_batch(const ObExpr &expr, ObE
       eval_flags.set(j);
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) {
       } else {
         res_datum.at(j)->set_uint32(src_arr->cardinality());
       }

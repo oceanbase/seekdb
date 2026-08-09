@@ -107,7 +107,6 @@ public:
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "aborted node should not seen", KR(ret), K(node));
     }
-    MDS_LOG(TRACE, "use filter to filter mds row", KR(ret), KPC_(collector), K(node), K_(read_version_range));
     return ret;
   }
 private:

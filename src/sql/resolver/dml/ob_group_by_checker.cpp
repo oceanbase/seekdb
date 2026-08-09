@@ -112,7 +112,6 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
     ObSEArray<ObRawExpr*, 4> all_rollup_exprs;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(append(all_rollup_exprs, ref_stmt->get_rollup_exprs()))) {
-      LOG_WARN("failed to expr", K(ret));
     }
     if (OB_SUCC(ret)) {
       ObGroupByChecker checker(param_store,
@@ -122,16 +121,13 @@ int ObGroupByChecker::check_group_by(const ParamStore *param_store,
       checker.set_nested_aggr(ref_stmt->contain_nested_aggr());
       checker.only_need_contraints_ = only_need_constraints;
       if (OB_FAIL(checker.check_select_stmt(ref_stmt))) {
-        LOG_WARN("failed to check group by", K(ret));
       } else if (!only_need_constraints) {
         for (int64_t i = 0; OB_SUCC(ret) && i < ref_stmt->get_group_expr_size(); i++) {
           if (OB_FAIL(check_groupby_valid(ref_stmt->get_group_exprs().at(i)))) {
-            LOG_WARN("failed to check groupby valid.", K(ret));
           } else { /* do nothing. */ }
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < ref_stmt->get_rollup_expr_size(); i++) {
           if (OB_FAIL(check_groupby_valid(ref_stmt->get_rollup_exprs().at(i)))) {
-            LOG_WARN("failed to check groupby valid.", K(ret));
           } else { /* do nothing. */ }
         }
       }
@@ -158,12 +154,10 @@ int ObGroupByChecker::add_pc_const_param_info(ObExprEqualCheckContext &check_ctx
     for (int64_t i = 0; OB_SUCC(ret) && i < check_ctx.param_expr_.count(); i++) {
       ObExprEqualCheckContext::ParamExprPair &param_pair = check_ctx.param_expr_.at(i);
       if (OB_FAIL(const_param_info.const_idx_.push_back(param_pair.param_idx_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (param_pair.param_idx_ < 0 || param_pair.param_idx_ >= param_store_->count()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("get invalid param idx", K(ret), K(param_pair.param_idx_), K(param_store_->count()));
       } else if (OB_FAIL(const_param_info.const_params_.push_back(param_store_->at(param_pair.param_idx_)))) {
-        LOG_WARN("failed to psuh back param const value", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -199,7 +193,6 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
       check_ctx.override_query_compare_ = true;
       if (expr.same_as(*rollup_exprs_->at(nth_rollup), &check_ctx)) {
         found = true;
-        LOG_DEBUG("found in rollup exprs", K(expr));
       }
     }
     if (OB_SUCCESS == check_ctx.err_code_ && !found && is_top_select_stmt()) {
@@ -212,7 +205,6 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
           check_ctx.override_query_compare_ = true;
           if (expr.same_as(*rollup_exprs_->at(nth_rollup), &check_ctx)) {
             found_same_structure = true;
-            LOG_DEBUG("found same structure in rollup exprs", K(expr));
           }
         }
       }
@@ -222,9 +214,7 @@ bool ObGroupByChecker::find_in_rollup(ObRawExpr &expr)
   } else if ((found || found_same_structure) && OB_SUCCESS == check_ctx.err_code_) {
     if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                        check_ctx.equal_param_info_))) {
-      LOG_WARN("failed to append equal params constraints", K(ret));
     } else if (OB_FAIL(add_pc_const_param_info(check_ctx))) {
-      LOG_WARN("failed to add pc const param info.", K(ret));
     } else { /*do nothing.*/ }
   }
   return found;
@@ -247,7 +237,6 @@ bool ObGroupByChecker::find_in_group_by(ObRawExpr &expr)
       check_ctx.override_query_compare_ = !is_check_order_by_;
       if (expr.same_as(*group_by_exprs_->at(nth_group_by), &check_ctx)) {
         found = true;
-        LOG_DEBUG("found in group by exprs", K(expr));
       }
     }
   }
@@ -263,9 +252,7 @@ bool ObGroupByChecker::find_in_group_by(ObRawExpr &expr)
     //    So need to make the two question marks and the constant after order by the same to match.
     if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                        check_ctx.equal_param_info_))) {
-      LOG_WARN("failed to append equal params constraints", K(ret));
     } else if (OB_FAIL(add_pc_const_param_info(check_ctx))) {
-      LOG_WARN("failed to add pc const param info.", K(ret));
     } else { /*do nothing.*/ }
   }
   return found;
@@ -297,9 +284,7 @@ int ObGroupByChecker::belongs_to_check_stmt(ObRawExpr &expr, bool &belongs_to)
     if (is_top_select_stmt()) {
       // the expr is not from checked stmt
       belongs_to = true;
-      LOG_DEBUG("same level", K(ret), K(expr));
     } else {
-      LOG_DEBUG("different level", K(ret), K(expr));
     }
   }
   return ret;
@@ -335,9 +320,7 @@ int ObGroupByChecker::colref_belongs_to_check_stmt(ObColumnRefRawExpr &expr, boo
     } else if (NULL != top_stmt->get_column_expr_by_id(expr.get_table_id(), expr.get_column_id())) {
       // the expr is not from checked stmt
       belongs_to = true;
-      LOG_DEBUG("same level", K(ret), K(expr));
     } else {
-      LOG_DEBUG("different level", K(ret), K(expr));
     }
   }
   return ret;
@@ -361,7 +344,6 @@ int ObGroupByChecker::visit(ObExecParamRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ref expr is invalid", K(ret));
   } else if (OB_FAIL(expr.get_ref_expr()->preorder_accept(*this))) {
-    LOG_WARN("failed to visit child", K(ret));
   }
   return ret;
 }
@@ -381,7 +363,6 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
 {
   int ret = OB_SUCCESS;
   ++level_;
-  LOG_DEBUG("check group by start stmt", K(ret));
 
   if (is_top_select_stmt()) {
     top_stmt_ = ref_stmt;
@@ -391,7 +372,6 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ref_stmt should not be NULL", K(ret));
   } else if (OB_FAIL(cur_stmts_.push_back(ref_stmt))) {
-    LOG_WARN("failed to push back stmt", K(ret));
   } else {
     ObStmtExprGetter visitor;
     if (is_top_select_stmt() || only_need_contraints_) {
@@ -419,13 +399,11 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
     }
     ObArray<ObRawExpr*> relation_expr_pointers;
     if (OB_FAIL(ref_stmt->get_relation_exprs(relation_expr_pointers, visitor))) {
-      LOG_WARN("get stmt relation exprs fail", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < relation_expr_pointers.count(); ++i) {
       ObRawExpr *expr = relation_expr_pointers.at(i);
       if (OB_FAIL(expr->preorder_accept(*this)))  {
-        LOG_WARN("fail to check group by", K(i), K(ret));
       }
     }
     // Processing ends, then exit
@@ -444,7 +422,6 @@ int ObGroupByChecker::check_select_stmt(const ObSelectStmt *ref_stmt)
       }
     }
   }
-  LOG_DEBUG("check group by end stmt", K(ret));
   --level_;
   return ret;
 }
@@ -464,7 +441,6 @@ int ObGroupByChecker::visit(ObQueryRefRawExpr &expr)
   } else if (!only_need_contraints_) {
     const ObSelectStmt *ref_stmt = expr.get_ref_stmt();
     if (OB_FAIL(check_select_stmt(ref_stmt))) {
-      LOG_WARN("failed to check select stmt", K(ret));
     }
   }
   return ret;
@@ -484,7 +460,6 @@ int ObGroupByChecker::visit(ObColumnRefRawExpr &expr)
       set_skip_expr(&expr);
     }
   } else if (OB_FAIL(colref_belongs_to_check_stmt(expr, belongs_to))) {
-    LOG_WARN("failed to get belongs to stmt", K(ret));
   } else if (!belongs_to) {
   } else if (find_in_group_by(expr) || find_in_rollup(expr)) {
   } else {
@@ -493,7 +468,6 @@ int ObGroupByChecker::visit(ObColumnRefRawExpr &expr)
                                                  expr.get_table_name(),
                                                  expr.get_column_name());
     LOG_USER_ERROR(OB_ERR_WRONG_FIELD_WITH_GROUP, column_name.length(), column_name.ptr());
-    LOG_DEBUG("column not in group by", K(*group_by_exprs_), K(expr));
   }
   return ret;
 }
@@ -557,7 +531,6 @@ int ObGroupByChecker::visit(ObAggFunRawExpr &expr)
   } else if (only_need_contraints_) {
     // do nothing
   } else if (OB_FAIL(belongs_to_check_stmt(expr, belongs_to))) {
-    LOG_WARN("failed to get belongs to stmt", K(ret));
   } else if (belongs_to) {
     // expr is aggregate function in current stmt, then skip it
     if (expr.in_inner_stmt()) {
@@ -623,14 +596,12 @@ int ObGroupByChecker::visit(ObPseudoColumnRawExpr &expr)
       set_skip_expr(&expr);
     }
   } else if (OB_FAIL(belongs_to_check_stmt(expr, belongs_to))) {
-    LOG_WARN("failed to get belongs to stmt", K(ret));
   } else if (belongs_to) {
     if (find_in_group_by(expr) || find_in_rollup(expr)) {
       set_skip_expr(&expr);
     } else if (T_ORA_ROWSCN != expr.get_expr_type()) {
       ret = OB_ERR_WRONG_FIELD_WITH_GROUP;
       //LOG_USER_ERROR(ret, column_name.length(), column_name.ptr());
-      LOG_DEBUG("pseudo column not in group by", K(*group_by_exprs_), K(expr));
     }
   }
   return ret;

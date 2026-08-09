@@ -131,7 +131,6 @@ int ObSSTableIndexBlockLevelScanner::init(
     LOG_WARN("invalid prefetch depth", K(ret), K(prefetch_depth));
   } else if (OB_FAIL(idx_row_scanner_.init(
                  datum_utils, scan_allocator, query_flag, nested_offset))) {
-    LOG_WARN("fail to init idx row scanner", K(ret));
   } else {
     query_range_ = query_range;
     datum_utils_ = &datum_utils;
@@ -160,7 +159,6 @@ int ObSSTableIndexBlockLevelScanner::get_next_row(ObMicroIndexInfo &index_row)
   } else if (!block_opened_ && !is_prefetch_queue_empty()) {
     ++read_idx_;
     if (OB_FAIL(open_current_read_index_block())) {
-      LOG_WARN("fail to open current read index block", K(ret));
     }
   }
 
@@ -173,9 +171,7 @@ int ObSSTableIndexBlockLevelScanner::get_next_row(ObMicroIndexInfo &index_row)
         release_current_read_item();
         ++read_idx_;
         if (OB_FAIL(open_current_read_index_block())) {
-          LOG_WARN("fail to open current read index block", K(ret), K_(read_idx));
         } else if (OB_FAIL(idx_row_scanner_.get_next(index_row))) {
-          LOG_WARN("fail to get next index row after open next block", K(ret));
         }
       } else {
         // ret = OB_ITER_END;
@@ -194,8 +190,6 @@ int ObSSTableIndexBlockLevelScanner::get_next_row(ObMicroIndexInfo &index_row)
     //    always point to the last range if we don't check key of every index row on the right border here.
     int cmp_ret = 0;
     if (OB_FAIL(index_row.endkey_.compare(query_range_.end_key_, *datum_utils_, cmp_ret, false))) {
-      LOG_WARN("failed to compare index row endkey with scan range end key",
-          K(ret), K(index_row.endkey_), K(query_range_.end_key_));
     } else if (cmp_ret > 0 || (cmp_ret == 0 && !query_range_.get_border_flag().inclusive_end())) {
       // found first endkey beyond scan range
       iter_end_ = true;
@@ -215,9 +209,7 @@ int ObSSTableIndexBlockLevelScanner::prefetch_root_block(ObSSTable &sstable)
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("ddl sstable not supported for sstable index block scanner", K(ret));
   } else if (OB_FAIL(sstable.get_index_tree_root(idx_block_))) {
-    LOG_WARN("fail to get index tree root block", K(ret));
   } else if (OB_FAIL(open_root_index_block(idx_block_, query_range_, contains_range))) {
-   LOG_WARN("fail to open root index block", K(ret));
   } else {
     last_prefetch_key_.set_compact_rowkey((&query_range_.end_key_));
     block_opened_ = true;
@@ -265,7 +257,6 @@ int ObSSTableIndexBlockLevelScanner::prefetch_next_index_block(ObSSTableIndexBlo
           use_block_cache_,
           prefetch_handle.io_handle_,
           io_allocator_))) {
-        LOG_WARN("failed to prefetch next index block", K(ret), K(idx_block_row));
       } else {
         
         prefetch_handle.block_state_ = ObSSTableMicroBlockState::IN_BLOCK_IO;
@@ -331,7 +322,6 @@ int ObSSTableIndexBlockLevelScanner::advance_to(const ObDatumRowkey &rowkey, con
 
     if (is_root_block_) {
       if (OB_FAIL(open_root_index_block(idx_block_, query_range_, found_advanced_key))) {
-        LOG_WARN("fail to open root index block", K(ret));
       }
     } else {
       while (OB_SUCC(ret) && !found_advanced_key) {
@@ -384,7 +374,6 @@ int ObSSTableIndexBlockLevelScanner::open_current_read_index_block()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("read_idx_ is greater than prefetch_idx_", K(ret), K(read_idx_), K(prefetch_idx_));
   } else if (OB_FAIL(read_handle.get_micro_block_data(nullptr, idx_block_, false))) {
-    LOG_WARN("failed to get micro block data", K(ret), K_(read_idx), K_(prefetch_idx));
   } else if (FALSE_IT(idx_row_scanner_.reuse())) {
   } else if (OB_FAIL(idx_row_scanner_.open(
       read_item.macro_id_,
@@ -488,11 +477,8 @@ int ObSSTableIndexScanner::init(
     LOG_WARN("invalid argument", K(ret), K(sstable), K(scan_range), K(scan_param));
   } else if (sstable.is_empty()) {
   } else if (OB_FAIL(block_io_allocator_.init(nullptr, OB_MALLOC_MIDDLE_BLOCK_SIZE, lib::ObMemAttr("SSTIdxScanIO")))) {
-    LOG_WARN("failed to init block io allocator", K(ret));
   } else if (OB_FAIL(init_level_scanners(scan_range, scan_param, sstable, scan_allocator))) {
-    LOG_WARN("failed to init level scanners", K(ret));
   } else if (OB_FAIL(init_index_row(scan_param, scan_allocator))) {
-    LOG_WARN("failed to init index row", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -513,7 +499,6 @@ int ObSSTableIndexScanner::get_next(const ObSSTableIndexRow *&index_row)
   } else if (sstable_->is_empty()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(try_prefetch())) {
-    LOG_WARN("failed to try prefetch index block", K(ret));
   } else if (OB_FAIL(inner_get_next_index_row(index_row_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("failed to get next index row", K(ret));
@@ -541,7 +526,6 @@ int ObSSTableIndexScanner::advance_to(const ObDatumRowkey &rowkey, const bool in
       } else if (curr_scanner->is_iter_end()) {
         // skip advance level scanner already finished iteration
       } else if (OB_FAIL(curr_scanner->advance_to(rowkey, inclusive))) {
-        LOG_WARN("failed to advance current level scanner to rowkey", K(ret), K(rowkey));
       } else if (level > 0) {
         // try prefetch for non-root level scanner
         ObSSTableIndexBlockLevelScanner *parent_scanner = level_scanners_.at(level - 1);
@@ -551,7 +535,6 @@ int ObSSTableIndexScanner::advance_to(const ObDatumRowkey &rowkey, const bool in
         } else if (!curr_scanner->can_prefetch_next_block() || parent_scanner->is_iter_end()) {
           // skip prefetch
         } else if (OB_FAIL(curr_scanner->prefetch_next_index_block(*parent_scanner))) {
-          LOG_WARN("failed to prefetch next index block", K(ret));
         }
       }
     }
@@ -573,7 +556,6 @@ int ObSSTableIndexScanner::try_prefetch()
 
     while (OB_SUCC(ret) && curr_scanner->can_prefetch_next_block() && !parent_scanner->is_iter_end()) {
       if (OB_FAIL(curr_scanner->prefetch_next_index_block(*parent_scanner))) {
-        LOG_WARN("failed to get next row", K(ret));
       }
     }
   }
@@ -597,7 +579,6 @@ int ObSSTableIndexScanner::init_level_scanners(
     break;
   case ObSSTableIndexScanParam::ScanLevel::LEAF:
     if (OB_FAIL(sstable.get_meta(sst_meta_handle))) {
-      LOG_WARN("failed to get sstable meta handle", K(ret));
     } else {
       scan_level_cnt = sst_meta_handle.get_sstable_meta().get_data_index_tree_height();
     }
@@ -611,9 +592,7 @@ int ObSSTableIndexScanner::init_level_scanners(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(level_scanners_.init(scan_level_cnt))) {
-    LOG_WARN("failed to init level scanners", K(ret));
   } else if (OB_FAIL(level_scanners_.prepare_allocate(scan_level_cnt))) {
-    LOG_WARN("failed to prepare allocate level scanners", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < scan_level_cnt; ++i) {
@@ -630,14 +609,11 @@ int ObSSTableIndexScanner::init_level_scanners(
         ObSSTableIndexBlockLevelScanner::DEFAULT_PREFETCH_DEPTH,
         scan_allocator,
         block_io_allocator_))) {
-      LOG_WARN("failed to init sstable index block level scanner", K(ret));
     } else if (FALSE_IT(level_scanners_.at(i) = level_scanner)) {
     } else if (0 == i) {
       if (OB_FAIL(level_scanner->prefetch_root_block(sstable))) {
-        LOG_WARN("failed to prefetch root block", K(ret));
       }
     } else if (OB_FAIL(level_scanner->prefetch_next_index_block(*level_scanners_.at(i - 1)))) {
-      LOG_WARN("failed to prefetch next index block", K(ret), K(i));
     }
   }
 
@@ -655,9 +631,7 @@ int ObSSTableIndexScanner::init_index_row(
       && OB_FAIL(index_row_.skip_index_row_.init(scan_allocator, index_proj_column_count))) {
     LOG_WARN("failed to init skip index row", K(ret));
   } else if (OB_FAIL(rowkey_buf_.init(scan_allocator, rowkey_column_count))) {
-    LOG_WARN("failed to init datum row for rowkey datum buffer", K(ret));
   } else if (OB_FAIL(endkey_.assign(rowkey_buf_.storage_datums_, rowkey_column_count))) {
-    LOG_WARN("failed to assign datum to endkey", K(ret));
   }
   return ret;
 }
@@ -675,9 +649,7 @@ int ObSSTableIndexScanner::inner_get_next_index_row(ObSSTableIndexRow &index_row
       LOG_WARN("failed to get next micro index info", K(ret));
     }
   } else if (OB_FAIL(process_endkey(index_info, index_row))) {
-    LOG_WARN("failed to process endkey", K(ret));
   } else if (OB_FAIL(project_skip_index_row(index_info, index_row))) {
-    LOG_WARN("failed to project skip index row", K(ret));
   }
   return ret;
 }
@@ -690,7 +662,6 @@ int ObSSTableIndexScanner::process_endkey(const ObMicroIndexInfo &index_info, Ob
   } else if (index_info.endkey_.is_discrete_rowkey()) {
     const ObDiscreteDatumRowkey *discrete_rowkey = index_info.endkey_.get_discrete_rowkey();
     if (OB_FAIL(discrete_rowkey->rowkey_vector_->get_rowkey(discrete_rowkey->row_idx_, endkey_))) {
-      STORAGE_LOG(WARN, "failed to get rowkey from discrete rowkey vector", K(ret));
     } else {
       index_row.endkey_ = &endkey_;
     }
@@ -714,13 +685,11 @@ int ObSSTableIndexScanner::project_skip_index_row(const ObMicroIndexInfo &index_
   } else {
     ObAggRowReader agg_reader;
     if (OB_FAIL(agg_reader.init(index_info.agg_row_buf_, index_info.agg_buf_size_))) {
-      LOG_WARN("failed to init agg row reader", K(ret), K(index_info));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < scan_param_->get_skip_index_projector().count(); ++i) {
       const ObSkipIndexColMeta &col_meta = scan_param_->get_skip_index_projector().at(i);
       ObDatum &read_datum = index_row.skip_index_row_.storage_datums_[i];
       if (OB_FAIL(agg_reader.read(col_meta, read_datum))) {
-        LOG_WARN("failde to read one skip index agg datum", K(ret), K(col_meta));
       }
     }
   }

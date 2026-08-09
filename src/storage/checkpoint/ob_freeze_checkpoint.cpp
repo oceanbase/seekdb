@@ -30,7 +30,6 @@ void ObFreezeCheckpoint::remove_from_data_checkpoint()
   if (OUT != location_) {
     int ret = OB_SUCCESS;
     if(OB_FAIL(unlink_())) {
-      STORAGE_LOG(WARN, "ObFreezeCheckpoint Unlink From DataCheckpoint Failed", K(ret));
     }
   }
 }
@@ -44,7 +43,6 @@ int ObFreezeCheckpoint::unlink_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(data_checkpoint_->unlink_(this))) {
-    STORAGE_LOG(ERROR, "failed to unlink", K(ret), KPC(this));
   } else {
     location_ = OUT;
     prev_ = NULL;
@@ -64,8 +62,6 @@ int ObFreezeCheckpoint::add_to_data_checkpoint(ObDataCheckpoint *data_checkpoint
   data_checkpoint_ = data_checkpoint;
   int ret = OB_SUCCESS;
   if (OB_FAIL(data_checkpoint_->add_to_new_create(this))) {
-    STORAGE_LOG(ERROR, "add_to_data_checkpoint Failed",
-                                      K(ret), K(*this));
   }
   return ret;
 }

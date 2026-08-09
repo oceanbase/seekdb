@@ -67,7 +67,6 @@ int ObTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
         // directly get from prefetched tablet_info
         tablet_info.reset();
         if (OB_FAIL(tablet_info.assign(prefetched_tablets_.at(prefetch_tablet_idx_)))) {
-          LOG_WARN("fail to assign tablet_info", KR(ret), K_(prefetch_tablet_idx));
         } else if (tablet_info.is_valid()) {
           find = true;
         }
@@ -133,7 +132,6 @@ int ObCompactionTabletMetaIterator::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(batch_size));
   } else if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
-    LOG_WARN("failed to init", KR(ret));
   } else {
     batch_size_ = batch_size;
     meta_db_pool_ = &meta_db_pool;

@@ -40,7 +40,6 @@ int ObHashExceptOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObHashSetOp::inner_open())) {
-    LOG_WARN("failed to open in ObHashExceptOp", K(ret));
   } else if (MY_SPEC.max_batch_size_ > 0 &&
       OB_ISNULL(store_rows_ = static_cast<const ObChunkDatumStore::StoredRow **> (ctx_.get_allocator().
       alloc(MY_SPEC.max_batch_size_ * sizeof(ObChunkDatumStore::StoredRow *))))) {
@@ -71,7 +70,6 @@ int ObHashExceptOp::build_hash_table_by_part(const int64_t batch_size)
   bool found = false;
   while (OB_SUCC(ret) && !found) {
     if (OB_FAIL(hp_infras_.get_next_pair_partition(InputSide::LEFT))) {
-      LOG_WARN("failed to get next partition", K(ret));
     } else if (!hp_infras_.has_cur_part(InputSide::LEFT)) {
       // Left side has no part, then there is no data to return
       ret = OB_ITER_END;
@@ -83,7 +81,6 @@ int ObHashExceptOp::build_hash_table_by_part(const int64_t batch_size)
       get_row_from_hash_table_ = true;
       found = true;
     } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::RIGHT))) {
-      LOG_WARN("failed to open cur part");
     } else {
       found = true;
       hp_infras_.switch_right();//dump logic falls on the right
@@ -101,19 +98,14 @@ int ObHashExceptOp::inner_get_next_row()
   clear_evaluated_flag();
   if (first_get_left_) {
     if (OB_FAIL(is_left_has_row(left_has_row))) {
-      LOG_WARN("failed to judge left has row", K(ret));
     } else if (!left_has_row) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(ObHashSetOp::init_hash_partition_infras())) {
-      LOG_WARN("failed to init hash partition infras", K(ret));
     } else if (OB_FAIL(build_hash_table_from_left(true))) {
-      LOG_WARN("failed to build hash table", K(ret));
     } else {
       hp_infras_.switch_right();
       if (OB_FAIL(batch_process_right())) {
-        LOG_WARN("failed to batch process right", K(ret));
       } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
-        LOG_WARN("failed to open hash table part", K(ret));
       } else {
         get_row_from_hash_table_ = true;
         has_got_part_ = true;
@@ -155,9 +147,7 @@ int ObHashExceptOp::batch_process_right() {
     if (OB_FAIL(ret)) {
       //error or iter_end break
     } else if (OB_FAIL(try_check_status())) {
-      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_.exists_row(*cur_exprs, part_cols))) {
-      LOG_WARN("failed to find row", K(ret));
     } else if (OB_NOT_NULL(part_cols)) {
       part_cols->store_row_->set_is_match(true);
     } else {
@@ -166,7 +156,6 @@ int ObHashExceptOp::batch_process_right() {
             && OB_FAIL(hp_infras_.create_dumped_partitions(InputSide::RIGHT))) {
           LOG_WARN("failed to create dump partitions", K(ret));
         } else if (OB_FAIL(hp_infras_.insert_row_on_partitions(*cur_exprs))) {
-          LOG_WARN("failed to insert row into partitions", K(ret));
         }
       } else {
         // No dumped, and unmatched right will be ignored
@@ -189,7 +178,6 @@ int ObHashExceptOp::batch_process_right_vectorize(const int64_t batch_size)
   while (OB_SUCC(ret)) {
     if (!has_got_part_) {
       if (OB_FAIL(right_->get_next_batch(batch_size, right_brs))) {
-        LOG_WARN("failed to get next batch", K(ret));
       } else if (right_brs->end_ && 0 == right_brs->size_) {
         ret = OB_ITER_END;
       } else {
@@ -199,18 +187,15 @@ int ObHashExceptOp::batch_process_right_vectorize(const int64_t batch_size)
     } else if (OB_FAIL(hp_infras_.get_right_next_batch(MY_SPEC.set_exprs_,
                                                        batch_size,
                                                        read_rows))) {
-      LOG_WARN("failed to get next batch from dumped partition", K(ret), K(read_rows));
     } else {
       cur_exprs = &MY_SPEC.set_exprs_;
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(try_check_status())) {
-      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_.exists_batch(*cur_exprs, read_rows, 
                                                has_got_part_ ? brs_.skip_ : right_brs->skip_, 
                                                brs_.skip_, 
                                                hash_values_for_batch_))) {
-      LOG_WARN("failed to exists batch", K(ret));
     } else {
       //for except, do not need set skip vector in exists_batch, all rows are from hash table.
       brs_.skip_->reset(batch_size);
@@ -231,11 +216,8 @@ get_next_row_from_hashtable(const ObChunkDatumStore::StoredRow *&store_row)
   while(!got_row && OB_SUCC(ret)) {
     if (!get_row_from_hash_table_) {
       if (OB_FAIL(hp_infras_.finish_insert_row())) {
-        LOG_WARN("failed to finish insert row", K(ret));
       } else if (OB_FAIL(hp_infras_.end_round())) {
-        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
-        LOG_WARN("failed to start round", K(ret));
       } else if (OB_FAIL(build_hash_table_by_part(batch_size))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to build hash table by part", K(ret));
@@ -244,9 +226,7 @@ get_next_row_from_hashtable(const ObChunkDatumStore::StoredRow *&store_row)
       if (OB_FAIL(ret)) {
       } else if (get_row_from_hash_table_) {
       } else if (OB_FAIL(batch_process_right())) {
-        LOG_WARN("failed to batch process right", K(ret));
       } else if (OB_FAIL(hp_infras_.close_cur_part(InputSide::RIGHT))) {
-        LOG_WARN("failed to close curr part", K(ret));
       } else {
         get_row_from_hash_table_ = true;
       }
@@ -282,11 +262,8 @@ int ObHashExceptOp::get_next_batch_from_hashtable(const int64_t batch_size)
   while (OB_SUCC(ret) && !got_batch) {
     if (!get_row_from_hash_table_) {
       if (OB_FAIL(hp_infras_.finish_insert_row())) {
-        LOG_WARN("failed to finish insert row", K(ret));
       } else if (OB_FAIL(hp_infras_.end_round())) {
-        LOG_WARN("faild to end round", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
-        LOG_WARN("failed to start round", K(ret));
       } else if (OB_FAIL(build_hash_table_by_part(batch_size))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to build hash table by part", K(ret));
@@ -295,9 +272,7 @@ int ObHashExceptOp::get_next_batch_from_hashtable(const int64_t batch_size)
       if (OB_FAIL(ret)) {
       } else if (get_row_from_hash_table_) {
       } else if (OB_FAIL(batch_process_right_vectorize(batch_size))) {
-        LOG_WARN("failed to process right vec", K(ret));
       } else if (OB_FAIL(hp_infras_.close_cur_part(InputSide::RIGHT))) {
-        LOG_WARN("failed to close right part", K(ret));
       } else {
         get_row_from_hash_table_ = true;
       }
@@ -336,20 +311,15 @@ int ObHashExceptOp::inner_get_next_batch(const int64_t max_row_cnt)
   if (first_get_left_) {
     const ObBatchRows *child_brs = nullptr;
     if (OB_FAIL(left_->get_next_batch(batch_size, child_brs))) {
-      LOG_WARN("failed get left batch", K(ret));
     } else if (FALSE_IT(left_brs_ = child_brs)) {
     } else if (child_brs->end_ && 0 == child_brs->size_) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(init_hash_partition_infras_for_batch())) {
-      LOG_WARN("failed to init hash partition infras", K(ret));
     } else if (OB_FAIL(build_hash_table_from_left_batch(true, batch_size))) {
-      LOG_WARN("failed to build hash table", K(ret));
     } else {
       hp_infras_.switch_right();
       if (OB_FAIL(batch_process_right_vectorize(batch_size))) {
-        LOG_WARN("failed to batch process right", K(ret));
       } else if (OB_FAIL(hp_infras_.open_hash_table_part())) {
-        LOG_WARN("failed to open hash table part", K(ret));
       } else {
         get_row_from_hash_table_ = true;
         has_got_part_ = true;

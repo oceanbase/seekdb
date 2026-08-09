@@ -66,7 +66,6 @@ public:
       ret = OB_ARRAY_OUT_OF_RANGE;
       LIB_LOG(WARN, "array is full", K_(count), K_(capacity), K(ret));
     } else if (OB_FAIL(copy_assign(data_[count_], obj))) {
-      LIB_LOG(WARN, "assign failed", K(ret));
     } else {
       ++count_;
     }
@@ -96,7 +95,6 @@ public:
       ret = OB_ARRAY_OUT_OF_RANGE;
       LIB_LOG(WARN, "array is empty", K_(count), K(ret));
     } else if (OB_FAIL(copy_assign(obj, data_[count_ - 1]))) {
-      LIB_LOG(WARN, "assign failed", K(ret));
     } else {
       --count_;
     }
@@ -115,7 +113,6 @@ public:
     } else {
       for (int64_t i = idx; OB_SUCC(ret) && i < count_ - 1; ++i) {
         if (OB_FAIL(copy_assign(data_[i], data_[i + 1]))) {
-          LIB_LOG(WARN, "assign failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -135,7 +132,6 @@ public:
       ret = OB_ARRAY_OUT_OF_RANGE;
       LIB_LOG(WARN, "idx out of array range", K(idx), K_(count), K(ret));
     } else if (OB_FAIL(copy_assign(obj, data_[idx]))) {
-      LIB_LOG(WARN, "assign failed", K(ret));
     }
     return ret;
   }
@@ -164,7 +160,6 @@ public:
     } else if (this != &other) {
       reuse();
       if (OB_FAIL(append(*this, other))) {
-        LIB_LOG(WARN, "append failed", K(ret));
       }
     }
     return ret;

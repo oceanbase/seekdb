@@ -86,7 +86,6 @@ public:
     const ObDASBaseCtDef *base_ctdef = nullptr;
     ObDASBaseRtDef *base_rtdef = nullptr;
     if (OB_FAIL(find_child_das_def(root_ctdef, root_rtdef, op_type, base_ctdef, base_rtdef))) {
-      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else if (OB_ISNULL(base_ctdef) || OB_ISNULL(base_rtdef)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "can not find the target op def", K(ret), K(op_type), KP(base_ctdef), KP(base_rtdef));
@@ -115,7 +114,6 @@ public:
     int ret = common::OB_SUCCESS;
     const ObDASBaseCtDef *base_ctdef = nullptr;
     if (OB_FAIL(find_child_das_ctdef(root_ctdef, op_type, base_ctdef))) {
-      SQL_DAS_LOG(WARN, "find chld das def failed", K(ret));
     } else if (OB_ISNULL(base_ctdef)) {
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "can not find the target op def", K(ret), K(op_type), KP(base_ctdef));

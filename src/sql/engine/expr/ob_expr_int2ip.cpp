@@ -111,7 +111,6 @@ int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("int2ip expr eval param value failed", K(ret));
   } else {
     ObDatum &text = expr.locate_param_datum(ctx, 0);
     if (text.is_null()) {
@@ -120,7 +119,6 @@ int ObExprInt2ip::int2ip_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &ex
       CK(expr.res_buf_len_ >= 16);
       int64_t int_val = text.get_int();
       if (OB_FAIL(int2ip(expr_datum, int_val))) {
-        LOG_WARN("fail to convert int 2 ip", K(ret), K(int_val));
       }
     }
   }

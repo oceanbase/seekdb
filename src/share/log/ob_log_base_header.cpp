@@ -104,13 +104,9 @@ DEFINE_SERIALIZE(ObLogBaseHeader)
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, version_))) {
-    CLOG_LOG(WARN, "serialize replay_hint_ failed", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, log_type_))) {
-    CLOG_LOG(WARN, "serialize log_type_ failed", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, flag_))) {
-    CLOG_LOG(WARN, "serialize flag_ failed", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, replay_hint_))) {
-    CLOG_LOG(WARN, "serialize replay_hint_ failed", K(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -122,13 +118,9 @@ DEFINE_DESERIALIZE(ObLogBaseHeader)
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &version_))) {
-    CLOG_LOG(WARN, "deserialize replay_hint_ failed", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &log_type_))) {
-    CLOG_LOG(WARN, "deserialize log_type_ failed", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &flag_))) {
-    CLOG_LOG(WARN, "deserialize flag_ failed", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &replay_hint_))) {
-    CLOG_LOG(WARN, "deserialize replay_hint_ failed", K(ret), KP(buf), K(data_len), K(pos));
   }
 
   return ret;

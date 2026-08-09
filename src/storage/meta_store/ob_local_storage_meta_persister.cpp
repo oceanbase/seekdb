@@ -64,7 +64,6 @@ int ObLocalStorageMetaPersister::prepare_create_ls(const ObLSMeta &meta, int64_t
   } else  {
     ls_epoch = 0;
     if (OB_FAIL(write_prepare_create_ls_slog_(meta))) {
-      LOG_WARN("fail to write prepare create ls slog", K(ret), K(meta));
     }
   }
   return ret;
@@ -78,7 +77,6 @@ int ObLocalStorageMetaPersister::commit_create_ls()
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_commit_create_ls_slog_())) {
-      LOG_WARN("fail to write commit create ls slog", K(ret));
     }
   }
   return ret;
@@ -92,7 +90,6 @@ int ObLocalStorageMetaPersister::abort_create_ls()
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_abort_create_ls_slog_())) {
-      LOG_WARN("fail to write abort create ls slog", K(ret));
     }
   }
   return ret;
@@ -106,7 +103,6 @@ int ObLocalStorageMetaPersister::delete_ls()
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_delete_ls_slog_())) {
-      LOG_WARN("fail to write delete ls slog", K(ret));
     }
   }
   return ret;
@@ -120,7 +116,6 @@ int ObLocalStorageMetaPersister::update_ls_meta(const int64_t ls_epoch, const Ob
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_update_ls_meta_slog_(ls_meta))) {
-      LOG_WARN("fail to write update ls meta slog", K(ret), K(ls_meta));
     }
   }
   return ret;
@@ -140,18 +135,15 @@ int ObLocalStorageMetaPersister::batch_update_tablet(const ObIArray<ObUpdateTabl
         ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
         ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
     if (OB_FAIL(param_arr.reserve(slog_arr.count()))) {
-      LOG_WARN("fail to reserve memory for slog param arr", K(ret), K(slog_arr.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < slog_arr.count(); i++) {
       log_param.data_ =(ObIBaseStorageLogEntry*)(&(slog_arr.at(i)));
       if (OB_FAIL(param_arr.push_back(log_param))) {
-        LOG_WARN("fail to push back slog param", K(ret), K(log_param));
       }
     }
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(slogger_->write_log(param_arr))) {
-      LOG_WARN("fail to batch write slog", K(ret), K(param_arr.count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < param_arr.count(); i++) {
         const ObStorageLogParam &log_param = param_arr.at(i);
@@ -186,7 +178,6 @@ int ObLocalStorageMetaPersister::update_tablet(
     LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(tablet_addr));
   } else {
     if (OB_FAIL(write_update_tablet_slog_(tablet_id, tablet_addr))) {
-      LOG_WARN("fail to write update tablet slog", K(ret), K(tablet_id), K(tablet_addr));
     }
   }
   return ret;
@@ -210,9 +201,7 @@ int ObLocalStorageMetaPersister::write_empty_shell_tablet(ObTablet *tablet, ObMe
         ObRedoLogSubType::OB_REDO_LOG_EMPTY_SHELL_TABLET);
     log_param.data_ = &slog_entry;
     if (OB_FAIL(slogger_->write_log(log_param))) {
-      LOG_WARN("fail to write slog for empty shell tablet", K(ret), K(log_param));
     } else if (OB_FAIL(ckpt_slog_handler_->report_slog(tablet_key, log_param.disk_addr_))) {
-      LOG_WARN("fail to report slog", K(ret), K(tablet_key));
     } else {
       tablet_addr = log_param.disk_addr_;
     }
@@ -239,7 +228,6 @@ int ObLocalStorageMetaPersister::remove_tablet(
       LOG_WARN("invalid arguments", K(ret), K(tablet_id), K(tablet_addr));
     } else {
       if (OB_FAIL(write_remove_tablet_slog_(tablet_id))) {
-        LOG_WARN("fail to write remove tablet slog", K(ret), K(tablet_id));
       }
     }
   }
@@ -255,7 +243,6 @@ int ObLocalStorageMetaPersister::remove_tablets(
     LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(write_remove_tablets_slog_(tablet_ids))) {
-      LOG_WARN("fail to write remove tablets slog", K(ret));
     }
   }
   return ret;
@@ -272,7 +259,6 @@ int ObLocalStorageMetaPersister::write_prepare_create_ls_slog_(const ObLSMeta &l
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
                                           ObRedoLogSubType::OB_REDO_LOG_CREATE_LS);
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write remove ls slog", K(log_param));
   }
   return ret;
 }
@@ -286,7 +272,6 @@ int ObLocalStorageMetaPersister::write_commit_create_ls_slog_()
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
                                           ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_COMMIT);
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write create ls commit slog", K(log_param));
   }
   return ret;
 }
@@ -300,7 +285,6 @@ int ObLocalStorageMetaPersister::write_abort_create_ls_slog_()
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
                                             ObRedoLogSubType::OB_REDO_LOG_CREATE_LS_ABORT);
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write create ls abort slog", K(log_param));
   }
   return ret;
 }
@@ -314,7 +298,6 @@ int ObLocalStorageMetaPersister::write_delete_ls_slog_()
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
                                             ObRedoLogSubType::OB_REDO_LOG_DELETE_LS);
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write remove ls slog", K(log_param));
   }
   return ret;
 }
@@ -328,7 +311,6 @@ int ObLocalStorageMetaPersister::write_update_ls_meta_slog_(const ObLSMeta &ls_m
   log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_LOCAL_STORAGE,
                                           ObRedoLogSubType::OB_REDO_LOG_UPDATE_LS);
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write update ls slog", K(log_param), K(ret));
   }
   return ret;
 }
@@ -339,8 +321,7 @@ int ObLocalStorageMetaPersister::write_update_tablet_slog_(
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey tablet_key(tablet_id);
-  if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) { // make sure that all data or meta written on the macro block is flushed
-    LOG_WARN("fail to fsync_block", K(ret));
+  if (OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync_block())) {
   } else {
     ObUpdateTabletLog slog_entry(tablet_id, disk_addr);
     ObStorageLogParam log_param;
@@ -348,7 +329,6 @@ int ObLocalStorageMetaPersister::write_update_tablet_slog_(
         ObRedoLogSubType::OB_REDO_LOG_UPDATE_TABLET);
     log_param.data_ = &slog_entry;
     if (OB_FAIL(slogger_->write_log(log_param))) {
-      LOG_WARN("fail to write slog for creating tablet", K(ret), K(log_param));
     } else {
       do {
         if (OB_FAIL(ckpt_slog_handler_->report_slog(tablet_key, log_param.disk_addr_))) {
@@ -374,7 +354,6 @@ int ObLocalStorageMetaPersister::write_remove_tablet_slog_(
       ObRedoLogSubType::OB_REDO_LOG_DELETE_TABLET);
   log_param.data_ = &slog_entry;
   if (OB_FAIL(slogger_->write_log(log_param))) {
-    LOG_WARN("fail to write remove tablet slog", K(ret), K(log_param));
   }
   return ret;
 }
@@ -396,17 +375,13 @@ int ObLocalStorageMetaPersister::write_remove_tablets_slog_(
     cur_cnt = MIN(MAX_ARRAY_SIZE, total_cnt - finish_cnt);
 
     if (OB_FAIL(current_tablet_arr.reserve(cur_cnt))) {
-      STORAGE_REDO_LOG(WARN, "reserve array fail", K(ret), K(cur_cnt), K(total_cnt), K(finish_cnt));
     }
     for (int64_t i = finish_cnt; OB_SUCC(ret) && i < finish_cnt + cur_cnt; ++i) {
       if (OB_FAIL(current_tablet_arr.push_back(tablet_ids.at(i)))) {
-        STORAGE_REDO_LOG(WARN, "push back tablet id fail", K(ret), K(cur_cnt), K(total_cnt),
-            K(finish_cnt), K(i));
       }
     }
     if (OB_FAIL(ret)){
     } else if (OB_FAIL(safe_batch_write_remove_tablets_slog_(current_tablet_arr))){
-      STORAGE_REDO_LOG(WARN, "inner write log fail", K(ret), K(cur_cnt), K(total_cnt), K(finish_cnt));
     } else {
       finish_cnt += cur_cnt;
     }
@@ -428,9 +403,7 @@ int ObLocalStorageMetaPersister::safe_batch_write_remove_tablets_slog_(
 
   if (!need_write) {
   } else if (OB_FAIL(slog_array.reserve(tablet_count))) {
-    LOG_WARN("failed to reserve for slog array", K(ret), K(tablet_count));
   } else if (OB_FAIL(param_array.reserve(tablet_count))) {
-    LOG_WARN("failed to reserve for param array", K(ret), K(tablet_count));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_count; ++i) {
       const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -439,14 +412,12 @@ int ObLocalStorageMetaPersister::safe_batch_write_remove_tablets_slog_(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet id is invalid", K(ret), K(tablet_id));
       } else if (OB_FAIL(slog_array.push_back(slog_entry))) {
-        LOG_WARN("fail to push slog entry into slog array", K(ret), K(slog_entry), K(i));
       }
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_count; i++) {
       ObStorageLogParam log_param(cmd, &slog_array[i]);
       if (OB_FAIL(param_array.push_back(log_param))) {
-        LOG_WARN("fail to push log param into param array", K(ret), K(log_param), K(i));
       }
     }
   }
@@ -454,7 +425,6 @@ int ObLocalStorageMetaPersister::safe_batch_write_remove_tablets_slog_(
   if (OB_FAIL(ret)) {
   } else if (!need_write) {
   } else if (OB_FAIL(slogger_->write_log(param_array))) {
-    LOG_WARN("fail to write slog for batch deleting tablet", K(ret), K(param_array));
   }
 
   return ret;

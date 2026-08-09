@@ -88,7 +88,6 @@ int ObExprRand::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->is_seed_const_ = tmp_other->is_seed_const_;
     }
@@ -113,7 +112,6 @@ int ObExprRand::calc_random_expr_const_seed(const ObExpr &expr, ObEvalCtx &ctx,
 		if (OB_ISNULL(random_ctx = static_cast<ObExprRandCtx *>(
             exec_ctx.get_expr_op_ctx(op_id)))) {
 			if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, random_ctx))) {
-				LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
 			} else {
         uint32_t seed = 0;
         if (expr.arg_cnt_ == 1) {
@@ -150,7 +148,6 @@ int ObExprRand::calc_random_expr_nonconst_seed(const ObExpr &expr, ObEvalCtx &ct
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg_cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, seed_datum))) {
-    LOG_WARN("expr.eval_param_value failed", K(ret));
   } else {
     uint64_t op_id = expr.expr_ctx_id_;
     ObExecContext &exec_ctx = ctx.exec_ctx_;
@@ -158,7 +155,6 @@ int ObExprRand::calc_random_expr_nonconst_seed(const ObExpr &expr, ObEvalCtx &ct
 		if (OB_ISNULL(random_ctx = static_cast<ObExprRandCtx *>(
             exec_ctx.get_expr_op_ctx(op_id)))) {
 			if (OB_FAIL(exec_ctx.create_expr_op_ctx(op_id, random_ctx))) {
-				LOG_WARN("failed to create operator ctx", K(ret), K(op_id));
 			}
 		}
 		if (OB_SUCC(ret)) {

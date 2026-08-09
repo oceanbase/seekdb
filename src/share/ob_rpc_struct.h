@@ -422,7 +422,6 @@ public:
   int assign(const ObIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "assign ddl arg failed", K(ret));
     } else {
 
       session_id_ = other.session_id_;
@@ -466,11 +465,8 @@ public:
     no_invalidate_ = other.no_invalidate_;
     update_system_stats_only_ = other.update_system_stats_only_;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else if (OB_FAIL(partition_ids_.assign(other.partition_ids_))) {
-      SHARE_LOG(WARN, "fail to assign partition ids", KR(ret));
     } else if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
-      SHARE_LOG(WARN, "fail to assign column ids", KR(ret));
     } else { /*do nothing*/ }
     return ret;
   }
@@ -512,7 +508,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else {
 
       session_id_ = other.session_id_;
@@ -620,7 +615,6 @@ public:
   int assign(const ObRebuildIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else {
       index_table_id_ = other.index_table_id_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
@@ -1016,13 +1010,10 @@ public:
   int assign(const ObCreateForeignKeyArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "assign index arg failed", K(ret), K(other));
     } else if (FALSE_IT(parent_database_ = other.parent_database_)) {
     } else if (FALSE_IT(parent_table_ = other.parent_table_)) {
     } else if (OB_FAIL(child_columns_.assign(other.child_columns_))) {
-      SHARE_LOG(WARN, "assign child columns failed", K(ret), K(other.child_columns_));
     } else if (OB_FAIL(parent_columns_.assign(other.parent_columns_))) {
-      SHARE_LOG(WARN, "assign parent columns failed", K(ret), K(other.parent_columns_));
     } else {
       update_action_ = other.update_action_;
       delete_action_ = other.delete_action_;
@@ -1651,17 +1642,11 @@ public:
   int assign(const ObCreateIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else if (OB_FAIL(index_columns_.assign(other.index_columns_))) {
-      SHARE_LOG(WARN, "fail to assign index columns", K(ret));
     } else if (OB_FAIL(store_columns_.assign(other.store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign store columns", K(ret));
     } else if (OB_FAIL(hidden_store_columns_.assign(other.hidden_store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign hidden store columns", K(ret));
     } else if (OB_FAIL(index_schema_.assign(other.index_schema_))) {
-      SHARE_LOG(WARN, "fail to assign index schema", K(ret));
     } else if (OB_FAIL(local_session_var_.deep_copy(other.local_session_var_))){
-      SHARE_LOG(WARN, "fail to copy local session vars", K(ret));
     } else {
       index_type_ = other.index_type_;
       index_option_ = other.index_option_;
@@ -3527,9 +3512,7 @@ public:
     constriant_id_ = other.constriant_id_;
     schema_version_ = other.schema_version_;
     if (OB_FAIL(res_arg_array_.assign(other.res_arg_array_))) {
-      SHARE_LOG(WARN, "assign res_arg_array failed", K(ret), K(other.res_arg_array_));
     } else if (OB_FAIL(ddl_res_array_.assign(other.ddl_res_array_))) {
-      SHARE_LOG(WARN, "assign ddl res array failed", K(ret));
     } else {
       ddl_type_ = other.ddl_type_;
       task_id_ = other.task_id_;

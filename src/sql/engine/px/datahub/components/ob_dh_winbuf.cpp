@@ -43,25 +43,21 @@ int ObWinbufPieceMsgListener::on_message(
         UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.datum_store_.add_row(*pkt.datum_row_))) {
-      LOG_WARN("fail to add row", K(ret));
     }
   } else {
     if (!ctx.whole_msg_.row_store_.is_inited() && OB_FAIL(ctx.whole_msg_.row_store_.init(
          UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.row_store_.add_row(pkt.row_))) {
-      LOG_WARN("fail to add row", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
      ctx.received_++;
-    LOG_TRACE("got a win buf picece msg", "all_got", ctx.received_, "expected", ctx.task_cnt_);
   }
   // Already received all pieces, send sqc whole
   // Each sqc broadcasts to its respective task
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }
@@ -103,12 +99,8 @@ int ObWinbufPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
-      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
-      LOG_WARN("fail flush dtl data", K(ret));
     } else {
-      LOG_DEBUG("dispatched winbuf whole msg",
-                  K(idx), K(cnt), K(whole_msg_), K(*ch));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
@@ -322,9 +314,7 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
       int64_t ctx_id = other.datum_store_.get_mem_ctx_id();
       const char *label = other.datum_store_.get_label();
       if (OB_FAIL(datum_store_.init(mem_limit, ctx_id, label, false))) {
-        LOG_WARN("init datum store failed", K(ret));
       } else if (OB_FAIL(datum_store_.append_datum_store(other.datum_store_))) {
-        LOG_WARN("append store failed", K(ret));
       }
     } else {
       ser_len = other.row_store_.get_serialize_size();
@@ -333,10 +323,8 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
         LOG_WARN("fail alloc memory", K(ser_len), KP(ser_ptr), K(ret));
       } else if (OB_FAIL(other.row_store_.serialize(static_cast<char *>(ser_ptr),
             ser_len, ser_pos))) {
-        LOG_WARN("fail serialzie init task arg", KP(ser_ptr), K(ser_len), K(ser_pos), K(ret));
       } else if (OB_FAIL(row_store_.deserialize(static_cast<const char *>(ser_ptr),
            ser_pos, des_pos))) {
-        LOG_WARN("fail des task arg", KP(ser_ptr), K(ser_pos), K(des_pos), K(ret));
       } else if (ser_pos != des_pos) {
         ret = OB_DESERIALIZE_ERROR;
         LOG_WARN("data_len and pos mismatch", K(ser_len), K(ser_pos), K(des_pos), K(ret));

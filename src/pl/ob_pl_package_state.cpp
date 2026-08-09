@@ -100,7 +100,6 @@ void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
                || PL_OPAQUE_TYPE == types_.at(i)) {
       int ret = OB_SUCCESS;
       if (OB_FAIL(ObUserDefinedType::destruct_objparam(inner_allocator_, vars_.at(i), session_info))) {
-        LOG_WARN("failed to destruct composte obj", K(ret));
       }
     } else if (PL_CURSOR_TYPE == types_.at(i)) {
       ObPLCursorInfo *cursor = reinterpret_cast<ObPLCursorInfo *>(vars_.at(i).get_ext());
@@ -180,7 +179,6 @@ int ObPLPackageState::check_version(const ObPackageStateVersion &state_version,
                                                        spec.get_dependency_table(),
                                                        cur_state_version.header_merge_version_,
                                                        match))) {
-        LOG_WARN("fail to check dep schema", K(ret), K(cur_state_version), K(state_version));
       }
     }
     if (OB_SUCC(ret) && match
@@ -190,7 +188,6 @@ int ObPLPackageState::check_version(const ObPackageStateVersion &state_version,
                                                        body->get_dependency_table(),
                                                        cur_state_version.body_merge_version_,
                                                        match))) {
-        LOG_WARN("fail to check dep schema", K(ret), K(cur_state_version), K(state_version));
       }
     }
   }

@@ -55,7 +55,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
       } else {
         ObArray<const ObTriggerInfo *> tg_array;
         if (OB_FAIL(schema_guard_->get_trigger_infos_in_runtime(tg_array))) {
-          SERVER_LOG(WARN, "get trigger info failed", K(ret));
         } else {
           const ObTriggerInfo *tg_info = NULL;
           sql::ObExecEnv exec_env;
@@ -67,13 +66,10 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
             } else if (tg_info->is_in_recyclebin()) {
               //triggers in the recycle bin do not need to be displayed
             } else if (OB_FAIL(exec_env.init(tg_info->get_package_exec_env()))) {
-              SERVER_LOG(ERROR, "fail to load exec env", K(ret));
             } else {
               const ObUserInfo *user_info = NULL;
               ObString user_name;
               if (OB_FAIL(schema_guard_->get_user_info(tg_info->get_owner_id(), user_info))) {
-                SERVER_LOG(WARN, "Failed to get database schema",
-                           K(tg_info->get_owner_id()), K(ret));
               } else {
                 if (OB_NOT_NULL(user_info)) {
                   // Here compatibility with mysql is ensured, if user exists, then assign value to user_name, if user has been deleted, then user_name = ""
@@ -90,8 +86,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                                                      pos, "'%s'@'%s'",
                                                      user_info->get_user_name(),
                                                      user_info->get_host_name()))) {
-                    SERVER_LOG(WARN, "Databuff_printf failed", K(ret), K(buf_size), K(pos),
-                               "user_name", user_info->get_user_name());
                   } else {
                     user_name.assign_ptr(username_buf, static_cast<int32_t>(buf_size - 1));
                   }
@@ -105,8 +99,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                   if (OB_FAIL(schema_guard_->get_table_schema(
                                                               tg_info->get_base_object_id(),
                                                               table))) {
-                    SERVER_LOG(WARN, "Failed to get table schema",
-                               K(tg_info->get_base_object_id()), K(ret));
                   } else if (OB_ISNULL(table)) {
                     ret = OB_ERR_UNEXPECTED;
                     SERVER_LOG(WARN, "Table schema should not be NULL", K(ret));
@@ -117,8 +109,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         const ObDatabaseSchema *db = NULL;
                         if (OB_FAIL(schema_guard_->get_database_schema(
                             tg_info->get_database_id(), db))) {
-                          SERVER_LOG(WARN, "Failed to get database schema",
-                                     K(tg_info->get_database_id()), K(ret));
                         } else if (OB_ISNULL(db)) {
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -149,8 +139,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         const ObDatabaseSchema *table_db = NULL;
                         if (OB_FAIL(schema_guard_->get_database_schema(
                             table->get_database_id(), table_db))) {
-                          SERVER_LOG(WARN, "Failed to get database schema",
-                                     K(table->get_database_id()), K(ret));
                         } else if (OB_ISNULL(table_db)) {
                           ret = OB_ERR_UNEXPECTED;
                           SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -187,8 +175,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                         ObObj int_value;
                         int_value.set_int(exec_env.get_sql_mode());
                         if (OB_FAIL(ob_sql_mode_to_str(int_value, cells[col_idx], allocator_))) {
-                          SERVER_LOG(ERROR, "fail to convert sqlmode to string", K(int_value),
-                                     K(ret));
                         } else {
                           cells[col_idx].set_collation_type(ObCharset::get_default_collation(
                                                               ObCharset::get_default_charset()));
@@ -234,7 +220,6 @@ int ObInfoSchemaTriggersTable::inner_get_next_row(ObNewRow *&row)
                 } // end of for
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(scanner_.add_row(cur_row_))) {
-                    SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
                   }
                 }
               } // end of else

@@ -61,7 +61,6 @@ int ObTabletServiceClogReplayExecutor::do_replay_(ObTabletHandle &handle)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(handle.get_obj()->replay_update_storage_schema(scn_, buf_, buf_size_, pos_))) {
-    LOG_WARN("update tablet storage schema fail", K(ret), K(handle), K_(scn), KP_(buf), K_(buf_size), K_(pos));
   }
 
   return ret;

@@ -38,7 +38,6 @@ int ObSysDDLLocalBuilderUtil::push_task(ObAsyncTask &task)
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(sys_ddl_scheduler->get_ddl_builder().push_task(task))) {
-        LOG_WARN("add task to ddl builder failed", KR(ret));
       }
     }
   }

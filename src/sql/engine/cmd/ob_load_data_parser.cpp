@@ -68,9 +68,7 @@ int ObCSVGeneralParser::init(const ObDataInFileStruct &format,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(format_.init_format(format, file_column_nums, file_cs_type))) {
-    LOG_WARN("fail to init format", K(ret));
   } else if (OB_FAIL(init_opt_variables())) {
-    LOG_WARN("fail to init opt values", K(ret));
   }
 
   return ret;
@@ -83,7 +81,6 @@ int ObCSVGeneralParser::init(const ObCSVGeneralFormat &format)
   format_ = format;
 
   if (OB_FAIL(init_opt_variables())) {
-    LOG_WARN("fail to init opt values", K(ret));
   }
 
   return ret;
@@ -321,7 +318,6 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::COMPRESSION)])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(compression_algorithm_from_string(node->value_->get_string(), compression_algorithm_))) {
-      LOG_WARN("failed to convert string to compression", K(ret));
     } else {
       node = node->get_next();
     }
@@ -354,7 +350,6 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::BINARY_FORMAT)])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(binary_format_from_string(node->value_->get_string(), binary_format_))) {
-      LOG_WARN("failed to convert string to binary format", K(ret));
     } else {
       node = node->get_next();
     }
@@ -547,7 +542,6 @@ int ObExternalFileFormat::to_string_with_alloc(ObString &str, ObIAllocator &allo
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc buf", K(ret), K(buf_len));
     } else if (OB_FAIL(to_string(buf, buf_len, pos, into_outfile))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   } while (OB_SIZE_OVERFLOW == ret);
   OX(str.assign_ptr(buf, pos));
@@ -591,9 +585,7 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("format string is empty", K(ret), K(str));
   } else if (OB_FAIL(parser.init(&temp_allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (NULL == data || json::JT_OBJECT != data->get_type()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error json value", K(ret), KPC(data));
@@ -637,7 +629,6 @@ int ObExternalFileFormat::mock_gen_column_def(
     case CSV_FORMAT: {
       uint64_t file_column_idx = column.get_column_id() - OB_APP_MIN_COLUMN_ID + 1;
       if (OB_FAIL(temp_str.append_fmt("%s%lu", N_EXTERNAL_FILE_COLUMN_PREFIX, file_column_idx))) {
-        LOG_WARN("fail to append sql str", K(ret));
       }
       break;
     }
@@ -649,7 +640,6 @@ int ObExternalFileFormat::mock_gen_column_def(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator, temp_str.string(), def))) {
-       LOG_WARN("fail to write string", K(ret));
      }
   }
 

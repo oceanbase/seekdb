@@ -45,12 +45,10 @@ OB_DEF_SERIALIZE(ObPxNewRow)
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(row_cell_count_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to serialize row_cell_count", K_(row_cell_count), K(ret));
   } else if (OB_LIKELY(NULL != row_)) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_->get_count(); ++idx) {
       const ObObj &cell = row_->get_cell(idx);
       if (OB_FAIL(serialization::encode(buf, buf_len, pos, cell))) {
-        LOG_WARN("fail append cell to buf", K(ret));
       }
     }
   }
@@ -78,7 +76,6 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
   des_row_buf_size_ = 0;
   OB_UNIS_DECODE(row_cell_count_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to deserialize row_cell_count", KP(buf), K(data_len), K(pos), K(ret));
   } else if (OB_LIKELY(row_cell_count_ > 0)) {
     if (OB_UNLIKELY(pos >= data_len)) {
       ret = OB_SERIALIZE_ERROR;
@@ -160,7 +157,6 @@ void ObReceiveRowReader::free(dtl::ObDtlLinkedBuffer *buf)
 {
   // free buffer to DFC memory manager, see: ObDtlBasicChannel::free_buf()
   if (NULL != buf) {
-    LOG_DEBUG("free dtl linked buffer", KP(buf), K(1UL));
     int ret = OB_SUCCESS;
     auto mgr = DTL.get_dfc_server().get_mem_manager();
     CK(NULL != mgr);
@@ -212,7 +208,6 @@ const ROW *ObReceiveRowReader::next_store_row()
     if (NULL != b) {
       int ret = b->get_store_row(cur_iter_pos_, srow);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fetch store row failed", K(ret));
       } else {
         cur_iter_rows_ += 1;
       }
@@ -375,7 +370,6 @@ int ObReceiveRowReader::get_next_batch(const ObIArray<ObExpr*> &exprs,
     if (0 == read_rows) {
       ret = OB_ITER_END;
     } else {
-      LOG_DEBUG("read rows", K(read_rows), KP(this));
       OZ(attach_rows(exprs, dynamic_const_exprs, eval_ctx, srows, read_rows));
     }
   }

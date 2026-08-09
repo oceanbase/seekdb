@@ -228,11 +228,8 @@ int ObTransformerImpl::transform_one_rule(ObDMLStmt *&stmt,
       trans.set_transformer_type(type);
       OPT_TRACE_TITLE("start transform rule", rule_name);
       if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("check status fail", K(ret));
       } else if (OB_FAIL(trans.transform(stmt, needed_transform_types_))) {
-        LOG_WARN("failed to transform a rewrite rule", "class", rule_name, K(ret), K(ctx_->outline_trans_hints_));
       } else if (OB_FAIL(collect_trans_stat(trans))) {
-        LOG_WARN("failed to collect transform stat", K(ret));
       } else {
         trans_happened |= trans.get_trans_happened();
         OPT_TRACE_TIME_USED;
@@ -242,7 +239,6 @@ int ObTransformerImpl::transform_one_rule(ObDMLStmt *&stmt,
       }
     }
   } else {
-    LOG_TRACE("skip tranform a rewrite rule", "class", rule_name);
   }
   return ret;
 }

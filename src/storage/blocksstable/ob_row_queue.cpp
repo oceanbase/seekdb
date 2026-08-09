@@ -51,7 +51,6 @@ int ObRowQueue::add_empty_row(ObIAllocator &allocator)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not inited", K(ret));
   } else if (OB_FAIL(alloc_row(row, allocator))) {
-    STORAGE_LOG(WARN, "failed to alloc row", K(ret));
   } else if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "row is NULL", K(ret));
@@ -60,9 +59,7 @@ int ObRowQueue::add_empty_row(ObIAllocator &allocator)
     row->row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
     row->mvcc_row_flag_.reset();
     if (OB_FAIL(rows_.push_back(row))) {
-      STORAGE_LOG(WARN, "failed to push back", K(ret));
     }
-    STORAGE_LOG(DEBUG, "add empty row", K(ret), KPC(row));
   }
   return ret;
 }
@@ -75,14 +72,11 @@ int ObRowQueue::add_row(const ObDatumRow &src, ObIAllocator &allocator)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not inited", K(ret));
   } else if (OB_FAIL(alloc_row(dest, allocator))) {
-    STORAGE_LOG(WARN, "failed to alloc row", K(ret));
   } else if (OB_ISNULL(dest)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "row is NULL", K(ret));
   } else if (OB_FAIL(dest->deep_copy(src, allocator))) {
-    STORAGE_LOG(WARN, "Failed to deep copy datum row", K(ret));
   } else if (OB_FAIL(rows_.push_back(dest))) {
-    STORAGE_LOG(WARN, "failed to push back", K(ret));
   }
   return ret;
 }
@@ -117,7 +111,6 @@ int ObRowQueue::alloc_row(ObDatumRow *&row, ObIAllocator &allocator)
     } else {
       row = new (buf) ObDatumRow;
       if (OB_FAIL(row->init(allocator, malloc_column_count))) {
-        STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
       }
     }
   }
@@ -146,7 +139,6 @@ int ObRowQueue::compact_border_row(const ObDatumRow *row,
       // border row has already been compacted
     } else if (OB_FAIL(storage::ObRowFuse::fuse_row(
                 *row, *border_row, *nop_pos, final_result, &allocator))) {
-      STORAGE_LOG(WARN, "Failed to fuse row", K(ret));
     } else if (final_result) {
       border_row->set_compacted_multi_version_row();
     }
@@ -154,7 +146,6 @@ int ObRowQueue::compact_border_row(const ObDatumRow *row,
       // fuse flag to first row
       border_row->row_flag_.fuse_flag(row->row_flag_);
     }
-    LOG_DEBUG("try to compact border row", K(ret), K(last_row), KPC(row), KPC(border_row));
   }
   return ret;
 }
@@ -170,9 +161,7 @@ int ObRowQueue::add_shadow_row(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected row queue", K(ret), K(count()), KPC(first_row), KPC(this));
     } else if (OB_FAIL(add_row(*first_row, allocator))) {
-      LOG_WARN("failed to add row queue", K(ret), KPC(first_row), KPC(this));
     } else if (OB_FAIL(ObShadowRowUtil::make_shadow_row(trans_seq_idx, *first_row))) {
-      LOG_WARN("failed to make shadow row", K(ret), KPC(first_row), K(trans_seq_idx));
     }
   }
   return ret;

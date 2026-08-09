@@ -42,13 +42,11 @@ int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_e
       int64_t compressed_size = 0;
       if (OB_FAIL(compressor_->compress(src, length, consumed_size, buf_ + curr_pos_, buf_len_ - curr_pos_,
                                         compressed_size, is_file_end, compress_ended))) {
-        LOG_WARN("failed to compress data", K(ret), K(length), K(consumed_size));
       } else {
         curr_pos_ += compressed_size;
         total_compressed_bytes_ += compressed_size;
         if (curr_pos_ >= buf_len_) {
           if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
-            LOG_WARN("failed to flush data to storage", K(ret), K(curr_pos_));
           } else {
             curr_pos_ = 0;
           }
@@ -63,7 +61,6 @@ int ObCompressStreamWriter::flush_to_storage(const char *data, size_t length)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(file_appender_->append(data, length, false))) {
-    LOG_WARN("failed to append file", K(ret), K(length));
   }
   return ret;
 }
@@ -73,11 +70,9 @@ int ObCompressStreamWriter::finish_file_compress()
   int ret = OB_SUCCESS;
   if (compress_stream_finished_) {
   } else if (OB_FAIL(finish_compress_stream())) {
-    LOG_WARN("failed to finish compress stream", K(ret));
   } else {
     if (curr_pos_ > 0) {
       if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
-        LOG_WARN("failed to flush buf to storage", K(ret), K(curr_pos_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -94,7 +89,6 @@ int ObCompressStreamWriter::finish_compress_stream()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("compressor is null", KR(ret));
   } else if (OB_FAIL(write(NULL, 0, true))) {
-    LOG_WARN("failed to finish compress", K(ret));
   }
   return ret;
 }
@@ -133,7 +127,6 @@ int ObCompressStreamWriter::init(ObFileAppender *file_appender,
     LOG_WARN("invalid compress type", K(ret), K(compress_type_));
   } else {
     if (OB_FAIL(ObOutfileStreamCompressor::create(compress_type_, *allocator_, compressor_))) {
-      LOG_WARN("failed to create decompressor", K(compress_type_), K(ret));
     } else if (OB_ISNULL(buf_ = (char *)allocator_->alloc(buf_len_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate buffer.", K(buf_len_));
@@ -216,7 +209,6 @@ int ObOutfileZstdStreamCompressor::init()
 
     ret = ObZstdWrapper::create_cctx(allocator, zstd_cctx_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to create zstd compress context", K(ret));
     }
   }
 

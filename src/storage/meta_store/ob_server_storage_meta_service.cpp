@@ -53,19 +53,14 @@ int ObServerStorageMetaService::init(ObIServerRuntime &server_runtime)
   } else if (OB_FAIL(check_log_disk(
         OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
         OB_FILE_SYSTEM_ROUTER.get_slog_dir()))) {
-    LOG_WARN("fail to set need reserved", K(ret));
   } else if (OB_FAIL(server_slogger_.init(
         OB_FILE_SYSTEM_ROUTER.get_slog_dir(),
         ObLogConstants::MAX_LOG_FILE_SIZE,
         OB_FILE_SYSTEM_ROUTER.get_slog_file_spec(),
         true /*is_server*/))) {
-    LOG_WARN("fail to init server slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(&server_slogger_, server_runtime))) {
-    LOG_WARN("fail to init server checkpoint slog hander", K(ret));
   } else if (OB_FAIL(persister_.init(&server_slogger_))) {
-    LOG_WARN("fail to init persister", K(ret));
   } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_, server_runtime))) {
-    LOG_WARN("fail to init replayer", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -80,11 +75,8 @@ int ObServerStorageMetaService::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(server_slogger_.start())) {
-    LOG_WARN("fail to start server slogger", K(ret));
   } else if (OB_FAIL(replayer_.start_replay()))  {
-    LOG_WARN("fail to start replayer", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
-    LOG_WARN("fail to start ckpt slog handler", K(ret));
   } else {
     ATOMIC_STORE(&is_started_, true);
   }
@@ -125,7 +117,6 @@ int ObServerStorageMetaService::get_meta_block_list(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.get_meta_block_list(meta_block_list))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -140,7 +131,6 @@ int ObServerStorageMetaService::get_reserved_size(int64_t &reserved_size) const
   } else if (need_reserved_) {
     int64_t used_size = 0;
     if (OB_FAIL(get_using_disk_space(used_size))) {
-      LOG_WARN("fail to get using size for slog", K(ret));
     } else {
       reserved_size = std::max(static_cast<int64_t>(0), SLOG_RESERVED_DISK_SIZE - used_size);
     }
@@ -173,7 +163,6 @@ int ObServerStorageMetaService::write_checkpoint(bool is_force)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
-    LOG_WARN("fail to write checkpoint", K(ret));
   }
   return ret;
 }
@@ -217,14 +206,11 @@ int ObServerStorageMetaService::get_using_disk_space(int64_t &using_space) const
   int ret = OB_SUCCESS;
   using_space = 0;
   if (OB_FAIL(server_slogger_.get_using_disk_space(using_space))) {
-    LOG_WARN("fail to get using disk space", K(ret), K(using_space));
   } else {
     if (OB_FAIL(share::check_server_runtime_ready())) {
-      LOG_WARN("server runtime is not ready", K(ret));
     } else {
       int64_t local_storage_using_size = 0;
       if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLocalStorageMetaService>()->get_slogger().get_using_disk_space(local_storage_using_size))) {
-        LOG_WARN("fail to get the disk space that slog used", K(ret));
       } else {
         using_space += local_storage_using_size;
       }

@@ -168,7 +168,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     lib::ContextParam mem_param;
     mem_param.set_mem_attr("DasMatchIter", ObCtxIds::DEFAULT_CTX_ID);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
-      LOG_WARN("failed to create das match iterator memory context", K(ret));
     }
     ir_match_part_score_ctdef_ = match_param.ir_match_part_score_ctdef_;
     ir_match_part_score_rtdef_ = match_param.ir_match_part_score_rtdef_;
@@ -197,7 +196,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(bestfield_collector->init())) {
-        LOG_WARN("failed to init boolean relevance collector", K(ret));
       } else {
         relevance_collector_ = bestfield_collector;
       }
@@ -208,7 +206,6 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(inner_product_relevance_collector->init(0))) {
-        LOG_WARN("failed to init boolean relevance collector", K(ret));
       } else {
         relevance_collector_ = inner_product_relevance_collector;
       }
@@ -217,14 +214,10 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(children_relevance_exprs_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(children_relevance_exprs_.init(match_param.children_relevance_exprs_.count()))) {
-      LOG_WARN("failed to init next round iter idxes", K(ret));
     } else if (OB_FAIL(children_relevance_exprs_.prepare_allocate(match_param.children_relevance_exprs_.count()))) {
-      LOG_WARN("failed to prepare allocate next round iter idxes", K(ret));
     } else if (FALSE_IT(children_domain_id_exprs_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(children_domain_id_exprs_.init(match_param.children_domain_id_exprs_.count()))) {
-      LOG_WARN("failed to init children domain id exprs", K(ret));
     } else if (OB_FAIL(children_domain_id_exprs_.prepare_allocate(match_param.children_domain_id_exprs_.count()))) {
-      LOG_WARN("failed to prepare allocate children domain id exprs", K(ret));
     } 
     for (int64_t i = 0; OB_SUCC(ret) && i < match_param.children_relevance_exprs_.count(); ++i) {
       children_relevance_exprs_[i] = match_param.children_relevance_exprs_.at(i);
@@ -234,31 +227,21 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(next_round_iter_idxes_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(next_round_iter_idxes_.init(children_cnt))) {
-      LOG_WARN("failed to init next round iter idxes", K(ret));
     } else if (OB_FAIL(next_round_iter_idxes_.prepare_allocate(children_cnt))) {
-      LOG_WARN("failed to prepare allocate next round iter idxes", K(ret));
     } else if (FALSE_IT(iter_domain_ids_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(iter_domain_ids_.init(children_cnt))) {
-      LOG_WARN("failed to init iter domain idxes", K(ret));
     } else if (OB_FAIL(iter_domain_ids_.prepare_allocate(children_cnt))) {
-      LOG_WARN("failed to prepare allocate iter domain idxes", K(ret));
     } else if (FALSE_IT(buffered_domain_ids_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(buffered_domain_ids_.init(OB_MAX(1, eval_ctx_->max_batch_size_)))) {
-      LOG_WARN("failed to init buffered domain idxes", K(ret));
     } else if (OB_FAIL(buffered_domain_ids_.prepare_allocate(OB_MAX(1, eval_ctx_->max_batch_size_)))) {
-      LOG_WARN("failed to prepare allocate buffered domain idxes", K(ret));
     } else if (FALSE_IT(buffered_relevances_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(buffered_relevances_.init(OB_MAX(1, eval_ctx_->max_batch_size_)))) {
-      LOG_WARN("failed to init buffered relevances", K(ret));
     } else if (OB_FAIL(buffered_relevances_.prepare_allocate(OB_MAX(1, eval_ctx_->max_batch_size_)))) {
-      LOG_WARN("failed to prepare allocate buffered relevances", K(ret));
     } else if (OB_FAIL(eval_ctx_->get_datum_access_ctx(
                    datum_access_ctx))) {
-      LOG_WARN("get datum access context failed", K(ret));
     } else if (OB_FAIL(merge_cmp_.init(
                    domain_id_expr_->datum_meta_, &iter_domain_ids_,
                    datum_access_ctx))) {
-      LOG_WARN("failed to init loser tree comparator", K(ret));
     } else if (children_cnt > 1 && OB_ISNULL(merge_heap_ = OB_NEWx(ObDASMatchMergeLoserTree, &myself_allocator_, merge_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate loser tree", K(ret));
@@ -304,7 +287,6 @@ int ObDASMatchIter::do_table_scan()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null child", K(ret), K(i));
       } else if (OB_FAIL(child->do_table_scan())) {
-        LOG_WARN("failed to do table scan", K(ret));
       }
     }
   }
@@ -320,7 +302,6 @@ int ObDASMatchIter::rescan()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null child", K(ret), K(i));
     } else if (OB_FAIL(child->rescan())) {
-      LOG_WARN("failed to do table scan", K(ret));
     }
   }
   return ret;
@@ -345,7 +326,6 @@ int ObDASMatchIter::inner_reuse()
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
     if (OB_FAIL(children_[i]->reuse())) {
-      LOG_WARN("failed to reuse child", K(ret));
     }
   }
   return ret;
@@ -443,7 +423,6 @@ int ObDASMatchIter::inner_get_next_row()
         LOG_WARN("failed to do one merge round", K(ret), K(count));
       }
     } else if (OB_FAIL(project_results(count))) {
-      LOG_WARN("failed to project results", K(ret), K(count));
     }
   }
   return ret;
@@ -541,9 +520,7 @@ int ObDASMatchIter::do_one_merge_round(int64_t &count)
       LOG_WARN("failed to fill merge heap", K(ret));
     }
   } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
-    LOG_WARN("failed to merge dimensions", K(ret));
   } else if (OB_FAIL(need_project && filter_on_demand(count, relevance, need_project))) {
-    LOG_WARN("failed to process filter", K(ret));
   } else if (OB_FAIL(need_project && cache_result(count, *id_datum, relevance))) {
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to cache result", K(ret));
@@ -587,7 +564,6 @@ int ObDASMatchIter::fill_merge_heap()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected null tr merge iter", K(ret));
           } else if (OB_FAIL(tr_merge_iter->get_query_max_score(max_query_score))) {
-            LOG_WARN("failed to get query max score", K(ret));
           } else if (max_query_score <= 0.0) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected query max score", K(ret), K(max_query_score));
@@ -608,7 +584,6 @@ int ObDASMatchIter::fill_merge_heap()
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(merge_heap_->push(item))) {
-        LOG_WARN("fail to push item to merge heap", K(ret), K(item));
       }
     } 
   }
@@ -638,12 +613,9 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
       curr_doc_end = true;
     }
     if (OB_FAIL(merge_heap_->top(top_item))) {
-      LOG_WARN("failed to get top item from merge heap", K(ret));
     } else if (OB_FAIL(relevance_collector_->collect_one_dim(top_item->iter_idx_, top_item->relevance_))) {
-      LOG_WARN("failed to collect one dimension", K(ret));
     } else if (FALSE_IT(iter_idx = top_item->iter_idx_)) {
     } else if (OB_FAIL(merge_heap_->pop())) {
-      LOG_WARN("failed to pop top item in heap", K(ret));
     } else {
       next_round_iter_idxes_[next_round_cnt_++] = iter_idx;
     }
@@ -655,7 +627,6 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null id datum", K(ret));
     } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
-      LOG_WARN("failed to get result", K(ret));
     } else if (got_valid_id &&OB_FAIL(process_collected_row(*id_datum, relevance))) {
       LOG_WARN("failed to process collected row", K(ret));
     } else if (is_match_part_score_iter() && ir_match_part_score_rtdef_->score_norm_function_ == ObMatchScoreNorm::SCORE_NORM_MIN_MAX) {
@@ -784,7 +755,6 @@ int ObDASMatchMergeCmp::cmp(
     if (OB_FAIL(cmp_func_(
             get_id_datum(l.iter_idx_), get_id_datum(r.iter_idx_), tmp_ret,
             datum_access_ctx_))) {
-      LOG_WARN("failed to compare doc id by datum", K(ret));
     } else {
       cmp_ret = tmp_ret;
     }
@@ -807,7 +777,6 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
   } else if (FALSE_IT(param_text = match_ctdef->es_param_text_expr_)) {
   } else if (FALSE_IT(eval_ctx = match_rtdef->eval_ctx_)) {
   } else if (OB_FAIL(param_text->eval(*eval_ctx, param_text_datum))) {
-    LOG_WARN("expr evaluation failed", K(ret));
   } else if (0 == param_text_datum->len_) {
     minimum_should_match = 0;
     match_rtdef->match_boost_ = 1.0;
@@ -822,12 +791,9 @@ int ObDASMatchIter::get_match_param(const ObDASIREsMatchCtDef *match_ctdef,
     if (cs_type != dst_type) {
       ObString tmp_out;
       if (OB_FAIL(ObCharset::tolower(cs_type, param_string, tmp_out, alloc))) {
-        LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(param_string));
       } else if (OB_FAIL(common::ObCharset::charset_convert(alloc, tmp_out, cs_type, dst_type, str_dest))) {
-        LOG_WARN("failed to convert string", K(ret), K(cs_type), K(param_string));
       }
     } else if (OB_FAIL(ObCharset::tolower(cs_type, param_string, str_dest, alloc))){
-      LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(param_string));
     }
     if (OB_SUCC(ret)) {
       minimum_should_match = 0;

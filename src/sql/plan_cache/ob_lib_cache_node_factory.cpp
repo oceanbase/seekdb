@@ -46,14 +46,12 @@ int ObLCNodeFactory::create_cache_node(ObLibCacheNameSpace ns,
   } else if (FALSE_IT(mem_attr.label_ = LC_NS_TYPE_LABELS[ns])) {
   } else if (OB_FAIL(parent_context->CREATE_CONTEXT(entity,
                                                     lib::ContextParam().set_mem_attr(mem_attr)))) {
-    LOG_WARN("create entity failed", K(ret), K(mem_attr));
   } else if (OB_ISNULL(entity)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL memory entity", K(ret));
   } else {
     WITH_CONTEXT(entity) {
       if (OB_FAIL(LC_CN_ALLOC[ns](entity, node, lib_cache_))) {
-        LOG_WARN("failed to create lib cache node", K(ret), K(ns));
       }
     }
   }

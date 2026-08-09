@@ -51,7 +51,6 @@ int ObExprJsonExtract::calc_result_typeN(ObExprResType& type,
     bool is_null_result = false;
 
     if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_EXTRACT))) {
-      LOG_WARN("wrong type for json doc.", K(ret), K(in_type));
     } else if (in_type == ObNullType) {
       is_null_result = true;
     } else if (in_type == ObJsonType) {
@@ -113,19 +112,16 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(allocator.eval_arg(json_arg, ctx, json_datum))) {
-    LOG_WARN("eval json arg failed", K(ret));
   } else if (json_datum->is_null()) {
     is_null_result = true; // mysql return NULL result
   } else if (val_type != ObJsonType && ob_is_string_type(val_type) == false) {
     ret = OB_ERR_INVALID_TYPE_FOR_JSON;
     LOG_WARN("input type error", K(val_type));
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(val_type, cs_type))) {
-    LOG_WARN("fail to ensure collation", K(ret), K(val_type), K(cs_type));
   } else {
     ObString j_str = json_datum->get_string();
     ObJsonInType j_in_type = ObJsonExprHelper::get_json_internal_type(val_type);
     if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(json_arg, ctx, allocator, j_str, is_null_result))) {
-      LOG_WARN("fail to get real data.", K(ret), K(j_str));
     } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, j_in_type, j_in_type, j_base, 0, ObJsonExprHelper::get_json_max_depth_config()))) {
       LOG_WARN("fail to get json base", K(ret), K(j_in_type));
       ret = OB_ERR_INVALID_JSON_TEXT;
@@ -153,25 +149,20 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
       hit.reset();
       ObDatum *path_data = NULL;
       if (OB_FAIL(allocator.eval_arg(expr.args_[i], ctx, path_data))) {
-        LOG_WARN("eval json path datum failed", K(ret));
       } else if (path_data->is_null()) {
         is_null_result = true;
       } else {
         ObString path_text = path_data->get_string();
         ObJsonPath *j_path = NULL;
         if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(expr.args_[i], ctx, allocator, path_text, is_null_result))) {
-          LOG_WARN("fail to get real data.", K(ret), K(path_text));
         } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, path_text, i, true))) {
-          LOG_WARN("parse text to path failed", K(path_text), K(ret));
         } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, false, hit))) {
-          LOG_WARN("json seek failed", K(path_text), K(ret));
         } else {
           if (j_path->can_match_many()) {
             may_match_many = true;
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < hit.size(); j++) {
             if (OB_FAIL(hits.push_node(hit[j]))) {
-              LOG_WARN("push hit into hits failed.", K(ret), K(j));
             }
           }
         }
@@ -183,7 +174,6 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObStringBuffer value(&allocator);
     ObIJsonBase *jb_res = NULL;
     if (OB_UNLIKELY(OB_FAIL(ret))) {
-      LOG_WARN("json seek failed", K(ret));
     } else if (hit_size == 0 || is_null_result) {
       res.set_null();
     } else {
@@ -191,33 +181,26 @@ int ObExprJsonExtract::eval_json_extract(const ObExpr &expr, ObEvalCtx &ctx, ObD
         jb_res = hits[0];
         ObString raw_str;
         if (OB_FAIL(ret)) {
-          LOG_WARN("json extarct get results failed", K(ret));
         } else if (OB_FAIL(jb_res->get_raw_binary(raw_str, &allocator))) {
-          LOG_WARN("json extarct get result binary failed", K(ret));
         } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_str))) {
-          LOG_WARN("fail to pack json result", K(ret));
         }
       } else {
         ObJsonBinAggSerializer bin_agg(&allocator, static_cast<uint8_t>(ObJsonNodeType::J_ARRAY));
         ObJsonBin *j_node = NULL;
         ObIJsonBase *jb_node = NULL;
         for (int32_t i = 0; OB_SUCC(ret) && i < hit_size; i++) {
-          if (OB_FAIL(ObJsonBaseFactory::transform(&allocator, hits[i], ObJsonInType::JSON_BIN, jb_node))) { // to binary
-            LOG_WARN("fail to transform to tree", K(ret), K(i), K(*(hits[i])));
+          if (OB_FAIL(ObJsonBaseFactory::transform(&allocator, hits[i], ObJsonInType::JSON_BIN, jb_node))) {
           } else {
             j_node = static_cast<ObJsonBin *>(jb_node);
             ObString key;
             if (OB_FAIL(bin_agg.append_key_and_value(key, value, j_node))) {
-              LOG_WARN("failed to append key and value", K(ret));
             }
           }
         }
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(bin_agg.serialize())) {
-          LOG_WARN("failed to serialize bin agg.", K(ret));
         } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, bin_agg.get_buffer()->string()))) {
-          LOG_WARN("failed to pack json res.", K(ret));
         }
       }
     }

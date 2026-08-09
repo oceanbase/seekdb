@@ -79,7 +79,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       token_weight_datum,
       avg_doc_token_cnt_datum,
       related_token_cnt_datum))) {
-    LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (OB_UNLIKELY(token_doc_cnt_datum->is_null() || total_doc_cnt_datum->is_null()
       || doc_length_datum->is_null() || token_weight_datum->is_null()
       || avg_doc_token_cnt_datum->is_null() || related_token_cnt_datum->is_null())) {
@@ -98,9 +97,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
     const double doc_weight = doc_token_weight(related_token_cnt, norm_len);
     const double relevance = token_weight * doc_weight;
     res_datum.set_double(relevance);
-    LOG_DEBUG("show bm25 parameters for current document",
-        K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-        K(norm_len), K(token_weight), K(doc_weight), K(relevance));
   }
   return ret;
 }
@@ -124,7 +120,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
     token_weight_datum,
     avg_doc_token_cnt_datum,
     related_token_cnt_datum))) {
-      LOG_WARN("evaluate parameter value failed", K(ret));
   } else if (OB_UNLIKELY(token_doc_cnt_datum.at(0)->is_null() || total_doc_cnt_datum.at(0)->is_null()
       || token_weight_datum.at(0)->is_null() || avg_doc_token_cnt_datum.at(0)->is_null())) {
       ret = OB_ERR_UNEXPECTED;
@@ -148,9 +143,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
         const double relevance = token_weight * doc_weight;
         res_datum[i].set_double(relevance);
         eval_flags.set(i);
-        LOG_DEBUG("show bm25 parameters for current document",
-            K(token_doc_cnt), K(total_doc_cnt), K(related_token_cnt), K(doc_token_cnt), K(avg_doc_token_cnt),
-            K(norm_len), K(token_weight), K(doc_weight), K(relevance));
       }
     }
   }

@@ -59,7 +59,6 @@ int ObRecyclebinRestoreTableResolver::resolve(const ParseNode &parser_tree)
                                                    origin_table_name,
                                                    origin_db_name,
                                                    true /*get origin db_name*/))) {
-      LOG_WARN("failed to resolve_table_relation_node", K(ret));
     } else {
       OX (restore_table_from_recyclebin_stmt->set_origin_table_name(origin_table_name));
       OX (restore_table_from_recyclebin_stmt->set_origin_table_id(OB_INVALID_ID));
@@ -74,7 +73,6 @@ int ObRecyclebinRestoreTableResolver::resolve(const ParseNode &parser_tree)
         if (OB_FAIL(resolve_table_relation_node(rename_node,
                                                 new_table_name,
                                                 new_db_name))) {
-          LOG_WARN("failed to resolve_table_relation_node", K(ret));
         } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == new_db_name
                    || ObString(OB_PUBLIC_SCHEMA_NAME) == new_db_name) {
           ret = OB_OP_NOT_ALLOW;

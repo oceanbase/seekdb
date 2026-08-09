@@ -68,20 +68,15 @@ int ObExprUDF::assign(const ObExprOperator &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("cast failed, type of argument is wrong", K(ret), K(other));
   } else if (OB_FAIL(subprogram_path_.assign(tmp_other->get_subprogram_path()))) {
-    LOG_WARN("failed to assign subprogram path", K(ret));
   } else if (OB_FAIL(params_type_.assign(tmp_other->get_params_type()))) {
-    LOG_WARN("failed to assign params type", K(ret));
   } else if (OB_FAIL(result_type_.assign(tmp_other->get_result_type()))) {
-    LOG_WARN("failed to assign result type", K(ret));
   } else if (OB_FAIL(params_desc_.assign(tmp_other->get_params_desc()))) {
-    LOG_WARN("failed to assign params desc", K(ret));
   } else {
     udf_id_ = tmp_other->get_udf_id();
     udf_package_id_ = tmp_other->get_udf_package_id();
     reserved_udt_udf_ = tmp_other->reserved_udt_udf_;
     reserved_udt_cons_ = tmp_other->reserved_udt_cons_;
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("failed to ObExprOperator::assign", K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -605,7 +600,6 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
     if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
                 schema_guard,
                 task_ctx.get_query_begin_schema_version()))) {
-      LOG_WARN("get schema guard failed", K(ret));
     }
   }
   // Through distributed plan execution the function does not have sqlctx information, construct one
@@ -674,9 +668,7 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
 
   if (OB_ISNULL(udf_ctx = static_cast<ObExprUDFCtx *>(exec_ctx.get_expr_op_ctx(udf_ctx_id)))) {
     if (OB_FAIL(exec_ctx.create_expr_op_ctx(udf_ctx_id, udf_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(udf_ctx->init_param_store(param_num))) {
-      LOG_WARN("failed to init param", K(ret));
     }
   } else {
     OX (udf_ctx->reuse());
@@ -793,7 +785,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
                                       info->params_desc_,
                                       info->params_type_);
           if (OB_SUCCESS != tmp) {
-            LOG_WARN("fail to process out param", K(tmp), K(ret));
           }
         }
       }
@@ -811,7 +802,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
           OZ (ctx.exec_ctx_.get_pl_ctx()->add(result));
           if (OB_FAIL(ret)) {
             if ((tmp_ret = pl::ObUserDefinedType::destruct_obj(result, ctx.exec_ctx_.get_my_session())) != OB_SUCCESS) {
-              LOG_WARN("failed to destruct result object", K(ret), K(tmp_ret));
             }
           }
         }
@@ -854,7 +844,6 @@ int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       for (int64_t i = 0; i < deep_in_objs.count(); ++i) {
         tmp = pl::ObUserDefinedType::destruct_obj(deep_in_objs.at(i), ctx.exec_ctx_.get_my_session());
         if (OB_SUCCESS != tmp) {
-          LOG_WARN("fail to destruct obj of in param", K(tmp));
         }
       }
     }
@@ -873,7 +862,6 @@ int ObExprUDF::fill_obj_stack(const ObExpr &expr, ObEvalCtx &ctx, ObObj *objs)
     objs[i].reset();
     ObDatum &param = expr.args_[i]->locate_expr_datum(ctx);
     if (OB_FAIL(param.to_obj(objs[i], expr.args_[i]->obj_meta_))) {
-      LOG_WARN("failed to convert obj", K(ret), K(i));
     }
   }
   return ret;

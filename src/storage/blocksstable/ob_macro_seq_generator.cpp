@@ -66,7 +66,6 @@ int ObMacroIncSeqGenerator::get_next(int64_t &seq_val)
     ret = OB_NOT_INIT;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(preview_next(current_, seq_val))) {
-    LOG_WARN("preview next value failed", K(ret));
   } else if (OB_UNLIKELY(seq_val >= seq_threshold_)) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("seq is larger than threshold", K(ret), K(seq_val), K_(seq_threshold), K_(start));
@@ -105,7 +104,6 @@ int ObMacroSkipSeqGenerator::init(const ObMacroSeqParam &seq_param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(seq_param));
   } else if (OB_FAIL(ddl_seq_generator_.init(seq_param.start_, seq_param.interval_, seq_param.step_))) {
-    LOG_WARN("init ddl sequence generator failed", K(ret), K(seq_param));
   }
   return ret;
 }

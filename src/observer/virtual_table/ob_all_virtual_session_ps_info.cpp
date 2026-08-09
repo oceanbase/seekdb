@@ -60,7 +60,6 @@ int ObAllVirtualSessionPsInfo::inner_open()
   if (OB_SUCC(ret)) {
     ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
     if (OB_FAIL(session_mgr.for_each_session(all_sql_session_iterator_))) {
-      SERVER_LOG(WARN, "failed to read each session", K(ret));
     } else {
       int64_t cnt = 0;
       session_mgr.get_session_count(cnt);
@@ -83,7 +82,6 @@ int format_param_types(const ObIArray<obmysql::EMySQLFieldType> &param_types,
     std::string str = std::to_string(param_types.at(idx));
     const char *charPtr = str.c_str();
     if (OB_FAIL(str_buf.append(charPtr))) {
-      SERVER_LOG(WARN, "failed to format param_types", K(ret));
     } else if (idx < param_types.count()-1 && OB_FAIL(str_buf.append(", "))) {
       SERVER_LOG(WARN, "failed to format param_types", K(ret));
     }
@@ -113,15 +111,12 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
     } else if (OB_FAIL(cur_session_info_->visit_ps_session_info(ps_client_stmt_id,
                                                      fetcher_))) {
       if (ret == OB_EER_UNKNOWN_STMT_HANDLER) {
-        SERVER_LOG(DEBUG, "can not find the ps_session_info, may be released",
-                  K(ret), K(ps_client_stmt_id));
         ret = OB_SUCCESS;
       } else {
         SERVER_LOG(WARN, "cannot get ps_session_info", K(ret),
                   K(ps_client_stmt_id));
       }
     } else if (OB_FAIL(fetcher_.get_error_code())) {
-      SERVER_LOG(WARN, "failed to deep copy ps session info", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
         uint64_t col_id = output_column_ids_.at(i);
@@ -144,7 +139,6 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
               ObResolverUtils::get_stmt_type_string(fetcher_.get_stmt_type());
           if (OB_FAIL(
                   ob_write_string(*allocator_, stmt_type_tmp, stmt_type_str))) {
-            SERVER_LOG(WARN, "ob write string failed", K(ret));
           } else {
             cells[i].set_varchar(stmt_type_str);
             cells[i].set_collation_type(ObCharset::get_default_collation(
@@ -161,8 +155,6 @@ int ObAllVirtualSessionPsInfo::fill_cells(ObPsStmtId ps_client_stmt_id,
           uint64_t len = 0;
           if (OB_FAIL(format_param_types(fetcher_.get_param_types(),
                                         allocator_, types_str, len))) {
-            SERVER_LOG(WARN, "format_param_types failed", K(ret),
-                      K(fetcher_.get_param_types()));
           } else {
             cells[i].set_lob_value(ObLongTextType, types_str,
                                   static_cast<int32_t>(len));
@@ -211,7 +203,6 @@ int ObAllVirtualSessionPsInfo::get_next_row_from_sessions(
       } else {
         if (OB_NOT_NULL(cur_session_info_)) {
           if (OB_FAIL(cur_session_info_->for_each_ps_session_info(*this))) {
-            SERVER_LOG(WARN, "failed to read each ps session info", K(ret));
           }
         } else {
           SERVER_LOG(WARN, "cur_session_info_ is nullptr", K(ret));
@@ -222,10 +213,8 @@ int ObAllVirtualSessionPsInfo::get_next_row_from_sessions(
       ObPsStmtId ps_client_stmt_id = 0;
       if (ps_client_stmt_ids_.count() == 0) {
       } else if (OB_FAIL(ps_client_stmt_ids_.pop_back(ps_client_stmt_id))) {
-        SERVER_LOG(WARN, "get client stmt id failed", K(ret));
       } else if (OB_FAIL(fill_cells(ps_client_stmt_id,
                                     is_filled))) {
-        SERVER_LOG(WARN, "fill cells failed", K(ret));
       }
     }
   } while (!is_filled && OB_SUCC(ret));
@@ -268,8 +257,6 @@ bool ObAllVirtualSessionPsInfo::ObSessionInfoIterator::operator()(
       ObArray<SessionID> *session_id_list = &session_ids_;
       if (OB_ISNULL(session_id_list)) {
       } else if (OB_FAIL(session_id_list->push_back(sess_info->get_server_sid()))) {
-        SERVER_LOG(WARN, "failed to push session id into session_id_list", K(ret),
-               K(sess_info->get_sid()));
       }
     }
   }
@@ -302,7 +289,6 @@ int ObAllVirtualSessionPsInfo::ObSessionInfoIterator::next(
         ret = OB_ITER_END;
       } else {
         if (OB_FAIL(cur_session_id_list_->pop_back(session_id))) {
-          SERVER_LOG(WARN, "failed to get session id", K(ret));
         } else {
           if (OB_FAIL(OBSERVER.get_sql_session_mgr().get_session(
                   session_id, sess_info))) {
@@ -344,7 +330,6 @@ int ObAllVirtualSessionPsInfo::ObPsSessionInfoFetcher::operator()(
     ref_count_ = ps_session_info->get_ref_cnt();
     checksum_ = ps_session_info->get_ps_stmt_checksum();
     if (OB_FAIL(param_types_.assign(ps_session_info->get_param_types()))) {
-      SERVER_LOG(WARN, "failed to copy param types", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;

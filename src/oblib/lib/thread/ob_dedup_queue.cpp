@@ -146,9 +146,7 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     COMMON_LOG(WARN, "invalid argument", K(thread_num), K(queue_size),
                K(total_mem_limit), K(hold_mem_limit), K(page_size));
   } else if (OB_FAIL(task_queue_sync_.init(ObWaitEventIds::DEDUP_QUEUE_COND_WAIT))) {
-    COMMON_LOG(WARN, "fail to init task queue sync cond, ", K(ret));
   } else if (OB_FAIL(work_thread_sync_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    COMMON_LOG(WARN, "fail to init work thread sync cond, ", K(ret));
   } else {
     thread_name_ = thread_name;
     thread_num_ = thread_num;
@@ -156,18 +154,13 @@ int ObDedupQueue::init(const int64_t thread_num /*= DEFAULT_THREAD_NUM*/,
     set_thread_count(thread_num);
 
     if (OB_SUCCESS != (ret = allocator_.init(page_size, label, total_mem_limit))) {
-      COMMON_LOG(WARN, "allocator init fail", K(page_size), K(label),
-                K(total_mem_limit), K(ret));
     } else if (OB_SUCCESS != (ret = task_map_.create(task_map_size, &hash_allocator_,
                                                       &bucket_allocator_))) {
-      COMMON_LOG(WARN, "task_map create fail", K(ret));
     } else if (OB_SUCCESS != (ret = task_queue_.init(queue_size, &allocator_))) {
-      COMMON_LOG(WARN, "task_queue init fail", K(ret));
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(start())) {
-      COMMON_LOG(WARN, "start thread fail", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -223,7 +216,6 @@ int ObDedupQueue::add_task(const IObDedupTask &task)
       ret = func.result_code_;
     } else if (OB_HASH_NOT_EXIST == hash_ret) {
       if (OB_FAIL(add_task_(task))) {
-        COMMON_LOG(WARN, "failed to add task", K(ret));
       }
     } else {
       COMMON_LOG(WARN, "unexpected hash_ret", K(hash_ret));
@@ -259,7 +251,6 @@ IObDedupTask *ObDedupQueue::copy_task_(const IObDedupTask &task)
     } else if (NULL == (ret = task.deep_copy(memory, deep_copy_size))) {
       COMMON_LOG_RET(WARN, OB_ERROR, "deep copy task object fail", K(deep_copy_size), KP(memory));
     } else {
-      COMMON_LOG(DEBUG, "deep copy task succ", K(ret), KP(memory), K(deep_copy_size));
       ret->set_memory_ptr(memory);
     }
     if (NULL == ret) {

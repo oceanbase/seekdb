@@ -42,29 +42,19 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_pk_column("model_id", new_schema.get_ai_model_id()))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("name", ObHexEscapeSqlStr(new_schema.get_name())))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("type", static_cast<int64_t>(new_schema.get_type())))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("model_name", ObHexEscapeSqlStr(new_schema.get_model_name())))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_TNAME, buffer))) {
-    LOG_WARN("failed to splice_insert_sql", K(ret));
   } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
   } else if (OB_FAIL(sql.add_pk_column("schema_version", new_schema.get_schema_version()))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (OB_FAIL(sql.add_column("is_deleted", 0))) {
-    LOG_WARN("failed to add column", K(ret), K(new_schema));
   } else if (FALSE_IT(buffer.reuse())) {
   } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_HISTORY_TNAME, buffer))) {
-    LOG_WARN("failed to splice_insert_sql", K(ret));
   } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
@@ -78,7 +68,6 @@ int ObAiModelSqlService::create_ai_model(const ObAiModelSchema &new_schema,
     opt.ddl_stmt_str_ = ddl_stmt;
 
     if (OB_FAIL(log_operation(opt, sql_client))) {
-      LOG_WARN("Failed to log operation", K(ret));
     }
   }
   return ret;
@@ -100,11 +89,8 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema));
   } else if (OB_FAIL(sql.add_pk_column("model_id", schema.get_ai_model_id()))) {
-    LOG_WARN("failed to add column", K(ret), K(schema));
   } else if (OB_FAIL(sql.splice_delete_sql(OB_ALL_AI_MODEL_TNAME, buffer))) {
-    LOG_WARN("failed to splice_delete_sql", K(ret));
   } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
-    LOG_WARN("failed to execute write", K(ret), K(buffer));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
@@ -112,21 +98,13 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
     buffer.reuse();
     sql.reuse();
     if (OB_FAIL(sql.add_pk_column("model_id", schema.get_ai_model_id()))) {
-      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.add_pk_column("schema_version", new_schema_version))) {
-      LOG_WARN("failed to add column", K(ret), K(new_schema_version));
     } else if (OB_FAIL(sql.add_column("is_deleted", 1))) {
-      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.add_column("name", ObHexEscapeSqlStr(schema.get_name())))) {
-      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.add_column("type", static_cast<int64_t>(schema.get_type())))) {
-      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.add_column("model_name", ObHexEscapeSqlStr(schema.get_model_name())))) {
-      LOG_WARN("failed to add column", K(ret), K(schema));
     } else if (OB_FAIL(sql.splice_insert_sql(OB_ALL_AI_MODEL_HISTORY_TNAME, buffer))) {
-      LOG_WARN("failed to splice_insert_sql", K(ret));
     } else if (OB_FAIL(sql_client.write(buffer.ptr(), affected_rows))) {
-      LOG_WARN("failed to execute write", K(ret), K(buffer));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value", K(affected_rows), K(buffer), K(ret));
@@ -143,7 +121,6 @@ int ObAiModelSqlService::drop_ai_model(const ObAiModelSchema &schema,
     opt.ddl_stmt_str_ = ddl_stmt;
 
     if (OB_FAIL(log_operation(opt, sql_client))) {
-      LOG_WARN("Failed to log operation", K(ret));
     }
   }
   return ret;

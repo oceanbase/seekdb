@@ -83,7 +83,6 @@ int64_t ObVersionParser::print_vsn(char *buf, const int64_t buf_len, uint64_t ve
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
               version, major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;
@@ -103,7 +102,6 @@ int ObVersionParser::is_valid(const char *verstr)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   }
   return ret;
 }
@@ -115,9 +113,7 @@ int ObVersionParser::get_version(const common::ObString &verstr, uint64_t &versi
   version = 0;
 
   if (OB_FAIL(databuff_printf(buf, OB_VERSION_LENGTH, "%.*s", verstr.length(), verstr.ptr()))) {
-    COMMON_LOG(WARN, "failed to print version", K(ret), K(verstr));
   } else if (OB_FAIL(get_version(buf, version))) {
-    COMMON_LOG(WARN, "failed to get version", K(ret), K(buf));
   }
 
   return ret;
@@ -130,7 +126,6 @@ int ObVersionParser::get_version(const char *verstr, uint64_t &version)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   } else {
     version = cal_version(items[ObVersionParser::MAJOR_POS],
                           items[ObVersionParser::MINOR_POS],

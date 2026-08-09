@@ -169,7 +169,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                          session_info_->get_host_name().length());
     user_id = session_info_->get_user_id();
     if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
-      LOG_WARN("faile to get session priv info", K(ret));
     }
   }
   const common::ObIArray<uint64_t> &enable_role_id_array = session_info_->get_enable_role_array();
@@ -208,12 +207,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                         real_id,
                                         show_resv_ctx,
                                         show_db_id))) {
-            LOG_WARN("fail to get database info", K(ret));
           } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("database id is invalid", K(ret), K(show_db_id));
           } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
-            LOG_WARN("check db access for show sql failed", K(ret));
           } else {
             /* (parse_tree.children_[2]->value_)&1        ->  FULL
              * ((parse_tree.children_[2]->value_)>>1)&1   ->  EXTENDED
@@ -430,10 +427,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                                 database_name.empty(), T_SHOW_COLUMNS, real_id,
                                                 show_db_name, show_db_id, show_table_name,
                                                 show_table_id, is_view))) {
-              LOG_WARN("fail to resolve show from table", K(ret));
             } else {
               if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
-                LOG_WARN("fail to init need privs array", K(ret));
               } else {
 
               }
@@ -488,7 +483,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                                    real_id,
                                                    show_db_id,
                                                    show_db_name))) {
-              LOG_WARN("fail to resolve show database", K(ret));
             } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, enable_role_id_array, show_db_name))) {
               if (OB_ERR_NO_DB_PRIVILEGE == ret) {
                 LOG_USER_ERROR(OB_ERR_NO_DB_PRIVILEGE, session_priv.user_name_.length(), session_priv.user_name_.ptr(),
@@ -524,7 +518,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], NULL, database_name.empty(),
                                                 parse_tree.type_, real_id, show_db_name,
                                                 show_db_id, show_table_name, show_table_id, is_view))) {
-              LOG_WARN("fail to resolve show from table", K(ret));
             }
             if (OB_FAIL(ret)) {
             } else if (T_SHOW_CREATE_VIEW == parse_tree.type_ || is_view) {
@@ -534,14 +527,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               need_priv.priv_set_ = OB_PRIV_SHOW_VIEW | OB_PRIV_SELECT;
               need_priv.priv_level_ = OB_PRIV_TABLE_LEVEL;
               if (OB_FAIL(stmt_need_privs.need_privs_.init(1))) {
-                LOG_WARN("Failed to init stmt need priv", K(ret));
               } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-                LOG_WARN("Failed to add need priv", K(ret));
               } else if (OB_FAIL(schema_checker_->check_priv(session_priv, enable_role_id_array, stmt_need_privs))) {
-                LOG_WARN("Failed to check acc", K(ret));
               } else { }//do nothing
             } else if (OB_FAIL(schema_checker_->check_table_show(session_priv, enable_role_id_array, show_db_name, show_table_name, allow_show))) {
-              LOG_WARN("Check table show error", K(ret));
             } else if (!allow_show) {
               ret = OB_ERR_NO_TABLE_PRIVILEGE;
               LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, static_cast<int>(strlen("SHOW")), "SHOW",
@@ -566,14 +555,12 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       case T_SHOW_CHECK_TABLE:
       {
         if (OB_FAIL(resolve_show_check_table(parse_tree, show_resv_ctx, select_sql))) {
-          LOG_WARN("failed to resolve show check table", K(ret));
         }
         break;
       }
       case T_SHOW_CREATE_USER:
       {
         if (OB_FAIL(resolve_show_create_user(parse_tree, show_resv_ctx, session_priv, enable_role_id_array, stmt_need_privs, select_sql, sql_gen))) {
-          LOG_WARN("failed to resolve show create user", K(ret));
         }
         break;
       }
@@ -593,12 +580,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             if (OB_FAIL(resolve_show_from_routine(parse_tree.children_[0], database_name.empty(),
                                                   parse_tree.type_, real_id, show_db_name,
                                                   show_db_id, show_routine_name, show_routine_id, proc_type))) {
-              LOG_WARN("fail to resolve show from routine", K(ret));
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(schema_checker_->check_routine_show(
                               session_priv, show_db_name, show_routine_name, allow_show))) {
-              LOG_WARN("Check routine show error", K(ret));
             } else if (!allow_show) {
               ret = OB_ERR_NO_TABLE_PRIVILEGE;
               LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, static_cast<int>(strlen("SHOW")), "SHOW",
@@ -637,12 +622,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                                   database_name.empty(),
                                                   real_id, show_db_name,
                                                   show_db_id, show_tg_name, show_tg_id, show_table_name))) {
-              LOG_WARN("fail to resolve show from trigger", K(ret));
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(schema_checker_->check_trigger_show(session_priv, enable_role_id_array, show_db_name,
                                                                   show_tg_name, allow_show, show_table_name))) {
-              LOG_WARN("Check trigger show error", K(ret));
             } else if (!allow_show) {
               ret = OB_ERR_NO_PRIVILEGE;
               LOG_WARN("trigger not has priv", K(ret), K(show_db_name), K(show_table_name), K(show_tg_name));
@@ -678,10 +661,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
             if (OB_FAIL(resolve_show_from_table(parse_tree.children_[0], parse_tree.children_[1], database_name.empty(),
                                                 T_SHOW_INDEXES, real_id, show_db_name, show_db_id,
                                                 show_table_name, show_table_id, is_view))) {
-              LOG_WARN("fail to resolve show from table", K(ret));
             } else {
               if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
-                LOG_WARN("fail to init need privs array", K(ret));
               } else {
                 ObNeedPriv need_priv;
                 //Priv check: global select || db select || table acc
@@ -706,7 +687,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                     bool pass = false;
                     if (OB_FAIL(schema_checker_->get_schema_guard()->check_priv_any_column_priv(
                                   session_priv, enable_role_id_array, show_db_name, show_table_name, pass))) {
-                      LOG_WARN("fail to collect privs in roles", K(ret));
                     } else if (!pass) {
                       ret = OB_ERR_NO_TABLE_PRIVILEGE;
                       LOG_USER_ERROR(OB_ERR_NO_TABLE_PRIVILEGE, (int)strlen("SELECT"), "SELECT",
@@ -843,8 +823,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
               if (OB_FAIL(schema_checker_->get_user_id(user_name,
                                                       host_name,
                                                       show_user_id))) {
-                LOG_WARN("Get user id error",
-                        K(user_name), K(ret));
               }
             }
             if (OB_SUCC(ret)
@@ -949,12 +927,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           real_id,
                                           show_resv_ctx,
                                           show_db_id))) {
-              LOG_WARN("fail to get database info", K(ret));
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("database id is invalid", K(ret), K(show_db_id));
             } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
-              LOG_WARN("check db access for show sql failed", K(ret));    
             } else {
               show_resv_ctx.stmt_type_ = stmt::T_SHOW_TABLE_STATUS;
               GEN_SQL_STEP_1(ObShowSqlSet::SHOW_TABLE_STATUS);
@@ -981,12 +957,10 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           real_id,
                                           show_resv_ctx,
                                           show_db_id))) {
-              LOG_WARN("fail to get database info", K(ret));
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("database id is invalid", K(ret), K(show_db_id));
             } else if (OB_FAIL(check_db_access_for_show_sql(show_resv_ctx, session_priv, enable_role_id_array))) {
-              LOG_WARN("check db access for show sql failed", K(ret));  
             } else {
               int64_t proc_type = T_SHOW_PROCEDURE_STATUS == parse_tree.type_ ? ROUTINE_PROCEDURE_TYPE : ROUTINE_FUNCTION_TYPE;
               show_resv_ctx.stmt_type_ = T_SHOW_PROCEDURE_STATUS == parse_tree.type_ ? stmt::T_SHOW_PROCEDURE_STATUS : stmt::T_SHOW_FUNCTION_STATUS;
@@ -1019,7 +993,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                                           real_id,
                                           show_resv_ctx,
                                           show_db_id))) {
-              LOG_WARN("fail to get database info", K(ret));
             } else if (OB_UNLIKELY(OB_INVALID_ID == show_db_id)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("database id is invalid", K(ret), K(show_db_id));
@@ -1103,25 +1076,17 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
                 offset = NULL != offset_node ? offset_node->value_ : 0;
                 if (parse_tree.type_ == T_SHOW_WARNINGS) {
                   if (OB_FAIL(sql_gen.init(params_.allocator_))) {
-                    LOG_WARN("fail to init sql string generator", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_select_str(ObShowSqlSet::SHOW_WARNINGS_SELECT))) {
-                    LOG_WARN("fail to generate select string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_WARNINGS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
-                    LOG_WARN("fail to generate from string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_limit_str(offset, row_count))) {
-                    LOG_WARN("fail to generate limit string", K(ret));
                   } else {
                     sql_gen.assign_sql_str(select_sql);
                   }
                 } else if (parse_tree.type_ == T_SHOW_ERRORS) {
                   if (OB_FAIL(sql_gen.init(params_.allocator_))) {
-                    LOG_WARN("fail to init sql string generator", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_select_str(ObShowSqlSet::SHOW_ERRORS_SELECT))) {
-                    LOG_WARN("fail to generate select string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_from_str(ObShowSqlSet::SHOW_ERRORS_SUBQUERY, OB_SYS_DATABASE_NAME, OB_ALL_VIRTUAL_WARNING_TNAME))) {
-                    LOG_WARN("fail to generate from string", K(ret));
                   } else if (OB_FAIL(sql_gen.gen_limit_str(offset, row_count))) {
-                    LOG_WARN("fail to generate limit string", K(ret));
                   } else {
                     sql_gen.assign_sql_str(select_sql);
                   }
@@ -1156,7 +1121,6 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("parse tree is wrong", K(ret), K(parse_tree.num_child_), K(parse_tree.children_));
         } else if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(parse_tree.children_[1]))) {
-          LOG_WARN("fail to resolve show-parameters runtime selector", K(ret));
         } else {
           show_resv_ctx.stmt_type_ = stmt::T_SHOW_PARAMETERS;
           show_resv_ctx.condition_node_ = parse_tree.children_[0];
@@ -1290,9 +1254,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(parse_and_resolve_select_sql(select_sql))) {
-        LOG_WARN("fail to parse and resolve select sql", K(ret), K(select_sql));
       } else if (OB_FAIL(resolve_like_or_where_clause(show_resv_ctx))) {
-        LOG_WARN("fail to resolve like or where clause", K(ret), K(show_resv_ctx), K(select_sql));
       }
     }
   }
@@ -1307,9 +1269,7 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
         select_stmt->get_query_ctx()->set_literal_stmt_type(show_resv_ctx.stmt_type_);
       }
       if (OB_FAIL(process_select_type(select_stmt, show_resv_ctx.stmt_type_, parse_tree))) {
-        LOG_WARN("fail to process select type", K(ret), K(show_resv_ctx));
       } else if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
-        LOG_WARN("pull select stmt all expr relation ids failed", K(ret));
       }
     }
   }
@@ -1329,12 +1289,10 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
   ObSchemaGetterGuard *schema_guard = NULL;
   share::schema::ObSessionPrivInfo session_priv;
   if (OB_FAIL(tables_set.create(MAX_CHECK_TABLE_CNT / 2))) {
-    LOG_WARN("failed to create hash set", K(ret));
   } else if (OB_UNLIKELY(1 != parse_tree.num_child_) || OB_ISNULL(parse_tree.children_[0])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parse tree is wrong", K(ret));
   } else if (OB_FAIL(recursive_resolve_table_info(parse_tree.children_[0], alloc, infos, tables_set))) {
-    LOG_WARN("failed to resolve table info", K(ret));
   } else if (infos.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get error info", K(ret));
@@ -1347,7 +1305,6 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got null ptr", K(ret));
   } else if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
-    LOG_WARN("fail to get session priv info", K(ret));
   }
   if (OB_SUCC(ret)) {
     ObSqlString check_table_str;
@@ -1356,7 +1313,6 @@ int ObShowResolver::resolve_show_check_table(const ParseNode &parse_tree,
       const common::ObIArray<uint64_t> &enable_role_id_array = session_info_->get_enable_role_array();
       if (OB_FAIL(schema_guard->check_db_show(
         session_priv, enable_role_id_array, infos.at(i).db_name_, allow_show))) {
-        LOG_WARN("Check db show failed", K(ret));
       } else if (allow_show && OB_FAIL(schema_guard->check_table_show(
               session_priv, enable_role_id_array, infos.at(i).db_name_, infos.at(i).table_name_, allow_show))) {
         LOG_WARN("Check table show failed", K(ret));
@@ -1487,7 +1443,6 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
                                                  enable_role_id_array,
                                                  ret_code,
                                                  has_select_privilege))) {
-      LOG_WARN("failed to check show create user privileges", K(ret));
     } else if (!has_select_privilege && !show_current_user) {
       ret = ret_code;
       if (OB_ERR_NO_DB_PRIVILEGE == ret) {
@@ -1532,7 +1487,6 @@ int ObShowResolver::resolve_show_create_user(const ParseNode &parse_tree,
     } else if (OB_FAIL(schema_printer.print_user_definition(*user_info, user_def_buf,
                                                      user_def_buf_size, pos, false,
                                                      !has_select_privilege && show_current_user))) {
-      SERVER_LOG(WARN, "Generate user definition failed");
     } else {
       GEN_SQL_STEP_1(ObShowSqlSet::SHOW_CREATE_USER);
       GEN_SQL_STEP_2(ObShowSqlSet::SHOW_CREATE_USER,
@@ -1584,17 +1538,11 @@ int ObShowResolver::check_show_create_user_privilege(const bool show_current_use
     need_priv_4.priv_set_ = OB_PRIV_SELECT;
     need_priv_4.priv_level_ = OB_PRIV_TABLE_LEVEL;
     if (OB_FAIL(stmt_need_privs.need_privs_.init(5))) {
-      LOG_WARN("Failed to init stmt need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_0))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_1))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_2))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_3))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_4))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     }
   } else {
     // not current_user require select privileges on mysql or oceanbase
@@ -1612,13 +1560,9 @@ int ObShowResolver::check_show_create_user_privilege(const bool show_current_use
     need_priv_2.priv_set_ = OB_PRIV_SELECT;
     need_priv_2.priv_level_ = OB_PRIV_DB_LEVEL;
     if (OB_FAIL(stmt_need_privs.need_privs_.init(3))) {
-      LOG_WARN("Failed to init stmt need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_0))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_1))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv_2))) {
-      LOG_WARN("Failed to add need priv", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1655,7 +1599,6 @@ int ObShowResolver::get_database_info(const ParseNode *database_node,
       } else {
         show_resv_ctx.show_database_name_ = session_database_name;
         if (OB_FAIL(schema_checker_->get_database_id(session_database_name, show_db_id))) {
-          LOG_WARN("fail to get database_id", K(ret), K(session_database_name));
         }
       }
     } else {
@@ -1669,7 +1612,6 @@ int ObShowResolver::get_database_info(const ParseNode *database_node,
                                                     real_id,
                                                     show_db_id,
                                                     show_resv_ctx.show_database_name_))) {
-        LOG_WARN("fail to resolve show from database", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -1796,7 +1738,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                                                       real_id,
                                                       show_database_id,
                                                       show_database_name))) {
-          LOG_WARN("fail to resolve show from database", K(ret));
         }
       }
     }
@@ -1817,8 +1758,6 @@ int ObShowResolver::resolve_show_from_table(const ParseNode *from_table_node,
                                                          false, /*cte_table_fisrt false*/
                                                          false/*is_hidden*/,
                                                          table_schema))) {
-      LOG_WARN("get table schema failed", K(ret),
-               K(show_database_id), K(show_table_name));
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema from schema checker is NULL", K(ret), K(table_schema));
@@ -1914,13 +1853,9 @@ int ObShowResolver::resolve_show_from_routine(const ParseNode *from_routine_node
     } else {
       if (T_SHOW_CREATE_PROCEDURE == node_type) {
         if (OB_FAIL(schema_checker_->get_standalone_procedure_info(show_database_name, show_routine_name, routine_info))) {
-          LOG_WARN("get procedure info failed", K(ret),
-                   K(show_database_name), K(show_routine_name));
         }
       } else {
         if (OB_FAIL(schema_checker_->get_standalone_function_info(show_database_name, show_routine_name, routine_info))) {
-          LOG_WARN("get function info failed", K(ret),
-                   K(show_database_name), K(show_routine_name));
         }
       }
     }
@@ -2008,7 +1943,6 @@ int ObShowResolver::parse_and_resolve_select_sql(const ObString &select_sql)
     ParseResult select_result;
     ObParser parser(*params_.allocator_, session_info_->get_sql_mode());
     if (OB_FAIL(parser.parse(select_sql, select_result))) {
-      LOG_WARN("parse select sql failed", K(select_sql), K(ret));
     } else {
       // use alias to make all columns number continued
       if (OB_ISNULL(select_result.result_tree_)) {
@@ -2025,7 +1959,6 @@ int ObShowResolver::parse_and_resolve_select_sql(const ObString &select_sql)
       } else {
         ParseNode *select_stmt_node = select_result.result_tree_->children_[0];
         if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
-          LOG_WARN("resolve select in view definition failed", K(ret), K(select_stmt_node));
         }
       }
     }
@@ -2106,7 +2039,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
           q_name.tbl_name_ = alias_name;
           q_name.col_name_ = col_name;
           if (OB_FAIL(resolve_column_ref_expr(q_name, ref_expr))) {
-            LOG_WARN("resolve column ref expr failed", K(q_name));
           } else if (OB_ISNULL(ref_expr)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column expr is null");
@@ -2115,24 +2047,19 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
                                                               like_pattern,
                                                               ObCharset::get_default_collation(ObCharset::get_default_charset()),
                                                               like_pat_expr))) {
-            LOG_WARN("fail to create string raw expr", K(ret), K(like_pattern));
           } else if (OB_FAIL(ObRawExprUtils::build_const_string_expr(*params_.expr_factory_,
                                                               ObVarcharType,
                                                               like_escape,
                                                               ObCharset::get_default_collation(ObCharset::get_default_charset()),
                                                               like_es_expr))) {
-            LOG_WARN("fail to create string raw expr", K(ret), K(like_escape));
           } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_LIKE, op_expr))) {
-            LOG_WARN("create raw expr failed", K(ret));
           } else if (OB_ISNULL(op_expr)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("op expr is null");
           } else {
             op_expr->set_param_exprs(ref_expr, like_pat_expr, like_es_expr);
             if (OB_FAIL(op_expr->formalize(session_info_))) {
-              LOG_WARN("fail to formalize expression", K(ret), K(op_expr));
             } else if (OB_FAIL(stmt->add_condition_expr(op_expr))) {
-              LOG_WARN("fail to add condition expression", K(ret), K(op_expr));
             }
           }
         }
@@ -2140,7 +2067,6 @@ int ObShowResolver::resolve_like_or_where_clause(ObShowResolverContext &ctx)
     } else if (T_WHERE_CLAUSE == condition_node->type_) {
       // where clause
       if (OB_FAIL(ObDMLResolver::resolve_where_clause(condition_node))) {
-        LOG_WARN("resolve where clause failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -2224,11 +2150,9 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
               node->children_[0]->str_len_ = strlen("table_name");
             }
           } else if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           }
           if (OB_SUCC(ret) && OB_NOT_NULL(node->children_[1])) {
             if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))) {
-              LOG_WARN("failed replace expr", K(ret));
             }
           }
         }
@@ -2248,7 +2172,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
               K(node->children_[0]));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2265,7 +2188,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(replace_where_clause(cur_expr, show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2286,7 +2208,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(replace_where_clause(cur_expr, show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2324,9 +2245,7 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
           LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2338,17 +2257,12 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
           LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else if (node->num_child_ == 3){
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[2], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           }
         } else if (node->num_child_ == 2) {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2360,11 +2274,8 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
            LOG_WARN("parse tree is wrong", K(ret), K(node->num_child_), K(node->children_));
         } else {
           if (OB_FAIL(replace_where_clause(node->children_[0], show_resv_ctx))) {
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[1], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           } else if (OB_FAIL(replace_where_clause(node->children_[2], show_resv_ctx))){
-            LOG_WARN("failed replace expr", K(ret));
           }
         }
         break;
@@ -2424,7 +2335,6 @@ int ObShowResolver::replace_where_clause(ParseNode* node, const ObShowResolverCo
         } else {
           for (int32_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
             if (OB_FAIL(replace_where_clause(node->children_[i], show_resv_ctx))) {
-              LOG_WARN("failed replace expr", K(ret));
             }
           }
         }
@@ -2466,7 +2376,6 @@ int ObShowResolver::resolve_column_ref_expr(const ObQualifiedName &q_name, ObRaw
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve_table_column_ref(q_name, real_ref_expr))) {
-    LOG_WARN("fail to resolve table column_ref", K(ret));
   }
   return ret;
 }
@@ -2482,12 +2391,9 @@ int ObShowResolver::recursive_resolve_table_info(const ParseNode *table_list_nod
     LOG_WARN("null point", K(ret), KP(table_list_node));
   } else if (T_LINK_NODE == table_list_node->type_) {
     if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[0], alloc, table_infos, tables_set)))) {
-      LOG_WARN("recursive resolve table list node failed", K(ret));
     } else if (OB_FAIL(SMART_CALL(recursive_resolve_table_info(table_list_node->children_[1], alloc, table_infos, tables_set)))) {
-      LOG_WARN("recursive resolve table list node failed", K(ret));
     }
   } else if (OB_FAIL(resolve_table_info(table_list_node, alloc, table_infos, tables_set))) {
-    LOG_WARN("resolve table info failed", K(ret));
   }
   return ret;
 }
@@ -2508,11 +2414,8 @@ int ObShowResolver::resolve_table_info(const ParseNode *table_node,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("null point", K(table_node), K(schema_checker_), K(ret));
   } else if (OB_FAIL(resolve_table_relation_node(table_node, table_name, database_name))) {
-    LOG_WARN("failed to resolve table relation node", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, database_name, curr_info.db_name_, true))) {
-    LOG_WARN("failed to copy db name", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, table_name, curr_info.table_name_, true))) {
-    LOG_WARN("failed to copy table name", K(ret));
   } else {
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
@@ -2578,14 +2481,12 @@ int ObShowResolver::ObSqlStrGenerator::gen_select_str(const char *select_str, ..
   } else {
     if (NULL == select_str) {
       if (OB_FAIL(databuff_printf(sql_buf_, OB_MAX_SQL_LENGTH, sql_buf_pos_, "SELECT * "))) {
-        LOG_WARN("fail to add select sql string", K(ret));
       }
     } else {
       va_list select_args;
       va_start(select_args, select_str);
       if (OB_FAIL(databuff_vprintf(sql_buf_, OB_MAX_SQL_LENGTH, sql_buf_pos_,
                                     select_str, select_args))) {
-        LOG_WARN("fail to add select sql string", K(ret));
       }
       va_end(select_args);
     }
@@ -2607,8 +2508,6 @@ int ObShowResolver::ObSqlStrGenerator::gen_from_str(const char *subquery_str, ..
                                 " FROM (%s) %s",
                                 subquery_str,
                                 ObShowSqlSet::SUBQERY_ALIAS))) {
-      // overwrite ret
-      LOG_WARN("fail to add subquery sql string", K(ret));
     } else {
       va_list subquery_args;
       va_start(subquery_args, subquery_str);
@@ -2617,7 +2516,6 @@ int ObShowResolver::ObSqlStrGenerator::gen_from_str(const char *subquery_str, ..
                                    sql_buf_pos_,
                                    tmp_buf,
                                    subquery_args))) {
-        LOG_WARN("fail to add subquery args sql string", K(ret));
       }
       va_end(subquery_args);
     }
@@ -2634,7 +2532,6 @@ int ObShowResolver::ObSqlStrGenerator::gen_limit_str(int64_t offset, int64_t row
                               " LIMIT %ld, %ld ",
                               offset,
                               row_cnt))) {
-    LOG_WARN("fail to gen limit string", K(ret));
   }
   return ret;
 }

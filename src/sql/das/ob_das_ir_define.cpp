@@ -76,7 +76,6 @@ OB_DEF_SERIALIZE(ObDASIRScanCtDef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASAttachCtDef::serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize ObDASAttachCtDef", K(ret));
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
     flags_,
@@ -107,7 +106,6 @@ OB_DEF_DESERIALIZE(ObDASIRScanCtDef)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASAttachCtDef::deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize ObDASAttachCtDef", K(ret));
   }
   LST_DO_CODE(OB_UNIS_DECODE,
     flags_,
@@ -228,7 +226,6 @@ int ObDocIdExt::from_obj(const ObObj &obj)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(datum_.from_obj(obj))) {
-    LOG_WARN("failed to copy obj to doc id ext", K(ret));
   }
   return ret;
 }
@@ -238,7 +235,6 @@ int ObDocIdExt::from_datum(const ObDatum &datum)
   int ret = common::OB_SUCCESS;
   int64_t dummy_pos = 0;
   if (OB_FAIL(datum_.deep_copy(datum, buf_, OB_DOC_ID_EXT_SIZE, dummy_pos))) {
-    LOG_WARN("failed to copy datum to doc id ext", K(ret));
   }
   return ret;
 }

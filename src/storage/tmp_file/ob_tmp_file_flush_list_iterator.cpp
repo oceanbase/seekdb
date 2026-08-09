@@ -48,10 +48,8 @@ int ObTmpFileFlushListIterator::init(ObTmpFileFlushPriorityManager *prio_mgr)
     LOG_WARN("invalid argument", KR(ret), KP(prio_mgr));
   } else if (FALSE_IT(files_.set_attr(ObMemAttr("TFFlushIterFile")))) {
   } else if (OB_FAIL(files_.prepare_allocate(MAX_CACHE_NUM))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else if (FALSE_IT(dirs_.set_attr(ObMemAttr("TFFlushIterDir")))) {
   } else if (OB_FAIL(dirs_.prepare_allocate(MAX_CACHE_NUM))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else {
     is_inited_ = true;
     prio_mgr_ = prio_mgr;
@@ -72,7 +70,6 @@ int ObTmpFileFlushListIterator::clear()
     // no need to reinsert files, do nothing
   } else if (FlushCtxState::FSM_F1 == cur_stage) {
     if (OB_FAIL(reinsert_files_into_flush_list_(cur_iter_file_idx_, cached_file_num_ - 1))){
-      LOG_ERROR("fail to reinsert files into flush list", KR(ret), K(cur_iter_file_idx_), K(cached_file_num_));
     }
   } else {
     for (int64_t i = cur_iter_dir_idx_; OB_SUCC(ret) && (i >= 0 && i < cached_dir_num_); i++) {
@@ -120,7 +117,6 @@ int ObTmpFileFlushListIterator::reset()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     if (OB_FAIL(clear())) {
-      LOG_WARN("fail to clear", KR(ret));
     }
     is_inited_ = false;
   }
@@ -155,10 +151,8 @@ int ObTmpFileFlushListIterator::reinsert_files_into_flush_list_(const int64_t st
           // tmp file insert meta tree item; do not handle data flush node here
           // because data node will not be re-inserted during flushing procedure
         } else if (OB_FAIL(sn_file->reinsert_meta_flush_node())) {
-          LOG_WARN("fail to reinsert flush node", KR(ret), K(files_[i]));
         }
       } else if (OB_FAIL(file_handle.get()->reinsert_data_flush_node())) {
-        LOG_WARN("fail to reinsert flush node", KR(ret), K(files_[i]));
       }
     }
   }
@@ -199,31 +193,24 @@ int ObTmpFileFlushListIterator::next(const FlushCtxState iter_stage, ObITmpFileH
     // 1. expected iterating flush stage is over than current flush stage;
     // 2. all cached file has been iterated
     if (OB_FAIL(clear())) {
-      LOG_WARN("fail to clear", KR(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (0 == cached_file_num_ && OB_FAIL(cache_files_(iter_stage))) {
     if (OB_ITER_END == ret) {
-      LOG_DEBUG("fail to cache files", KR(ret));
     } else {
       LOG_WARN("fail to cache files", KR(ret));
     }
   } else if (OB_FAIL(check_cur_idx_status_())) {
-    LOG_WARN("fail to check cur idx status", KR(ret));
   } else {
     file_handle = files_[cur_iter_file_idx_].file_handle_;
     if (FileList::L1 == cur_caching_list_idx_) {
       if (OB_FAIL(advance_big_file_idx_())) {
-        LOG_WARN("fail to advance big file idx", KR(ret));
       }
     } else if (OB_FAIL(advance_small_file_idx_())) {
-      LOG_WARN("fail to advance small file idx", KR(ret));
     }
   }
-  LOG_DEBUG("try to get next file", KR(ret), K(iter_stage), K(cur_stage),
-            K(cur_iter_file_idx_), K(cached_file_num_), K(file_handle));
   return ret;
 }
 
@@ -239,11 +226,8 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid cached num", KR(ret), K(cached_dir_num_), K(cached_file_num_));
   } else if (OB_FAIL(init_caching_list_with_flush_stage_(iter_stage))) {
-    LOG_WARN("fail to init caching list", KR(ret), K(iter_stage));
   } else if (OB_FAIL(acquire_final_list_of_flush_stage_(iter_stage, end_list_idx))) {
-    LOG_WARN("fail to acquire final list of flush stage", KR(ret), K(iter_stage));
   } else if (OB_FAIL(file_handles.prepare_allocate_and_keep_count(target_cache_file_num))) {
-    LOG_WARN("fail to prepare allocate", KR(ret), K(target_cache_file_num));
   } else { // pop enough files from priority manager for caching
     int64_t remain_cache_file_num = target_cache_file_num;
     bool cache_over = false;
@@ -252,7 +236,6 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
       if (OB_FAIL(prio_mgr_->popN_from_file_list(cur_caching_list_is_meta_, cur_caching_list_idx_,
                                                  remain_cache_file_num, actual_cache_file_num,
                                                  file_handles))) {
-        LOG_WARN("fail to pop N from file list", KR(ret), K(cur_caching_list_idx_));
       } else if (FALSE_IT(remain_cache_file_num -= actual_cache_file_num)) {
       } else if (OB_UNLIKELY(remain_cache_file_num < 0)) {
         ret = OB_ERR_UNEXPECTED;
@@ -264,13 +247,10 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
         if (cur_caching_list_idx_ == end_list_idx) { // has reached the last list of this flush stage
           if (file_handles.empty()) {
             ret = OB_ITER_END;
-            LOG_DEBUG("iter end in current flush stage", KR(ret), K(iter_stage),
-                      K(cur_caching_list_idx_), K(remain_cache_file_num));
           } else { // cache files successful, but the num is not enough
             cache_over = true;
           }
-        } else if (OB_FAIL(advance_caching_list_idx_())) { // pop files of the next list of this flush stage
-          LOG_WARN("fail to advance caching list idx", KR(ret));
+        } else if (OB_FAIL(advance_caching_list_idx_())) {
         }
       }
     } // end while
@@ -279,10 +259,8 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
   if (OB_SUCC(ret)) {
     if (FileList::L1 == cur_caching_list_idx_) {
       if (OB_FAIL(cache_big_files_(file_handles))) {
-        LOG_WARN("fail to cache big files", KR(ret));
       }
     } else if (OB_FAIL(cache_small_files_(file_handles))) {
-      LOG_WARN("fail to cache big files", KR(ret));
     }
   }
 
@@ -296,10 +274,8 @@ int ObTmpFileFlushListIterator::cache_files_(const FlushCtxState iter_stage)
       } else if (cur_caching_list_is_meta_) {
         ObSharedNothingTmpFile *sn_file = static_cast<ObSharedNothingTmpFile *>(tmp_file);
         if (OB_FAIL(sn_file->reinsert_meta_flush_node())) {
-          LOG_WARN("fail to reinsert flush node", KR(ret), K(files_[i]));
         }
       } else if (OB_TMP_FAIL(tmp_file->reinsert_data_flush_node())) {
-        LOG_ERROR("fail to reinsert flush node", KR(tmp_ret), K(i), K(file_handles[i]));
       }
     }
   }
@@ -310,7 +286,6 @@ int ObTmpFileFlushListIterator::cache_big_files_(const ObArray<ObITmpFileHandle>
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(build_file_wrappers_(file_handles))) {
-    LOG_WARN("fail to build file wrappers", KR(ret));
   } else {
     cur_iter_file_idx_ = 0;
     cur_iter_dir_idx_ = -1; // no need to aggregate files into dir
@@ -323,9 +298,7 @@ int ObTmpFileFlushListIterator::cache_small_files_(const ObArray<ObITmpFileHandl
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(build_file_wrappers_(file_handles))) {
-    LOG_WARN("fail to build file wrappers", KR(ret));
   } else if (OB_FAIL(build_dir_wrappers_())) {
-    LOG_WARN("fail to build dir wrappers", KR(ret));
   } else {
     cur_iter_file_idx_ = dirs_[0].start_file_idx_;
     cur_iter_dir_idx_ = 0;
@@ -384,7 +357,6 @@ int ObTmpFileFlushListIterator::build_dir_wrappers_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("file ptr is null", K(ret), KP(file));
       } else if (OB_FAIL(get_flushing_file_dirty_page_num_(*file, file_dirty_page_num))) {
-        LOG_WARN("fail to get flushing file dirty page num", KR(ret));
       } else if (file->get_dir_id() != dir_id) {
         if (0 != i) {
           end_file_idx = i - 1;
@@ -394,8 +366,6 @@ int ObTmpFileFlushListIterator::build_dir_wrappers_()
                 KR(ret), K(cached_dir_num), K(dirs_));
           } else if (OB_FAIL(dirs_[cached_dir_num].init(cur_caching_list_is_meta_, page_num,
                                                  start_file_idx, end_file_idx))) {
-            LOG_WARN("fail to init tmp file dir wrapper", KR(ret), K(i), K(dirs_[cached_dir_num]), K(page_num),
-                                                          K(start_file_idx), K(end_file_idx));
           } else {
             cached_dir_num++;
           }
@@ -418,8 +388,6 @@ int ObTmpFileFlushListIterator::build_dir_wrappers_()
               KR(ret), K(cached_dir_num), K(dirs_));
         } else if (OB_FAIL(dirs_[cached_dir_num].init(cur_caching_list_is_meta_, page_num,
                                                start_file_idx, end_file_idx))) {
-          LOG_WARN("fail to init tmp file dir wrapper", KR(ret), K(page_num),
-                                                        K(start_file_idx), K(end_file_idx));
         } else {
           cached_dir_num++;
         }
@@ -575,7 +543,6 @@ int ObTmpFileFlushListIterator::advance_small_file_idx_()
     cur_iter_file_idx_++;
     if (cur_iter_file_idx_ > dirs_[cur_iter_dir_idx_].end_file_idx_) {
       if (OB_FAIL(advance_dir_idx_())) {
-        LOG_WARN("fail to advance dir idx", KR(ret));
       } else if (cur_iter_dir_idx_ < cached_dir_num_) {
         if (OB_UNLIKELY(!dirs_[cur_iter_dir_idx_].is_inited_)) {
           ret = OB_ERR_UNEXPECTED;

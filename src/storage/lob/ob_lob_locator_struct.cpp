@@ -29,7 +29,6 @@ int ObLobDiskLocatorWrapper::get_char_len(const ObLobLocatorV2 &locator, uint64_
   int ret = OB_SUCCESS;
   ObString disk_locator;
   if (OB_FAIL(locator.get_disk_locator(disk_locator))) {
-    LOG_WARN("failed to get lob common from lob locator", K(ret), K(locator));
   } else if (disk_locator.length() != ObLobManager::LOB_OUTROW_FULL_SIZE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("disk locator invalid", K(ret), K(locator));
@@ -52,7 +51,6 @@ int ObLobDiskLocatorWrapper::init(char *ptr, const int64_t len)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_disk_locator_length(len))) {
-    LOG_WARN("check_disk_locator_length fail", K(ret), K(len), KP(ptr));
   } else if (OB_ISNULL(lob_common_ = reinterpret_cast<ObLobCommon*>(ptr))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("lob common is null", K(ret), K(len), KP(ptr));

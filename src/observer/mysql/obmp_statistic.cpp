@@ -38,7 +38,6 @@ int ObMPStatistic::process()
   obmysql::OMPKString pkt(tmp_string);
 
   if (OB_FAIL(response_packet(pkt))) {
-    RPC_OBMYSQL_LOG(WARN, "fail to response statistic packet", K(ret));
   } else {
     // do nothing
   }

@@ -34,7 +34,6 @@ int binary_operand_batch_eval(const ObExpr &expr,
   const ObExpr &right = *expr.args_[1];
   if (null_short_circuit) {
     if (OB_FAIL(left.eval_batch(ctx, skip, size))) {
-      LOG_WARN("batch evaluate failed", K(ret), K(expr));
     } else if (left.is_batch_result()) {
       const ObBitVector *rskip = &skip;
       if (!left.get_eval_info(ctx).notnull_) {
@@ -52,12 +51,10 @@ int binary_operand_batch_eval(const ObExpr &expr,
       } else if (rskip->is_all_true(size)) {
         // If rskip is all true, the right expr does not need to be evaluated.
       } else if (OB_FAIL(right.eval_batch(ctx, *rskip, size))) {
-        LOG_WARN("batch evaluated failed", K(ret), K(right));
       }
     } else {
       if (!left.locate_expr_datum(ctx).is_null()) {
         if (OB_FAIL(right.eval_batch(ctx, skip, size))) {
-          LOG_WARN("batch evaluate failed", K(ret), K(right));
         }
       }
     }
@@ -82,11 +79,8 @@ int ObNestedArithOpBaseFunc::construct_params(ObIAllocator &alloc, ObEvalCtx &ct
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObArrayExprUtils::get_array_obj(alloc, ctx, left_meta_id, left, left_obj))) {
-    SQL_ENG_LOG(WARN, "get array failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(alloc, ctx, right_meta_id, right, right_obj))) {
-    SQL_ENG_LOG(WARN, "get array failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(alloc, ctx, res_meta_id, res_obj, false))) {
-    SQL_ENG_LOG(WARN, "construct res array failed", K(ret));
   }
   return ret;
 }
@@ -95,9 +89,7 @@ int ObNestedArithOpBaseFunc::get_res(ObEvalCtx &ctx, ObIArrayType *res_obj, cons
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(res_obj->init())) {
-    LOG_WARN("array init failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::set_array_res(res_obj, res_obj->get_raw_binary_len(), expr, ctx, res_str))) {
-    LOG_WARN("set array result failed", K(ret));
   }
   return ret;
 }

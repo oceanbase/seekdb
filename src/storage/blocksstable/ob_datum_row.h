@@ -53,7 +53,6 @@ public:
     int ret = OB_SUCCESS;
     cols_descs_ = &cols_descs;
     if (OB_FAIL(obj_buf_.init(&allocator))) {
-      STORAGE_LOG(WARN, "Failed to init ObObjBufArray", K(ret));
     }
     return ret;
   }

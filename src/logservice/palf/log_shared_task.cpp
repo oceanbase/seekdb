@@ -60,15 +60,11 @@ int LogHandleSubmitTask::do_task(IPalfEnvImpl *palf_env_impl)
   IPalfHandleImplGuard guard;
   common::ObTimeGuard time_guard("handle submit task", 100 * 1000);
   if (OB_FAIL(palf_env_impl->get_palf_handle_impl(guard))) {
-    PALF_LOG(WARN, "IPalfEnvImpl get_palf_handle_impl failed", K(ret), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->get_palf_epoch(palf_epoch))) {
-    PALF_LOG(WARN, "IPalfEnvImpl get_palf_epoch failed", K(ret), KPC(this));
   } else if (palf_epoch != palf_epoch_) {
     PALF_LOG(WARN, "palf_epoch has changed, drop task", K(ret), K(palf_epoch), KPC(this));
   } else if (OB_FAIL(guard.get_palf_handle_impl()->try_handle_next_submit_log())) {
-    PALF_LOG(WARN, "PalfHandleImpl try_handle_next_submit_log failed", K(ret), KPC(this));
   } else {
-    PALF_LOG(TRACE, "LogHandleSubmitTask handle_task success", K(time_guard), KPC(this));
   }
   return ret;
 }

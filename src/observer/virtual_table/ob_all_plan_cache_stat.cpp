@@ -93,7 +93,6 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
     case HIT_RATE: {
       if (pc_stat.access_count_ !=0) {
         cells[i].set_int(pc_stat.hit_count_*100/pc_stat.access_count_);
-        SERVER_LOG(DEBUG, "rate:", "hit_count", pc_stat.hit_count_, "access_count", pc_stat.access_count_);
       } else {
         cells[i].set_int(0);
       }
@@ -139,9 +138,7 @@ int ObAllPlanCacheStat::get_row()
       ObPlanCache *plan_cache =
           ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
       if (OB_FAIL(fill_cells(*plan_cache))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(ret), K(cur_row_));
       } else {
-        SERVER_LOG(DEBUG, "add plan cache");
       }
       iter_end_ = true;
     }

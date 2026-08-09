@@ -48,14 +48,11 @@ int ObMdsMergeMultiVersionRowStore::init(const ObDataStoreDesc &data_store_desc,
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(shadow_row_.init(row_column_cnt))) {
-    LOG_WARN("fail to init datum row", K(ret), K(row_column_cnt));
   } else if (OB_FAIL(row_queue_.init(row_column_cnt))) {
-    LOG_WARN("fail to init row queue", K(ret), K(row_column_cnt));
   } else {
     data_store_desc_ = &data_store_desc;
     macro_writer_ = &macro_writer;
     is_inited_ = true;
-    LOG_DEBUG("succeed to init mds mini helper", K(ret), KPC(data_store_desc_));
   }
   return ret;
 }
@@ -70,9 +67,7 @@ int ObMdsMergeMultiVersionRowStore::finish()
     ret = OB_EMPTY_RESULT;
     LOG_WARN("unexpected row queue is empty, which means no data come in", K(ret));
   } else if (OB_FAIL(dump_row_queue())) {
-    LOG_WARN("fail to dump row queue", K(ret), K(row_queue_));
   } else {
-    LOG_DEBUG("succeed to finish operator", K(ret));
   }
   return ret;
 }
@@ -86,7 +81,6 @@ int ObMdsMergeMultiVersionRowStore::put_row_into_queue(const ObDatumRow &row)
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (row_queue_.is_empty()) {
     if (OB_FAIL(row_queue_.add_row(row, row_queue_allocator_))) {
-      LOG_WARN("fail to add row to row_queue", K(ret), K(row), K(row_queue_));
     }
   } else {
     cur_key_.reset();
@@ -97,24 +91,18 @@ int ObMdsMergeMultiVersionRowStore::put_row_into_queue(const ObDatumRow &row)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected last row is nullptr", K(ret), K(row_queue_));
     } else if (OB_FAIL(last_key_.assign(last_row_in_qu->storage_datums_, data_store_desc_->get_schema_rowkey_col_cnt()))) {
-      LOG_WARN("Failed to assign qu rowkey", K(ret));
     } else if (OB_FAIL(cur_key_.assign(row.storage_datums_, data_store_desc_->get_schema_rowkey_col_cnt()))) {
-      LOG_WARN("Failed to assign cur key", K(ret));
     } else if (OB_FAIL(cur_key_.compare(last_key_, data_store_desc_->get_datum_utils(), compare_result))) {
-      LOG_WARN("Failed to compare last key", K(ret), K(cur_key_), K(last_key_));
     } else if (OB_UNLIKELY(compare_result < 0)) {
       ret = OB_ROWKEY_ORDER_ERROR;
       LOG_ERROR("input rowkey is less then last rowkey", K(ret), K(cur_key_), K(last_key_), K(ret));
     } else if (compare_result == 0) {
       if (OB_FAIL(put_same_rowkey_row_into_queue(row, *last_row_in_qu))) {
-        LOG_WARN("Failed to put same rowkey into queue", K(ret), K(row), KPC(last_row_in_qu));
       }
     } else {
       // put another row key, dump current row queue
       if (OB_FAIL(dump_row_queue())) {
-        LOG_WARN("Failed to dump row queue", K(ret), K(row_queue_));
       } else if (OB_FAIL(row_queue_.add_row(row, row_queue_allocator_))) {
-        LOG_WARN("fail to add row to row_queue", K(row), K(row_queue_));
       }
     }
   }
@@ -142,7 +130,6 @@ int ObMdsMergeMultiVersionRowStore::put_same_rowkey_row_into_queue(const ObDatum
   } else {
     // another trans version rowkey.
     if (OB_FAIL(row_queue_.add_row(row, row_queue_allocator_))) {
-      LOG_WARN("fail to add row to row_queue", K(ret), K(row), K(row_queue_));
     }
   }
   return ret;
@@ -164,20 +151,16 @@ int ObMdsMergeMultiVersionRowStore::dump_row_queue()
       last_row_in_qu->set_compacted_multi_version_row();
       last_row_in_qu->storage_datums_[ObMdsSchemaHelper::SEQ_NO_IDX].set_int(0);
       if (OB_FAIL(macro_writer_->append_row(*last_row_in_qu))) {
-        LOG_WARN("fail to append row", K(ret), KPC(last_row_in_qu), KPC(macro_writer_));
       } else {
-        LOG_DEBUG("succeed to append mds row", K(ret), KPC(last_row_in_qu));
       }
     }
   } else {
     if (OB_FAIL(dump_shadow_row())){
-      LOG_WARN("Failed to dump mds shadow row", K(ret));
     } else {
       const ObDatumRow *row = nullptr;
       ObDatumRow *dump_row = nullptr;
       while (OB_SUCC(ret) && row_queue_.has_next()) {
         if (OB_FAIL(row_queue_.get_next_row(row))) {
-          LOG_WARN("Failed to get row from row queue", K(ret), K(row_queue_));
         } else {
           dump_row = const_cast<ObDatumRow *> (row);
           dump_row->storage_datums_[ObMdsSchemaHelper::SEQ_NO_IDX].set_int(0);
@@ -186,9 +169,7 @@ int ObMdsMergeMultiVersionRowStore::dump_row_queue()
             dump_row->set_last_multi_version_row();
           }
           if (OB_FAIL(macro_writer_->append_row(*dump_row))) {
-            LOG_WARN("fail to append row", K(ret), KPC(dump_row), KPC(macro_writer_));
           } else {
-            LOG_DEBUG("succeed to append mds row", K(ret), KPC(dump_row));
           }
         }
       }
@@ -213,16 +194,13 @@ int ObMdsMergeMultiVersionRowStore::dump_shadow_row()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected last row is nullptr", K(ret), K(row_queue_));
   } else if (OB_FAIL(shadow_row_.deep_copy((*first_row_in_qu), row_queue_allocator_))) {
-    LOG_WARN("Failed to deep copy datum row", K(ret), KPC(first_row_in_qu));
   } else {
     shadow_row_.set_first_multi_version_row();
     shadow_row_.set_shadow_row();
     shadow_row_.set_compacted_multi_version_row();
     shadow_row_.storage_datums_[ObMdsSchemaHelper::SEQ_NO_IDX].set_int(-INT64_MAX);
     if (OB_FAIL(macro_writer_->append_row(shadow_row_))) {
-      LOG_WARN("fail to append row", K(ret), K(shadow_row_), KPC(macro_writer_));
     } else {
-      LOG_DEBUG("succeed to append mds shadow row", K(ret), K(shadow_row_));
     }
   }
   return ret;
@@ -250,9 +228,7 @@ int ObMdsMiniMergeOperator::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid data store desc", K(ret), K(data_store_desc));
   } else if (OB_FAIL(row_store_.init(data_store_desc, macro_writer))) {
-    LOG_WARN("fail to init mds merge helper", K(ret), K(data_store_desc));
   } else if (OB_FAIL(cur_row_.init(row_column_cnt))) {
-    LOG_WARN("fail to init datum row", K(ret), K(row_column_cnt));
   } else {
     is_inited_ = true;
   }
@@ -274,9 +250,7 @@ int ObTabletDumpMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
     cur_allocator_.reuse();
     mds::MdsDumpKVStorageAdapter adapter(kv);
     if (OB_FAIL(adapter.convert_to_mds_row(cur_allocator_, cur_row_))) {
-      LOG_WARN("fail to convert MdsDumpKVStorageAdapter to row", K(ret), K(adapter), K(cur_row_));
     } else if (OB_FAIL(row_store_.put_row_into_queue(cur_row_))) {
-      LOG_WARN("fail to put row into queue", K(ret));
     } else {
       LOG_INFO("mds op succeed to add row", K(ret), K(adapter), K(cur_row_), K(kv));
     }
@@ -299,9 +273,7 @@ int ObTabletDumpMediumMds2MiniOperator::operator()(const mds::MdsDumpKV &kv)
     cur_allocator_.reuse();
     mds::MdsDumpKVStorageAdapter adapter(kv);
     if (OB_FAIL(adapter.convert_to_mds_row(cur_allocator_, cur_row_))) {
-      LOG_WARN("fail to convert MdsDumpKVStorageAdapter to row", K(ret), K(adapter), K(cur_row_));
     } else if (OB_FAIL(row_store_.put_row_into_queue(cur_row_))) {
-      LOG_WARN("fail to put row into queue", K(ret));
     } else {
       LOG_INFO("mds op succeed to add medium mds row", K(ret), K(adapter), K(cur_row_));
     }
@@ -358,21 +330,15 @@ int ObMdsTableMiniMerger::init(compaction::ObTabletMergeCtx &ctx, ObMdsMiniMerge
     } else if (OB_FAIL(data_desc_.init(false/*is ddl*/, *storage_schema, tablet_id,
         ctx.get_merge_type(), ctx.get_snapshot(), data_version, ctx.static_desc_.micro_index_clustered_,
         ctx.get_concurrent_cnt(), ctx.static_param_.scn_range_.end_scn_))) {
-      LOG_WARN("fail to init whole desc", KR(ret), K(ctx), K(tablet_id));
     } else if (OB_FAIL(macro_start_seq.set_parallel_degree(0))) {
-      LOG_WARN("Failed to set parallel degree to macro start seq", K(ret));
     } else if (OB_FAIL(macro_start_seq.set_sstable_seq(ctx.static_param_.sstable_logic_seq_))) {
-      LOG_WARN("Failed to set sstable seq", K(ret), K(ctx.static_param_.sstable_logic_seq_));
     } else if (FALSE_IT(macro_seq_param.start_ = macro_start_seq.macro_data_seq_)) {
     } else if (FALSE_IT(data_desc_.get_desc().sstable_index_builder_ = &sstable_builder_)) {
     } else if (OB_FAIL(sstable_builder_.init(data_desc_.get_desc()))) {
-      LOG_WARN("Failed to init sstable builder", K(ret), K(data_desc_.get_desc()));
     } else if (OB_FAIL(macro_writer_.open(
                    data_desc_.get_desc(), 0 /*parallel_idx*/, macro_seq_param,
                    ctx.get_pre_warm_param()))) {
-      LOG_WARN("Failed to open macro block writer", K(ret), K(data_desc_.get_desc()));
     } else if (OB_FAIL(op.init(data_desc_.get_desc(), macro_writer_))) {
-      LOG_WARN("fail to init op", K(ret), "row column count", data_desc_.get_desc().get_row_column_count());
     } else {
       ctx_ = &ctx;
       storage_schema_ = storage_schema;
@@ -395,11 +361,8 @@ int ObMdsTableMiniMerger::generate_mds_mini_sstable(
   } else {
     SMART_VARS_2((ObSSTableMergeRes, res), (ObTabletCreateSSTableParam, param)) {
       if (OB_FAIL(macro_writer_.close())) {
-        LOG_WARN("fail to close macro writer", K(ret), K(macro_writer_));
       } else if (OB_FAIL(ctx_->update_block_info(macro_writer_.get_merge_block_info(), 0/*cost_time*/))) {
-        STORAGE_LOG(WARN, "Failed to add macro blocks", K(ret));
       } else if (OB_FAIL(sstable_builder_.close(res))) {
-        LOG_WARN("fail to close sstable builder", K(ret), K(sstable_builder_));
       } else if (CLICK_FAIL(param.init_for_mds(*ctx_, res, *storage_schema_))) {
         LOG_ERROR("fail to create sstable param for mds", K(ret));
       } else if (CLICK_FAIL(ObTabletCreateDeleteHelper::create_sstable(param, allocator, table_handle))) {
@@ -416,7 +379,6 @@ int ObMdsTableMiniMerger::generate_mds_mini_sstable(
   } else {
     const common::ObTabletID &tablet_id = ctx_->get_tablet_id();
     const blocksstable::ObSSTable *sstable = static_cast<blocksstable::ObSSTable*>(table_handle.get_table());
-    LOG_TRACE("succeed to generate mds mini sstable", K(ret), K(tablet_id), KPC(sstable));
   }
   return ret;
 }

@@ -57,11 +57,9 @@ int ObMonitoringDumpOp::inner_open()
     const char* name = get_phy_op_name(spec_.get_left()->type_);
     op_name_.set_string(name, strlen(name));
     if (OB_FAIL(output_hash_.init(output.count()))) {
-      LOG_WARN("init output hash array failed", K(ret));
     } else {
       for (int64_t i = 0; i < output.count() && OB_SUCC(ret); i++) {
         if (OB_FAIL(output_hash_.push_back(0))) {
-          LOG_WARN("push back failed", K(ret));
         }
       }
       open_time_ = ObTimeUtility::current_time();
@@ -102,7 +100,6 @@ int ObMonitoringDumpOp::inner_rescan()
   LOG_INFO("do rescan", K(op_name_.get_string()),
            K(MY_SPEC.dst_op_id_));
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   }
   return ret;
 }
@@ -121,7 +118,6 @@ int ObMonitoringDumpOp::inner_get_next_row()
   } else {
     rows_++;
     if (OB_FAIL(calc_hash_value())) {
-      LOG_WARN("calc hash value failed", K(ret));
     } else  {
       if (MY_SPEC.flags_ & ObAllocOpHint::OB_MONITOR_TRACING) {
         LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
@@ -144,13 +140,11 @@ int ObMonitoringDumpOp::calc_hash_value()
     ObExpr *expr = output.at(i);
     ObDatum *datum = NULL;
     if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-      LOG_WARN("eval expr failed", K(ret));
     } else {
       uint64_t ori_hash_value = output_hash_.at(i);
       uint64_t hash_value = 0;
       if (OB_FAIL(expr->basic_funcs_->default_hash_(
               *datum, 0, hash_value, datum_access_ctx_))) {
-        LOG_WARN("do hash failed", K(ret));
       } else {
         output_hash_.at(i) = ori_hash_value + hash_value;
       }
@@ -161,7 +155,6 @@ int ObMonitoringDumpOp::calc_hash_value()
 
 int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
-  LOG_DEBUG("MonitoringDumpOp get_next_batch start");
   int ret = OB_SUCCESS;
   int64_t batch_cnt = min(max_row_cnt, MY_SPEC.max_batch_size_);
   const ObBatchRows *child_brs = nullptr;
@@ -169,7 +162,6 @@ int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
 
   if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-    LOG_WARN("child_op failed to get next row", K(ret));
   } else {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
     batch_info_guard.set_batch_size(batch_cnt);
@@ -180,7 +172,6 @@ int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
         ++rows_;
         batch_info_guard.set_batch_idx(i);
         if (OB_FAIL(calc_hash_value())) {
-          LOG_WARN("calc hash value failed", K(ret));
         } else {
           if (MY_SPEC.flags_ & ObAllocOpHint::OB_MONITOR_TRACING) {
             LOG_INFO("", K(op_name_.get_string()), K(ObToStringExprRow(eval_ctx_, MY_SPEC.output_)),
@@ -195,7 +186,6 @@ int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
     } // end for
     if (OB_SUCC(ret)) {
       if (OB_FAIL(brs_.copy(child_brs))) {
-        LOG_WARN("copy child_brs to brs_ failed", K(ret));
       }
     }
     LOG_INFO("", K(op_name_.get_string()), K(MY_SPEC.dst_op_id_),

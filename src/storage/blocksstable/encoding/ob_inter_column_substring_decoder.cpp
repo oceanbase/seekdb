@@ -54,7 +54,6 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
           ctx.is_bit_packing(), row_id,
           ctx.col_header_->length_ - sizeof(ObInterColSubStrMetaHeader),
           ref, datum, ctx.col_header_->get_store_obj_type()))) {
-        LOG_WARN("meta_reader_ read failed", K(ret), K(row_id));
       }
     }
 
@@ -62,8 +61,6 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
     if (OB_SUCC(ret) && -1 == ref) {
       ObDatum ref_datum;
       if (OB_FAIL(ctx.ref_decoder_->decode(*ctx.ref_ctx_, ref_datum, row_id, bs, data, len))) {
-        LOG_WARN("ref_decoder decode failed", K(ret),
-            K(row_id), KP(data), K(len));
       } else if (ref_datum.is_null()) {
         datum.set_null();
       } else if (ref_datum.is_nop()) {

@@ -317,7 +317,6 @@ int ObPThread::try_wait()
   int ret = OB_SUCCESS;
   if (nullptr != threads_[0]) {
     if (OB_FAIL(threads_[0]->try_wait())) {
-      LOG_WARN("ObPThread try_wait failed", K(ret));
     }
   }
   return ret;

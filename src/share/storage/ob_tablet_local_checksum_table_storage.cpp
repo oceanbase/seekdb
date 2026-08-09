@@ -48,7 +48,6 @@ int ObTabletLocalChecksumTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -68,7 +67,6 @@ int ObTabletLocalChecksumTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TABLET_LOCAL_CHECKSUM, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -96,7 +94,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
         "       data_checksum_type "
         "FROM __all_tablet_local_checksum "
         "WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
         const ObTabletID &tablet_id = tablet_ids.at(i);
@@ -107,17 +104,14 @@ int ObTabletLocalChecksumTableStorage::batch_get(
             "%s %ld",
             i == 0 ? "" : ",",
             tablet_id.id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sql.append(")"))) {
-          LOG_WARN("failed to append sql", K(ret));
         } else if (compaction_scn.is_valid()) {
           const char *op = include_larger_than ? ">=" : "=";
           if (OB_FAIL(sql.append_fmt(" AND compaction_scn %s %lu",
               op, compaction_scn.get_val_for_inner_table_field()))) {
-            LOG_WARN("failed to append compaction scn predicate", K(ret));
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(sql.append(" ORDER BY tablet_id;"))) {
@@ -143,7 +137,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid local checksum type", K(ret), K(data_checksum_type), K(tablet_id_val));
         } else if (OB_FAIL(item.compaction_scn_.convert_for_inner_table_field(compaction_scn_val))) {
-          LOG_WARN("failed to convert local checksum scn", K(ret), K(compaction_scn_val), K(tablet_id_val));
         } else if (OB_ISNULL(b_column_checksums_blob) || b_column_checksums_len <= 0) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("local column checksum metadata is empty", K(ret), K(tablet_id_val));
@@ -154,8 +147,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
           item.data_checksum_type_ = static_cast<ObDataChecksumType>(data_checksum_type);
           common::ObString b_column_checksums_obstr(b_column_checksums_len, static_cast<const char *>(b_column_checksums_blob));
           if (OB_FAIL(item.column_meta_.set_with_str(item.data_checksum_type_, b_column_checksums_obstr))) {
-            LOG_WARN("failed to parse local column checksum metadata",
-                     K(ret), K(b_column_checksums_obstr), K(item.tablet_id_));
           }
         }
 

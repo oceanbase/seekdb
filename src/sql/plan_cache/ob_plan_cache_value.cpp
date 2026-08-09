@@ -194,40 +194,29 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
     MEMCPY(sql_id_, pc_ctx.sql_ctx_.sql_id_, sizeof(pc_ctx.sql_ctx_.sql_id_));
     MEMCPY(format_sql_id_, pc_ctx.sql_ctx_.format_sql_id_, sizeof(pc_ctx.sql_ctx_.format_sql_id_));
     if (OB_FAIL(not_param_index_.add_members2(pc_ctx.not_param_index_))) {
-      LOG_WARN("fail to add not param index members", K(ret));
     } else if (OB_FAIL(neg_param_index_.add_members2(pc_ctx.neg_param_index_))) {
-      LOG_WARN("fail to add neg param index members", K(ret));
     } else if (OB_FAIL(param_charset_type_.assign(pc_ctx.param_charset_type_))) {
-      LOG_WARN("fail to assign param charset type", K(ret));
     } else if (OB_FAIL(must_be_positive_idx_.add_members2(pc_ctx.must_be_positive_index_))) {
-      LOG_WARN("failed to add bitset members", K(ret));
     } else if (OB_FAIL(fmt_int_or_ch_decint_idx_.add_members2(pc_ctx.fmt_int_or_ch_decint_idx_))) {
-      LOG_WARN("failed to add bitset members", K(ret));
     } else if (OB_FAIL(set_stored_schema_objs(plan->get_dependency_table(),
                                               pc_ctx.sql_ctx_.schema_guard_))) {
-      LOG_WARN("failed to set stored schema objs",
-               K(ret), K(plan->get_dependency_table()), K(pc_ctx.sql_ctx_.schema_guard_));
     } else {
       //deep copy special param raw text
       if (PC_PS_MODE == pc_ctx.mode_ || PC_PL_MODE == pc_ctx.mode_) {
         if (OB_FAIL(not_param_var_.assign(pc_ctx.not_param_var_))) {
-          LOG_WARN("fail to assign not param var", K(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < not_param_var_.count(); ++i) {
           if (OB_FAIL(deep_copy_obj(*pc_alloc_,
                                     not_param_var_.at(i).ps_param_,
                                     not_param_var_.at(i).ps_param_))) {
-            LOG_WARN("deep_copy_obj failed", K(i), K(not_param_var_.at(i)));
           }
         }
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < pc_ctx.not_param_info_.count(); i++) {
           if (OB_FAIL(not_param_info_.push_back(pc_ctx.not_param_info_.at(i)))) {
-            LOG_WARN("fail to push not_param_info", K(ret));
           } else if (OB_FAIL(ob_write_string(*pc_alloc_,
                                              not_param_info_.at(i).raw_text_,
                                              not_param_info_.at(i).raw_text_))) {
-            LOG_WARN("fail to deep copy param raw text", K(ret));
           }
         } //for end
         if (OB_SUCC(ret)) {
@@ -262,9 +251,7 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("fail to alloc mem", K(ret));
           } else if (OB_FAIL(outline_signature_str.serialize(buf1, size1, pos_s1))) {
-            LOG_WARN("fail to serialize constructed_sql_", K(ret));
           } else if (OB_FAIL(outline_format_signature_str.serialize(buf2, size2, pos_s2))) {
-            LOG_WARN("fail to serialize constructed_sql_", K(ret));
           } else {
             outline_signature_.assign_ptr(buf1, static_cast<ObString::obstr_size_t>(pos_s1));
             outline_format_signature_.assign_ptr(buf2, static_cast<ObString::obstr_size_t>(pos_s2));
@@ -298,7 +285,6 @@ int ObPlanCacheValue::init(ObPCVSet *pcv_set, const ObILibCacheObject *cache_obj
           // Get the table name of the temporary table
           pc_ctx.tmp_table_names_.reset();
           if (OB_FAIL(get_tmp_depend_tbl_names(pc_ctx.tmp_table_names_))) {
-            LOG_WARN("failed to get tmp depend tbl ids", K(ret));
           } else {
             // do nothing
           }
@@ -330,7 +316,6 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
       LOG_WARN("null ptr unexpected", K(ret), K(phy_ctx), K(ab_params));
     } else if (query_cnt <= 1) {
       ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-      LOG_TRACE("unexpected query count", K(ret), K(query_cnt));
     } else if (batch_plan_set->get_can_skip_params_match()) {
       // can_skip_params_match_ is true, we not need match all params,
       // only call match_params_info once
@@ -338,11 +323,8 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
       phy_ctx->reset_datum_param_store();
       phy_ctx->set_original_param_cnt(ab_params->count());
       if (OB_FAIL(get_one_group_params(0, *ab_params, param_store))) {
-        LOG_WARN("fail to get one params", K(ret));
       } else if (OB_FAIL(pc_ctx.fp_result_.cache_params_->assign(param_store))) {
-        LOG_WARN("assign params failed", K(ret), K(param_store));
       } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-        LOG_WARN("fail to match_params_info", K(ret), KPC(params));
       } else {
         // not match this plan, try match next plan
       }
@@ -355,16 +337,11 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
         phy_ctx->reset_datum_param_store();
         phy_ctx->set_original_param_cnt(ab_params->count());
         if (OB_FAIL(get_one_group_params(i, *ab_params, param_store))) {
-          LOG_WARN("fail to get one params", K(ret), K(i));
         } else if (OB_FAIL(pc_ctx.fp_result_.cache_params_->assign(param_store))) {
-          LOG_WARN("assign params failed", K(ret), K(param_store));
         } else if (OB_FAIL(phy_ctx->init_datum_param_store())) {
-          LOG_WARN("init datum_store failed", K(ret), K(param_store));
         } else if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-          LOG_WARN("fail to match_params_info", K(ret), KPC(params));
         } else if (i != 0 && !is_same) {
           ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-          LOG_TRACE("params is not same type", K(param_store), K(i));
         }
       }
     }
@@ -373,16 +350,12 @@ int ObPlanCacheValue::match_all_params_info(ObPlanSet *batch_plan_set,
       phy_ctx->reset_datum_param_store();
       phy_ctx->set_original_param_cnt(ab_params->count());
       if (OB_FAIL(batch_plan_set->copy_param_flag_from_param_info(ab_params))) {
-        LOG_WARN("failed copy param flag", K(ret), KPC(ab_params));
       } else if (OB_FAIL(phy_ctx->get_param_store_for_update().assign(*ab_params))) {
-        LOG_WARN("failed to assign params_store", K(ret), K(*ab_params));
       } else if (OB_FAIL(phy_ctx->init_datum_param_store())) {
-        LOG_WARN("failed to init datum store", K(ret));
       }
     }
   } else {
     if (OB_FAIL(batch_plan_set->match_params_info(params, pc_ctx, is_same))) {
-      LOG_WARN("fail to match_params_info", K(ret));
     }
   }
   return ret;
@@ -418,15 +391,12 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
   } else if (OB_UNLIKELY(switchover_epoch_ != new_switchover_epoch)) {
     ret = OB_OLD_SCHEMA_VERSION;
     switchover_epoch_ = new_switchover_epoch;
-    SQL_PC_LOG(TRACE, "switchover_epoch changed, view or table is old version", KR(ret));
   } else if (OB_FAIL(check_value_version_for_get(pc_ctx.sql_ctx_.schema_guard_,
                                                  need_check_schema,
                                                  schema_array,
                                                  is_old_version))) {
-    SQL_PC_LOG(WARN, "fail to check table version", K(ret));
   } else if (true == is_old_version) {
     ret = OB_OLD_SCHEMA_VERSION;
-    SQL_PC_LOG(TRACE, "view or table is old version", K(ret));
   }
   if (OB_FAIL(ret)) {
     //do nothing
@@ -443,7 +413,6 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
       if (OB_FAIL(ObValuesTableCompression::resolve_params_for_values_clause(pc_ctx, stmt_type_,
                   not_param_info_, param_charset_type_, neg_param_index_, not_param_index_,
                   must_be_positive_idx_, fmt_int_or_ch_decint_idx_, params))) {
-        LOG_WARN("failed to resolve_params_for_values_clause ", K(ret));
       }
     } else if (OB_FAIL(resolver_params(pc_ctx,
                                        stmt_type_,
@@ -454,14 +423,12 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
                                        fmt_int_or_ch_decint_idx_,
                                        pc_ctx.fp_result_.raw_params_,
                                        params))) {
-      LOG_WARN("fail to resolver raw params", K(ret));
     }
     if (OB_SUCC(ret)) {
       ObPhysicalPlanCtx *phy_ctx = pc_ctx.exec_ctx_.get_physical_plan_ctx();
       if (NULL != phy_ctx) {
         phy_ctx->set_original_param_cnt(phy_ctx->get_param_store().count());
         if (OB_FAIL(phy_ctx->init_datum_param_store())) {
-          LOG_WARN("fail to init datum param store", K(ret));
         }
       }
     }
@@ -481,15 +448,12 @@ int ObPlanCacheValue::choose_plan(ObPlanCacheCtx &pc_ctx,
         plan = NULL;
         bool is_same = false;
         if (OB_FAIL(match_all_params_info(plan_set, pc_ctx, is_same))) {
-          SQL_PC_LOG(WARN, "fail to match params info", K(ret));
         } else if (!is_same) {        //do nothing
-          LOG_TRACE("params info does not match", KPC(params));
         } else {
           if (OB_FAIL(plan_set->select_plan(pc_ctx, plan))) {
             if (OB_SQL_PC_NOT_EXIST == ret) {
               ret = OB_SUCCESS;
             } else {
-              SQL_PC_LOG(TRACE, "failed to select plan in plan set", K(ret));
             }
           } else if (NULL != params) {
             break; // this place is recommended to keep, if removed, additional markers need to be added in for() to judge, and the macro above the for loop should not be used;
@@ -551,10 +515,8 @@ int ObPlanCacheValue::resolver_params(ObPlanCacheCtx &pc_ctx,
     SQL_PC_LOG(WARN, "raw_params and param_charset_type count is different", K(ret),
                K(raw_param_cnt), K(param_charset_type.count()), K(pc_ctx.raw_sql_));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimal_int))) {
-    LOG_WARN("fail to check enable decimal int", K(ret));
    } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session, false,
                           enable_mysql_compatible_dates))) {
-    LOG_WARN("fail to check enable mysql compatible dates", K(ret));
   } else {
     ObCollationType collation_connection = static_cast<ObCollationType>(session->get_local_collation_connection());
     (void)obj_params->reserve(raw_param_cnt);
@@ -564,7 +526,6 @@ int ObPlanCacheValue::resolver_params(ObPlanCacheCtx &pc_ctx,
                   param_charset_type.at(i), neg_param_index, not_param_index, must_be_positive_idx,
                   fmt_int_or_ch_decint_idx, raw_params.at(i), i, enable_mysql_compatible_dates,
                   value, is_param, enable_decimal_int))) {
-        SQL_PC_LOG(WARN, "failed to resolver param", K(ret), K(i));
       } else if (is_param && OB_FAIL(obj_params->push_back(value))) {
         SQL_PC_LOG(WARN, "fail to push item to array", K(ret));
       } else {/* do nothing */}
@@ -585,7 +546,6 @@ int ObPlanCacheValue::before_resolve_array_params(ObPlanCacheCtx &pc_ctx, int64_
                                                                query_num,
                                                                param_num,
                                                                *ab_params))) {
-    LOG_WARN("failed to create multi_stmt_param_store", K(ret));
   }
   return ret;
 }
@@ -603,9 +563,7 @@ int ObPlanCacheValue::resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx)
       LOG_WARN("failed to check multi insert param value", K(ret));
     } else if (!is_valid) {
       ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-      LOG_TRACE("batched multi_stmt needs rollback", K(ret));
     } else if (OB_FAIL(before_resolve_array_params(pc_ctx, query_num, param_num, ab_params))) {
-      LOG_WARN("fail to prepare resolve params", K(ret));
     } else if (OB_ISNULL(ab_params)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
@@ -634,9 +592,7 @@ int ObPlanCacheValue::resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx)
       LOG_WARN("failed to check multi stmt not param value", K(ret));
     } else if (!is_valid) {
       ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-      LOG_TRACE("batched multi_stmt needs rollback", K(ret));
     } else if (OB_FAIL(before_resolve_array_params(pc_ctx, query_num, param_num, ab_params))) {
-      LOG_WARN("fail to prepare resolve params", K(ret));
     } else if (OB_ISNULL(ab_params)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
@@ -648,7 +604,6 @@ int ObPlanCacheValue::resolve_multi_stmt_params(ObPlanCacheCtx &pc_ctx)
                                                    must_be_positive_idx_,
                                                    fmt_int_or_ch_decint_idx_,
                                                    *ab_params))) {
-      LOG_WARN("failed to check multi stmt param type", K(ret));
     } else {
       pc_ctx.ab_params_ = ab_params;
     }
@@ -688,15 +643,11 @@ int ObPlanCacheValue::resolve_insert_multi_values_param(ObPlanCacheCtx &pc_ctx,
                                        fmt_int_or_ch_decint_idx,
                                        *raw_param_array,
                                        &temp_obj_params))) {
-      LOG_WARN("failed to resolve parames", K(ret));
     } else {
-      LOG_DEBUG("print one insert temp_obj_params", 
-          K(temp_obj_params), K(params_num), K(query_num), K(pc_ctx.not_param_info_));
     }
 
     if (OB_SUCC(ret) && i == 0) {
       if (OB_FAIL(first_obj_params.assign(temp_obj_params))) {
-        LOG_WARN("fail to assign params", K(ret));
       }
       // set type and external type
       for (int64_t j = 0; OB_SUCC(ret) && j < params_num; j++) {
@@ -760,7 +711,6 @@ int ObPlanCacheValue::check_multi_stmt_param_type(ObPlanCacheCtx &pc_ctx,
                                 fmt_int_or_ch_decint_idx,
                                 pc_ctx.multi_stmt_fp_results_.at(i).raw_params_,
                                 &temp_obj_params))) {
-      LOG_WARN("failed to resolve parames", K(ret));
     } else if (i == 0) {
       ret = first_obj_params.assign(temp_obj_params);
       // set type and external type
@@ -808,7 +758,6 @@ int ObPlanCacheValue::check_multi_stmt_not_param_value(
     if (OB_FAIL(check_not_param_value(multi_stmt_fp_results.at(i),
                                       not_param_info,
                                       is_same))) {
-      LOG_WARN("failed to check not param value", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -826,7 +775,6 @@ int ObPlanCacheValue::check_insert_multi_values_param(ObPlanCacheCtx &pc_ctx, bo
     } else if (OB_FAIL(check_not_param_value(*raw_params,
                                              pc_ctx.not_param_info_,
                                              is_same))) {
-      LOG_WARN("failed to check not param value", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -842,7 +790,6 @@ int ObPlanCacheValue::check_not_param_value(const ObIArray<ObPCParam *> &raw_par
   is_same = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_same && i < not_param_info.count(); ++i) {
     if (OB_FAIL(raw_params.at(not_param_info.at(i).idx_, pc_param))) {
-      LOG_WARN("fail to get raw params", K(not_param_info.at(i).idx_), K(ret));
     } else if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(pc_param));
@@ -874,7 +821,6 @@ int ObPlanCacheValue::check_not_param_value(const ObFastParserResult &fp_result,
   is_same = true;
   for (int64_t i = 0; OB_SUCC(ret) && is_same && i < not_param_info.count(); ++i) {
     if (OB_FAIL(fp_result.raw_params_.at(not_param_info.at(i).idx_, pc_param))) {
-      LOG_WARN("fail to get raw params", K(not_param_info.at(i).idx_), K(ret));
     } else if (OB_ISNULL(pc_param)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(pc_param));
@@ -901,16 +847,13 @@ int ObPlanCacheValue::get_one_group_params(int64_t pos, const ParamStore &src_pa
   int ret = OB_SUCCESS;
   int64_t N = src_params.count();
   if (OB_FAIL(dst_params.reserve(N))) {
-    LOG_WARN("fail to reserve paramer_store", K(ret), K(N));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     const ObObjParam &objparam = src_params.at(i);
     const ObSqlArrayObj *array_obj = NULL;
     if (OB_UNLIKELY(!objparam.is_ext_sql_array())) {
       if (OB_FAIL(dst_params.push_back(objparam))) {
-        LOG_WARN("fail to push param_obj to param_store", K(i), K(pos), K(array_obj->data_[pos]), K(ret));
       }
-      LOG_DEBUG("get one obj", K(ret), K(pos), K(i), K(objparam));
     } else if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(objparam.get_ext()))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(i), K(objparam));
@@ -918,9 +861,7 @@ int ObPlanCacheValue::get_one_group_params(int64_t pos, const ParamStore &src_pa
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid parameters pos", K(ret), K(i), K(pos), K(objparam));
     } else if (OB_FAIL(dst_params.push_back(array_obj->data_[pos]))) {
-      LOG_WARN("fail to push param_obj to param_store", K(i), K(pos), K(array_obj->data_[pos]), K(ret));
     } else {
-      LOG_TRACE("get one batch obj", K(pos), K(i), K(array_obj->data_[pos]));
     }
   }
   return ret;
@@ -951,18 +892,13 @@ int ObPlanCacheValue::match_and_generate_ext_params(ObPlanSet *batch_plan_set,
       plan_ctx->reset_datum_param_store();
       plan_ctx->set_original_param_cnt(origin_params_cnt);
       if (OB_FAIL(get_one_group_params(i, *ab_params, param_store))) {
-        LOG_WARN("fail to get one params", K(ret), K(i));
       } else if (OB_FAIL(plan_ctx->get_param_store_for_update().assign(param_store))) {
-        LOG_WARN("assign params failed", K(ret), K(param_store));
       } else if (OB_FAIL(plan_ctx->init_datum_param_store())) {
-        LOG_WARN("init datum_store failed", K(ret), K(param_store));
       } else if (OB_FAIL(batch_plan_set->match_params_info(&(plan_ctx->get_param_store()),
                                                            pc_ctx,
                                                            is_same))) {
-        LOG_WARN("fail to match params info", K(ret), K(i), K(param_store));
       } else if (!is_same) {
         ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-        LOG_TRACE("params is not same type", K(param_store), K(i));
       } else {
         // do nothing
       }
@@ -972,11 +908,8 @@ int ObPlanCacheValue::match_and_generate_ext_params(ObPlanSet *batch_plan_set,
       plan_ctx->reset_datum_param_store();
       plan_ctx->set_original_param_cnt(origin_params_cnt);
       if (OB_FAIL(plan_ctx->get_param_store_for_update().assign(*ab_params))) {
-        LOG_WARN("failed to assign params_store", K(ret), K(*ab_params));
       } else if (OB_FAIL(plan_ctx->init_datum_param_store())) {
-        LOG_WARN("failed to init datum store", K(ret));
       } else {
-        LOG_DEBUG("succ to init datum", K(ret));
       }
     }
   }
@@ -997,10 +930,8 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
   if (OB_FAIL(check_value_version_for_add(plan,
                                           schema_array,
                                           is_old_version))) {
-    SQL_PC_LOG(WARN, "fail to check table version", K(ret));
   } else if (is_old_version) {
     ret = OB_OLD_SCHEMA_VERSION;
-    SQL_PC_LOG(TRACE, "view or table is old version", K(ret));
   }
   if (OB_FAIL(ret)) {//do nothing
   }
@@ -1010,16 +941,12 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
       if (OB_FAIL(cur_plan_set->match_params_info(plan.get_params_info(),
                                                   pc_ctx,
                                                   is_same))) {
-        SQL_PC_LOG(WARN, "fail to match params info", K(ret));
       } else if (false == is_same) { //do nothing
       } else {//param info already matched
-        SQL_PC_LOG(DEBUG, "add plan to plan set");
         need_new_planset = false;
         if (is_multi_stmt_batch &&
             OB_FAIL(match_and_generate_ext_params(cur_plan_set, pc_ctx))) {
-          LOG_TRACE("fail to match and generate ext_params", K(ret));
         } else if (OB_FAIL(cur_plan_set->add_cache_obj(plan, pc_ctx, add_plan_ret))) {
-          SQL_PC_LOG(TRACE, "failed to add plan", K(ret));
         }
         break;
       }
@@ -1030,28 +957,22 @@ int ObPlanCacheValue::add_plan(ObPlanCacheObject &plan,
      *  and then add the plan set to plan cache value
      */
     if (OB_SUCC(ret) && need_new_planset) {
-      SQL_PC_LOG(DEBUG, "add new plan set");
       ObPlanSet *plan_set = nullptr;
       if (OB_FAIL(create_new_plan_set(ObPlanSet::get_plan_set_type_by_cache_obj_type(plan.get_ns()),
                                       plan_set))) {
-        SQL_PC_LOG(WARN, "failed to create new plan set", K(ret));
       } else {
         plan_set->set_plan_cache_value(this);
         if (OB_FAIL(plan_set->init_new_set(pc_ctx,
                                            plan,
                                            get_pc_malloc()))) {
-          LOG_WARN("init new plan set failed", K(ret));
         } else if (is_multi_stmt_batch &&
             OB_FAIL(match_and_generate_ext_params(plan_set, pc_ctx))) {
-          LOG_TRACE("fail to match and generate ext_params", K(ret));
         } else if (OB_FAIL(plan_set->add_cache_obj(plan, pc_ctx, add_plan_ret))) {
-          SQL_PC_LOG(TRACE, "failed to add plan to plan set", K(ret));
         } else if (!plan_sets_.add_last(plan_set)) {
           ret = OB_ERROR;
           SQL_PC_LOG(WARN, "failed to add plan set to plan cache value", K(ret));
         } else {
           ret = OB_SUCCESS;
-          SQL_PC_LOG(DEBUG, "plan set added", K(ret));
         }
 
         // free the memory if not used
@@ -1083,7 +1004,6 @@ void ObPlanCacheValue::reset()
   plan_sets_.clear();
   // free plan_cache_key
   if (NULL == pc_alloc_) {
-    SQL_PC_LOG(TRACE, "pc alloc not init, may be reset before", K(pc_alloc_));
   } else {
     for (int64_t i = 0; i < not_param_info_.count(); i++) {
       if (NULL != not_param_info_.at(i).raw_text_.ptr()) {
@@ -1159,7 +1079,6 @@ int ObPlanCacheValue::check_value_version_for_add(const ObPlanCacheObject &cache
                                   cache_obj.get_outline_state().outline_version_,
                                   schema_array,
                                   result))) {
-    LOG_WARN("failed to check pcv version", K(ret));
   } else {
     // do nothing
   }
@@ -1186,7 +1105,6 @@ int ObPlanCacheValue::check_value_version_for_get(share::schema::ObSchemaGetterG
                                          local_outline_version,
                                          schema_array,
                                          result))) {
-    LOG_WARN("failed to check value version", K(ret));
   } else {
     // do nothing
   }
@@ -1213,7 +1131,6 @@ int ObPlanCacheValue::check_value_version(bool need_check_schema,
       is_old_version = true;
     } else if (OB_FAIL(check_dep_schema_version(schema_array,
                                                 is_old_version))) {
-      LOG_WARN("failed to check schema obj versions", K(ret));
     } else {
       // do nothing
     }
@@ -1238,10 +1155,8 @@ int ObPlanCacheValue::check_dep_schema_version(const ObIArray<PCVSchemaObj> &sch
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("got an unexpected null table schema", K(ret), K(schema_obj1));
       } else if (*schema_obj1 == schema_obj2) { // schema do match
-        LOG_DEBUG("matched schema objs", K(*schema_obj1), K(schema_obj2), K(i));
         // do nothing
       } else {
-        LOG_TRACE("mismatched schema objs", K(*schema_obj1), K(schema_obj2), K(i));
         is_old_version = true;
       }
     }
@@ -1274,8 +1189,6 @@ int ObPlanCacheValue::get_outline_version(ObSchemaGetterGuard &schema_guard,
             signature,
             false,
             outline_info))) {
-      LOG_WARN("failed to get_outline_info", K(database_id), K(signature));
-    // try format
     } else if (NULL == outline_info && 
               OB_FAIL(schema_guard.get_outline_info_with_signature(database_id,
                       format_signature,
@@ -1341,7 +1254,6 @@ int ObPlanCacheValue::match(ObPlanCacheCtx &pc_ctx,
     for (int64_t i = 0; OB_SUCC(ret) && is_same && i < not_param_var_.count(); ++i) {
       ps_param = NULL;
       if (OB_FAIL(pc_ctx.fp_result_.parameterized_params_.at(not_param_var_[i].idx_, ps_param))) {
-        LOG_WARN("fail to get ps param", K(not_param_info_[i].idx_), K(ret));
       } else if (OB_ISNULL(ps_param)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ps_param));
@@ -1370,14 +1282,12 @@ int ObPlanCacheValue::match(ObPlanCacheCtx &pc_ctx,
     }
   } else {
     if (OB_FAIL(check_not_param_value(pc_ctx.fp_result_, not_param_info_, is_same))) {
-      LOG_WARN("failed to check not param value", K(ret));
     }
   }
 
   // check for temp tables and same table
   if (OB_SUCC(ret) && is_same && schema_array.count() != 0) {
     if (OB_FAIL(match_dep_schema(pc_ctx, schema_array, is_same))) {
-      LOG_WARN("failed to check dep table schema", K(ret));
     }
   }
   return ret;
@@ -1493,7 +1403,6 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null argument", K(ret), K(schema_guard));
   } else if (OB_FAIL(stored_schema_objs_.init(dep_table_store.count()))) {
-    LOG_WARN("failed to init stored_schema_objs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dep_table_store.count(); i++) {
       const ObSchemaObjVersion &table_version = dep_table_store.at(i);
@@ -1508,17 +1417,14 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
         } else if (FALSE_IT(pcv_schema_obj = new(obj_buf)PCVSchemaObj(pc_alloc_))) {
           // do nothing
         } else if (OB_FAIL(pcv_schema_obj->init_with_version_obj(table_version))) {
-          LOG_WARN("failed to init pcv schema obj", K(ret), K(table_version));
         } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
-          LOG_WARN("failed to push back array", K(ret));
         } else {
           obj_buf = nullptr;
           pcv_schema_obj = nullptr;
         }
       } else if (OB_FAIL(schema_guard->get_table_schema(
                   table_version.get_object_id(),
-                  table_schema))) { // now deal with table schema
-        LOG_WARN("failed to get table schema", K(ret), K(table_version), K(table_schema));
+                  table_schema))) {
       } else if (nullptr == table_schema) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get an unexpected null schema", K(ret), K(table_schema));
@@ -1531,11 +1437,9 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
       } else if (FALSE_IT(pcv_schema_obj = new(obj_buf)PCVSchemaObj(pc_alloc_))) {
         // do nothing
       } else if (OB_FAIL(pcv_schema_obj->init(table_schema))) {
-        LOG_WARN("failed to init pcv schema obj with table schema", K(ret));
       } else if (FALSE_IT(pcv_schema_obj->is_explicit_db_name_ = table_version.is_db_explicit_)) {
         // do nothing
       } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
-        LOG_WARN("failed to push back array", K(ret));
       } else if(!contain_sys_name_table_) {
         // Plan matching needs to distinguish regular tables from system tables
         // with the same name. Tables under sys include system tables and views,
@@ -1545,7 +1449,6 @@ int ObPlanCacheValue::set_stored_schema_objs(const DependenyTableStore &dep_tabl
         if (OB_FAIL(share::schema::ObSysTableChecker::is_sys_table_name(OB_SYS_DATABASE_ID,
                                                                                table_schema->get_table_name(),
                                                                                contain_sys_name_table_))) {
-          LOG_WARN("failed to check sys table", K(ret));
         } else {
           // do nothing
         }
@@ -1587,7 +1490,6 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
   if (OB_FAIL(need_check_schema_version(pc_ctx,
                                         new_schema_version,
                                         need_check_schema))) {
-    LOG_WARN("failed to get need_check_schema flag", K(ret));
   } else if (!need_check_schema) {
     // do nothing
   } else if (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
@@ -1611,14 +1513,11 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
         } else if (OB_FAIL(schema_guard.get_schema_version(pcv_schema->schema_type_,
                                                     pcv_schema->schema_id_,
                                                     new_version))) {
-          LOG_WARN("failed to get schema version",
-                   K(ret), K(pcv_schema->schema_type_), K(pcv_schema->schema_id_));
         } else {
           tmp_schema_obj.schema_id_ = pcv_schema->schema_id_;
           tmp_schema_obj.schema_version_ = new_version;
           tmp_schema_obj.schema_type_ = pcv_schema->schema_type_;
           if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
-            LOG_WARN("failed to push back array", K(ret));
           } else {
             tmp_schema_obj.reset();
           }
@@ -1627,10 +1526,7 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
                                                               pcv_schema->database_id_,
                                                               pcv_schema->table_name_,
                                                               false,
-                                                              table_schema))) { // mysql mode directly use pcv schema cached db id query
-        LOG_WARN("failed to get table schema",
-                 K(ret), K(pcv_schema->database_id_),
-                 K(pcv_schema->table_name_));
+                                                              table_schema))) {
       } else {
         // do nothing
       }
@@ -1641,11 +1537,8 @@ int ObPlanCacheValue::get_all_dep_schema(ObPlanCacheCtx &pc_ctx,
         tmp_schema_obj.reset();
       } else if (nullptr == table_schema) {
         ret = OB_OLD_SCHEMA_VERSION;
-        LOG_TRACE("table not exist", K(ret), K(*pcv_schema), K(table_schema));
       } else if (OB_FAIL(tmp_schema_obj.init_without_copy_name(table_schema))) {
-        LOG_WARN("failed to init pcv schema obj", K(ret));
       } else if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
-        LOG_WARN("failed to push back array", K(ret));
       } else {
         table_schema = nullptr;
         tmp_schema_obj.reset();
@@ -1708,26 +1601,20 @@ int ObPlanCacheValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
   for (int64_t i = 0; OB_SUCC(ret) && i < dep_schema_objs.count(); i++) {
     if (TABLE_SCHEMA != dep_schema_objs.at(i).get_schema_type()) {
       if (OB_FAIL(tmp_schema_obj.init_with_version_obj(dep_schema_objs.at(i)))) {
-        LOG_WARN("failed to init pcv schema obj", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
-        LOG_WARN("failed to push back pcv schema obj", K(ret));
       } else {
         tmp_schema_obj.reset();
       }
     } else if (OB_FAIL(schema_guard.get_simple_table_schema( dep_schema_objs.at(i).get_object_id(), table_schema))) {
-      LOG_WARN("failed to get table schema",
-               K(ret), K(dep_schema_objs.at(i)));
     } else if (nullptr == table_schema) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get an unexpected null table schema", K(ret));
     } else if (table_schema->is_index_table()) {
       // do nothing
     } else if (OB_FAIL(tmp_schema_obj.init_without_copy_name(table_schema))) {
-      LOG_WARN("failed to init pcv schema obj", K(ret));
     } else if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
-      LOG_WARN("failed to push back pcv schema obj", K(ret));
     } else {
       table_schema = nullptr;
       tmp_schema_obj.reset();
@@ -1737,7 +1624,6 @@ int ObPlanCacheValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
   if (OB_FAIL(ret)) {
     schema_array.reset();
   } else {
-    LOG_DEBUG("get all dep schema", K(schema_array));
   }
   return ret;
 }
@@ -1749,7 +1635,6 @@ int ObPlanCacheValue::need_check_schema_version(ObPlanCacheCtx &pc_ctx,
   int ret = OB_SUCCESS;
   need_check = false;
   if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_schema_version(new_schema_version))) {
-    LOG_WARN("failed to get runtime schema version", K(ret));
   } else {
     int64_t cached_runtime_schema_version = ATOMIC_LOAD(&runtime_schema_version_);
     /*

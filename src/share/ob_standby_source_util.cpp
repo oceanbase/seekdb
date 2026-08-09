@@ -72,7 +72,6 @@ int ObStandbySourceUtil::get_first_service_addr(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(addr.parse_from_string(addr_str))) {
-      LOG_WARN("failed to parse standby service address", KR(ret), K(addr_str));
     } else if (!addr.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid standby service address", KR(ret), K(addr_str));

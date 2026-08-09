@@ -52,7 +52,6 @@ int ObPartIterator::next(const ObPartition *&part)
         ObString part_name(
                            ObPartitionSchema::MYSQL_NON_PARTITIONED_TABLE_PART_NAME);
         if (OB_FAIL(part_.set_part_name(part_name))) {
-          LOG_WARN("fail to set part name", KR(ret), K(part_name));
         } else {
           part_.set_part_id(0);
           part = &part_;

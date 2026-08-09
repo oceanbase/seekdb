@@ -64,7 +64,6 @@ int ObAllVirtualTabletBufferInfo::get_tablet_pool_infos()
   ObMemAttr attr("TabletBuffer");
   buffer_infos_.set_attr(attr);
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>()->get_tablet_buffer_infos(buffer_infos_))) {
-    SERVER_LOG(WARN, "fail to get tablet buffer infos", K(ret));
   }
   return ret;
 }
@@ -80,7 +79,6 @@ int ObAllVirtualTabletBufferInfo::inner_get_next_row(common::ObNewRow *&row)
   } else if (buffer_infos_.size() <= index_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(gen_row(buffer_infos_[index_], row))) {
-    SERVER_LOG(WARN, "fail to gen_row", K(ret));
   } else {
     index_++;
   }

@@ -179,7 +179,6 @@ void ObMdsTableHandler::mark_removed_from_t3m(ObTabletPointer *pointer)
   MdsRLockGuard guard(lock_);
   if (mds_table_handle_.is_valid()) {
     if (OB_FAIL(mds_table_handle_.mark_removed_from_t3m(pointer))) {
-      MDS_LOG(WARN, "fail to unregister_from_mds_table_mgr", K(*this));
     }
   }
 }

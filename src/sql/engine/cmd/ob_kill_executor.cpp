@@ -34,7 +34,6 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("session manager is not installed", K(ret));
   } else if (OB_FAIL(arg.init(ctx, stmt))) {
-    LOG_WARN("fail to init kill_session arg", K(ret), K(arg), K(ctx), K(stmt));
   } else if (OB_FAIL(kill_session(arg, *session_mgr))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_UNKNOWN_CONNECTION;
@@ -61,7 +60,6 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   uint32_t sess_id = arg.sess_id_;
   ObSessionGetterGuard guard(sess_mgr, sess_id);
   if (OB_FAIL(guard.get_session(sess_info))) {
-    LOG_WARN("fail to get session", K(ret), K(sess_id));
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", K(ret), K(arg));
@@ -73,10 +71,8 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
     LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
   } else if (arg.is_query_) {
     if (OB_FAIL(sess_mgr.kill_query(*sess_info))) {
-      LOG_WARN("fail to kill query", K(ret), K(arg));
     }
   } else if (OB_FAIL(sess_mgr.kill_session(*sess_info))) {
-    LOG_WARN("fail to kill session", K(ret), K(arg));
   }
   return ret;
 }

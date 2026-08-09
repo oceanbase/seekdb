@@ -33,7 +33,6 @@ int ObServerCheckpointReader::read_checkpoint(const ObServerSuperBlock &super_bl
     ret = OB_ERR_SYS;
     LOG_WARN("super block is invalid", K(ret), K(super_block));
   } else if (OB_FAIL(read_runtime_meta_checkpoint(super_block.body_.runtime_meta_entry_))) {
-    LOG_WARN("fail to read runtime meta checkpoint", K(ret), K(super_block));
   }
   return ret;
 }
@@ -46,7 +45,6 @@ int ObServerCheckpointReader::read_runtime_meta_checkpoint(const MacroBlockId &e
   if (OB_UNLIKELY(!entry_block.is_valid())) {
     LOG_INFO("has no runtime config checkpoint");
   } else if (OB_FAIL(runtime_meta_item_reader_.init(entry_block, mem_attr))) {
-    LOG_WARN("fail to init runtime config item reader", K(ret));
   } else {
     char *item_buf = nullptr;
     int64_t item_buf_len = 0;
@@ -60,7 +58,6 @@ int ObServerCheckpointReader::read_runtime_meta_checkpoint(const MacroBlockId &e
           break;
         }
       } else if (OB_FAIL(deserialize_runtime_meta(item_buf, item_buf_len))) {
-        LOG_WARN("failed to replay_runtime_meta_checkpoint", K(ret));
       }
     }
   }
@@ -77,7 +74,6 @@ int ObServerCheckpointReader::deserialize_runtime_meta(const char *buf, const in
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(runtime_meta.deserialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to deserialize", K(ret));
   } else {
     // Keep cover semantics (last item wins)
     runtime_meta_ = runtime_meta;

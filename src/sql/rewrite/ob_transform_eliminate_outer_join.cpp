@@ -38,11 +38,8 @@ int ObTransformEliminateOuterJoin::transform_one_stmt(common::ObIArray<ObParentD
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt is NULL", K(ret));
   } else if (OB_FAIL(eliminate_outer_join(parent_stmts, stmt, trans_happened))) {
-    LOG_WARN("failed to eliminate_outer_join on stmt", K(ret));
   } else if (trans_happened) {
-    LOG_TRACE("succeed to eliminate outer join", K(trans_happened));
     if (OB_FAIL(add_transform_hint(*stmt))) {
-      LOG_WARN("failed to add transform hint", K(ret));
     }
   }
   return ret;
@@ -62,9 +59,7 @@ int ObTransformEliminateOuterJoin::eliminate_outer_join(ObIArray<ObParentDMLStmt
   } else if (stmt->get_joined_tables().empty()) {
     /*do nothing*/
   } else if (OB_FAIL(stmt->get_equal_set_conditions(conditions, true))) {
-    LOG_WARN("failed to get equal set conditions", K(ret));
   } else if (OB_FAIL(ObTransformUtils::get_extra_condition_from_parent(parent_stmt, stmt, conditions))) {
-    LOG_WARN("failed to get null reject select", K(ret));
   } else {
     common::ObArray<FromItem> from_item_list;
     common::ObArray<JoinedTable*> joined_table_list;
@@ -78,11 +73,8 @@ int ObTransformEliminateOuterJoin::eliminate_outer_join(ObIArray<ObParentDMLStmt
     //after trans, reset table item
     if (OB_SUCC(ret)) {
       if (OB_FAIL(stmt->reset_from_item(from_item_list))) {
-        LOG_WARN("failed to reset table_items", K(ret));
       } else if (OB_FAIL(stmt->get_joined_tables().assign(joined_table_list))) {
-        LOG_WARN("failed to reset joined table container", K(ret));
       } else {
-        LOG_TRACE("succ to to do outer join elimination");
       }
     }
   }
@@ -105,7 +97,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param has null", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
@@ -115,7 +106,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
                                                 joined_table_list,
                                                 should_move_to_from_list,
                                                 is_my_joined_table_type))) {
-    LOG_WARN("check joined table type failed", K(ret));
   } else if (is_my_joined_table_type) {
     OPT_TRACE("try to eliminate joined table:", cur_table_item);
     // Sub-table cannot be found from stmt, can only be obtained through pointer conversion to joined_table
@@ -137,7 +127,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
       TableItem *r_child = process_join->right_table_;
       ObSEArray<ObRawExpr*, 4> left_child_conditions;
       if (OB_FAIL(append_array_no_dup(left_child_conditions, conditions))) {
-        LOG_WARN("failed to append array no dup.", K(ret));
       } else if (process_join->joined_type_ == INNER_JOIN
                   && OB_FAIL(append_array_no_dup(left_child_conditions, process_join->join_conditions_))) {
         LOG_WARN("failed to append array no dup.", K(ret));
@@ -148,11 +137,9 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
                                                                                 left_child_conditions,
                                                                                 child_should_move_to_from_list,
                                                                                 trans_happened)))) {
-        LOG_WARN("failed to process the left child", K(ret), K(r_child));
       } else {
         ObSEArray<ObRawExpr*, 4> right_child_conditions;
         if (OB_FAIL(append_array_no_dup(right_child_conditions, conditions))) {
-          LOG_WARN("failed to append array no dup.", K(ret));
         } else if (process_join->joined_type_ != FULL_OUTER_JOIN
                   && OB_FAIL(append_array_no_dup(right_child_conditions, process_join->join_conditions_))) {
           LOG_WARN("failed to append array no dup.", K(ret));
@@ -163,7 +150,6 @@ int ObTransformEliminateOuterJoin::recursive_eliminate_outer_join_in_table_item(
                                                                                   right_child_conditions,
                                                                                   child_should_move_to_from_list,
                                                                                   trans_happened)))) {
-          LOG_WARN("failed to process the right child", K(ret), K(r_child));
         } else {
           /*do nothing*/
         }
@@ -197,7 +183,6 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
       from_item.is_joined_ = false;
       from_item.table_id_ = cur_table_item->table_id_;
       if (OB_FAIL(from_item_list.push_back(from_item))) {
-        LOG_WARN("failed to push to from item list", K(ret));
       } else {
         /* do nothing */
       }
@@ -220,9 +205,7 @@ int ObTransformEliminateOuterJoin::is_outer_joined_table_type(ObDMLStmt *stmt,
         from_item.is_joined_ = true;
         from_item.table_id_ = cur_table_item->table_id_;
         if (OB_FAIL(from_item_list.push_back(from_item))) {
-          LOG_WARN("failed to push to from item list", K(ret));
         } else if (OB_FAIL(joined_table_list.push_back(cur_joined_table_item))) {
-          LOG_WARN("failed to push to joined table list", K(ret));
         } else {
           /* do nothing */
         }
@@ -253,7 +236,6 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
     if (FULL_OUTER_JOIN == cur_joined_table->joined_type_) {
       // Can left outer join be eliminated
       if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
-        LOG_WARN("failed to test eliminated left join condition", K(ret));
       } else if (can_eliminate) {
         //left join elimination, rotate right join to left join
         trans_happened = true;
@@ -270,7 +252,6 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
       if (OB_SUCC(ret)) {
         // Attempt to eliminate left join after conversion from right join
         if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
-            LOG_WARN("failed to test eliminated right join condition", K(ret));
         } else if (can_eliminate) {
             trans_happened = true;
             if (cur_joined_table->joined_type_ == LEFT_OUTER_JOIN) {
@@ -297,7 +278,6 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
     } else if (LEFT_OUTER_JOIN == cur_joined_table->joined_type_) {
       // Can left outer join be eliminated
       if (OB_FAIL(can_be_eliminated(stmt, cur_joined_table, conditions, can_eliminate))) {
-          LOG_WARN("failed to test eliminated left join condition", K(ret));
       } else if (can_eliminate) {
         trans_happened = true;
         cur_joined_table->joined_type_ = INNER_JOIN;
@@ -313,9 +293,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
         if (should_move_to_from_list) {
           trans_happened = true;
           if (OB_FAIL(stmt->add_condition_exprs(cur_joined_table->join_conditions_))) {
-            LOG_WARN("failed to move join conditions into where clause", K(ret));
           } else if (OB_FAIL(append_array_no_dup(conditions, cur_joined_table->join_conditions_))) {
-            LOG_WARN("failed to append conditions.", K(ret));
           } else {
             /* do nothing. */
           }
@@ -328,9 +306,7 @@ int ObTransformEliminateOuterJoin::do_eliminate_outer_join(ObDMLStmt *stmt,
         from_item.is_joined_ = true;
         from_item.table_id_ = cur_joined_table->table_id_;
         if (OB_FAIL(from_item_list.push_back(from_item))) {
-          LOG_WARN("faled to push back origin from item", K(ret));
         } else if (OB_FAIL(joined_table_list.push_back(cur_joined_table))) {
-          LOG_WARN("faield to push back origin joined item", K(ret));
         } else {
           /* do nothing. */
         }
@@ -351,15 +327,12 @@ int ObTransformEliminateOuterJoin::can_be_eliminated(ObDMLStmt *stmt,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(can_be_eliminated_with_null_reject(stmt, joined_table, conditions, can_eliminate))) {
-    LOG_WARN("failed to test eliminated condition with null reject", K(ret));
   } else if (can_eliminate) {
     /*do nothing*/
   } else if (OB_FAIL(can_be_eliminated_with_foreign_primary_join(stmt, joined_table, conditions, can_eliminate))) {
-    LOG_WARN("failed to test eliminated condition with foreign primary join", K(ret));
   } else if (can_eliminate) {
     /*do nothing*/
   } else if (OB_FAIL(can_be_eliminated_with_null_side_column_in_aggr(stmt, joined_table, can_eliminate))) {
-    LOG_WARN("failed to test eliminated condition with aggr null column", K(ret));
   } else {
     /*do nothing*/
   }
@@ -389,7 +362,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_reject(ObDMLStmt 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("right table is null", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(*(joined_table->right_table_), right_table_ids))) {
-    LOG_WARN("failed to get right table relation ids", K(ret));
   }
 
   // check whether any condition is null reject for any column of the right table
@@ -399,11 +371,9 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_reject(ObDMLStmt 
     if (OB_FAIL(extract_columns(condition,
                                 right_table_ids,
                                 col_exprs))) {
-      LOG_WARN("failed to extract columns", K(ret));
     } else if (OB_FAIL(ObTransformUtils::is_null_reject_condition(condition,
                                                                   col_exprs,
                                                                   has_null_reject))) {
-      LOG_WARN("failed to check whether the condition is null rejection", K(ret));
     } else if (has_null_reject) {
       OPT_TRACE("joined table eliminated by", condition);
     }
@@ -444,22 +414,17 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
                                               joined_table->left_table_,
                                               joined_table->right_table_,
                                               is_simple_condition))) {
-    LOG_WARN("check is simple join condition failed", K(ret));
   } else if (!is_simple_condition) {
     /*on condition is not a simple column equality join, cannot be eliminated, do nothing*/
     OPT_TRACE("on condition is not simply join condition");
   } else if (OB_FAIL(stmt->get_table_rel_ids(*(joined_table->left_table_),left_table_ids))) {
-    LOG_WARN("failed to get left table rel ids", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(*(joined_table->right_table_), right_table_ids))) {
-    LOG_WARN("failed to get right table relation ids", K(ret));
   } else if (OB_FAIL(extract_columns_from_join_conditions(joined_table->join_conditions_,
                                                           left_table_ids,
                                                           left_col_exprs))) {
-    LOG_WARN("failed to extract columns", K(ret));
   } else if (OB_FAIL(extract_columns_from_join_conditions(joined_table->join_conditions_,
                                                           right_table_ids,
                                                           right_col_exprs))) {
-    LOG_WARN("failed to extract columns", K(ret));
   } else if(left_col_exprs.count() != right_col_exprs.count() ) {
     /*do nothing*/
   } else if (OB_FAIL(ObTransformUtils::check_foreign_primary_join(joined_table->left_table_,
@@ -472,14 +437,12 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
                                                                   is_foreign_primary_join,
                                                                   is_first_table_parent,
                                                                   foreign_key_info))) {
-    LOG_WARN("failed to check foreign primary join", K(ret));
   } else if (!is_foreign_primary_join || is_first_table_parent) {
     /*Not a primary foreign key join, or the foreign key table is not the left table, cannot eliminate, do nothing*/
     OPT_TRACE("not foreign primary join");
   } else if (OB_FAIL(ObTransformUtils::is_foreign_key_rely(ctx_->session_info_,
                                                             foreign_key_info,
                                                             is_foreign_rely))) {
-    LOG_WARN("can not get foreign key info", K(ret));
   } else if (!is_foreign_rely) {
     /*Non-reliable foreign key relationship, cannot be removed, do nothing*/
     OPT_TRACE("foreign key is not rely");
@@ -489,7 +452,6 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_foreign_primary_join(O
     OPT_TRACE("right table has parition hint");
   } else if (OB_FAIL(is_all_columns_not_null(stmt, left_col_exprs, conditions,
                                              is_all_foreign_columns_not_null))) {
-    LOG_WARN("check foreign columns is not null failed", K(ret));
   } else if (is_all_foreign_columns_not_null) {
     can_eliminate = true;
   } else {
@@ -523,12 +485,10 @@ int ObTransformEliminateOuterJoin::is_all_columns_not_null(ObDMLStmt *stmt,
                                               static_cast<const ObColumnRefRawExpr *>(col_expr),
                                               ctx_->session_info_,
                                               is_nullable))) {
-        LOG_WARN("check column is not null failed", K(ret));
       } else if (!is_nullable) {
         /*do nothing*/
       } else if (OB_FAIL(ObTransformUtils::has_null_reject_condition(conditions, col_expr,
                                                                      has_null_reject))) {
-        LOG_WARN("failed to check whether the condition is null rejection", K(ret));
       } else {
         is_nullable = !has_null_reject;
       }
@@ -593,20 +553,17 @@ int ObTransformEliminateOuterJoin::extract_columns(const ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr is null", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (expr->is_column_ref_expr()) {
     if (rel_ids.is_superset(expr->get_relation_ids())) {
       if (OB_FAIL(col_exprs.push_back(static_cast<const ObColumnRefRawExpr *>(expr)))) {
-        LOG_WARN("failed to push back col expr", K(ret));
       } else {/*do nothing*/}
     } else {/*do nothing*/}
   } else if (expr->has_flag(CNT_COLUMN)) {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(extract_columns(expr->get_param_expr(i), rel_ids, col_exprs)))) {
-        LOG_WARN("failed to extract columns from param", K(ret));
       } else {/*do nothing*/}
     }
   } else {/*do nothing*/}
@@ -622,7 +579,6 @@ int ObTransformEliminateOuterJoin::extract_columns_from_join_conditions(const Ob
     if (OB_FAIL(extract_columns(exprs.at(i),
                                 rel_ids,
                                 col_exprs))) {
-      LOG_WARN("extract columns failed", K(ret));
     } else {
       /*do nothing*/
     }
@@ -656,14 +612,12 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_side_column_in_ag
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get right join item failed", K(ret));
   } else if (OB_FAIL(stmt->get_table_rel_ids(*right_table, right_table_ids))) {
-    LOG_WARN("failed to get right table relation ids", K(ret));
   } else {
     can_eliminate = true;
     
     if (!is_only_full_group_by_on(ctx_->session_info_->get_sql_mode())) {
       for (int64_t i = 0; OB_SUCC(ret) && can_eliminate && i < select_stmt->get_select_item_size(); ++i) {
         if (OB_FAIL(check_expr_ref_column_all_in_aggr(select_stmt->get_select_item(i).expr_, can_eliminate))) {
-          LOG_WARN("check expr ref column all in aggr failed", K(ret));
         }
       }
     }
@@ -683,11 +637,9 @@ int ObTransformEliminateOuterJoin::can_be_eliminated_with_null_side_column_in_ag
       } else if (!aggr_expr->has_flag(CNT_COLUMN)) {
         can_eliminate = false;
       } else if (OB_FAIL(extract_columns(aggr_expr, right_table_ids, right_col_exprs))) {
-        LOG_WARN("failed to extract columns", K(ret));
       } else {
         for (int64_t param_index = 0; OB_SUCC(ret) && can_eliminate && param_index < aggr_expr->get_real_param_count(); param_index++) {
           if (OB_FAIL(ObTransformUtils::is_null_propagate_expr(aggr_expr->get_real_param_exprs().at(param_index), right_col_exprs, can_eliminate))) {
-            LOG_WARN("failed to call is_null_propagate_expr", K(ret));
           }
         }
       }
@@ -710,7 +662,6 @@ int ObTransformEliminateOuterJoin::check_expr_ref_column_all_in_aggr(const ObRaw
   } else if (expr->has_flag(CNT_COLUMN)) {
     for (int64_t i = 0; OB_SUCC(ret) && is_in && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(check_expr_ref_column_all_in_aggr(expr->get_param_expr(i), is_in)))) {
-        LOG_WARN("failed to check expr ref column all in aggr", K(ret));
       }
     }
   }

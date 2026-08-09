@@ -34,7 +34,6 @@ int get_cipher_op_mode(share::ObCipherOpMode &op_mode, const ObSQLSessionInfo *s
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_BLOCK_ENCRYPTION_MODE, encryption))) {
-    LOG_WARN("fail to get block encryption variable", K(ret));
   } else if (encryption >= 0 && encryption <= 17) {
     encryption++;
     op_mode = static_cast<share::ObCipherOpMode>(encryption);
@@ -105,7 +104,6 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, key))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (OB_ISNULL(src) || OB_ISNULL(key)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("got null ptr", K(ret));
@@ -135,7 +133,6 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
                                          src_str.ptr(), src_str.length(),
                                          buf_length, NULL, 0, NULL, 0, 0, op_mode,
                                          buf, out_len, NULL))) {
-        LOG_WARN("failed to encrypt", K(ret));
       }
     } else if (!is_ecb) {
       ObString iv_str = expr.locate_param_datum(ctx, 2).get_string();
@@ -147,7 +144,6 @@ int ObExprBaseEncrypt::eval_encrypt(const ObExpr &expr,
                                                 src_str.ptr(), src_str.length(),
                                                 buf_length, iv_str.ptr(), iv_str.length(), NULL, 0,
                                                 0, op_mode, buf, out_len, NULL))) {
-        LOG_WARN("failed to encrypt", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -211,7 +207,6 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
   bool is_null = false;
   bool is_ecb = true;
   if (OB_FAIL(expr.eval_param_value(ctx, src, key))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (src->is_null() || key->is_null()) {
     res.set_null();
   } else if (OB_UNLIKELY(2 != expr.arg_cnt_ && 3 != expr.arg_cnt_)) {
@@ -239,7 +234,6 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
       if (OB_FAIL(ObBlockCipher::decrypt(key_str.ptr(), key_str.length(),
                                          src_str.ptr(), src_str.length(), buf_len, NULL, 0, NULL, 0,
                                          NULL, 0, op_mode, buf, out_len))) {
-        LOG_WARN("failed to decrypt", K(ret));
       }
     } else {
       ObString iv_str = expr.locate_param_datum(ctx, 2).get_string();
@@ -251,7 +245,6 @@ int ObExprBaseDecrypt::eval_decrypt(const ObExpr &expr,
                                                 src_str.ptr(), src_str.length(), buf_len,
                                                 iv_str.ptr(), iv_str.length(), NULL, 0, NULL, 0,
                                                 op_mode, buf, out_len))) {
-        LOG_WARN("failed to decrypt", K(ret));
       }
     }
     if (OB_ERR_AES_DECRYPT == ret) {
@@ -297,12 +290,10 @@ int ObExprAesEncrypt::eval_aes_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_ENCRYPT), N_AES_ENCRYPT);
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
-    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using aes_encrypt with not aes block_encryption_mode");
   } else if (OB_FAIL(eval_encrypt(expr, ctx, op_mode, func_name, res))) {
-    LOG_WARN("failed to eval aes encrypt", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -329,12 +320,10 @@ int ObExprAesDecrypt::eval_aes_decrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObCipherOpMode op_mode = ObCipherOpMode::ob_invalid_mode;
   ObString func_name(strlen(N_AES_DECRYPT), N_AES_DECRYPT);
   if (OB_FAIL(get_cipher_op_mode(op_mode, ctx.exec_ctx_.get_my_session()))) {
-    LOG_WARN("fail to get cipher mode", K(ret));
   } else if (!ObEncryptionUtil::is_aes_encryption(op_mode)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using aes_decrypt with not aes block_encryption_mode");
   } else if (OB_FAIL(eval_decrypt(expr, ctx, op_mode, func_name, res))) {
-    LOG_WARN("failed to eval aes decrypt", K(ret));
   } else { /* do nothing */ }
   return ret;
 }

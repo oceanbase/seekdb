@@ -44,7 +44,6 @@ int ObMediumListChecker::validate_medium_info_list(
   if (skip_validate) {
     // do nothing
   } else if (OB_FAIL(inner_check_medium_list(extra_info, medium_info_array, last_major_snapshot))) {
-    LOG_WARN("failed to inner check medium info list", K(ret));
   }
   return ret;
 }
@@ -58,17 +57,13 @@ int ObMediumListChecker::inner_check_medium_list(
   int64_t next_medium_info_idx = 0;
 
   if (OB_FAIL(check_extra_info(extra_info, last_major_snapshot))) {
-    LOG_WARN("failed to check extra info", KR(ret), K(last_major_snapshot), K(extra_info));
   } else if (nullptr == medium_info_array || medium_info_array->empty()) {
     // do nothing
   } else if (OB_FAIL(filter_finish_medium_info(*medium_info_array, last_major_snapshot, next_medium_info_idx))) {
-    LOG_WARN("failed to filter finish medium info", KR(ret), K(last_major_snapshot), K(next_medium_info_idx));
   } else if (next_medium_info_idx >= medium_info_array->count()) {
     // do nothing
   } else if (OB_FAIL(check_continue(*medium_info_array, next_medium_info_idx))) {
-    LOG_WARN("failed to check medium list continue", KR(ret), K(last_major_snapshot), KPC(medium_info_array));
   } else if (OB_FAIL(check_next_schedule_medium(*medium_info_array->at(next_medium_info_idx), last_major_snapshot))) {
-    LOG_WARN("failed to check next schedule medium info", KR(ret), K(last_major_snapshot), KPC(medium_info_array), K(next_medium_info_idx));
   }
   return ret;
 }

@@ -30,7 +30,6 @@ int ObParallelTaskController::init(int64_t max_parallelism)
   if (OB_UNLIKELY(max_parallelism <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(vacant_cond_.init(common::ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("init vacant condition failed", K(ret));
   } else {
     max_parallelism_ = max_parallelism;
   }
@@ -126,7 +125,6 @@ int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mod
   OZ (insertsql_keys.append(")"));
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("append failed", K(ret), K(insertsql_keys.length()));
   }
 
   return ret;
@@ -140,7 +138,6 @@ int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t res
   int64_t current_time = ObTimeUtil::current_time();
 
   if (OB_FAIL(session.is_timeout(is_timeout))) {
-    LOG_WARN("get session timeout info failed", K(ret));
   } else if (OB_UNLIKELY(worker_query_timeout < current_time + reserved_us)) {
     ret = OB_TIMEOUT;
     LOG_WARN("query is timeout", K(ret));
@@ -148,10 +145,8 @@ int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t res
     ret = OB_TIMEOUT;
     LOG_WARN("session is timeout", K(ret));
   } else if (OB_FAIL(session.check_session_status())) {
-    LOG_WARN("session's state is not OB_SUCCESS", K(ret));
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("LOAD DATA timeout", K(ret), K(session.get_server_sid()), K(worker_query_timeout), K(current_time), K(reserved_us));
   }
   return ret;
 }
@@ -170,9 +165,7 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", KR(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
-    LOG_WARN("fail to get sys variable", K(ret));
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, gather_optimizer_statistics))) {
-    LOG_WARN("fail to get GATHER_OPTIMIZER_STATISTICS hint", K(ret));
   } else if (gather_optimizer_statistics != 0 && obj.get_bool()) {
     need_opt_stat_gather = true;
   }

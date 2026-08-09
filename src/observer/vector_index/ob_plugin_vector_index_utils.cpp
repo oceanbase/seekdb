@@ -32,7 +32,6 @@ int ObPluginVectorIndexUtils::get_task_read_snapshot(SCN &read_version)
   ObLS *ls = nullptr;
   // ObLSWRSHandler::get_ls_weak_read_ts
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-    LOG_WARN("failed to get log stream", K(ret));
   } else {
     read_version = ls->get_ls_wrs_handler()->get_ls_weak_read_ts();
   }
@@ -50,10 +49,8 @@ int ObPluginVectorIndexUtils::add_key_ranges(uint64_t table_id, ObRowkey& rowkey
     // LOG_INFO("scan_allocator_after_reuse", K(scan_param.scan_allocator_->used()), K(scan_param.scan_allocator_->total()));
   }
   if (OB_FAIL(new_range.build_range(table_id, rowkey))) {
-    LOG_WARN("failed to build range.", K(ret), K(table_id), K(rowkey));
   } else if (FALSE_IT(scan_param.key_ranges_.reuse())) {
   } else if (OB_FAIL(scan_param.key_ranges_.push_back(new_range))) {
-    LOG_WARN("failed to build key ranges.", K(ret), K(table_id), K(rowkey));
   }
 
   return ret;
@@ -76,7 +73,6 @@ int ObPluginVectorIndexUtils::add_key_ranges(uint64_t table_id, ObRowkey& start_
   new_range.flag_ = 0;
   scan_param.key_ranges_.reuse();
   if (OB_FAIL(scan_param.key_ranges_.push_back(new_range))) {
-    LOG_WARN("failed to build key ranges.", K(ret), K(table_id), K(start_key), K(end_key));
   }
 
   return ret;
@@ -88,9 +84,7 @@ int ObPluginVectorIndexUtils::iter_table_rescan(storage::ObTableScanParam &scan_
   ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
 
   if (OB_FAIL(tsc_service->reuse_scan_iter(false, iter))) {
-    LOG_WARN("failed to reuse scan iter.", K(ret));
   } else if (OB_FAIL(tsc_service->table_rescan(scan_param, iter))) {
-    LOG_WARN("failed to rescan iter.", K(ret));
   }
 
   return ret;
@@ -125,7 +119,6 @@ int ObPluginVectorIndexUtils::get_extra_info_objs(storage::ObTableScanParam &sca
         const ObDatum &extra_datum = datum_row->storage_datums_[i + offset];
         if (OB_FALSE_IT(out_extra_info_objs[i].reset())) {
         } else if (OB_FAIL(out_extra_info_objs[i].from_datum(extra_datum, meta_type, &allocator))) {
-          LOG_WARN("failed to from obj.", K(ret), K(extra_datum), K(meta_type), K(i));
         }
       }
     }
@@ -150,9 +143,7 @@ int ObPluginVectorIndexUtils::read_object_from_data_table_iter(ObObj *&input_obj
   
   ObString vector;
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
-    LOG_WARN("failed to set vid id key", K(ret));
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
-    LOG_WARN("failed to recan vid id scan param.", K(ret));
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
@@ -211,9 +202,7 @@ int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *inpu
   ObRowkey rowkey(input_obj, 1); // vid_rowkey table only has one rowkey column
   
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
-    LOG_WARN("failed to set vid id key", K(ret));
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
-    LOG_WARN("failed to recan vid id scan param.", K(ret));
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
@@ -241,9 +230,7 @@ int ObPluginVectorIndexUtils::read_object_from_vid_rowkey_table_iter(ObObj *inpu
           output_obj[i].reset();
           ObObjMeta meta_type = out_col_param->at(i + 1)->get_meta_type();
           if (OB_FAIL(datum_row->storage_datums_[i + 1].to_obj(tmp_obj, meta_type))) {
-            LOG_WARN("failed to convert datum to obj.", K(ret), K(i), K(datum_row->storage_datums_[i + 1]));
           } else if (OB_FAIL(ob_write_obj(allocator, tmp_obj, output_obj[i]))) {
-            LOG_WARN("failed to write obj.", K(ret), K(i), K(tmp_obj));
           }
         }
       }
@@ -268,9 +255,7 @@ int ObPluginVectorIndexUtils::read_object_from_embedded_table_iter(ObObj *&input
   ObRowkey rowkey(input_obj, data_table_rowkey_count + 1);
   
   if (OB_FAIL(add_key_ranges(table_id, rowkey, scan_param))) {
-    LOG_WARN("failed to set vid id key", K(ret));
   } else if (OB_FAIL(iter_table_rescan(scan_param, iter))) {
-    LOG_WARN("failed to recan vid id scan param.", K(ret));
   } else {
     blocksstable::ObDatumRow *datum_row = nullptr;
     storage::ObTableScanIterator *scan_iter = dynamic_cast<storage::ObTableScanIterator *>(iter);
@@ -362,20 +347,15 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(schema_service));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema manager", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_inc_table_id(), delta_buffer_schema))) {
-    LOG_WARN("failed to get table schema by index id.", K(ret), K(adapter.get_inc_table_id()));
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_data_table_id(), table_schema))) {
-    LOG_WARN("failed to get data table scheam.", K(ret), K(adapter.get_data_table_id()));
   } else if (OB_ISNULL(delta_buffer_schema) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid index table schema.", K(ret), KP(delta_buffer_schema), KP(table_schema));
   } else if (OB_FAIL(adapter.get_extra_info_actual_size(extra_info_actual_size))) {
-    LOG_WARN("failed to get extra info actual size.", K(ret));
   } else if (extra_info_actual_size > 0) {
     ObSEArray<uint64_t, 4> extra_column_ids;
     if (OB_FAIL(ObVectorIndexUtil::get_extra_info_column_id(*table_schema, *delta_buffer_schema, extra_column_ids))) {
-      LOG_WARN("failed to get extra info column id.", K(ret));
     } else {
       column_count = extra_column_ids.count();
     }
@@ -400,38 +380,30 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(schema_service));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema manager", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( incr_index_table_id, delta_buffer_schema))) {
-    LOG_WARN("failed to get table schema by index id.", K(ret), K(incr_index_table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {
-    LOG_WARN("failed to get data table scheam.", K(ret), K(data_table_id));
   } else if (OB_ISNULL(delta_buffer_schema) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid index table schema.", K(ret), KP(delta_buffer_schema), KP(table_schema));
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*table_schema, *delta_buffer_schema, vector_column_ids))) {
-    LOG_WARN("failed to get vector index column id.", K(ret));
   } else if (vector_column_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get vector column id count invalid.", K(ret), K(vector_column_ids.count()));
   } else if (OB_FAIL(adapter->get_extra_info_actual_size(extra_info_actual_size))) {
-    LOG_WARN("failed to get extra info actual size.", K(ret));
   } else if (!adapter->get_is_need_vid()) {
     if (extra_info_actual_size > 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("extra info actual size is not 0 for table without pk.", K(ret), K(extra_info_actual_size));
     } else if (OB_FAIL(table_schema->get_rowkey_column_ids(vector_column_ids))){
-      LOG_WARN("failed to get pk increment column id.", K(ret));
     }
   } else if (extra_info_actual_size > 0) {
     adapter->set_extra_column_count(0);
     ObSEArray<uint64_t, 4> extra_column_ids;
     if (OB_FAIL(ObVectorIndexUtil::get_extra_info_column_id(*table_schema, *delta_buffer_schema, extra_column_ids))) {
-      LOG_WARN("failed to get extra info column id.", K(ret));
     } else if (extra_column_ids.count() > 0) {
       adapter->set_extra_column_count(extra_column_ids.count());
       for (int i = 0; OB_SUCC(ret) && i < extra_column_ids.count(); ++i) {
         if (OB_FAIL(vector_column_ids.push_back(extra_column_ids.at(i)))) {
-          LOG_WARN("failed to push back extra column id.", K(ret), K(extra_column_ids.at(i)));
         }
       }
     }
@@ -492,9 +464,7 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
                                         data_iter,
                                         nullptr,
                                         is_hybrid_vector))) {
-      LOG_WARN("failed to read data table local tablet.", K(ret));
     } else if (OB_FAIL(get_extra_column_count(*adapter, extra_column_count))) {
-      LOG_WARN("failed to get extra column count", K(ret), KPC(adapter));
     } else if (extra_column_count > 0) {
       if (OB_ISNULL(output_extra_info_obj = static_cast<ObVecExtraInfoObj *>(allocator.alloc(sizeof(ObVecExtraInfoObj) * extra_column_count * alloc_size)))) { // use lots of memory
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -581,7 +551,6 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
           ada_ctx.set_vectors(output_vec_obj);
           ada_ctx.set_extra_infos(output_extra_info_obj);
           if (OB_FAIL(adapter->complete_delta_buffer_table_data(&ada_ctx))) {
-            LOG_WARN("failed to complete delta buffer", KR(ret));
           } else {
             // do nothing, ada_ctx.do_next_batch already called in complete_delta_buffer_table_data
           }
@@ -631,7 +600,6 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
         if (OB_SUCC(ret)) {
           ada_ctx.set_vectors(output_vec_obj);
           if (OB_FAIL(adapter->complete_delta_buffer_table_data(&ada_ctx))) {
-            LOG_WARN("failed to complete delta buffer", KR(ret));
           }
         }
       }
@@ -647,14 +615,12 @@ int ObPluginVectorIndexUtils::read_vector_info(ObPluginVectorIndexAdaptor *adapt
     if (OB_NOT_NULL(vid_id_iter)) {
       tmp_ret = tsc_service->revert_scan_iter(vid_id_iter);
       if (tmp_ret != OB_SUCCESS) {
-        LOG_WARN("revert vid_id_iter failed", K(ret));
       }
     }
     vid_id_iter = nullptr;
     if (OB_NOT_NULL(data_iter)) {
       tmp_ret = tsc_service->revert_scan_iter(data_iter);
       if (tmp_ret != OB_SUCCESS) {
-        LOG_WARN("revert data_iter failed", K(ret));
       }
     }
     vid_id_iter = nullptr;
@@ -684,16 +650,13 @@ int ObPluginVectorIndexUtils::try_sync_vbitmap_memdata(ObPluginVectorIndexAdapto
                                 allocator,
                                 vbitmap_scan_param,
                                 vbitmap_table_param,
-                                index_id_iter))) { // read_local_tablet 4rd aux index get rowkey, backword
-    LOG_WARN("fail to read local tablet", KR(ret), K(index_type), KPC(adapter));
+                                index_id_iter))) {
   } else if (OB_FAIL(adapter->check_index_id_table_readnext_status(&ada_ctx, index_id_iter, target_scn))) {
-    LOG_WARN("fail to check and sync vbitmap.", KR(ret));
   } // ToDo: may also need to sync vector to incr memdata
 
   if (OB_NOT_NULL(index_id_iter) && OB_NOT_NULL(tsc_service)) {
     int tmp_ret = tsc_service->revert_scan_iter(index_id_iter);
     if (tmp_ret != OB_SUCCESS) {
-      LOG_WARN("revert index_id_iter failed", K(ret));
     }
     index_id_iter = nullptr;
   }
@@ -726,8 +689,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
                                 allocator,
                                 snapshot_scan_param,
                                 snapshot_table_param,
-                                snapshot_idx_iter))) { // read_local_tablet 5th aux index get rowkey
-    LOG_WARN("fail to read local tablet", KR(ret), K(index_type), KPC(new_adapter));
+                                snapshot_idx_iter))) {
   } else {
     blocksstable::ObDatumRow *row = nullptr;
     ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(snapshot_idx_iter);
@@ -758,11 +720,8 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
             new_adapter = new(adpt_buff)ObPluginVectorIndexAdaptor(&vector_index_service->get_allocator(), vec_idx_mgr->get_memory_context());
             new_adapter->set_create_type(adapter->get_create_type());
             if (OB_FAIL(new_adapter->copy_meta_info(*adapter))) {
-              LOG_WARN("failed to copy meta info", K(ret));
             } else if (OB_FAIL(new_adapter->init(vec_idx_mgr->get_memory_context(), vec_idx_mgr->get_all_vsag_use_mem()))) {
-              LOG_WARN("failed to init adpt.", K(ret));
             } else if (OB_FAIL(new_adapter->set_index_identity(adapter->get_index_identity()))) {
-              LOG_WARN("failed to set index identity", K(ret));
             } else {
               adapter = new_adapter;
             }
@@ -773,9 +732,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
-        LOG_WARN("failed to write string", K(ret), K(row->storage_datums_[0].get_string()));
       } else if (OB_FAIL(iter_table_rescan(snapshot_scan_param, table_scan_iter))) {
-        LOG_WARN("failed to rescan", K(ret));
       } else {
   
         ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -797,14 +754,10 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
         } else {
           TCWLockGuard lock_guard(snap_memdata->mem_data_rwlock_);
           if (OB_FAIL(index_seri.deserialize(snap_memdata->index_, param, cb))) {
-            LOG_WARN("serialize index failed.", K(ret));
           } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_memdata->index_))) {
-            LOG_WARN("fail to index immutable_optimize", K(ret));
           } else if (OB_FALSE_IT(index_type = new_adapter->get_snap_index_type())) {
           } else if (OB_FAIL(get_split_snapshot_prefix(index_type, key_prefix, target_prefix))) {
-            LOG_WARN("fail to get split snapshot prefix", K(ret), K(index_type), K(key_prefix));
           } else if (OB_FAIL(new_adapter->set_snapshot_key_prefix(target_prefix))) {
-            LOG_WARN("failed to set snapshot key prefix", K(ret), K(index_type), K(target_prefix));
           } else if (OB_FAIL(obvectorutil::get_index_number(snap_memdata->index_, index_count))) {
             ret = OB_ERR_VSAG_RETURN_ERROR;
             LOG_WARN("fail to get incr index number", K(ret));
@@ -837,7 +790,6 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
   if (OB_NOT_NULL(snapshot_idx_iter) && OB_NOT_NULL(tsc_service)) {
     int tmp_ret = tsc_service->revert_scan_iter(snapshot_idx_iter);
     if (tmp_ret != OB_SUCCESS) {
-      LOG_WARN("revert snapshot_idx_iter failed", K(ret));
     }
     snapshot_idx_iter = nullptr;
   }
@@ -866,7 +818,6 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
     schema::ObIndexType delta_type = adapter->is_hybrid_index()? INDEX_TYPE_HYBRID_INDEX_LOG_LOCAL: INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
     if (OB_FAIL(try_sync_snapshot_memdata(
             adapter, create_new_adapter, target_scn, allocator, lob_read_options))) {
-      LOG_WARN("failed to refresh mem snapshots without refresh incr", KR(ret));
     } else if (OB_FAIL(read_local_tablet(adapter,
                                   target_scn,
                                   delta_type,
@@ -875,9 +826,7 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
                                   inc_scan_param,
                                   inc_table_param,
                                   delta_buf_iter))) {
-      LOG_WARN("fail to read local tablet", KR(ret), K(delta_type), KP(adapter));
     } else if (OB_FAIL(adapter->get_extra_info_actual_size(extra_info_actual_size))) {
-      LOG_WARN("fail to get extra info actual size", K(ret), KPC(adapter));
     } else {
       int64_t extra_info_column_count =
           extra_info_actual_size > 0
@@ -886,19 +835,15 @@ int ObPluginVectorIndexUtils::refresh_adp_from_table(
       ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObVectorQueryAdaptorResultContext ada_ctx(extra_info_column_count, &allocator, &tmp_allocator);
       if (OB_FAIL(adapter->check_delta_buffer_table_readnext_status(&ada_ctx, delta_buf_iter,target_scn))) {
-        LOG_WARN("fail to check_delta_buffer_table_readnext_status.", K(ret));
       } else if (OB_FAIL(try_sync_vbitmap_memdata(adapter, target_scn, allocator, ada_ctx))) {
-        LOG_WARN("failed to sync vbitmap", KR(ret));
       } else if (ada_ctx.get_status() == PVQ_COM_DATA) {
         if (OB_FAIL(read_vector_info(adapter, allocator, target_scn, ada_ctx))) {
-          LOG_WARN("failed to read vector_info", KR(ret));
         }
       }
     }
     if (OB_NOT_NULL(delta_buf_iter) && OB_NOT_NULL(tsc_service)) {
       int tmp_ret = tsc_service->revert_scan_iter(delta_buf_iter);
       if (tmp_ret != OB_SUCCESS) {
-        LOG_WARN("revert delta_buf_iter failed", K(tmp_ret));
       }
       delta_buf_iter = nullptr;
     }
@@ -922,10 +867,8 @@ int ObPluginVectorIndexUtils::query_need_refresh_memdata(
     if (adapter->get_reload_finish()) {
       need_retry = true;
     } else if (OB_FAIL(target_scn.convert_from_ts(ObTimeUtility::fast_current_time()))) {
-      LOG_WARN("failed to convert ts to scn", K(ret));
     } else if (OB_FAIL(ObPluginVectorIndexUtils::refresh_memdata(
                    adapter, target_scn, allocator, lob_read_options))) {
-      LOG_WARN("fail to refresh adapter", K(ret));
     } else if (OB_FALSE_IT(adapter->set_reload_finish(true))) {
     } else {
       need_retry = true;
@@ -958,13 +901,11 @@ int ObPluginVectorIndexUtils::refresh_memdata(ObPluginVectorIndexAdaptor *adapte
       } else if (FALSE_IT(vec_idx_mgr = &vector_index_service->get_index_mgr())) {
       } else if (OB_FAIL(refresh_adp_from_table(
                      new_adapter, true, target_scn, allocator, lob_read_options))) {
-        LOG_WARN("failed to refresh adapter from table", K(ret), KPC(adapter));
       }
       if (adapter != new_adapter && OB_NOT_NULL(new_adapter)) {
         if (OB_SUCC(ret)) {
           RWLock::WLockGuard lock_guard(vec_idx_mgr->get_adapter_map_lock());
           if (OB_FAIL(vec_idx_mgr->replace_old_adapter(new_adapter))) {
-            LOG_WARN("failed to replace old adapter", K(ret));
           }
         }
         if (OB_FAIL(ret)) {
@@ -1053,18 +994,15 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))) {
-    LOG_WARN("failed to get log stream", K(ret));
   } else if (OB_FAIL(ls->get_tablet_with_timeout(tablet_id,
                                                                  tablet_handle,
                                                                  0, // timeout
                                                                  ObMDSGetTabletMode::READ_READABLE_COMMITED,
                                                                  target_scn))) {
-    LOG_WARN("fail to get tablet handle", KR(ret), K(tablet_id), K(type));
   } else {
     scan_param.tablet_id_ = tablet_id;
     scan_param.schema_version_ = tablet_handle.get_obj()->get_tablet_meta().max_sync_storage_schema_version_;
     if (OB_FAIL(init_common_scan_param(scan_param, adapter, target_scn, &allocator, &scan_allocator, type, table_id))) {
-      LOG_WARN("fail to init common scan param", KR(ret), KPC(adapter));
     } else if (OB_FAIL(init_table_param(&table_param,
                                         adapter->get_inc_table_id(),
                                         adapter->get_data_table_id(),
@@ -1074,7 +1012,6 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
                                         out_column_ids,
                                         need_all_columns,
                                         need_ora_scn))) {
-      LOG_WARN("fail to init table param", KR(ret), KPC(adapter));
     } else if (FALSE_IT(scan_param.table_param_ = &table_param)) {
     } else {
       common::ObNewRange range;
@@ -1082,7 +1019,6 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
       uint32_t col_cnt = 0;
       if (is_non_shared_vec_index_aux_table(type)) {
         if (OB_FAIL(get_non_shared_index_aux_table_rowkey_colum_count(type, col_cnt))) {
-          LOG_WARN("fail to get index aux table colum count", KR(ret), K(type));
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * col_cnt * 2))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("alloc scan range obj failed.", K(ret));
@@ -1116,7 +1052,6 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
       } else {
         // vid_rowkey table or data table, get rowkey while complete
         if (OB_FAIL(get_shared_table_rowkey_colum_count(type, table_id, col_cnt))) {
-          LOG_WARN("fail to get index aux table colum count", KR(ret), K(type));
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * col_cnt * 2))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("alloc scan range obj failed.", K(ret));
@@ -1143,14 +1078,12 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
       scan_param.key_ranges_.reset();
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(scan_param.key_ranges_.push_back(range))) {
-        LOG_WARN("failed to push key range.", K(ret), K(scan_param), K(range));
       } else {
         ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
         if (OB_ISNULL(oas)) {
           ret = OB_ERR_INTERVAL_INVALID;
           LOG_WARN("get access service failed.", K(ret));
         } else if (OB_FAIL(oas->table_scan(scan_param, scan_iter))) {
-          LOG_WARN("do table scan falied.", K(ret), K(scan_param));
         }
       }
 
@@ -1261,9 +1194,7 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get schema", KR(ret), KR(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
     LOG_WARN("get null table schema", KR(ret), KR(table_id));
@@ -1271,12 +1202,10 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     ObArray<uint64_t> tmp_column_ids;
     const ObTableSchema *data_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else if (tmp_column_ids.count() < 3) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected column count", K(tmp_column_ids.count()));
@@ -1306,7 +1235,6 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         } else if (col_schema->is_hybrid_vec_index_chunk_column()) {
           chunk_column_id = col_schema->get_column_id();
         } else if (OB_FAIL(part_column_ids.push_back(col_schema->get_column_id()))) {
-          LOG_WARN("failed to push back column id", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1314,9 +1242,7 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get valid column id", K(ret), K(vid_column_id), K(type_column_id), K(vector_column_id));
       } else if (OB_FAIL(column_ids.push_back(vid_column_id))) {
-        LOG_WARN("failed to push 2nd column id.", K(ret));
       } else if (OB_FAIL(column_ids.push_back(type_column_id))) {
-        LOG_WARN("failed to push 3rd column id.", K(ret));
       } else if (0 != vector_column_id && OB_FAIL(column_ids.push_back(vector_column_id))) {
         LOG_WARN("failed to push 4th column id.", K(ret));
       } else if (0 != chunk_column_id && OB_FAIL(column_ids.push_back(chunk_column_id))) {
@@ -1327,7 +1253,6 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
       if (OB_SUCC(ret) && need_all_columns) {
         for (int64_t i = 0; OB_SUCC(ret) && i < part_column_ids.count(); ++i) {
           if (OB_FAIL(column_ids.push_back(part_column_ids.at(i)))) {
-            LOG_WARN("failed to push back column id.", K(ret));
           }
         }
       }
@@ -1343,14 +1268,11 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     ObArray<uint64_t> tmp_column_ids;
     const ObTableSchema *data_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else if (tmp_column_ids.count() < 4) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected column count", K(tmp_column_ids.count()));
@@ -1380,7 +1302,6 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         } else if (col_schema->is_vec_hnsw_vector_column()) {
           vector_column_id = col_schema->get_column_id();
         } else if (OB_FAIL(part_column_ids.push_back(col_schema->get_column_id()))) {
-          LOG_WARN("failed to push back column id", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1388,18 +1309,13 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get valid column id", K(ret), K(scn_column_id), K(vid_column_id), K(type_column_id), K(vector_column_id));
       } else if (OB_FAIL(column_ids.push_back(scn_column_id))) {
-        LOG_WARN("failed to push 1st column id.", K(ret));
       } else if (OB_FAIL(column_ids.push_back(vid_column_id))) {
-        LOG_WARN("failed to push 2nd column id.", K(ret));
       } else if (OB_FAIL(column_ids.push_back(type_column_id))) {
-        LOG_WARN("failed to push 3rd column id.", K(ret));
       } else if (OB_FAIL(column_ids.push_back(vector_column_id))) {
-        LOG_WARN("failed to push 4th column id.", K(ret));
       }
       if (OB_SUCC(ret) && need_all_columns) {
         for (int64_t i = 0; OB_SUCC(ret) && i < part_column_ids.count(); ++i) {
           if (OB_FAIL(column_ids.push_back(part_column_ids.at(i)))) {
-            LOG_WARN("failed to push back column id.", K(ret));
           }
         }
       }
@@ -1415,12 +1331,10 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     ObSEArray<uint64_t, 4> tmp_column_ids;
     const ObTableSchema *data_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else {
       // make sure vid column is the last output column
       for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count() && vid_column_id == 0; ++i) {
@@ -1435,18 +1349,14 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
       if (OB_FAIL(ret)) {
       } else if (FALSE_IT(tmp_column_ids.reuse())) {
       } else if (OB_FAIL(data_table_schema->get_rowkey_column_ids(tmp_column_ids))) {
-        LOG_WARN("failed to get data table rowkey column id", K(ret), KPC(data_table_schema));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_column_ids.count(); ++i) {
         if (OB_FAIL(column_ids.push_back(tmp_column_ids[i]))) {
-          LOG_WARN("failed to push column id.", K(ret), K(i), K(tmp_column_ids[i]), K(vid_column_id));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(column_ids.push_back(vid_column_id))) {
-        LOG_WARN("failed to push 1st column id.", K(ret));
       } else if (OB_FAIL(table_param->convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-        LOG_ERROR("fail to convert table param", KR(ret), K(table_schema), K(type));
       }
     }
   } else if (is_vec_vid_rowkey_type(type)) {
@@ -1454,12 +1364,10 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     ObSEArray<uint64_t, 4> tmp_column_ids;
     const ObTableSchema *data_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else {
       // make sure vid column is the first output column
       for (int64_t i = 0; OB_SUCC(ret) && i < table_schema->get_column_count() && vid_column_id == 0; ++i) {
@@ -1473,31 +1381,25 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(column_ids.push_back(vid_column_id))) {
-        LOG_WARN("failed to push 1st column id.", K(ret));
       } else if (FALSE_IT(tmp_column_ids.reuse())) {
       } else if (OB_FAIL(data_table_schema->get_rowkey_column_ids(tmp_column_ids))) {
-        LOG_WARN("failed to get data table rowkey column id", K(ret), KPC(data_table_schema));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_column_ids.count(); ++i) {
         if (OB_FAIL(column_ids.push_back(tmp_column_ids[i]))) {
-          LOG_WARN("failed to push column id.", K(ret), K(i), K(tmp_column_ids[i]), K(vid_column_id));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_param->convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-        LOG_ERROR("fail to convert table param", KR(ret), K(table_schema), K(type));
       }
     }
   } else if (is_vec_index_snapshot_data_type(type)) {
     const ObTableSchema *data_table_schema = NULL;
     ObSEArray<uint64_t, 4> tmp_column_ids;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else {
       uint64_t key_column_id = 0;
       uint64_t lob_data_column_id = 0;
@@ -1517,14 +1419,11 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected snapshot data column ids", K(key_column_id), K(lob_data_column_id));
       } else if (OB_FAIL(column_ids.push_back(key_column_id))) {
-        LOG_WARN("failed to push column id.", K(ret), K(key_column_id));
       } else if (OB_FAIL(column_ids.push_back(lob_data_column_id))) {
-        LOG_WARN("failed to push column id.", K(ret), K(lob_data_column_id));
       } else {
         table_param->get_enable_lob_locator_v2() = true;
         table_param->set_is_vec_index(true);
         if (OB_FAIL(table_param->convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-          LOG_ERROR("fail to convert table param", KR(ret), K(table_schema), K(type));
         }
       }
     }
@@ -1532,12 +1431,10 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     const ObTableSchema *data_table_schema = NULL;
     ObSEArray<uint64_t, 4> tmp_column_ids;
     if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_table_schema))) {
-      LOG_WARN("fail to get schema", KR(ret), KR(data_table_id));
     } else if (OB_ISNULL(table_schema) || OB_ISNULL(data_table_schema)) {
       ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
       LOG_WARN("get null table schema", KR(ret), K(table_id), K(data_table_id));
     } else if (OB_FAIL(table_schema->get_column_ids(tmp_column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else {
       // need [rowkey][vid][vector]
       uint64_t vid_column_id = 0;
@@ -1558,7 +1455,6 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
         } else if (col_schema->is_vec_hnsw_vector_column()) {
           vector_column_id = col_schema->get_column_id();
         } else if (OB_FAIL(part_column_ids.push_back(col_schema->get_column_id()))) {
-          LOG_WARN("failed to push back column id", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1572,23 +1468,19 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_column_ids.count(); ++i) {
           if (OB_FAIL(column_ids.push_back(tmp_column_ids[i]))) {
-            LOG_WARN("failed to push column id.", K(ret), K(i), K(tmp_column_ids[i]), K(vid_column_id));
           }
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(column_ids.push_back(vid_column_id))) {
-        LOG_WARN("failed to push column id.", K(ret), K(vid_column_id));
       } else if (!adapter->get_is_need_vid()) {
         for (int64_t i = 0; OB_SUCC(ret) && i < part_column_ids.count(); ++i) {
           if (OB_FAIL(column_ids.push_back(part_column_ids[i]))) {
-            LOG_WARN("failed to push column id.", K(ret), K(i), K(part_column_ids[i]), K(vid_column_id));
           }
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(column_ids.push_back(vector_column_id))) {
-        LOG_WARN("failed to push column id.", K(ret), K(vector_column_id));
       }
       if (OB_SUCC(ret) && OB_NOT_NULL(out_column_ids)) {
         out_column_ids->assign(column_ids);
@@ -1599,18 +1491,14 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
     }
   } else if (is_vec_index(type)) {
     if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
-      LOG_ERROR("fail to get index table all column ids", K(table_schema), KPC(adapter));
     } else {
       if (OB_FAIL(table_param->convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-        LOG_ERROR("fail to convert table param", KR(ret), K(table_schema), K(type));
       }
     }
   } else if (type == INDEX_TYPE_IS_NOT) {
     if (OB_FAIL(get_data_table_out_column_id(column_ids, inc_table_id, table_id, adapter))) {
-      LOG_WARN("failed to get vec column id.", K(ret));
     } else {
       if (OB_FAIL(table_param->convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-        LOG_WARN("failed to convert table param.", K(ret));
       }
     }
   }
@@ -1629,16 +1517,12 @@ int ObPluginVectorIndexUtils::get_special_index_aux_table_column_count(
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
     LOG_WARN("get null table schema", KR(ret), K(table_id));
   } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
-    LOG_ERROR("fail to get index table all column ids", K(table_schema));
   } else if (OB_FAIL(scan_param.column_ids_.assign(column_ids))) {
-    LOG_WARN("failed to assign column ids.", K(ret));
   } else {
     col_cnt = column_ids.count();
   }
@@ -1683,16 +1567,13 @@ int ObPluginVectorIndexUtils::get_shared_table_rowkey_colum_count(schema::ObInde
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get schema", KR(ret), KR(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
     LOG_WARN("get null table schema", KR(ret), KR(table_id));
   } else {
     const ObRowkeyInfo &rowkey_info = table_schema->get_rowkey_info();
     if (OB_FAIL(rowkey_info.get_column_ids(column_ids))) {
-      LOG_WARN("get rowkey_info from  table schema faild", KR(ret), KR(table_id), KPC(table_schema));
     } else {
       col_cnt = column_ids.count();
     }
@@ -1841,7 +1722,6 @@ int ObPluginVectorIndexUtils::get_vector_index_prefix(const ObTableSchema &index
   int ret = OB_SUCCESS;
   ObString tmp_table_name = index_schema.get_table_name();
   if (OB_FAIL(get_vector_index_prefix_inner(index_schema, tmp_table_name, prefix))) {
-    LOG_WARN("failed to get_vector_index_prefix_inner", K(ret), K(tmp_table_name));
   }
   return ret;
 }
@@ -1852,9 +1732,7 @@ int ObPluginVectorIndexUtils::get_vector_index_name_prefix(const ObTableSchema &
   int ret = OB_SUCCESS;
   ObString index_name;
   if (OB_FAIL(index_schema.get_index_name(index_name))) {
-    LOG_WARN("failed to get index name", K(ret), K(index_schema));
   } else if (OB_FAIL(get_vector_index_prefix_inner(index_schema, index_name, prefix))) {
-    LOG_WARN("failed to get_vector_index_prefix_inner", K(ret), K(index_name));
   }
   return ret;
 }
@@ -1867,7 +1745,6 @@ int ObPluginVectorIndexUtils::erase_ivf_build_helper(const ObIvfHelperKey &key)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null ObPluginVectorIndexService ptr", K(ret));
   } else if (OB_FAIL(vec_index_service->erase_ivf_build_helper(key))) {
-    LOG_WARN("failed to erase ivf build helper", K(ret), K(key));
   }
   if (ret == OB_HASH_NOT_EXIST) {
     LOG_WARN("erase ivf build helper, key not exist", K(ret), K(key));
@@ -1884,17 +1761,14 @@ int ObPluginVectorIndexUtils::get_split_snapshot_prefix(
   if (index_type == VIAT_HGRAPH) {
     ObString split_item("_hgraph_");
     if (OB_FAIL(split_snapshot_prefix(src, split_item, dst))) {
-      LOG_WARN("fail to split snapshot prefix");
     }
   } else if (index_type == VIAT_HNSW || index_type == VIAT_HNSW_SQ || index_type == VIAT_HNSW_BQ) {
     ObString split_item("_hnsw_");
     if (OB_FAIL(split_snapshot_prefix(src, split_item, dst))) {
-      LOG_WARN("fail to split snapshot prefix");
     }
   } else if (index_type == VIAT_IPIVF) {
     ObString split_item("_ipivf_");
     if (OB_FAIL(split_snapshot_prefix(src, split_item, dst))) {
-      LOG_WARN("fail to split ipivf snapshot prefix");
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1945,7 +1819,6 @@ int ObPluginVectorIndexUtils::get_leader_flag(bool &is_leader)
   ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   index_mgr = &vector_index_service->get_index_mgr();
   is_leader = index_mgr->is_leader();
-  LOG_TRACE("success to get leader", K(is_leader));
   return ret;
 }
 
@@ -1979,7 +1852,6 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_incr_data()->mem_ctx_->mem_ctx())) {
               if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_incr_%lu\":%d", adaptor->get_inc_table_id(), adaptor->get_incr_vsag_mem_hold()))) {
-                OB_LOG(WARN, "failed to get vsag incr data mem info", K(ret));
               }
             }
             if (OB_FAIL(ret)) {
@@ -1987,7 +1859,6 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_snap_data_()->mem_ctx_->mem_ctx())) {
               if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_snap_%lu\":%d", adaptor->get_snapshot_table_id(), adaptor->get_snap_vsag_mem_hold()))) {
-                OB_LOG(WARN, "failed to get vsag snap data mem info", K(ret));
               }
             }
             if (OB_FAIL(ret)) {
@@ -1995,7 +1866,6 @@ int ObPluginVectorIndexUtils::fill_mem_context_detail_info(ObPluginVectorIndexSe
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_) &&
                 OB_NOT_NULL(adaptor->get_vbitmap_data()->mem_ctx_->mem_ctx())) {
               if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"vsag_bitmap_%lu\":%lu", adaptor->get_vbitmap_table_id(), adaptor->get_vbitmap_data()->mem_ctx_->hold()))) {
-                OB_LOG(WARN, "failed to get vsag bitmap data mem info", K(ret));
               }
             }
           }
@@ -2018,11 +1888,8 @@ int ObPluginVectorIndexUtils::get_mem_context_detail_info(ObPluginVectorIndexSer
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fill_mem_context_detail_info(service, complete_tablet_ids, buf, buf_len, pos))) {
-    LOG_WARN("failed to fill complete adaptor detail info", KR(ret));
   } else if (OB_FAIL(fill_mem_context_detail_info(service, partial_tablet_ids, buf, buf_len, pos))) {
-    LOG_WARN("failed to fill partial adaptor detail info", KR(ret));
   } else if (OB_FAIL(fill_ivf_mem_context_detail_info(service, cache_tablet_ids, buf, buf_len, pos))) {
-    LOG_WARN("failed to fill ivf mem_ctx detail info", KR(ret));
   }
 
   return ret;
@@ -2054,7 +1921,6 @@ int ObPluginVectorIndexUtils::fill_ivf_mem_context_detail_info(ObPluginVectorInd
           ret = OB_SUCCESS;
           if (adaptor != NULL) {
             if (OB_FAIL(databuff_printf(buf, buf_len, pos,", \"ivf_cache_%lu\":%ld", adaptor->get_table_id(), adaptor->get_memory_hold()))) {
-              OB_LOG(WARN, "failed to get vsag incr data mem info", K(ret));
             }
           }
           OZ(adaptor_ptr_set.set_refactored(reinterpret_cast<int64_t>(adaptor)));
@@ -2076,9 +1942,7 @@ int ObPluginVectorIndexUtils::get_vector_index_ids(bool &has_ivf_index, common::
     ret = OB_EAGAIN;
     LOG_INFO("runtime schema is not ready after server restart, retry later");
   } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_vector_info_index_ids_in_runtime( has_ivf_index, table_id_array))) {
-    LOG_WARN("fail to get vector index table ids in runtime", KR(ret));
   }
   return ret;
 }

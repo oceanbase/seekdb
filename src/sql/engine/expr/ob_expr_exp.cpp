@@ -45,7 +45,6 @@ int calc_exp_expr_double(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -66,7 +65,6 @@ int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -74,7 +72,6 @@ int calc_exp_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     number::ObNumber res_nmb;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(arg_nmb.e_power(res_nmb, alloc_guard.get_allocator()))) {
-      LOG_WARN("e_power failed", K(ret));
     } else {
       res_datum.set_number(res_nmb);
     }

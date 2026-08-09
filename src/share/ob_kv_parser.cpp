@@ -45,7 +45,6 @@ int ObKVParser::emit(int sym)
   } else {
     if (sym == SYM_VALUE && NULL != cb_) {
       if (OB_FAIL(cb_->match(key_buf_, value_buf_))) {
-        LOG_WARN("fail match callback", K_(key_buf), K_(value_buf));
       }
     }
     if (OB_SUCC(ret)) {
@@ -132,25 +131,20 @@ int ObKVParser::parse(const char *data, int64_t data_length)
     cur_ = data_;
     data_length_ = length;
     if (OB_FAIL(get_token())) {
-      LOG_WARN("failed to  get_token", K(ret));
     }
   }
   while (OB_SUCC(ret) && !finish) {
     if (SYM_END == token_) {
       if (OB_FAIL(match(SYM_END))) {
-        LOG_WARN("fail match SYM_END");
       } else {
         finish = true;
       }
     } else if (SYM_VALUE == token_) {
       if (OB_FAIL(kv_pair())) {
-        LOG_WARN("fail match kv");
       }
     } else if (SYM_PAIR_SEP == token_) {
       if (OB_FAIL(match(SYM_PAIR_SEP))) {
-        LOG_WARN("fail match SYM_PAIR_SEP");
       } else if (OB_FAIL(kv_pair())) {
-        LOG_WARN("fail match kv");
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -172,11 +166,8 @@ int ObKVParser::kv_pair()
   switch (token_) {
     case SYM_VALUE:
       if (OB_FAIL(match(SYM_VALUE))) {
-        LOG_WARN("fail match key");
       } else if (OB_FAIL(match(SYM_KV_SEP))) {
-        LOG_WARN("fail match kv seperator");
       } else if (OB_FAIL(emit(SYM_VALUE))) {
-        LOG_WARN("fail match value");
       }
       break;
     default:

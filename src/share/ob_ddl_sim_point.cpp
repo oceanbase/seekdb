@@ -61,9 +61,7 @@ public:
   int operator() (hash::HashMapPair<ObDDLSimPointMgr::TaskSimPoint, int64_t> &entry) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(task_sim_points_.push_back(entry.first))) {
-      LOG_WARN("push back task sim point failed", K(ret), K(entry.first));
     } else if (OB_FAIL(sim_counts_.push_back(entry.second))) {
-      LOG_WARN("push back sim count failed", K(ret), K(entry.second));
     }
     return ret;
   }

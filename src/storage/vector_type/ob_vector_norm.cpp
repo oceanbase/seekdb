@@ -30,7 +30,6 @@ int ObVectorNorm::vector_norm_func(const float *a, const int64_t len, double &no
   double norm_square = 0;
   norm = 0;
   if (OB_FAIL(vector_norm_square_func(a, len, norm_square))) {
-    LIB_LOG(WARN, "failed to cal l2 square", K(ret));
   } else {
     norm = sqrt(norm_square);
   }

@@ -47,25 +47,18 @@ int ObUpdateIndexStatusHelper::lock_objects_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(lock_database_by_obj_name_())) {
-    LOG_WARN("fail to lock databse by obj name", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_id(arg_.database_name_, database_id_))) {
-    LOG_WARN("fail to get database id", KR(ret), K_(arg_.database_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_PARALLEL_DDL_CONFLICT;
     LOG_WARN("invalid database_id, database name may changed", KR(ret), K_(arg_.database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
-    LOG_WARN("fail to lock database id", KR(ret), K_(database_id));
   } else if (OB_FAIL(add_lock_object_by_id_(arg_.data_table_id_,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock data table", KR(ret), K_(arg_.data_table_id));
   } else if (OB_FAIL(add_lock_object_by_id_(arg_.index_table_id_,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock index table id", KR(ret), K_(arg_.index_table_id));
   } else if (OB_FAIL(lock_existed_objects_by_id_())) {
-    LOG_WARN("fail to lock objects by id", KR(ret));
   }
   RS_TRACE(lock_objects);
   return ret;
@@ -76,11 +69,8 @@ int ObUpdateIndexStatusHelper::lock_database_by_obj_name_()
   int ret = OB_SUCCESS;
   const ObString &database_name = arg_.database_name_;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-    LOG_WARN("fail to lock database by name", KR(ret), K(database_name));
   } else if (OB_FAIL(lock_databases_by_name_())) {
-    LOG_WARN("fail to lock databases by name", KR(ret));
   }
   return ret;
 }
@@ -90,7 +80,6 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
   int ret = OB_SUCCESS;
   const ObTableSchema *orig_data_table_schema = nullptr;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   }
   const ObDatabaseSchema *database_schema = NULL;
   if (FAILEDx(schema_guard_wrapper_.get_table_schema(arg_.index_table_id_, orig_index_table_schema_))) {
@@ -104,7 +93,6 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
     LOG_WARN("databse_id_ is not euqal to index_table's database_id",
              KR(ret), K_(database_id), K(orig_index_table_schema_->get_database_id()));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(database_id));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("databse_schema is null", KR(ret));
@@ -116,12 +104,10 @@ int ObUpdateIndexStatusHelper::generate_schemas_()
     ret = OB_EAGAIN;
     LOG_WARN("set index status to available, but previous status is not unavailable, which is not expected", KR(ret));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(arg_.data_table_id_, orig_data_table_schema))) {
-    LOG_WARN("fail to get data table schema", KR(ret), K_(arg_.data_table_id));
   } else if (OB_ISNULL(orig_data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail data table is null", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_data_table_schema, new_data_table_schema_))) {
-    LOG_WARN("fail to alloc new table schema", KR(ret));
   } else {
     new_data_table_schema_->set_in_offline_ddl_white_list(arg_.in_offline_ddl_white_list_);
   }
@@ -133,7 +119,6 @@ int ObUpdateIndexStatusHelper::calc_schema_version_cnt_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     // update index status
     schema_version_cnt_ = 1;
@@ -152,7 +137,6 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
   ObSchemaService *schema_service = schema_service_->get_schema_service();
   const ObString *ddl_stmt_str = arg_.ddl_stmt_str_.empty() ? nullptr : &arg_.ddl_stmt_str_;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is nullptr", KR(ret));
@@ -166,18 +150,14 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service is nullptr", KR(ret));
     } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-      LOG_WARN("fail to gen new schema version", KR(ret));
     } else if (OB_FAIL(schema_service->get_table_sql_service().update_index_status(
       *new_data_table_schema_, arg_.index_table_id_, new_status_, new_schema_version, get_trans_(), ddl_stmt_str))) {
-      LOG_WARN("fail to update index status", KR(ret), K_(arg_.index_table_id), K_(arg_.data_table_id), K_(new_status));
     } else if (arg_.task_id_ != 0) {
       ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
       int64_t published_schema_version = OB_INVALID_VERSION;
       if (OB_FAIL(tsi_generator->get_end_version(published_schema_version))) {
-        LOG_WARN("fail to get end version", KR(ret), K_(arg));
       } else if (OB_FAIL(ObDDLTaskRecordOperator::update_published_schema_version(
                          get_trans_(), arg_.task_id_, published_schema_version))) {
-        LOG_WARN("fail to update published_schema_version", KR(ret), K_(arg_.task_id), K(published_schema_version));
       } else if (orig_index_table_schema_->get_index_status() != new_status_ && new_status_ == INDEX_STATUS_AVAILABLE) {
         ObTableLockOwnerID owner_id;
         if (OB_ISNULL(new_data_table_schema_)) {
@@ -185,13 +165,11 @@ int ObUpdateIndexStatusHelper::operate_schemas_()
           LOG_WARN("data_table_schema is null", KR(ret));
         } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                        arg_.task_id_))) {
-          LOG_WARN("failed to get owner id", KR(ret), K_(arg_.task_id));
         } else if (OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*new_data_table_schema_,
                                                                 orig_index_table_schema_->get_table_id(),
                                                                 orig_index_table_schema_->is_global_index_table(),
                                                                 owner_id,
                                                                 get_trans_()))) {
-          LOG_WARN("failed to unlock ddl lock", KR(ret));
         }
       }
     }

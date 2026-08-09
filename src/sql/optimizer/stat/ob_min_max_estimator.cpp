@@ -52,7 +52,6 @@ int ObStatMinMaxSubquery::gen_expr(char *buf, const int64_t buf_len, int64_t &po
                                      col_param_->column_name_.length(),
                                      col_param_->column_name_.ptr(),
                                      is_min_ ? "ASC" : "DESC"))) {
-    LOG_WARN("failed to print buf", K(ret));
   }
   return ret;
 }
@@ -68,7 +67,6 @@ int ObStatMinMaxSubquery::decode(
     LOG_WARN("col stat is not given", K(ret), K(col_stat_));
   } else if (OB_FAIL(ObDbmsStatsUtils::truncate_string_for_opt_stats(
                  obj, allocator, datum_access_ctx))) {
-    LOG_WARN("fail to truncate string", K(ret));
   } else if (is_min_) {
     col_stat_->set_min_value(obj);
   } else {
@@ -114,7 +112,6 @@ int ObMinMaxEstimator::add_min_max_stat_items(ObIAllocator &allocator,
                                                                           partition_string_,
                                                                           true))) {
         } else if (OB_FAIL(stat_items_.push_back(min_subquery))) {
-          LOG_WARN("failed to push back array", K(ret));
         } else if (OB_ISNULL(p = allocator.alloc(sizeof(ObStatMinMaxSubquery)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory failed", K(ret));
@@ -125,7 +122,6 @@ int ObMinMaxEstimator::add_min_max_stat_items(ObIAllocator &allocator,
                                                                           partition_string_,
                                                                           false))) {
         } else if (OB_FAIL(stat_items_.push_back(max_subquery))) {
-          LOG_WARN("failed to push back array", K(ret));
         }
       }
     }
@@ -143,7 +139,6 @@ int ObMinMaxEstimator::estimate(const ObOptStatGatherParam &param,
   int64_t duration_time = -1;
   ObSEArray<ObOptStat, 1> tmp_opt_stats;
   if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {
-    LOG_WARN("failed to add from table", K(ret));
   } else if (OB_UNLIKELY(param.partition_infos_.count() > 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param));
@@ -154,26 +149,18 @@ int ObMinMaxEstimator::estimate(const ObOptStatGatherParam &param,
                                             param,
                                             param.column_params_,
                                             opt_stat))) {
-    LOG_WARN("failed to add min max stat items", K(ret));
   } else if (get_item_size() <= 0) {
     // do nothing
   } else if (OB_FAIL(add_hint(no_rewrite, allocator))) {
-    LOG_WARN("failed to add no_rewrite", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(param.gather_start_time_,
                                                                param.max_duration_time_,
                                                                duration_time))) {
-    LOG_WARN("failed to get valid duration time", K(ret));
   } else if (OB_FAIL(fill_query_timeout_info(allocator, duration_time))) {
-    LOG_WARN("failed to fill query timeout info", K(ret));
   } else if (OB_FAIL(pack_sql(raw_sql))) {
-    LOG_WARN("failed to pack raw sql", K(ret));
   } else if (OB_FAIL(tmp_opt_stats.push_back(opt_stat))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(do_estimate(param, raw_sql.string(), false,
                                  opt_stat, tmp_opt_stats))) {
-    LOG_WARN("failed to evaluate basic stats", K(ret));
   } else {
-    LOG_TRACE("succeed to gather min max value from index", K(opt_stat.column_stats_));
   }
   stat_items_.reuse();
   return ret;
@@ -183,15 +170,12 @@ int ObMinMaxEstimator::pack_sql(ObSqlString &raw_sql_str)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(gen_select_filed())) {
-    LOG_WARN("failed to generate select filed", K(ret));
   } else if (OB_FAIL(raw_sql_str.append_fmt("SELECT %.*s %.*s FROM DUAL",
                                             other_hints_.length(),
                                             other_hints_.ptr(),
                                             static_cast<int32_t>(select_fields_.length()),
                                             select_fields_.ptr()))) {
-    LOG_WARN("failed to build query sql stmt", K(ret));
   } else {
-    LOG_TRACE("OptStat: min max stat query sql", K(raw_sql_str));
   }
   return ret;
 }

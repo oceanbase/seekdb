@@ -71,9 +71,7 @@ int ObRuntimeStatusCache::inner_refresh_restore_status()
     const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
 
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
-      LOG_WARN("fail to get runtime schema", K(ret));
     } else if (OB_ISNULL(runtime_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("runtime schema is null", K(ret));

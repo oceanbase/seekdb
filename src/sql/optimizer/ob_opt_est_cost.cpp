@@ -42,7 +42,6 @@ int ObOptEstCost::cost_nestloop(const ObCostNLJoinInfo &est_cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_nestloop(est_cost_info,
                                    cost))) {
-    LOG_WARN("failed to est cost for nestloop join", K(ret));
   }
   return ret;
 }
@@ -55,7 +54,6 @@ int ObOptEstCost::cost_mergejoin(const ObCostMergeJoinInfo &est_cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_mergejoin(est_cost_info,
                                    cost))) {
-    LOG_WARN("failed to est cost for merge join", K(ret));
   }
   return ret;
 }
@@ -68,7 +66,6 @@ int ObOptEstCost::cost_hashjoin(const ObCostHashJoinInfo &est_cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_hashjoin(est_cost_info,
                                    cost))) {
-    LOG_WARN("failed to est cost for hash join", K(ret));
   }
   return ret;
 }
@@ -105,7 +102,6 @@ int ObOptEstCost::cost_sort_and_exchange(OptTableMetas *table_metas,
                                           need_sort,
                                           prefix_pos,
                                           cost))) {
-    LOG_WARN("failed to est cost for sort and exchange", K(ret));
   }
   return ret;
 }
@@ -118,7 +114,6 @@ int ObOptEstCost::cost_sort(const ObSortCostInfo &cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_sort(cost_info,
                               cost))) {
-    LOG_WARN("failed to est cost for sort", K(ret));
   }
   return ret;
 }
@@ -131,7 +126,6 @@ int ObOptEstCost::cost_exchange(const ObExchCostInfo &cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_exchange(cost_info,
                                   cost))) {
-    LOG_WARN("failed to est cost for exchange", K(ret));
   }
   return ret;
 }
@@ -144,7 +138,6 @@ int ObOptEstCost::cost_exchange_in(const ObExchInCostInfo &cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_exchange_in(cost_info,
                                      cost))) {
-    LOG_WARN("failed to est cost for exchange in", K(ret));
   }
   return ret;
 }
@@ -157,7 +150,6 @@ int ObOptEstCost::cost_exchange_out(const ObExchOutCostInfo &cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_exchange_out(cost_info,
                                       cost))) {
-    LOG_WARN("failed to est cost for exchange out", K(ret));
   }
   return ret;
 }
@@ -264,7 +256,6 @@ int ObOptEstCost::cost_subplan_filter(const ObSubplanFilterCostInfo &info,
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_subplan_filter(info, cost))) {
-    LOG_WARN("failed to est cost for subplan filter", K(ret));
   }
   return ret;
 }
@@ -277,7 +268,6 @@ int ObOptEstCost::cost_union_all(const ObCostMergeSetInfo &info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_union_all(info,
                                    cost))) {
-    LOG_WARN("failed to est cost for union all", K(ret));
   }
   return ret;
 }
@@ -290,7 +280,6 @@ int ObOptEstCost::cost_merge_set(const ObCostMergeSetInfo &info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_merge_set(info,
                                    cost))) {
-    LOG_WARN("failed to est cost for merge set", K(ret));
   }
   return ret;
 }
@@ -303,7 +292,6 @@ int ObOptEstCost::cost_hash_set(const ObCostHashSetInfo &info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_hash_set(info,
                                   cost))) {
-    LOG_WARN("failed to est cost for hash set", K(ret));
   }
   return ret;
 }
@@ -327,7 +315,6 @@ int ObOptEstCost::cost_table(const ObCostTableScanInfo &est_cost_info,
   if (OB_FAIL(vector_model.cost_table(est_cost_info,
                                 parallel,
                                 cost))) {
-    LOG_WARN("failed to est cost for table scan", K(ret));
   }
   return ret;
 }
@@ -346,7 +333,6 @@ int ObOptEstCost::cost_table_for_parallel(const ObCostTableScanInfo &est_cost_in
                                                             part_cnt_per_dop,
                                                             px_cost,
                                                             cost))) {
-    LOG_WARN("failed to est cost for table scan parallel", K(ret));
   }
   return ret;
 }
@@ -363,7 +349,6 @@ int ObOptEstCost::cost_index_back(const ObCostTableScanInfo &est_cost_info,
                                      row_count,
                                      limit_count,
                                      index_back_cost))) {
-    LOG_WARN("failed to est cost for index back", K(ret));
   }
   return ret;
 }
@@ -375,7 +360,6 @@ int ObOptEstCost::get_sort_cmp_cost(const common::ObIArray<sql::ObRawExprResType
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.get_sort_cmp_cost(types, cmp_cost))) {
-    LOG_WARN("failed to get sort cmp cost", K(ret));
   }
   return ret;
 }
@@ -428,7 +412,6 @@ int ObOptEstCost::cost_window_function(double rows,
                                         width,
                                         win_func_cnt,
                                         cost))) {
-    LOG_WARN("failed to est cost for window function", K(ret));
   }
   return ret;
 }
@@ -441,7 +424,6 @@ int ObOptEstCost::cost_insert(ObDelUpCostInfo& cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_insert(cost_info,
                                 cost))) {
-    LOG_WARN("failed to est cost for insert", K(ret));
   }
   return ret;
 }
@@ -454,7 +436,6 @@ int ObOptEstCost::cost_update(ObDelUpCostInfo& cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_update(cost_info,
                                 cost))) {
-    LOG_WARN("failed to est cost for update", K(ret));
   }
   return ret;
 }
@@ -467,7 +448,6 @@ int ObOptEstCost::cost_delete(ObDelUpCostInfo& cost_info,
   GET_COST_MODEL();
   if (OB_FAIL(vector_model.cost_delete(cost_info,
                                 cost))) {
-    LOG_WARN("failed to est cost for delete", K(ret));
   }
   return ret;
 }
@@ -488,7 +468,6 @@ int ObOptEstCost::calc_range_cost(const ObTableMetaInfo& table_meta_info,
                                     range_count,
                                     range_sel,
                                     cost))) {
-    LOG_WARN("failed to est cost for range scan", K(ret));
   }
   return ret;
 }
@@ -614,7 +593,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
     LOG_WARN("null point error", K(est_cost_info.table_metas_), K(est_cost_info.sel_ctx_), K(ret));
   } else if (FALSE_IT(est_cost_info.sel_ctx_->init_op_ctx(NULL, est_cost_info.table_meta_info_->table_row_count_))) {
   } else if (OB_FAIL(est_cost_info.sel_ctx_->init_deduce_infos(&path))) {
-    LOG_WARN("failed to init deduce info", K(ret));
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
                                                                          *est_cost_info.sel_ctx_,
                                                                          apply_filters,
@@ -622,7 +600,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
                                                                          total_sel,
                                                                          est_cost_info.prefix_filter_sel_,
                                                                          all_predicate_sel))) {
-    LOG_WARN("failed to calculate prefix filter sel", K(est_cost_info.prefix_filters_));
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
                                                                          *est_cost_info.sel_ctx_,
                                                                          apply_filters,
@@ -630,7 +607,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
                                                                          total_sel,
                                                                          est_cost_info.pushdown_prefix_filter_sel_,
                                                                          all_predicate_sel))) {
-    LOG_WARN("failed to calculate prefix filter sel", K(est_cost_info.pushdown_prefix_filters_));
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
                                                                          *est_cost_info.sel_ctx_,
                                                                          apply_filters,
@@ -638,7 +614,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
                                                                          total_sel,
                                                                          est_cost_info.postfix_filter_sel_,
                                                                          all_predicate_sel))) {
-    LOG_WARN("failed to calculate prefix filter sel", K(est_cost_info.postfix_filters_));
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
                                                                          *est_cost_info.sel_ctx_,
                                                                          apply_filters,
@@ -646,14 +621,8 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
                                                                          total_sel,
                                                                          est_cost_info.table_filter_sel_,
                                                                          all_predicate_sel))) {
-    LOG_WARN("failed to calculate prefix filter sel", K(est_cost_info.table_filters_));
   } else {
     est_cost_info.sel_ctx_->clear();
-    LOG_TRACE("table filter info", K(est_cost_info.ref_table_id_), K(est_cost_info.index_id_),
-        K(est_cost_info.prefix_filters_), K(est_cost_info.pushdown_prefix_filters_),
-        K(est_cost_info.postfix_filters_), K(est_cost_info.table_filters_),
-        K(est_cost_info.prefix_filter_sel_), K(est_cost_info.pushdown_prefix_filter_sel_),
-        K(est_cost_info.postfix_filter_sel_), K(est_cost_info.table_filter_sel_));
   }
   return ret;
 }
@@ -679,7 +648,6 @@ int ObOptEstCost::stat_estimate_single_range_rc(const ObCostTableScanInfo &est_c
                                                                        est_cost_info.range_columns_,
                                                                        range,
                                                                        range_selectivity))) {
-    LOG_WARN("failed to calculate single newrange selectivity", K(est_cost_info), K(ret));
   } else {
     if (range.empty() && fabs(1.0 - est_cost_info.prefix_filter_sel_) < OB_DOUBLE_EPSINON) {
       //defend code: user may enter a query without predicates on index prefix, but with
@@ -687,10 +655,8 @@ int ObOptEstCost::stat_estimate_single_range_rc(const ObCostTableScanInfo &est_c
       //think that this index has a very small scan cost. such plan will cause following
       //query with correct ranges to timeout.
       range_selectivity = 1.0;
-      LOG_TRACE("OPT:[STAT EST RANGE] range is empty and prefix_filter_sel is 1");
     }
     count = static_cast<double>(table_meta_info->table_row_count_) * range_selectivity;
-    LOG_TRACE("OPT:[STAT EST RANGE]", K(range), K(range_selectivity), K(count));
   }
   return ret;
 }

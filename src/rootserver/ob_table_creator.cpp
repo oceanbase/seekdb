@@ -35,7 +35,6 @@ int ObTableCreator::init(const bool need_tablet_cnt_check)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableCreator init twice", KR(ret));
   } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
-    LOG_WARN("fail to init tablet creator", KR(ret));
   } else {
     inited_ = true;
   }
@@ -53,10 +52,8 @@ int ObTableCreator::init_with_fork_table_info(
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableCreator init twice", KR(ret));
   } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
-    LOG_WARN("fail to init tablet creator", KR(ret));
   } else if (OB_FAIL(fork_table_info_builder_.init_with_fork_table_info(
               main_fork_table_info, dest_table_ids, schema_guard))) {
-    LOG_WARN("fail to init fork table info builder", KR(ret), K(main_fork_table_info), K(dest_table_ids));
   } else {
     inited_ = true;
   }
@@ -68,7 +65,6 @@ int ObTableCreator::execute()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_creator_.execute())) {
-    LOG_WARN("fail to execute tablet creator", KR(ret));
   } else if (tablet_infos_.count() > 0
              && OB_FAIL(share::ObTabletMappingTableOperator::batch_update(trans_, tablet_infos_))) {
     LOG_ERROR("fail to batch update tablet info", KR(ret));
@@ -110,7 +106,6 @@ int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, data_table_schema, data_format_version, need_create_empty_majors))) {
-    LOG_WARN("fail to add_create_tablets_of_tables_arg_", KR(ret), K(schemas));
   }
   return ret;
 }
@@ -133,7 +128,6 @@ int ObTableCreator::add_create_bind_tablets_of_hidden_table_arg(
     LOG_WARN("failed to push back hidden table schema", K(ret));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, &orig_table_schema, data_format_version, need_create_empty_majors))) {
-    LOG_WARN("failed to add arg", K(ret), K(schemas));
   }
   return ret;
 }
@@ -155,7 +149,6 @@ int ObTableCreator::add_create_tablets_of_table_arg(
     LOG_WARN("failed to push_back", KR(ret), K(table_schema), K(need_create_empty_major_sstable));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, NULL, data_format_version, need_create_empty_majors, schema_guard))) {
-    LOG_WARN("failed to add create tablet arg", KR(ret), K(table_schema));
   }
   return ret;
 }
@@ -196,7 +189,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, NULL, data_format_version, need_create_empty_majors, schema_guard))) {
-    LOG_WARN("fail to add_create_tablets_of_tables_arg_", KR(ret), K(schemas));
   }
   return ret;
 }
@@ -287,8 +279,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                     data_format_version,
                     need_create_empty_majors,
                     schema_guard))) {
-          LOG_WARN("fail to generate_create_tablet_arg",
-                   K(table_schema), K(schemas), KR(ret), K(is_create_bind_hidden_tablets));
         }
       } else {
         ObPartition **part_array = table_schema.get_part_array();
@@ -312,8 +302,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                           data_format_version,
                           need_create_empty_majors,
                           schema_guard))) {
-                LOG_WARN("fail to generate_create_tablet_arg",
-                         K(table_schema), K(schemas), KR(ret), K(i), K(is_create_bind_hidden_tablets));
               }
             } else if (PARTITION_LEVEL_TWO == part_level) {
               ObSubPartition **subpart_array = part_array[i]->get_subpart_array();
@@ -337,8 +325,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
                                 data_format_version,
                                 need_create_empty_majors,
                                 schema_guard))) {
-                      LOG_WARN("fail to generate_create_tablet_arg",
-                               K(table_schema), K(schemas), KR(ret), K(i), K(j), K(is_create_bind_hidden_tablets));
                     }
                   }
                 }
@@ -356,8 +342,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       int64_t schema_version = table_schema.get_schema_version();
       if (OB_FAIL(share::ObTabletToTableHistoryOperator::create_tablet_to_table_history(
                          trans_, schema_version, pairs))) {
-        LOG_WARN("fail to create tablet to table history",
-                 KR(ret), K(schema_version));
       }
       int64_t end_time = ObTimeUtility::current_time();
       LOG_INFO("finish create_tablet_to_table_history", KR(ret),
@@ -390,7 +374,6 @@ int ObTableCreator::generate_create_tablet_arg_(
   if (PARTITION_LEVEL_ZERO == data_table_schema.get_part_level()) {
     data_tablet_id = data_table_schema.get_tablet_id();
   } else if (OB_FAIL(data_table_schema.get_part_by_idx(part_idx, subpart_idx, data_part))) {
-    LOG_WARN("fail to get data part", KR(ret), K(data_table_schema), K(part_idx), K(subpart_idx));
   } else if (OB_ISNULL(data_part)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("NULL ptr", K(data_table_schema), KR(ret), K(part_idx), K(subpart_idx));
@@ -407,7 +390,6 @@ int ObTableCreator::generate_create_tablet_arg_(
     } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
       tablet_id = table_schema_ptr->get_tablet_id();
     } else if (OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
-      LOG_WARN("fail to get index part", KR(ret), KPC(table_schema_ptr), K(part_idx), K(subpart_idx));
     } else if (OB_ISNULL(data_part) || OB_ISNULL(part)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("NULL ptr", K(data_table_schema), KPC(table_schema_ptr), KR(ret), K(part_idx), K(subpart_idx));
@@ -421,14 +403,10 @@ int ObTableCreator::generate_create_tablet_arg_(
     share::ObTabletTablePair tablet_info(tablet_id, table_schema_ptr->get_table_id());
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tablet_id_array.push_back(tablet_id))) {
-      LOG_WARN("failed to assign table schema point", KR(ret));
     } else if (is_sys_table(table_schema_ptr->get_table_id())) {
     } else if (OB_FAIL(tablet_infos_.push_back(tablet_info))) {
-      LOG_WARN("fail to push_back", KR(ret), K(tablet_info));
     } else if (OB_FAIL(pair.init(tablet_id, table_id))) {
-      LOG_WARN("fail to init tablet-table pair", KR(ret), K(tablet_id), K(table_id));
     } else if (OB_FAIL(pairs.push_back(pair))) {
-      LOG_WARN("fail to push back tablet-table pair", KR(ret), K(pair));
     }
   }
 
@@ -440,7 +418,6 @@ int ObTableCreator::generate_create_tablet_arg_(
     } else {
       if (OB_FAIL(fork_table_info_builder_.build_fork_tablet_infos(
               schemas, part_idx, subpart_idx, *schema_guard, fork_tablet_infos))) {
-        LOG_WARN("fail to build fork tablet infos", KR(ret), K(part_idx), K(subpart_idx));
       }
     }
   }
@@ -458,9 +435,7 @@ int ObTableCreator::generate_create_tablet_arg_(
                         need_create_empty_majors,
                         no_create_commit_versions,
                         fork_tablet_infos))) {
-      LOG_WARN("fail to init create tablet arg", KR(ret), K(schemas), K(is_create_bind_hidden_tablets));
     } else if (OB_FAIL(tablet_creator_.add_create_tablet_arg(create_tablet_arg))) {
-      LOG_WARN("fail to add create tablet arg", KR(ret), K(create_tablet_arg));
     }
   }
 

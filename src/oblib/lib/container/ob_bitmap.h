@@ -207,7 +207,6 @@ OB_INLINE int ObBitmap::set(const size_type pos, const bool value)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(is_valid(pos))) {
-    LIB_LOG(WARN, "Faild to check valid", K(ret), K(pos), K_(valid_bytes));
   } else {
     data_[pos] = value;
   }
@@ -228,7 +227,6 @@ OB_INLINE int ObBitmap::flip(const size_type pos)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(is_valid(pos))) {
-    LIB_LOG(WARN, "Faild to check valid", K(ret), K(pos), K_(valid_bytes));
   } else {
     data_[pos] = (data_[pos] == 0);
   }

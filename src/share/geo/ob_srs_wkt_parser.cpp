@@ -354,16 +354,13 @@ int ObSrsWktParser::parse_srs_wkt(common::ObIAllocator &allocator, uint64_t srid
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("srs string is empty", K(ret), K(srid));
   } else if (OB_FAIL(parse_coordinate_system(allocator, srs_str, geo_rs))) {
-    LOG_WARN("failed to parse srs wkt", K(ret));
   } else if (OB_NOT_NULL(geog_rs = boost::get<ObGeographicRs>(&geo_rs))) {
     if (OB_FAIL(ObSpatialReferenceSystemBase::create_geographic_srs(&allocator, srid, geog_rs, tmp_result))) {
-      LOG_WARN("failed to create geographic srs from parsed coordinate system", K(ret));
     } else {
       srs = tmp_result;
     }
   } else if (OB_NOT_NULL(proj_rs = boost::get<ObProjectionRs>(&geo_rs))) {
     if (OB_FAIL(ObSpatialReferenceSystemBase::create_project_srs(&allocator, srid, proj_rs, tmp_result))) {
-      LOG_WARN("failed to create geographic srs from parsed coordinate system", K(ret));
     } else {
       srs = tmp_result;
     }
@@ -380,7 +377,6 @@ int ObSrsWktParser::parse_geog_srs_wkt(common::ObIAllocator& allocator, const co
   ObGeoRs geo_rs; 
   ObGeographicRs *geog_rs; 
   if (OB_FAIL(parse_coordinate_system(allocator, srs_str, geo_rs))) {
-    LOG_WARN("failed to parse srs wkt", K(ret));
   } else if (OB_ISNULL(geog_rs = boost::get<ObGeographicRs>(&geo_rs))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error when parse srs wkt", K(ret));
@@ -395,7 +391,6 @@ int ObSrsWktParser::parse_proj_srs_wkt(common::ObIAllocator& allocator, const co
   ObGeoRs geo_rs; 
   ObProjectionRs *proj_rs; 
   if (OB_FAIL(parse_coordinate_system(allocator, srs_str, geo_rs))) {
-    LOG_WARN("failed to parse srs wkt", K(ret));
   } else if (OB_ISNULL(proj_rs = boost::get<ObProjectionRs>(&geo_rs))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error when parse srs wkt", K(ret));

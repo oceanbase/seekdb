@@ -41,7 +41,6 @@ int ObFTDictTableIter::get_key(ObString &str)
     ret = OB_NOT_INIT;
     LOG_WARN("Not inited.", K(ret));
   } else if (OB_FAIL(res_.get_result()->get_varchar("word", str))) {
-    LOG_WARN("Failed to get varchar", K(ret));
   }
   return ret;
 }
@@ -78,13 +77,9 @@ int ObFTDictTableIter::init(const ObString &table_name)
     SMART_VAR(ObSqlString, sql_string)
     {
       if (OB_FAIL(sql_string.append("SELECT word FROM oceanbase."))) {
-        LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(table_name))) {
-        LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_string.append(" ORDER BY word"))) {
-        LOG_WARN("Failed to append sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res_, sql_string.ptr()))) {
-        LOG_WARN("Failed to execute sql", K(ret));
       }
     }
 

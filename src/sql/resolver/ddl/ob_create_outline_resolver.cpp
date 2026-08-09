@@ -67,7 +67,6 @@ int ObCreateOutlineResolver::resolve_hint(const ParseNode *node, ObCreateOutline
         create_outline_stmt.get_hint() = ObString::make_string(buf);
         if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
             *allocator_, session_info_->get_dtc_params(), create_outline_stmt.get_hint()))) {
-          LOG_WARN("fail to convert sql text", K(ret));
         }
       }
     }
@@ -107,7 +106,6 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
     //set server version
     ObString server_version;
     if (OB_FAIL(ob_write_string(*allocator_, ObString(build_version()), server_version))) {
-      LOG_WARN("failed to write string", K(ret));
     } else {
       create_outline_stmt->set_server_version(server_version);
     }
@@ -129,7 +127,6 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
       ObString db_name;
       ObString outline_name;
       if (OB_FAIL(resolve_outline_name(node->children_[1], db_name, outline_name))) {
-        LOG_WARN("fail to resolve outline name", K(ret));
       } else {
         create_outline_stmt->set_database_name(db_name);
         create_outline_stmt->set_outline_name(outline_name);
@@ -152,16 +149,13 @@ int ObCreateOutlineResolver::resolve(const ParseNode &parse_tree)
       //set outline_target
       if (OB_SUCC(ret)) {
         if (OB_FAIL(resolve_outline_target(node->children_[4], create_outline_stmt->get_target_sql()))) {
-          LOG_WARN("fail to resolve outline target", K(ret));
         }
       }
     } else {
       if (OB_FAIL(resolve_hint(node->children_[3], *create_outline_stmt))) {
-        LOG_WARN("fail to resolve hint", K(ret));
       } else if (OB_FAIL(resolve_sql_id(node->children_[4],
                                         *create_outline_stmt,
                                         is_format_otl))) {
-        LOG_WARN("fail to resolve sql id", K(ret));
       }
     }
   }

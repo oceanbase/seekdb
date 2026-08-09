@@ -70,10 +70,8 @@ int ObArrayWithMap<ITEM>::init(
   int ret = OB_SUCCESS;
   array_.set_attr(ObMemAttr("ArrayIdxArr"));
   if (OB_FAIL(array_.reserve(expect_val_cnt))) {
-    STORAGE_LOG(WARN, "failed to reserve array", K(ret), K(expect_val_cnt));
   } else if (need_index_map_ && expect_val_cnt > BUILD_HASH_MAP_THRESHOLD && !map_.created()) {
     if (OB_FAIL(map_.create(expect_val_cnt, "ArrayIdxMap", "ArrayIdxMap"))) {
-      STORAGE_LOG(WARN, "failed to build map", K(ret), K(expect_val_cnt));
     }
   }
   return ret;
@@ -85,15 +83,12 @@ int ObArrayWithMap<ITEM>::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(other.array_.count()))) {
-    STORAGE_LOG(WARN, "failed to init", K(ret), K(other));
   } else if (map_.created()) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < other.array_.count(); ++idx) {
       if (OB_FAIL(push_back(other.at(idx)))) {
-         STORAGE_LOG(WARN, "failed to push item", K(ret), K(idx), K(other.at(idx)));
       }
     }
   } else if (OB_FAIL(array_.assign(other.array_))) {
-    STORAGE_LOG(WARN, "failed to assign array", K(ret), K(other));
   }
   return ret;
 }
@@ -104,7 +99,6 @@ int ObArrayWithMap<ITEM>::push_back(const ITEM &item)
   int ret = OB_SUCCESS;
   const int64_t last_idx = array_.count() - 1;
   if (OB_FAIL(array_.push_back(item))) {
-    STORAGE_LOG(WARN, "failed to push item", K(ret), K(item));
   } else if (last_idx >= 0 && array_.at(last_idx).get_tablet_id() == item.get_tablet_id()) {
     // same tablet
   } else {

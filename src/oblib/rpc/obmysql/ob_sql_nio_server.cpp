@@ -81,7 +81,6 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(reactor_lock_);
   if (OB_FAIL(io_handler_.init(deliver))) {
-    LOG_WARN("handler init fail", K(ret));
   } else {
     nio_callbacks cb = {};
     cb.ctx = &io_handler_;

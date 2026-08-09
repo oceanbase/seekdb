@@ -123,8 +123,6 @@ int ObServerSchemaUpdater::init(const common::ObAddr &host, ObMultiVersionSchema
                                       SSU_MAX_THREAD_NUM,
                                       SSU_TASK_QUEUE_SIZE,
                                       "SerScheQueue"))) {
-    LOG_WARN("init task queue failed", KR(ret), LITERAL_K(SSU_MAX_THREAD_NUM),
-             LITERAL_K(SSU_TASK_QUEUE_SIZE));
   } else {
     host_ = host;
     schema_mgr_ = schema_mgr;
@@ -184,7 +182,6 @@ int ObServerSchemaUpdater::batch_process_tasks(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch_tasks cnt is 0", KR(ret));
   } else if (OB_FAIL(tasks.assign(batch_tasks))) {
-    LOG_WARN("fail to assign task", KR(ret), "task_cnt", batch_tasks.count());
   } else {
     DEBUG_SYNC(BEFORE_SET_NEW_SCHEMA_VERSION);
     lib::ob_sort(tasks.begin(), tasks.end(), ObServerSchemaTask::greator_than);
@@ -195,11 +192,9 @@ int ObServerSchemaUpdater::batch_process_tasks(
                KR(ret), "task_cnt", tasks.count());
     } else if (ObServerSchemaTask::RELEASE == type) {
       if (OB_FAIL(process_release_task())) {
-        LOG_WARN("fail to process release task", KR(ret), K(tasks.at(0)));
       }
     } else if (ObServerSchemaTask::ASYNC_REFRESH == type) {
       if (OB_FAIL(process_async_refresh_tasks(tasks))) {
-        LOG_WARN("fail to process async refresh tasks", KR(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -219,7 +214,6 @@ int ObServerSchemaUpdater::process_release_task()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_mgr_ is NULL", KR(ret));
   } else if (OB_FAIL(schema_mgr_->try_eliminate_schema_mgr())) {
-    LOG_WARN("fail to eliminate schema mgr", KR(ret));
   }
   LOG_INFO("try to release schema", KR(ret));
   return ret;
@@ -270,7 +264,6 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
     }
     if (OB_SUCC(ret) && need_refresh) {
       if (OB_FAIL(schema_mgr_->refresh_and_add_schema())) {
-        LOG_WARN("fail to refresh schema", KR(ret));
       }
     }
   }

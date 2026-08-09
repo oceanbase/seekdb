@@ -50,7 +50,6 @@ int ObFuseRowCacheKeyBase::hash(uint64_t &hash_val) const
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected error for null datum utils", K(ret), K(*this));
     } else if (OB_FAIL(rowkey_.hash(*datum_utils_, hash_val))) {
-      STORAGE_LOG(WARN, "Failed to calc hash value for datum rowkey", K(ret), K(rowkey_));
     }
   }
   return ret;
@@ -69,7 +68,6 @@ int ObFuseRowCacheKeyBase::equal(const ObFuseRowCacheKeyBase &other, bool &equal
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "Invalid argument to compare row cachekey", K(ret), K(*this), K(other));
     } else if (OB_FAIL(rowkey_.equal(other.rowkey_, *datum_utils, equal))) {
-      STORAGE_LOG(WARN, "Failed to check rowkey cache key equal", K(ret), K(rowkey_), K(other));
     }
   }
   return ret;
@@ -91,7 +89,6 @@ int ObFuseRowCacheKeyBase::deep_copy(char *buf, const int64_t buf_len, ObFuseRow
     if (rowkey_.is_valid() && rowkey_size_ > 0) {
       ObRawBufAllocatorWrapper tmp_buf(buf, rowkey_size_);
       if (OB_FAIL(rowkey_.deep_copy(dest.rowkey_, tmp_buf))) {
-        LOG_WARN("fail to deep copy rowkey", K(ret));
       } else {
         dest.rowkey_size_ = rowkey_size_;
       }
@@ -128,7 +125,6 @@ int ObFuseRowCacheKey::hash(uint64_t &hash_value) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(base_.hash(hash_value))) {
-    LOG_WARN("Failed to hash base key", K(ret), K(*this));
   } else {
     hash_value = common::murmurhash(&tablet_snapshot_version_, sizeof(tablet_snapshot_version_), hash_value);
   }
@@ -155,7 +151,6 @@ int ObFuseRowCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey
     ObFuseRowCacheKey *pfuse_key = new (buf) ObFuseRowCacheKey();
     pfuse_key->tablet_snapshot_version_ = tablet_snapshot_version_;
     if (OB_FAIL(base_.deep_copy(buf + sizeof(ObFuseRowCacheKey), buf_len - sizeof(ObFuseRowCacheKey), pfuse_key->base_))) {
-      LOG_WARN("fail to deep copy base key", K(ret));
     } else {
       key = pfuse_key;
     }
@@ -228,7 +223,6 @@ int ObFuseRowCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheV
     pos = sizeof(*this) + sizeof(ObStorageDatum) * column_cnt_;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt_; ++i) {
       if (OB_FAIL(pfuse_value->datums_[i].deep_copy(datums_[i], buf, buf_len, pos))) {
-        STORAGE_LOG(WARN, "Failed to deep copy datum", K(ret), K(i));
       }
     }
 
@@ -271,7 +265,6 @@ int ObFuseRowCache::put_row(const ObFuseRowCacheKey &key, const ObFuseRowCacheVa
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(value));
   } else if (OB_FAIL(put(key, value, true/*overwrite*/))) {
-    LOG_WARN("fail to put row to row cache", K(ret), K(key), K(value));
   }
   return ret;
 }

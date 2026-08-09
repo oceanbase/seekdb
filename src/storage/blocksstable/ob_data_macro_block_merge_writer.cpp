@@ -60,7 +60,6 @@ int ObDataMacroBlockMergeWriter::open(
   if (OB_FAIL(ObMacroBlockWriter::open(
           data_store_desc, parallel_idx, macro_seq_param, pre_warm_param,
           callback, validator))) {
-    STORAGE_LOG(WARN, "Fail to open macro block writer", K(ret));
   }
 
   return ret;
@@ -80,7 +79,6 @@ int ObDataMacroBlockMergeWriter::append_row(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObMacroBlockWriter::append_row(row))) {
-    STORAGE_LOG(WARN, "ObMacroBlockWriter fail to append_row", K(ret));
   }
 
   return ret;
@@ -100,10 +98,8 @@ int ObDataMacroBlockMergeWriter::append_micro_block(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObMacroBlockWriter::append_micro_block(micro_block))) {
-    STORAGE_LOG(WARN, "ObMacroBlockWriter fail to append_micro_block", K(ret));
   } else if (check_need_switch_macro_block()) {
     if (OB_FAIL(try_switch_macro_block())) {
-      STORAGE_LOG(WARN, "fail to try switch macro block", K(ret));
     }
   }
 
@@ -147,10 +143,8 @@ int ObDataMacroBlockMergeWriter::build_micro_block()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObMacroBlockWriter::build_micro_block())) {
-    STORAGE_LOG(WARN, "ObMacroBlockWriter fail to build_micro_block", K(ret));
   } else if (check_need_switch_macro_block()) {
     if (OB_FAIL(try_switch_macro_block())) {
-      STORAGE_LOG(WARN, "fail to try switch macro block", K(ret));
     }
   }
 
@@ -162,7 +156,6 @@ int ObDataMacroBlockMergeWriter::try_switch_macro_block()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObMacroBlockWriter::try_switch_macro_block())) {
-    STORAGE_LOG(WARN, "ObMacroBlockWriter fail to try switch macro block", K(ret));
   } else {
     is_use_freespace_ = next_block_use_freespace_;
     next_block_use_freespace_ = false;

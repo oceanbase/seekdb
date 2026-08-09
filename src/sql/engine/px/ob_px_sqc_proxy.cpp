@@ -47,9 +47,7 @@ int ObPxSQCProxy::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(link_sqc_qc_channel(sqc_arg_))) {
-    LOG_WARN("fail to link sqc qc channel", K(ret));
   } else if (OB_FAIL(setup_loop_proc(sqc_ctx_))) {
-    LOG_WARN("fail to setup loop proc", K(ret));
   }
   return ret;
 }
@@ -70,7 +68,6 @@ int ObPxSQCProxy::link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg)
     
     sqc_ctx_.msg_loop_.set_process_query_time(get_process_query_time());
     sqc_ctx_.msg_loop_.set_query_timeout_ts(get_query_timeout_ts());
-    LOG_TRACE("register sqc-qc channel", K(sqc));
   }
   return ret;
 }
@@ -79,11 +76,8 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_ready_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("fail init cond", K(ret));
   } else if (OB_FAIL(sqc_ctx.receive_data_ch_provider_.init())) {
-    LOG_WARN("fail init receive ch provider", K(ret));
   } else if (OB_FAIL(sqc_ctx.transmit_data_ch_provider_.init())) {
-    LOG_WARN("fail init transmit ch provider", K(ret));
   } else {
     (void)sqc_ctx.msg_loop_
         .register_processor(sqc_ctx.receive_data_ch_msg_proc_)
@@ -135,7 +129,6 @@ int ObPxSQCProxy::do_process_dtl_msg(int64_t timeout_ts)
   while (OB_SUCC(ret)) {
     if (OB_FAIL(sqc_ctx_.msg_loop_.process_any(10))) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
-        LOG_TRACE("no message for sqc, exit", K(ret), K(timeout_ts));
       } else {
         LOG_WARN("fail proccess dtl msg", K(timeout_ts), K(ret));
       }
@@ -195,7 +188,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
   int ret = OB_SUCCESS;
   bool need_process_dtl = need_receive_channel_map_via_dtl(child_dfo_id);
 
-  LOG_TRACE("get_receive_data_ch", K(need_process_dtl), K(child_dfo_id));
   do {
     ObSqcLeaderTokenGuard guard(leader_token_lock_, msg_ready_cond_);
     if (guard.hold_token()) {
@@ -204,7 +196,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
           ret = process_dtl_msg(timeout_ts);
         }
 
-        LOG_TRACE("process dtl msg done", K(ret));
         // When all messages are received, then focus on doing your own task
         // Check if the expected receive channel map has already been received
         if (OB_SUCC(ret)) {
@@ -220,7 +211,6 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
               LOG_WARN("fail peek data channel from ch_provider", K(ret));
             }
           } else {
-            LOG_TRACE("SUCC got nonblock receive channel", K(task_ch_set), K(child_dfo_id));
           }
         }
       } while (OB_DTL_WAIT_EAGAIN == ret);
@@ -432,10 +422,7 @@ int ObPxSQCProxy::report(int end_ret) const
     LOG_WARN("empty channel", K(sqc), K(ret));
   } else if (OB_FAIL(ch->send(finish_msg,
       sqc_arg.exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      // Do our best, if push fails it will be handled by other mechanisms
-    LOG_WARN("fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
-    LOG_WARN("fail flush dtl data", K(ret));
   }
 
   return ret;
@@ -480,7 +467,6 @@ int ObPxSQCProxy::get_whole_msg_provider(uint64_t op_id, ObDtlMsgType msg_type, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqc_ctx_.get_whole_msg_provider(op_id, msg_type, provider))) {
-    SQL_LOG(WARN, "fail get provider", K(ret));
   }
   return ret;
 }
@@ -495,7 +481,6 @@ int ObPxSQCProxy::make_sqc_sample_piece_msg(ObDynamicSamplePieceMsg &msg, bool &
       sqc_ctx_.get_task_count(),
       msg,
       finish))) {
-    LOG_WARN("fail to merge piece msg", K(ret));
   } else if (finish) {
     sample_msg_.expect_range_count_ = msg.expect_range_count_;
     sample_msg_.source_dfo_id_ = msg.source_dfo_id_;
@@ -553,7 +538,6 @@ int ObPxSQCProxy::sync_wait_all(ObPxDatahubDataProvider &provider)
           ret = code.code_;
           LOG_WARN("message loop is interrupted", K(code), K(ret));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("failed to sync wait", K(ret), K(task_cnt), K(provider.dh_msg_cnt_));
         }
       }
     }

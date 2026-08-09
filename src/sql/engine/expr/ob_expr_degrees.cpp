@@ -57,7 +57,6 @@ int ObExprDegrees::calc_degrees_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum * radian = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
-    LOG_WARN("eval radian arg failed", K(ret), K(expr));
   } else if (radian->is_null()) {
     res_datum.set_null();
   } else {

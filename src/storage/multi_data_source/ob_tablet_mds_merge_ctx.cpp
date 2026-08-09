@@ -58,7 +58,6 @@ int ObTabletMdsMinorMergeCtx::get_merge_tables(ObGetMergeTablesResult &get_merge
   int ret = OB_SUCCESS;
   void *buf = nullptr;
   if (OB_FAIL(get_tables_by_key(get_merge_table_result))) {
-    LOG_WARN("failed to get tables by key", KR(ret), "param", get_dag_param(), KPC(merge_dag_));
   } else if (OB_ISNULL(buf = mem_ctx_.alloc(sizeof(ObMdsMinorFilter)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(ObMdsMinorFilter));
@@ -69,7 +68,6 @@ int ObTabletMdsMinorMergeCtx::get_merge_tables(ObGetMergeTablesResult &get_merge
     const int64_t multi_version_start = get_tablet()->get_multi_version_start();
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(compaction_filter->init(last_major_snapshot, multi_version_start))) {
-      LOG_WARN("failed to init mds compaction_filter", K(tmp_ret), K(last_major_snapshot), K(multi_version_start));
     } else {
       filter_ctx_.compaction_filter_ = compaction_filter;
       FLOG_INFO("success to init mds compaction filter", K(tmp_ret), K(last_major_snapshot), K(multi_version_start));
@@ -91,7 +89,6 @@ int ObTabletMdsMinorMergeCtx::update_tablet(ObTabletHandle &new_tablet_handle)
   int ret = OB_SUCCESS;
   const ObSSTable *sstable = nullptr;
   if (OB_FAIL(create_sstable(sstable))) {
-    LOG_WARN("failed to create sstable", KR(ret), "dag_param", get_dag_param());
   } else {
     ObUpdateTableStoreParam mds_param(static_param_.version_range_.snapshot_version_,
                                       1/*multi_version_start*/,
@@ -100,7 +97,6 @@ int ObTabletMdsMinorMergeCtx::update_tablet(ObTabletHandle &new_tablet_handle)
                                       false/*allow_duplicate_sstable*/);
     if (OB_FAIL(mds_param.init_with_compaction_info(
       ObCompactionTableStoreParam(get_merge_type(), sstable->get_end_scn()/*clog_checkpoint_scn*/, false/*need_report*/, false/*has_truncate_info*/)))) {
-      LOG_WARN("failed to init with compaction info", KR(ret));
     } else if (OB_FAIL(get_ls()->update_tablet_table_store(get_tablet_id(), mds_param, new_tablet_handle))) {
       LOG_ERROR("failed to update tablet table store", K(ret), K(mds_param), K(new_tablet_handle));
       CTX_SET_DIAGNOSE_LOCATION(*this);

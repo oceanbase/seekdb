@@ -53,9 +53,7 @@ int ObRecursiveUnionAllOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_data_.rescan())){
-    LOG_WARN("Failed to rescan inner data", K(ret));
   } else if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("Operator rescan failed", K(ret));
   }
   return ret;
 }
@@ -68,7 +66,6 @@ int ObRecursiveUnionAllOp::inner_open()
     ret = OB_NOT_INIT;
     LOG_WARN("Left op is null", K(ret));
   } else if (OB_FAIL(inner_data_.init())) {
-    LOG_WARN("Failed to create hash filter", K(ret));
   } else if (OB_ISNULL(op_kit = ctx_.get_operator_kit(MY_SPEC.pump_operator_id_))
               || OB_ISNULL(op_kit->op_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -76,8 +73,6 @@ int ObRecursiveUnionAllOp::inner_open()
   } else {
     inner_data_.set_left_child(left_);
     inner_data_.set_right_child(right_);
-    LOG_DEBUG("recursive union all inner open", K(MY_SPEC.output_), K(MY_SPEC.left_->output_),
-                K(MY_SPEC.right_->output_));
     inner_data_.set_fake_cte_table(static_cast<ObFakeCTETableOp *>(op_kit->op_));
     inner_data_.set_search_strategy(MY_SPEC.strategy_);
     if (MY_SPEC.is_vectorized()) {
@@ -103,7 +98,6 @@ int ObRecursiveUnionAllOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("Failed to check physical plan status", K(ret));
   } else if (OB_FAIL(inner_data_.get_next_row())) {
     if (OB_ITER_END != ret) {
       LOG_WARN("Failed to get next sort row from recursive inner data", K(ret));
@@ -118,9 +112,7 @@ int ObRecursiveUnionAllOp::inner_get_next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
   int64_t batch_size = std::min(max_row_cnt, MY_SPEC.max_batch_size_);
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("Failed to check physical plan status", K(ret));
   } else if (OB_FAIL(inner_data_.get_next_batch(batch_size, brs_))) {
-    LOG_WARN("Failed to get next sort row from recursive inner data", K(ret));
   }
   return ret;
 }

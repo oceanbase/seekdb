@@ -50,7 +50,6 @@ int ObOBJLockCallback::print_callback()
 int ObOBJLockCallback::trans_commit()
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("ObOBJLockCallback::trans_commit", K(*this));
   ObMemtableCtx *mem_ctx = static_cast<ObMemtableCtx*>(ctx_);
   switch (lock_op_->lock_op_.op_type_) {
   case IN_TRANS_DML_LOCK:
@@ -90,7 +89,6 @@ int ObOBJLockCallback::rollback_callback()
 int ObOBJLockCallback::lock_abort_()
 {
   int ret = OB_SUCCESS;
-  LOG_DEBUG("ObOBJLockCallback::lock_abort", K(*this));
   switch (lock_op_->lock_op_.op_type_) {
   case IN_TRANS_DML_LOCK:
   case IN_TRANS_COMMON_LOCK: {
@@ -141,9 +139,7 @@ int ObOBJLockCallback::get_redo(
                                    lock_op_->lock_op_,
                                    memtable_->get_key().get_tablet_id(),
                                    this))) {
-    LOG_WARN("get redo failed", K(ret), KP(this), KP_(lock_op));
   }
-  LOG_DEBUG("ObOBJLockCallback::get_redo", K(ret), K(*this), K(lock_op_->lock_op_));
   return ret;
 }
 

@@ -93,9 +93,7 @@ int ObTriggerMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(trigger_id_map_.init())) {
-    LOG_WARN("init trigger id map failed", K(ret));
   } else if (OB_FAIL(trigger_name_map_.init())) {
-    LOG_WARN("init trigger name map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -154,7 +152,6 @@ int ObTriggerMgr::deep_copy(const ObTriggerMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(trigger), K(ret));
       } else if (OB_FAIL(add_trigger(*trigger))) {
-        LOG_WARN("add trigger failed", K(*trigger), K(ret));
       }
     }
   }
@@ -192,7 +189,6 @@ int ObTriggerMgr::add_triggers(const ObIArray<ObSimpleTriggerSchema> &trigger_sc
   } else {
     FOREACH_CNT_X(trigger_schema, trigger_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_trigger(*trigger_schema))) {
-        LOG_WARN("add trigger failed", K(ret), "trigger_schema", *trigger_schema);
       }
     }
   }
@@ -378,7 +374,6 @@ int ObTriggerMgr::get_trigger_schemas_in_runtime(ObIArray<const ObSimpleTriggerS
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("NULL ptr", K(ret), K(trigger));
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
-      LOG_WARN("push back trigger failed", K(ret));
     }
   }
   return ret;
@@ -400,7 +395,6 @@ int ObTriggerMgr::get_trigger_schemas_in_database(uint64_t database_id,
     } else if (trigger->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(trigger_schemas.push_back(trigger))) {
-      LOG_WARN("push back trigger failed", K(ret));
     }
   }
   return ret;

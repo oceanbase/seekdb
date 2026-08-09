@@ -58,7 +58,6 @@ OB_NOINLINE int ObWorkerProcessor::process_err_test()
 
   if(OB_FAIL(ret))
   {
-    LOG_WARN("process err_test", K(ret));
   }
   return ret;
 }
@@ -69,7 +68,6 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
   ObReqProcessor *processor = NULL;
 
   if (OB_FAIL(process_err_test())) {
-    LOG_WARN("ignore request with err_test", K(ret));
   } else if (OB_FAIL(translator_.translate(req, processor))) {
     LOG_WARN("translate request fail", K(ret));
     on_translate_fail(&req, ret);
@@ -81,7 +79,6 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
     req.on_process_begin();
     req.set_trace_point(ObRequest::OB_REQUEST_WORKER_PROCESSOR_RUN);
     if (OB_FAIL(processor->run())) {
-      LOG_WARN("process request fail", K(ret));
     }
     translator_.release(processor);
   }
@@ -115,7 +112,6 @@ int ObWorkerProcessor::process(rpc::ObRequest &req)
   ob_reset_tsi_warning_buffer();
   try {
     if (OB_FAIL(process_one(req))) {
-      LOG_WARN("process request fail", K(ret));
     }
   } catch (OB_BASE_EXCEPTION &except) {
     _LOG_ERROR("Exception caught!!! errno = %d, exception info = %s", except.get_errno(), except.what());

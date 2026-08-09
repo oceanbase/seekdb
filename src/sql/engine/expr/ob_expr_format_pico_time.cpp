@@ -51,10 +51,8 @@ int ObExprFormatPicoTime::eval_format_pico_time(const ObExpr &expr, ObEvalCtx &c
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("eval arg0 failed", K(ret));
   } else {
     if (OB_FAIL(eval_format_pico_time_util(expr, res_datum, datum, ctx))){
-      LOG_WARN("eval format_pico_time unexpect error", K(ret));
     } else {
       // do nothing
     }
@@ -66,10 +64,8 @@ int ObExprFormatPicoTime::eval_format_pico_time_batch(const ObExpr &expr,
                                       ObEvalCtx &ctx,
                                       const ObBitVector &skip,
                                       const int64_t batch_size) {
-  LOG_DEBUG("eval format pico time batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval arg0 failed", K(ret));
   } else {
     ObDatum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -79,7 +75,6 @@ int ObExprFormatPicoTime::eval_format_pico_time_batch(const ObExpr &expr,
       }
       ObDatum *datum= &expr.args_[0]->locate_expr_datum(ctx, i);
       if (OB_FAIL(eval_format_pico_time_util(expr, res_datum[i], datum, ctx, i))){
-        LOG_WARN("eval format_pico_time unexpect error", K(ret));
       } else {
         // do nothing
       }

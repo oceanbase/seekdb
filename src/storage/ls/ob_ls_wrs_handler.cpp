@@ -106,7 +106,6 @@ int ObLSWRSHandler::generate_ls_weak_read_snapshot_version(ObLS &ls,
     }
     ret = OB_SUCCESS;
   } else if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-    TRANS_LOG(WARN, "get gts scn error", K(ret), K(max_stale_time), K(*this));
   } else {
     int64_t snapshot_version_barrier = gts_scn.convert_to_ts() - max_stale_time;
     if (timestamp.convert_to_ts() <= snapshot_version_barrier) {

@@ -50,7 +50,6 @@ void ObBatchExecCollector::add(
     }
 #undef ADD_COMMENT
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObSSTableMergeInfoMgr>()->add_sstable_merge_info(merge_history_))) {
-      STORAGE_LOG(WARN, "failed to add sstable merge info", KR(ret), K_(merge_history));
     }
   }
 }
