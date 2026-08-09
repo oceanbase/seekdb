@@ -174,15 +174,10 @@ int ObTransService::do_commit_tx_slowpath_(ObTxDesc &tx)
                                              tx.op_sn_,
                                              tx.commit_start_scn_,
                                              commit_version);
-  const bool request_accepted = OB_SUCCESS == commit_ret;
-  if (request_accepted || commit_need_retry_(commit_ret)) {
-    if (request_accepted) {
-      ++tx.commit_times_;
-    }
-    const int64_t max_delay = request_accepted
-        ? INT64_MAX
-        : POST_COMMIT_REQ_RETRY_INTERVAL;
-    if (OB_FAIL(register_commit_retry_task_(tx, max_delay))) {
+  if (OB_SUCCESS == commit_ret) {
+    ++tx.commit_times_;
+  } else if (commit_need_retry_(commit_ret)) {
+    if (OB_FAIL(register_commit_retry_task_(tx, POST_COMMIT_REQ_RETRY_INTERVAL))) {
     }
   } else {
     ret = handle_tx_commit_result_(tx, commit_ret, commit_version);
@@ -711,10 +706,7 @@ int ObTransService::get_write_store_ctx(ObTxDesc &tx,
   bool ctx_exist = false;
   ObTxTable *tx_table = nullptr;
 
-  if (!share::server_is_write_enabled()) {
-    ret = OB_STANDBY_DATABASE_READ_ONLY;
-    TRANS_LOG(WARN, "server write gate is closed", K(ret), K(tx), KPC(this));
-  } else if (tx.is_rdonly()) {
+  if (tx.access_mode_ == ObTxAccessMode::RD_ONLY) {
     ret = OB_ERR_READ_ONLY_TRANSACTION;
     TRANS_LOG(WARN, "tx is readonly", K(ret), K(tx), KPC(this));
   } else if (OB_UNLIKELY(!snapshot.valid_)) {

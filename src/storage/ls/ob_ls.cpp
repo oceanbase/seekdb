@@ -505,28 +505,6 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
   return ret;
 }
 
-int ObLS::switch_to_local_append_mode_(const int64_t deadline_us)
-{
-  int ret = OB_SUCCESS;
-  if (is_local_append_mode_) {
-    LOG_INFO("local log is already in append mode", K_(ls_meta));
-  } else if (OB_FAIL(start_local_log_(deadline_us))) {
-    LOG_WARN("failed to switch local log to append mode", K(ret), K_(ls_meta));
-  }
-  return ret;
-}
-
-int ObLS::switch_to_local_replay_mode_(const int64_t deadline_us)
-{
-  int ret = OB_SUCCESS;
-  if (!is_local_append_mode_) {
-    LOG_INFO("local log is already in replay mode", K_(ls_meta));
-  } else if (OB_FAIL(stop_local_log_(deadline_us))) {
-    LOG_WARN("failed to switch local log to replay mode", K(ret), K_(ls_meta));
-  }
-  return ret;
-}
-
 int ObLS::offline_(const int64_t start_ts)
 {
   int ret = OB_SUCCESS;

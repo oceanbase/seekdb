@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_sstable_copy_finish_task.h"
-#include "share/config/ob_server_config.h"
 #include "standby/restore/ob_restore_helper.h"
+#include "standby/standby_host.h"
 #include "standby/restore/ob_standby_restore_macro_block_writer.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
@@ -426,7 +426,7 @@ int ObSSTableCopyFinishTask::process()
 
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
-    if (GCONF.errsim_migration_tablet_id.get_value() == copy_ctx_.tablet_id_.id()
+    if (copy_ctx_.helper_->get_config().errsim_migration_tablet_id_ == copy_ctx_.tablet_id_.id()
       && ObITable::is_major_sstable(copy_ctx_.table_key_.table_type_)
     ) {
       // inject error when finish copying 3rd major sstable

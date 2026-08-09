@@ -29,6 +29,10 @@
 
 namespace oceanbase
 {
+namespace standby
+{
+struct StandbyConfig;
+}
 namespace storage
 {
 
@@ -48,6 +52,7 @@ struct ObTabletCopyFinishTaskParam final
   const ObMigrationTabletParam *src_tablet_meta_;
   ObICopyTabletCtx *copy_tablet_ctx_;
   bool is_only_replace_major_;
+  const standby::StandbyConfig *config_;
 };
 
 struct ObICopyTabletCtx;

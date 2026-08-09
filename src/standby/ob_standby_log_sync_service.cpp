@@ -24,12 +24,11 @@
 #include "logservice/ob_log_handler.h"
 #include "logservice/ob_log_service.h"
 #include "logservice/replayservice/ob_log_replay_service.h"
-#include "share/config/ob_server_config.h"
 #include "share/log/palf/log_define.h"
-#include "share/ob_server_struct.h"
-#include "share/ob_standby_source_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "standby/ob_standby_grpc.h"
+#include "standby/ob_standby_source_util.h"
+#include "standby/standby_host.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
@@ -78,70 +77,68 @@ ObStandbyLogSyncService::ObStandbyLogSyncService()
     is_scheduled_(false),
     paused_(false),
     fatal_error_(OB_SUCCESS),
-    startup_target_scn_()
+    startup_target_scn_(),
+    config_(nullptr),
+    host_(nullptr)
 {
 }
 
-ObStandbyLogSyncService &ObStandbyLogSyncService::instance_()
+int ObStandbyLogSyncService::init(const StandbyConfig &config, IStandbyHost &host)
 {
-  static ObStandbyLogSyncService service;
-  return service;
-}
-
-int ObStandbyLogSyncService::init()
-{
-  return instance_().init_();
+  int ret = OB_SUCCESS;
+  config_ = &config;
+  host_ = &host;
+  if (OB_FAIL(init_())) {
+    config_ = nullptr;
+    host_ = nullptr;
+  }
+  return ret;
 }
 
 int ObStandbyLogSyncService::start()
 {
-  return instance_().start_();
+  return start_();
 }
 
 int ObStandbyLogSyncService::stop()
 {
-  return instance_().stop_();
+  return stop_();
 }
 
 int ObStandbyLogSyncService::wait()
 {
-  return instance_().wait_();
+  return wait_();
 }
 
 void ObStandbyLogSyncService::destroy()
 {
-  instance_().destroy_();
+  destroy_();
 }
 
 int ObStandbyLogSyncService::prepare_switch_to_primary(const bool is_failover)
 {
-  return instance_().prepare_switch_to_primary_(is_failover);
+  return prepare_switch_to_primary_(is_failover);
 }
 
 int ObStandbyLogSyncService::validate_switch_to_primary(const bool is_failover)
 {
-  return instance_().validate_switch_to_primary_(is_failover);
+  return validate_switch_to_primary_(is_failover);
 }
 
 int ObStandbyLogSyncService::pause()
 {
-  return instance_().pause_();
-}
-
-int ObStandbyLogSyncService::resume()
-{
-  return instance_().resume_();
+  return pause_();
 }
 
 int ObStandbyLogSyncService::set_startup_target_scn(const share::SCN &target_scn)
 {
-  return instance_().set_startup_target_scn_(target_scn);
+  return set_startup_target_scn_(target_scn);
 }
 
 int ObStandbyLogSyncService::wait_startup_replay(
     const std::function<bool()> &is_stopping)
 {
-  return instance_().wait_startup_replay_(is_stopping);
+  return wait_startup_replay_(is_stopping);
 }
 
 int ObStandbyLogSyncService::get_local_progress(
@@ -165,6 +162,17 @@ int ObStandbyLogSyncService::get_local_progress(
   return ret;
 }
 
+int ObStandbyLogSyncService::wait_local_append()
+{
+  int ret = OB_SUCCESS;
+  logservice::ObLogHandler *log_handler = nullptr;
+  if (OB_FAIL(get_log_handler(log_handler))) {
+  } else {
+    log_handler->wait_append_sync();
+  }
+  return ret;
+}
+
 int ObStandbyLogSyncService::init_()
 {
   int ret = OB_SUCCESS;
@@ -173,7 +181,7 @@ int ObStandbyLogSyncService::init_()
     LOG_WARN("failed to lock standby log sync service", KR(ret));
   } else if (is_inited_) {
     ret = OB_INIT_TWICE;
-  } else if (GCTX.is_embedded_mode()) {
+  } else if (config_->embedded_mode_) {
     is_inited_ = true;
   } else if (OB_FAIL(timer_.init("StbyLogSync", common::ObMemAttr("StbyLogSync")))) {
     LOG_WARN("failed to init standby log sync timer", KR(ret));
@@ -191,7 +199,7 @@ int ObStandbyLogSyncService::start_()
     LOG_WARN("failed to lock standby log sync service", KR(ret));
   } else if (!is_inited_) {
     ret = OB_NOT_INIT;
-  } else if (GCTX.is_embedded_mode() || is_scheduled_) {
+  } else if (config_->embedded_mode_ || is_scheduled_) {
   } else if (OB_FAIL(timer_.schedule(*this, SYNC_INTERVAL_US, true /*repeat*/, true /*immediate*/))) {
     LOG_WARN("failed to schedule standby log sync task", KR(ret));
   } else {
@@ -214,7 +222,7 @@ int ObStandbyLogSyncService::stop_()
 int ObStandbyLogSyncService::wait_()
 {
   int ret = OB_SUCCESS;
-  if (is_inited_ && is_scheduled_ && !GCTX.is_embedded_mode()) {
+  if (is_inited_ && is_scheduled_ && !config_->embedded_mode_) {
     timer_.wait();
     lib::ObMutexGuard guard(lock_);
     if (OB_FAIL(guard.get_ret())) {
@@ -238,6 +246,8 @@ void ObStandbyLogSyncService::destroy_()
     paused_ = false;
     fatal_error_ = OB_SUCCESS;
     startup_target_scn_.reset();
+    config_ = nullptr;
+    host_ = nullptr;
   }
 }
 
@@ -330,10 +340,10 @@ int ObStandbyLogSyncService::get_source_addr_(common::ObAddr &source_addr) const
 {
   int ret = OB_SUCCESS;
   source_addr.reset();
-  const common::ObString source = GCONF.log_restore_source.str();
+  const common::ObString source = host_->log_restore_source();
   if (source.empty()) {
     ret = OB_ENTRY_NOT_EXIST;
-  } else if (OB_FAIL(share::ObStandbySourceUtil::get_first_service_addr(source, source_addr))) {
+  } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(source, source_addr))) {
     LOG_WARN("failed to parse standby log source", KR(ret), K(source));
   } else if (!source_addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
@@ -349,7 +359,7 @@ int ObStandbyLogSyncService::query_source_end_scn_(
   int ret = OB_SUCCESS;
   ObStandbyGrpcClient client;
   end_scn.reset();
-  if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US))) {
+  if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, host_->rpc_tls_enabled()))) {
     LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.get_log_end_scn(end_scn))) {
     LOG_WARN("failed to query source log end scn", KR(ret), K(source_addr));
@@ -396,7 +406,7 @@ int ObStandbyLogSyncService::sync_once_(
   } else if (OB_FAIL(get_log_handler(log_handler))) {
   } else if (OB_FAIL(log_handler->get_end_lsn(start_lsn))) {
     LOG_WARN("failed to get local standby log end lsn", KR(ret));
-  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US))) {
+  } else if (OB_FAIL(client.init(source_addr, RPC_TIMEOUT_US, host_->rpc_tls_enabled()))) {
     LOG_WARN("failed to init standby grpc client", KR(ret), K(source_addr));
   } else if (OB_FAIL(client.fetch_log(
       start_lsn,
@@ -450,7 +460,7 @@ int ObStandbyLogSyncService::validate_switch_to_primary_(const bool is_failover)
   share::SCN local_sync_scn;
   const int64_t deadline_us = THIS_WORKER.is_timeout_ts_valid()
       ? THIS_WORKER.get_timeout_ts()
-      : common::ObTimeUtility::current_time() + GCONF.internal_sql_execute_timeout;
+      : common::ObTimeUtility::current_time() + host_->operation_timeout_us();
 
   {
     lib::ObMutexGuard guard(lock_);
@@ -499,7 +509,7 @@ int ObStandbyLogSyncService::prepare_switch_to_primary_(const bool is_failover)
   bool was_paused = false;
   const int64_t deadline_us = THIS_WORKER.is_timeout_ts_valid()
       ? THIS_WORKER.get_timeout_ts()
-      : common::ObTimeUtility::current_time() + GCONF.internal_sql_execute_timeout;
+      : common::ObTimeUtility::current_time() + host_->operation_timeout_us();
 
   if (OB_FAIL(sync_guard.get_ret())) {
     LOG_WARN("failed to serialize standby log sync", KR(ret));
@@ -582,30 +592,9 @@ int ObStandbyLogSyncService::pause_()
   return ret;
 }
 
-int ObStandbyLogSyncService::resume_()
-{
-  int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(lock_);
-  if (OB_FAIL(guard.get_ret())) {
-    LOG_WARN("failed to lock standby log sync service", KR(ret));
-  } else if (!is_inited_) {
-    ret = OB_NOT_INIT;
-  } else if (fatal_error_ != OB_SUCCESS) {
-    ret = fatal_error_;
-  } else {
-    paused_ = false;
-    LOG_INFO("standby log import resumed");
-  }
-  return ret;
-}
-
 void ObStandbyLogSyncService::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  if (!GCTX.is_standby_server()) {
-    return;
-  }
-
   lib::ObMutexGuard sync_guard(sync_lock_);
   common::ObAddr source_addr;
   bool made_progress = false;

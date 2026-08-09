@@ -841,10 +841,6 @@ _OBSERVER_RUNTIME_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_rpc_transport_services",
         "//src/oblib:oblib_rpc_transport_utilities",
     ],
-    "ob_server_standalone_2": [
-        "//src/oblib:oblib_diagnostics_runtime",
-        "//src/oblib:oblib_foundation",
-    ],
     "ob_server_vector_index_0": [
         "//src/oblib:common_sql_mode",
         "//src/oblib:oblib_collections_advanced",

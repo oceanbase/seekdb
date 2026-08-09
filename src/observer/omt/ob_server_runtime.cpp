@@ -21,7 +21,6 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
-#include "share/ob_cpu_share_calculator.h"
 
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
@@ -339,11 +338,9 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
     } else {
       runtime_meta_ = meta;
-      // Carry the persisted profile selected before runtime construction. The
-      // command-line role remains only a fresh-directory fallback.
-      set_role(share::server_role());
+      set_role(GCTX.server_role_);
+      // Carry the boot-time write capability from the bootstrap runtime.
       set_write_enabled(share::server_is_write_enabled());
-      set_recovery_mode(share::server_is_recovery_mode());
       set_min_cpu(meta.runtime_config_.resource_config_.min_cpu());
       set_max_cpu(meta.runtime_config_.resource_config_.max_cpu());
       const int64_t memory_size = static_cast<double>(runtime_meta_.runtime_config_.resource_config_.memory_size());
@@ -625,14 +622,13 @@ int ObServerRuntime::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_REQUEST_RUNTIME_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_MYSQL: {
-        if (!req.is_retry_on_lock()) {
+        if (req.is_retry_on_lock()) {
+          if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
+          }
+        } else {
           ATOMIC_INC(&recv_mysql_cnt_);
-        }
-        // Keep authentication ahead of normal SQL regardless of whether the
-        // client uses TCP, a Unix domain socket, or a Windows named pipe.
-        const int priority = req.is_retry_on_lock() || req.is_auth_request()
-                           ? RQ_HIGH : RQ_NORMAL;
-        if (OB_FAIL(req_queue_.push(&req, priority, true))) {
+          if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
+          }
         }
         break;
       }
@@ -804,10 +800,6 @@ void ObServerRuntime::check_parallel_servers_target()
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
   } else {
-    val = ObCpuShareCalculator::resolve_parallel_servers_target(
-        val,
-        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
-        GCONF.px_workers_per_cpu_quota);
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }

@@ -1,49 +1,120 @@
 load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+load("//bazel:seekdb_build_settings.bzl", "seekdb_bool_flag")
 
 package(default_visibility = ["//visibility:private"])
 
+seekdb_bool_flag(
+    name = "enable_standby",
+    build_setting_default = True,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "standby_disabled",
+    flag_values = {":enable_standby": "false"},
+)
+
+STANDBY_DEPS = [
+    "//src/logservice:append_callback_interface",
+    "//src/logservice:logservice",
+    "//src/oblib/grpc:grpc_runtime",
+    "//src/oblib:oblib_foundation",
+    "//src/oblib:oblib_foundation_base",
+    "//src/oblib:oblib_collections_utilities",
+    "//src/oblib:oblib_concurrency_runtime_base",
+    "//src/oblib:oblib_core_advanced",
+    "//src/oblib:oblib_core_utilities",
+    "//src/oblib:oblib_foundation_integration",
+    "//src/oblib:oblib_foundation_services",
+    "//src/oblib:oblib_foundation_support",
+    "//src/oblib:oblib_diagnostics_runtime",
+    "//src/oblib:oblib_db_values_runtime",
+    "//src/oblib:oblib_io_runtime",
+    "//src/oblib:oblib_memory_utilities",
+    "//src/oblib:oblib_memory_base",
+    "//src/share:cluster_metadata_persistence",
+    "//src/share:config",
+    "//src/share:core_types",
+    "//src/share:diagnostics",
+    "//src/share:execution_contracts",
+    "//src/share:freeze_coordination",
+    "//src/share:io",
+    "//src/share:io_device_interface",
+    "//src/share:lob_diff_interface",
+    "//src/share:lob_read_service",
+    "//src/share:log_protocol",
+    "//src/share:max_id_allocation",
+    "//src/share:runtime_context",
+    "//src/share:seekdb_runtime_foundation",
+    "//src/share:scn_interface",
+    "//src/share:schema_access",
+    "//src/share:tenant_role_transition_interface",
+    "//src/share:tenant_runtime",
+    "//src/share:task_control",
+    "//src/storage:storage_runtime_internal_headers",
+    "//src/storage:storage_runtime_interface",
+]
+
 cc_library(
-    name = "standby",
-    srcs = glob(["**/*.cpp"]),
-    hdrs = glob(["**/*.h"]),
+    name = "standby_interface",
+    hdrs = [
+        "standby_host.h",
+        "standby_module.h",
+    ],
     deps = [
-        "//src/logservice:append_callback_interface",
-        "//src/logservice:logservice",
-        "//src/oblib/grpc:grpc_runtime",
-        "//src/oblib:oblib_foundation",
-        "//src/oblib:oblib_foundation_base",
-        "//src/oblib:oblib_collections_utilities",
-        "//src/oblib:oblib_concurrency_runtime_base",
-        "//src/oblib:oblib_core_advanced",
-        "//src/oblib:oblib_core_utilities",
-        "//src/oblib:oblib_foundation_integration",
-        "//src/oblib:oblib_foundation_services",
         "//src/oblib:oblib_foundation_support",
-        "//src/oblib:oblib_diagnostics_runtime",
-        "//src/oblib:oblib_db_values_runtime",
         "//src/oblib:oblib_io_runtime",
-        "//src/oblib:oblib_memory_utilities",
-        "//src/oblib:oblib_memory_base",
-        "//src/share:cluster_metadata_persistence",
-        "//src/share:config",
-        "//src/share:core_types",
-        "//src/share:execution_contracts",
-        "//src/share:freeze_coordination",
-        "//src/share:io",
-        "//src/share:io_device_interface",
-        "//src/share:lob_diff_interface",
-        "//src/share:lob_read_service",
-        "//src/share:log_protocol",
-        "//src/share:runtime_context",
         "//src/share:seekdb_runtime_foundation",
-        "//src/share:scn_interface",
-        "//src/share:schema_access",
-        "//src/share:tenant_role_transition_interface",
-        "//src/share:tenant_runtime",
-        "//src/share:task_control",
-        "//src/storage:storage_runtime_internal_headers",
-        "//src/storage:storage_runtime_interface",
     ],
     features = ["layering_check"],
+)
+
+cc_library(
+    name = "standby_runtime",
+    srcs = glob(["**/*.cpp"], exclude = [
+        "standby_module.cpp",
+        "standby_module_disabled.cpp",
+    ]),
+    hdrs = glob(["**/*.h"], exclude = [
+        "standby_host.h",
+        "standby_module.h",
+    ]),
+    deps = STANDBY_DEPS + [":standby_interface"],
+    features = ["layering_check"],
+)
+
+cc_library(
+    name = "standby_unit_test_interface",
+    deps = [":standby_runtime"],
+    visibility = ["//unittest/standby:__pkg__"],
+)
+
+cc_library(
+    name = "standby_enabled",
+    srcs = ["standby_module.cpp"],
+    deps = STANDBY_DEPS + [
+        ":standby_interface",
+        ":standby_runtime",
+    ],
+    features = ["layering_check"],
+)
+
+cc_library(
+    name = "standby_disabled_impl",
+    srcs = ["standby_module_disabled.cpp"],
+    deps = [
+        ":standby_interface",
+        "//src/oblib:oblib_foundation_base",
+        "//src/oblib:oblib_memory_utilities",
+    ],
+    features = ["layering_check"],
+)
+
+cc_library(
+    name = "standby",
+    deps = select({
+        ":standby_disabled": [":standby_disabled_impl"],
+        "//conditions:default": [":standby_enabled"],
+    }),
     visibility = ["//src/observer:__pkg__"],
 )

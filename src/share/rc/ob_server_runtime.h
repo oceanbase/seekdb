@@ -89,12 +89,6 @@ public:
   }
   bool is_write_enabled() const { return 0 != ATOMIC_LOAD(&write_enabled_); }
 
-  void set_recovery_mode(const bool enabled)
-  {
-    ATOMIC_STORE(&recovery_mode_, enabled ? 1 : 0);
-  }
-  bool is_recovery_mode() const { return 0 != ATOMIC_LOAD(&recovery_mode_); }
-
   void set_switchover_epoch(const int64_t switchover_epoch);
   int64_t switchover_epoch() const { return ATOMIC_LOAD(&switchover_epoch_); }
 
@@ -105,7 +99,6 @@ protected:
   ObServerModuleInitCtx *module_init_ctx_;
   ObServerRole::Role role_;
   int64_t write_enabled_;
-  int64_t recovery_mode_;
   double max_cpu_;
   double min_cpu_;
   int64_t memory_size_;
@@ -201,16 +194,6 @@ inline void set_server_write_enabled(const bool enabled)
 inline bool server_is_write_enabled()
 {
   return g_server_runtime->is_write_enabled();
-}
-
-inline void set_server_recovery_mode(const bool enabled)
-{
-  g_server_runtime->set_recovery_mode(enabled);
-}
-
-inline bool server_is_recovery_mode()
-{
-  return g_server_runtime->is_recovery_mode();
 }
 
 inline int64_t server_switchover_epoch()

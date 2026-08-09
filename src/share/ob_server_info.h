@@ -37,32 +37,45 @@ struct ObServerInfo
 {
   ObServerInfo()
     : server_role_(ObServerRole::INVALID_ROLE),
-      switchover_status_(ObServerSwitchoverStatus::INVALID_STATUS) {}
+      pending_role_(ObServerRole::INVALID_ROLE),
+      switchover_status_(ObServerSwitchoverStatus::INVALID_STATUS),
+      cutover_scn_() {}
   ~ObServerInfo() {}
 
   bool is_valid() const {
     return server_role_.is_valid()
-           && switchover_status_.is_valid();
+           && switchover_status_.is_valid()
+           && (!pending_role_.is_valid()
+               || pending_role_.is_primary()
+               || pending_role_.is_standby());
   }
 
   void reset() {
     server_role_.reset();
+    pending_role_.reset();
     switchover_status_.reset();
+    cutover_scn_.reset();
   }
 
   int assign(const ObServerInfo &other) {
     server_role_ = other.server_role_;
+    pending_role_ = other.pending_role_;
     switchover_status_ = other.switchover_status_;
+    cutover_scn_ = other.cutover_scn_;
     return OB_SUCCESS;
   }
 
   // Getters
   const ObServerRole &get_server_role() const { return server_role_; }
+  const ObServerRole &get_pending_role() const { return pending_role_; }
   const ObServerSwitchoverStatus &get_switchover_status() const { return switchover_status_; }
+  const SCN &get_cutover_scn() const { return cutover_scn_; }
 
   // Convenience methods
   bool is_primary() const { return server_role_.is_primary(); }
   bool is_standby() const { return server_role_.is_standby(); }
+  bool has_pending_role() const { return pending_role_.is_valid(); }
+  bool is_preparing_status() const { return switchover_status_.is_preparing_status(); }
   bool is_normal_status() const { return switchover_status_.is_normal_status(); }
   bool is_switching_to_primary_status() const { return switchover_status_.is_switching_to_primary_status(); }
   bool is_switching_to_standby_status() const { return switchover_status_.is_switching_to_standby_status(); }
@@ -71,10 +84,28 @@ struct ObServerInfo
   bool is_prepare_flashback_for_failover_to_primary_status() const { return switchover_status_.is_prepare_flashback_for_failover_to_primary_status(); }
   bool is_flashback_status() const { return switchover_status_.is_flashback_status(); }
 
-  TO_STRING_KV(K_(server_role), K_(switchover_status));
+  int activate_pending_role()
+  {
+    int ret = OB_SUCCESS;
+    if (pending_role_.is_valid()) {
+      if (!pending_role_.is_primary() && !pending_role_.is_standby()) {
+        ret = OB_INVALID_DATA;
+      } else {
+        server_role_ = pending_role_;
+        pending_role_.reset();
+        switchover_status_ = NORMAL_SWITCHOVER_STATUS;
+        cutover_scn_.reset();
+      }
+    }
+    return ret;
+  }
+
+  TO_STRING_KV(K_(server_role), K_(pending_role), K_(switchover_status), K_(cutover_scn));
 
   ObServerRole server_role_;
+  ObServerRole pending_role_;
   ObServerSwitchoverStatus switchover_status_;
+  SCN cutover_scn_;
 
   OB_UNIS_VERSION(1);
 };

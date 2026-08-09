@@ -1565,7 +1565,6 @@ int ObServer::obs_init_modules()
 int ObServer::obs_start_modules()
 {
   int ret = OB_SUCCESS;
-  mods_ls_service_->set_startup_append_mode(!GCTX.is_standby_server());
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_start(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }

@@ -21,6 +21,8 @@
 #include "share/config/ob_config_manager.h"
 #include "lib/utility/ob_mod_define.h"  // ObModIds
 #include "lib/string/ob_string.h"  // ObString
+#include <errno.h>
+#include <stdlib.h>
 #include <string.h>  // strlen, MEMCPY
 
 namespace oceanbase
@@ -28,40 +30,93 @@ namespace oceanbase
 namespace share
 {
 
-OB_SERIALIZE_MEMBER(ObServerInfo, server_role_, switchover_status_);
+OB_SERIALIZE_MEMBER(ObServerInfo, server_role_, pending_role_, switchover_status_, cutover_scn_);
 
-// Helper function to serialize server_info to string format: "server_role:switchover_status"
+// New format: "active_role:pending_role:transition_status:cutover_scn".
+// The two-field form is still accepted for old data directories.
 static int serialize_server_info_to_string(const ObServerInfo &server_info, common::ObString &str, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   str.reset();
 
   const char *role_str = server_info.get_server_role().to_str();
+  const char *pending_role_str = server_info.get_pending_role().to_str();
   const char *status_str = server_info.get_switchover_status().to_str();
 
-  if (OB_ISNULL(role_str) || OB_ISNULL(status_str)) {
+  if (OB_ISNULL(role_str) || OB_ISNULL(pending_role_str) || OB_ISNULL(status_str)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server_info", KR(ret), K(server_info));
   } else {
-    int64_t role_len = strlen(role_str);
-    int64_t status_len = strlen(status_str);
-    int64_t total_len = role_len + 1 + status_len;  // role + ':' + status
+    const int64_t total_len = strlen(role_str) + strlen(pending_role_str)
+        + strlen(status_str) + 3 + 32;
 
-    char *buf = static_cast<char *>(allocator.alloc(total_len));
+    char *buf = static_cast<char *>(allocator.alloc(total_len + 1));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory", KR(ret), K(total_len));
     } else {
-      MEMCPY(buf, role_str, role_len);
-      buf[role_len] = ':';
-      MEMCPY(buf + role_len + 1, status_str, status_len);
-      str.assign_ptr(buf, static_cast<int32_t>(total_len));
+      const uint64_t cutover_scn = server_info.get_cutover_scn().is_valid()
+          ? server_info.get_cutover_scn().get_val_for_logservice() : 0;
+      int64_t pos = 0;
+      if (OB_FAIL(databuff_printf(buf, total_len + 1, pos, "%s:%s:%s:%llu",
+          role_str, pending_role_str, status_str,
+          static_cast<unsigned long long>(cutover_scn)))) {
+        LOG_WARN("failed to serialize server_info", KR(ret), K(server_info));
+      } else {
+        str.assign_ptr(buf, static_cast<int32_t>(pos));
+      }
     }
   }
   return ret;
 }
 
-// Helper function to deserialize server_info from string format: "server_role:switchover_status"
+static int parse_role(const common::ObString &str, ObServerRole &role)
+{
+  int ret = OB_SUCCESS;
+  if (0 == str.case_compare("INVALID")) {
+    role.reset();
+  } else {
+    role = ObServerRole(str);
+    if (!role.is_valid()) {
+      ret = OB_INVALID_DATA;
+    }
+  }
+  return ret;
+}
+
+static int parse_scn(const common::ObString &str, SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  scn.reset();
+  if (str.empty() || (str.length() == 1 && str.ptr()[0] == '0')) {
+  } else {
+    // ObString is not required to be NUL terminated. Copy the bounded field
+    // before using the libc numeric parser so malformed data cannot escape
+    // this persisted field.
+    char value_buf[32];
+    if (str.length() >= static_cast<int32_t>(sizeof(value_buf))) {
+      ret = OB_INVALID_DATA;
+    } else {
+      MEMCPY(value_buf, str.ptr(), str.length());
+      value_buf[str.length()] = '\0';
+    }
+    char *end_ptr = nullptr;
+    if (OB_SUCC(ret)) {
+      errno = 0;
+      const unsigned long long value = strtoull(value_buf, &end_ptr, 10);
+      if (OB_UNLIKELY(errno == ERANGE || end_ptr != value_buf + str.length()
+          || value > OB_MAX_SCN_TS_NS)) {
+        ret = OB_INVALID_DATA;
+      } else if (OB_FAIL(scn.convert_for_logservice(static_cast<uint64_t>(value)))) {
+        LOG_WARN("failed to convert persisted cutover scn", KR(ret), K(str));
+      }
+    }
+  }
+  return ret;
+}
+
+// Legacy two-field values are mapped to one pending role so restart can finish
+// an old interrupted transition without reviving its online state machine.
 static int deserialize_server_info_from_string(const common::ObString &str, ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
@@ -71,45 +126,62 @@ static int deserialize_server_info_from_string(const common::ObString &str, ObSe
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty server_info string", KR(ret));
   } else {
-    // Find the colon separator
-    const char *colon_pos = nullptr;
-    for (int32_t i = 0; i < str.length(); ++i) {
-      if (str.ptr()[i] == ':') {
-        colon_pos = str.ptr() + i;
-        break;
-      }
-    }
-
-    if (OB_ISNULL(colon_pos)) {
-      ret = OB_INVALID_DATA;
-      LOG_WARN("invalid server_info format, missing colon separator", KR(ret), K(str));
-    } else {
-      int32_t role_len = static_cast<int32_t>(colon_pos - str.ptr());
-      int32_t status_len = str.length() - role_len - 1;
-
-      if (role_len <= 0 || status_len <= 0) {
-        ret = OB_INVALID_DATA;
-        LOG_WARN("invalid server_info format, empty role or status", KR(ret), K(str), K(role_len), K(status_len));
-      } else {
-        common::ObString role_str(role_len, str.ptr());
-        common::ObString status_str(status_len, colon_pos + 1);
-
-        server_info.server_role_ = ObServerRole(role_str);
-        server_info.switchover_status_ = ObServerSwitchoverStatus(status_str);
-
-        if (!server_info.is_valid()) {
+    common::ObString fields[4];
+    int64_t field_count = 0;
+    int32_t field_start = 0;
+    for (int32_t i = 0; i <= str.length(); ++i) {
+      if (i == str.length() || str.ptr()[i] == ':') {
+        if (field_count >= ARRAYSIZEOF(fields)) {
           ret = OB_INVALID_DATA;
-          LOG_WARN("invalid server_info after deserialization", KR(ret), K(str), K(server_info));
+          break;
         }
+        fields[field_count++].assign_ptr(str.ptr() + field_start, i - field_start);
+        field_start = i + 1;
       }
     }
+
+    if (OB_FAIL(ret)) {
+    } else if (field_count != 2 && field_count != 4) {
+      ret = OB_INVALID_DATA;
+      LOG_WARN("invalid server_info field count", KR(ret), K(str), K(field_count));
+    } else if (OB_FAIL(parse_role(fields[0], server_info.server_role_))) {
+      LOG_WARN("invalid active role in server_info", KR(ret), K(str));
+    } else if (field_count == 2) {
+      server_info.switchover_status_ = ObServerSwitchoverStatus(fields[1]);
+      if (!server_info.switchover_status_.is_valid()) {
+        ret = OB_INVALID_DATA;
+      } else if (server_info.switchover_status_.is_prepare_switching_to_standby_status()
+                 || server_info.switchover_status_.is_switching_to_standby_status()) {
+        server_info.pending_role_ = STANDBY_SERVER_ROLE;
+        server_info.switchover_status_ = PREPARING_SWITCHOVER_STATUS;
+      } else if (server_info.switchover_status_.is_prepare_switching_to_primary_status()
+                 || server_info.switchover_status_.is_prepare_flashback_for_failover_to_primary_status()
+                 || server_info.switchover_status_.is_flashback_status()
+                 || server_info.switchover_status_.is_switching_to_primary_status()) {
+        server_info.pending_role_ = PRIMARY_SERVER_ROLE;
+        server_info.switchover_status_ = PREPARING_SWITCHOVER_STATUS;
+      }
+    } else if (OB_FAIL(parse_role(fields[1], server_info.pending_role_))) {
+      LOG_WARN("invalid pending role in server_info", KR(ret), K(str));
+    } else {
+      server_info.switchover_status_ = ObServerSwitchoverStatus(fields[2]);
+      if (!server_info.switchover_status_.is_valid()) {
+        ret = OB_INVALID_DATA;
+      } else if (OB_FAIL(parse_scn(fields[3], server_info.cutover_scn_))) {
+        LOG_WARN("invalid cutover scn in server_info", KR(ret), K(str));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !server_info.is_valid()) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("invalid server_info after deserialization", KR(ret), K(str), K(server_info));
   }
   return ret;
 }
 
 // Helper function to load server_info from config parameter using config manager interface
 // Query config table via config storage interface using load_all_configs, not from memory
-// Format: "server_role:switchover_status"
+// Format: "active_role:pending_role:transition_status:cutover_scn".
 static int load_server_info_from_config(
     common::ObConfigManager *config_mgr,
     ObServerInfo &server_info)
@@ -142,7 +214,7 @@ static int load_server_info_from_config(
 
 // Helper function to update server_info config parameter via internal table
 // Only persists to table, reload is handled by caller
-// Format: "server_role:switchover_status"
+// Format: "active_role:pending_role:transition_status:cutover_scn".
 static int update_server_info_config(
     common::ObConfigManager *config_mgr,
     const ObServerInfo &server_info)
@@ -190,18 +262,21 @@ int ObServerInfoProxy::load_server_info(
   int ret = OB_SUCCESS;
   server_info.reset();
 
-  // Load server_info from config parameter (using config manager interface)
-  // Format: "server_role:switchover_status"
+  // Load server_info from config parameter (using config manager interface).
   if (OB_FAIL(load_server_info_from_config(config_mgr, server_info))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       // A fresh data directory has no persisted role yet.
       if (ObServerRole::PRIMARY_ROLE == fallback_role) {
         server_info.server_role_ = PRIMARY_SERVER_ROLE;
+        server_info.pending_role_.reset();
         server_info.switchover_status_ = NORMAL_SWITCHOVER_STATUS;
+        server_info.cutover_scn_.reset();
         ret = OB_SUCCESS;
       } else if (ObServerRole::STANDBY_ROLE == fallback_role) {
         server_info.server_role_ = STANDBY_SERVER_ROLE;
+        server_info.pending_role_.reset();
         server_info.switchover_status_ = NORMAL_SWITCHOVER_STATUS;
+        server_info.cutover_scn_.reset();
         ret = OB_SUCCESS;
       } else {
         LOG_WARN("cannot infer server_info from server_role",
@@ -232,6 +307,9 @@ int ObServerInfoProxy::init_server_info_from_role(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server role", KR(ret), K(server_role));
   }
+
+  server_info.pending_role_.reset();
+  server_info.cutover_scn_.reset();
 
   if (OB_SUCC(ret)) {
     // Update server_info via config parameter

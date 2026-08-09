@@ -473,7 +473,8 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
         const bool is_internal_maintenance =
             pc_ctx.sql_ctx_.session_info_->is_inner()
             && !pc_ctx.sql_ctx_.session_info_->is_user_session();
-        const bool is_standby_control_stmt = !share::server_is_primary()
+        const bool is_write_enabled = share::server_is_write_enabled();
+        const bool is_standby_control_stmt = !is_write_enabled
             && ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_);
         MEMCPY(pc_ctx.sql_ctx_.sql_id_,
                plan->stat_.sql_id_.ptr(),
@@ -482,7 +483,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
                plan->stat_.format_sql_id_.ptr(),
                plan->stat_.format_sql_id_.length());
         if (!is_internal_maintenance
-            && !share::server_is_primary()
+            && !is_write_enabled
                    && !pc_ctx.sql_traits_.is_readonly_stmt_
                    && !ObSQLUtils::is_allowed_on_standby(pc_ctx.sql_traits_.stmt_type_)) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;

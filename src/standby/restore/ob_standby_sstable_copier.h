@@ -27,6 +27,10 @@
 
 namespace oceanbase
 {
+namespace standby
+{
+struct StandbyConfig;
+}
 namespace common
 {
 class ObInOutBandwidthThrottle;
@@ -48,7 +52,10 @@ public:
   ObStandbySSTableCopier();
   ~ObStandbySSTableCopier() = default;
 
-  int init(const common::ObAddr &src, common::ObInOutBandwidthThrottle *bandwidth_throttle);
+  int init(
+      const common::ObAddr &src,
+      common::ObInOutBandwidthThrottle *bandwidth_throttle,
+      const standby::StandbyConfig &config);
   int prepare_replay_base(
       share::SCN &restore_checkpoint_scn,
       palf::PalfBaseInfo &palf_base_info,
@@ -109,6 +116,7 @@ private:
   bool replay_base_prepared_;
   common::ObAddr src_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
+  const standby::StandbyConfig *config_;
   ObLSMeta source_ls_meta_;
   share::SCN physical_checkpoint_scn_;
   restore::ObStandbyRestoreHelper ls_view_helper_;

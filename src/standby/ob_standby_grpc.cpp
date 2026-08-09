@@ -18,7 +18,6 @@
 
 #include "standby/ob_standby_grpc.h"
 #include "standby/ob_standby_grpc_service.h"
-#include "standby/ob_standby_service.h"
 #include "grpc/ob_grpc_server.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -27,6 +26,7 @@
 #include "standby/ob_standby_palf_base_info.h"
 #include "standby/ob_standby_grpc_stream_util.h"
 #include "standby/restore/ob_standby_restore_reader.h"
+#include "standby/standby_host.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "common/ob_version_def.h"
@@ -46,11 +46,13 @@ namespace oceanbase
 namespace standby
 {
 
-class ObStandbyGrpcServiceImpl final : public standbyservice::StandbyService::Service
+class StandbyGrpcService final : public standbyservice::StandbyService::Service
 {
 public:
-  ObStandbyGrpcServiceImpl() {}
-  virtual ~ObStandbyGrpcServiceImpl() {}
+  explicit StandbyGrpcService(const StandbyConfig &config)
+    : io_timeout_ms_(config.io_timeout_ms_)
+  {}
+  virtual ~StandbyGrpcService() {}
 
   grpc::Status fetch_ls_view(grpc::ServerContext* context,
                              const standbyservice::FetchLSViewReq* request,
@@ -87,12 +89,40 @@ public:
   grpc::Status fetch_log(grpc::ServerContext* context,
                          const standbyservice::FetchLogReq* request,
                          grpc::ServerWriter<standbyservice::FetchLogRes>* writer) override;
+
+private:
+  int64_t io_timeout_ms_;
 };
 
-int register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server)
+int create_and_register_standby_grpc_service(
+    obgrpc::ObGrpcServer &grpc_server,
+    const StandbyConfig &config,
+    StandbyGrpcService *&service)
 {
-  static ObStandbyGrpcServiceImpl standby_grpc_service;
-  return grpc_server.register_service(&standby_grpc_service);
+  int ret = OB_SUCCESS;
+  service = nullptr;
+  StandbyGrpcService *new_service = nullptr;
+  if (!config.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid standby gRPC service config", KR(ret));
+  } else if (OB_ISNULL(new_service = OB_NEW(StandbyGrpcService, "StandbyGrpc", config))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate standby gRPC service", KR(ret));
+  } else if (OB_FAIL(grpc_server.register_service(new_service))) {
+    LOG_WARN("failed to register standby gRPC service", KR(ret));
+    OB_DELETE(StandbyGrpcService, "StandbyGrpc", new_service);
+  } else {
+    service = new_service;
+  }
+  return ret;
+}
+
+void destroy_standby_grpc_service(StandbyGrpcService *&service)
+{
+  if (nullptr != service) {
+    OB_DELETE(StandbyGrpcService, "StandbyGrpc", service);
+    service = nullptr;
+  }
 }
 
 ObStandbyLSViewTabletCountResult::ObStandbyLSViewTabletCountResult()
@@ -109,7 +139,7 @@ ObStandbyLSViewMeta::ObStandbyLSViewMeta()
 
 OB_SERIALIZE_MEMBER(ObStandbyLSViewMeta, ls_meta_, physical_checkpoint_scn_);
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_ls_view(
+grpc::Status StandbyGrpcService::fetch_ls_view(
     grpc::ServerContext* context,
     const FetchLSViewReq* request,
     grpc::ServerWriter<FetchLSViewRes>* writer)
@@ -232,7 +262,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_ls_view(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::get_ls_view_tablet_count(
+grpc::Status StandbyGrpcService::get_ls_view_tablet_count(
     grpc::ServerContext* context,
     const standbyservice::GetLSViewTabletCountReq* request,
     standbyservice::GetLSViewTabletCountRes* response)
@@ -274,7 +304,7 @@ grpc::Status ObStandbyGrpcServiceImpl::get_ls_view_tablet_count(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_info(
+grpc::Status StandbyGrpcService::fetch_tablet_info(
     grpc::ServerContext* context,
     const FetchTabletInfoReq* request,
     grpc::ServerWriter<FetchTabletInfoRes>* writer)
@@ -343,7 +373,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_sstable_info(
+grpc::Status StandbyGrpcService::fetch_tablet_sstable_info(
     grpc::ServerContext* context,
     const FetchTabletSSTableInfoReq* request,
     grpc::ServerWriter<FetchTabletSSTableInfoRes>* writer)
@@ -402,7 +432,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_tablet_sstable_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_sstable_macro_info(
+grpc::Status StandbyGrpcService::fetch_sstable_macro_info(
     grpc::ServerContext* context,
     const FetchSSTableMacroInfoReq* request,
     grpc::ServerWriter<FetchSSTableMacroInfoRes>* writer)
@@ -454,7 +484,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_sstable_macro_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_macro_block(
+grpc::Status StandbyGrpcService::fetch_macro_block(
     grpc::ServerContext* context,
     const FetchMacroBlockReq* request,
     grpc::ServerWriter<FetchMacroBlockRes>* writer)
@@ -475,7 +505,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_macro_block(
       FetchMacroBlockRes header_response;
       FetchMacroBlockRes data_response;
       if (OB_FAIL(producer.init(arg.ls_id_, arg.table_key_,
-          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_))) {
+          arg.copy_macro_range_info_, arg.data_version_, arg.backfill_tx_scn_, io_timeout_ms_))) {
         LOG_ERROR("failed to init copy macro block ob producer", K(ret), K(arg));
       }
       common::ObArenaAllocator header_allocator("MacroBlkHeader");
@@ -528,7 +558,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_macro_block(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::check_restore_precondition(
+grpc::Status StandbyGrpcService::check_restore_precondition(
     grpc::ServerContext* context,
     const standbyservice::CheckRestorePreconditionReq* request,
     standbyservice::CheckRestorePreconditionRes* response)
@@ -609,7 +639,7 @@ grpc::Status ObStandbyGrpcServiceImpl::check_restore_precondition(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_standby_palf_base_info(
+grpc::Status StandbyGrpcService::fetch_standby_palf_base_info(
     grpc::ServerContext* context,
     const standbyservice::FetchStandbyPalfBaseInfoReq* request,
     standbyservice::FetchStandbyPalfBaseInfoRes* response)
@@ -635,7 +665,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_standby_palf_base_info(
   return obgrpc::ob_error_to_grpc_status(ret);
 }
 
-grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
+grpc::Status StandbyGrpcService::fetch_log(
     grpc::ServerContext *context,
     const standbyservice::FetchLogReq *request,
     grpc::ServerWriter<standbyservice::FetchLogRes> *writer)
@@ -744,6 +774,7 @@ grpc::Status ObStandbyGrpcServiceImpl::fetch_log(
 int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
+    bool rpc_tls_enabled,
     const obcall::ObCopyTabletsSSTableInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx)
@@ -758,7 +789,7 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -793,6 +824,7 @@ int ObStandbyGrpcClient::init_tablet_sstable_info_stream(
 int ObStandbyGrpcClient::init_sstable_macro_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
+    bool rpc_tls_enabled,
     const obcall::ObCopySSTableMacroRangeInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx)
@@ -807,7 +839,7 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -842,6 +874,7 @@ int ObStandbyGrpcClient::init_sstable_macro_info_stream(
 int ObStandbyGrpcClient::init_macro_block_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
+    bool rpc_tls_enabled,
     const obcall::ObCopyMacroBlockRangeArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx)
@@ -856,7 +889,7 @@ int ObStandbyGrpcClient::init_macro_block_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -891,6 +924,7 @@ int ObStandbyGrpcClient::init_macro_block_stream(
 int ObStandbyGrpcClient::init_tablet_info_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
+    bool rpc_tls_enabled,
     const obcall::ObCopyTabletInfoArg &arg,
     common::ObIAllocator &allocator,
     restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx)
@@ -905,7 +939,7 @@ int ObStandbyGrpcClient::init_tablet_info_stream(
   } else {
     void *ctx_buf = nullptr;
     grpc_client = new (buf) ObStandbyGrpcClient();
-    if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
+    if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
       LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
     } else if (OB_ISNULL(ctx_buf = allocator.alloc(sizeof(grpc::ClientContext)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -948,7 +982,10 @@ ObStandbyGrpcClient::~ObStandbyGrpcClient()
 {
 }
 
-int ObStandbyGrpcClient::init(const common::ObAddr& addr, int64_t timeout)
+int ObStandbyGrpcClient::init(
+    const common::ObAddr& addr,
+    int64_t timeout,
+    bool rpc_tls_enabled)
 {
   int ret = OB_SUCCESS;
 
@@ -959,7 +996,7 @@ int ObStandbyGrpcClient::init(const common::ObAddr& addr, int64_t timeout)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid addr", K(ret), K(addr));
   } else {
-    ret = grpc_client_.init(addr, timeout, ObStandbyService::is_rpc_tls_enabled());
+    ret = grpc_client_.init(addr, timeout, rpc_tls_enabled);
     if (OB_SUCC(ret)) {
       is_inited_ = true;
       LOG_INFO("ObStandbyGrpcClient init success", K(addr), K(timeout));
@@ -1341,6 +1378,7 @@ int ObStandbyGrpcClient::translate_error(const grpc::Status &status)
 int ObStandbyGrpcClient::init_ls_view_stream(
     const common::ObAddr &src_addr,
     int64_t timeout,
+    bool rpc_tls_enabled,
     common::ObIAllocator &allocator,
     ObLSMeta &ls_meta,
     share::SCN &physical_checkpoint_scn,
@@ -1356,7 +1394,7 @@ int ObStandbyGrpcClient::init_ls_view_stream(
       LOG_WARN("failed to alloc grpc client", K(ret));
     } else {
       grpc_client = new (buf) ObStandbyGrpcClient();
-      if (OB_FAIL(grpc_client->init(src_addr, timeout))) {
+      if (OB_FAIL(grpc_client->init(src_addr, timeout, rpc_tls_enabled))) {
         LOG_WARN("failed to init standby grpc client", K(ret), K(src_addr), K(timeout));
       } else {
         void *ctx_buf = nullptr;

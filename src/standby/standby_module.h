@@ -40,7 +40,6 @@ public:
   int start();
   int wait_replay_ready(const std::function<bool()> &is_stopping);
   int wait_metadata_ready();
-  int reload_config(const bool rpc_service_enabled);
   int start_listener();
 
 private:

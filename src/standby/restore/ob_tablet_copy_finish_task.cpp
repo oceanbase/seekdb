@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "standby/restore/ob_tablet_copy_finish_task.h"
-#include "standby/ob_standby_observer_adapter.h"
-#include "share/config/ob_server_config.h"
+#include "share/ob_structured_event_logger.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
+#include "standby/standby_host.h"
 
 namespace oceanbase
 {
@@ -35,7 +35,8 @@ ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
     is_leader_restore_(false),
     src_tablet_meta_(nullptr),
     copy_tablet_ctx_(nullptr),
-    is_only_replace_major_(false)
+    is_only_replace_major_(false),
+    config_(nullptr)
 
 {
 }
@@ -43,7 +44,8 @@ ObTabletCopyFinishTaskParam::ObTabletCopyFinishTaskParam()
 bool ObTabletCopyFinishTaskParam::is_valid() const
 {
   return OB_NOT_NULL(ls_) && tablet_id_.is_valid() && OB_NOT_NULL(copy_tablet_ctx_)
-      && ObTabletRestoreAction::is_valid(restore_action_);
+      && ObTabletRestoreAction::is_valid(restore_action_) && OB_NOT_NULL(config_)
+      && config_->is_valid();
 }
 
 
@@ -97,7 +99,7 @@ int ObTabletCopyFinishTask::process()
     // do nothing.
   } else if (OB_DDL_TASK_EXECUTE_TOO_MUCH_TIME == ret ) { // ret=-4192, errsim trigger to test ddl-split orthogonal ls-migration.
     ret = OB_SUCCESS;
-    const int64_t errsim_test_tablet_id = GCONF.errsim_test_tablet_id.get_value();
+    const int64_t errsim_test_tablet_id = param_.config_->errsim_test_tablet_id_;
     if (param_.tablet_id_.is_inner_tablet() || param_.tablet_id_.is_ls_inner_tablet()) {
     } else if (errsim_test_tablet_id > 0 && param_.tablet_id_.id() == errsim_test_tablet_id) {
       LOG_INFO("[ERRSIM] stuck before create table store", K(param_), KPC(this));
@@ -141,6 +143,7 @@ int ObTabletCopyFinishTask::process()
                           + minor_tables_handle_.get_count()
                           + ddl_tables_handle_.get_count()
                           + major_tables_handle_.get_count();
+  const int64_t ls_id = ObLSID::SYS_LS_ID;
 
   int tmp_ret = OB_SUCCESS;
   char extra_info_str[MAX_ROOTSERVICE_JOB_EXTRA_INFO_LENGTH] = {0};
@@ -155,13 +158,13 @@ int ObTabletCopyFinishTask::process()
     LOG_WARN("failed to print extra info", K(tmp_ret), K(extra_info));
   }
 
-  standby::ObStandbyObserverAdapter::report_tablet_copy_finish_task(
-      OB_SERVER_RUNTIME_ID,
-      ObLSID::SYS_LS_ID,
-      param_.tablet_id_.id(),
-      ret,
-      sstable_count,
-      extra_info_str);
+  SERVER_EVENT_ADD("standby_restore", "tablet_copy_finish_task",
+      "tenant_id", OB_SERVER_RUNTIME_ID,
+      "ls_id", ls_id,
+      "tablet_id", param_.tablet_id_.id(),
+      "ret", ret,
+      "sstable_count", sstable_count,
+      "extra_info", extra_info_str);
   return ret;
 }
 

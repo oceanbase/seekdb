@@ -21,12 +21,12 @@
 #include "share/rc/ob_server_runtime.h"
 #include "standby/restore/ob_physical_copy_task.h"
 #include "standby/restore/ob_restore_helper.h"
+#include "standby/standby_host.h"
 #include "standby/restore/ob_standby_restore_tablet_builder.h"
 #include "standby/restore/ob_tablet_copy_finish_task.h"
 #include "standby/restore/ob_sstable_copy_finish_task.h"
 #include "standby/ob_standby_grpc.h"
 #include "standby/ob_standby_palf_base_info.h"
-#include "share/config/ob_server_config.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/ls/ob_ls_meta.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
@@ -79,6 +79,7 @@ ObStandbySSTableCopier::ObStandbySSTableCopier()
       replay_base_prepared_(false),
       src_(),
       bandwidth_throttle_(nullptr),
+      config_(nullptr),
       source_ls_meta_(),
       physical_checkpoint_scn_(),
       ls_view_helper_()
@@ -87,18 +88,20 @@ ObStandbySSTableCopier::ObStandbySSTableCopier()
 
 int ObStandbySSTableCopier::init(
     const common::ObAddr &src,
-    common::ObInOutBandwidthThrottle *bandwidth_throttle)
+    common::ObInOutBandwidthThrottle *bandwidth_throttle,
+    const standby::StandbyConfig &config)
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("standby sstable copier init twice", K(ret));
-  } else if (!src.is_valid() || OB_ISNULL(bandwidth_throttle)) {
+  } else if (!src.is_valid() || OB_ISNULL(bandwidth_throttle) || !config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid standby sstable copier argument", K(ret), K(src), KP(bandwidth_throttle));
   } else {
     src_ = src;
     bandwidth_throttle_ = bandwidth_throttle;
+    config_ = &config;
     is_inited_ = true;
   }
   return ret;
@@ -136,7 +139,7 @@ int ObStandbySSTableCopier::prepare_replay_base(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("source returned invalid restore checkpoint", K(ret), K(source_ls_meta_));
   } else if (FALSE_IT(arg.replay_start_scn_ = restore_checkpoint_scn)) {
-  } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US))) {
+  } else if (OB_FAIL(client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init grpc client for replay base", K(ret), K_(src));
   } else if (OB_FAIL(client.fetch_standby_palf_base_info(arg, result))) {
     LOG_WARN("failed to fetch source palf replay base", K(ret), K_(src), K(arg));
@@ -192,11 +195,11 @@ int ObStandbySSTableCopier::init_helper_(ObStandbyRestoreHelper &helper) const
 {
   int ret = OB_SUCCESS;
   ObTaskId task_id;
-  task_id.init(GCONF.self_addr_);
+  task_id.init(config_->self_addr_);
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby sstable copier not init", K(ret));
-  } else if (OB_FAIL(helper.init(src_, task_id, bandwidth_throttle_))) {
+  } else if (OB_FAIL(helper.init(src_, task_id, bandwidth_throttle_, *config_))) {
     LOG_WARN("failed to init standby restore helper", K(ret), K_(src), K(task_id));
   }
   return ret;
@@ -485,7 +488,7 @@ int ObStandbySSTableCopier::copy_tablet_(
   ObStandbyRestoreHelper macro_helper;
   ObStandbyRestoreCopySSTableParam copy_sstable_param;
   ObStandbyRestoreCopySSTableInfoMgr copy_sstable_info_mgr;
-  copy_id.init(GCONF.self_addr_);
+  copy_id.init(config_->self_addr_);
   copy_sstable_param.helper_ = &macro_helper;
 
   if (OB_ISNULL(ls) || !tablet_id.is_valid()) {
@@ -520,6 +523,7 @@ int ObStandbySSTableCopier::copy_tablet_(
     tablet_param.src_tablet_meta_ = src_tablet_meta;
     tablet_param.copy_tablet_ctx_ = &copy_tablet_ctx;
     tablet_param.is_only_replace_major_ = false;
+    tablet_param.config_ = config_;
     if (OB_FAIL(tablet_finish_task.init(tablet_param))) {
       LOG_WARN("failed to init tablet finish task", K(ret), K(tablet_param));
     }

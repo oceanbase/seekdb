@@ -35,6 +35,7 @@ static const char *SERVER_SWITCHOVER_STATUS_STRS[] =
   "PREPARE SWITCHING TO PRIMARY",
   "PREPARE FLASHBACK",
   "FLASHBACK",
+  "PREPARING",
 };
 
 OB_SERIALIZE_MEMBER(ObServerSwitchoverStatus, value_);

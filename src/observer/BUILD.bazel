@@ -91,7 +91,6 @@ filegroup(
 _OBSERVER_NATIVE_DEPS = [
     "//rust:sql_nio_headers",
     "//src/oblib/easy:easy",
-    "//src/oblib/grpc:grpc_runtime",
     "//src/oblib:common_sql_mode",
     "//src/oblib:oblib_foundation",
     "//src/data_plane:data_plane_api_interface",

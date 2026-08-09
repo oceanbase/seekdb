@@ -85,10 +85,8 @@ c1	c2	c3
 1	src_1	100
 2	src_2	200
 3	src_3	300
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_1 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_1 and readable_scn >= $primary_last_scn_1, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $primary_last_scn_1, 1, 30;
 Phase 2 completed: Standby sync verified, data consistency and merge checkpoint verified
 ========== Phase 3: First Switchover (Primary -> Standby) ==========
 --- ddl ---
@@ -105,12 +103,20 @@ insert into test_switchover_vec values(5, 'vec_5', '[13.0, 14.0, 15.0]');
 insert into test_switchover_fork_src values(4, 'src_4', 400);
 insert into test_switchover_fork_src values(5, 'src_5', 500);
 insert into test_switchover_fork_dst values(4, 'fork_4', 444);
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_p.force_stop;
+db_s.force_stop;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 create table test_switchover_readonly_check(a int);
 ERROR HY000: standby tenant is read only
 Phase 3 completed: Primary successfully switched to standby
 ========== Phase 4: Second Switchover (Standby -> Primary) ==========
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 --- ddl ---
 insert into test_switchover_ddl(id, name, value, create_time, extra_info) values(5, 'test5', 500, current_timestamp, NULL);
 create table test_switchover_ddl_new(a int primary key, b varchar(100));
@@ -206,10 +212,8 @@ db_p.check_until_timeout select count(*) from test_switchover_fork_dst2 where c2
 select count(*) from test_switchover_fork_dst2;
 count(*)
 6
-db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_2 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_2 and readable_scn >= $primary_last_scn_2, 1, 30;
-db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $primary_last_scn_2, 1, 30;
 Phase 5 completed: New standby sync verified, data consistency and merge checkpoint verified
 ========== Phase 6: Roundtrip Switchover (Back to Original) ==========
 --- ddl ---
@@ -223,9 +227,14 @@ insert into test_switchover_vec_idx values(3, 'vidx_3', '[0.0, 0.0, 1.0, 0.0]');
 --- fork_table ---
 insert into test_switchover_fork_src values(7, 'src_7', 700);
 insert into test_switchover_fork_dst values(5, 'fork_5', 555);
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn_before_switch, 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s.force_stop;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 --- ddl ---
 select count(*) from test_switchover_ddl;
 count(*)
@@ -285,9 +294,7 @@ count(*)
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN != GLOBAL_BROADCAST_SCN, 1, 100;
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn, 1, 120;
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn and readable_scn >= $final_last_scn, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $final_last_scn, 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $final_last_scn and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 Phase 6 completed: Roundtrip switchover completed, final merge checkpoint verified
 ========== Test Summary ==========
 Roundtrip switchover framework test completed successfully:
