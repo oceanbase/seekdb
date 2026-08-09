@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "standby/restore/ob_physical_copy_task.h"
+#include "standby/standby_host.h"
 #include "standby/restore/ob_restore_helper.h"
-#include "standby/ob_standby_observer_adapter.h"
+#include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
 {
@@ -344,7 +345,8 @@ int ObPhysicalCopyTask::get_macro_block_writer_(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory", K(ret));
     } else if (OB_FAIL(tmp_writer->init(copy_ctx_->tenant_id_, copy_ctx_->ls_id_, copy_ctx_->tablet_id_,
-        copy_ctx_->copy_id_, sstable_param, reader, index_block_rebuilder, copy_ctx_->extra_info_))) {
+        copy_ctx_->copy_id_, sstable_param, reader, index_block_rebuilder, copy_ctx_->extra_info_,
+        copy_ctx_->helper_->get_config().io_timeout_ms_))) {
       STORAGE_LOG(WARN, "failed to init macro block writer", K(ret), KPC(copy_ctx_));
     } else {
       writer = tmp_writer;
@@ -384,12 +386,12 @@ int ObPhysicalCopyTask::record_server_event_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("copy ctx should not be null", K(ret), KPC_(copy_ctx));
   } else {
-    standby::ObStandbyObserverAdapter::report_physical_copy_task(
-        copy_ctx_->tenant_id_,
-        copy_ctx_->ls_id_.id(),
-        copy_ctx_->tablet_id_.id(),
-        copy_table_key_,
-        copy_macro_range_info_->macro_block_count_);
+    SERVER_EVENT_ADD("standby_restore", "physical_copy_task",
+        "tenant_id", copy_ctx_->tenant_id_,
+        "ls_id", copy_ctx_->ls_id_.id(),
+        "tablet_id", copy_ctx_->tablet_id_.id(),
+        "table_key", copy_table_key_,
+        "macro_block_count", copy_macro_range_info_->macro_block_count_);
   }
   return ret;
 }

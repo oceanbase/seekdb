@@ -114,6 +114,7 @@ SHARE_UNITY_GROUPS = [
             "src/share/ob_schema_version_info.cpp",
             "src/share/ob_freeze_info_proxy.cpp",
             "src/share/ob_ls_id.cpp",
+            "src/share/ob_server_info.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

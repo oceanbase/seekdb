@@ -149,7 +149,7 @@ public:
   ObStandbyGrpcClient();
   ~ObStandbyGrpcClient();
 
-  int init(const common::ObAddr& addr, int64_t timeout);
+  int init(const common::ObAddr& addr, int64_t timeout, bool rpc_tls_enabled);
   int get_ls_view_tablet_count(ObStandbyLSViewTabletCountResult& result);
   int check_restore_precondition(obcall::ObCheckRestorePreconditionResult& result);
   int fetch_standby_palf_base_info(const standby::ObFetchStandbyPalfBaseInfoArg &arg,
@@ -185,6 +185,7 @@ public:
   static int init_ls_view_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
+      bool rpc_tls_enabled,
       common::ObIAllocator &allocator,
       ObLSMeta &ls_meta,
       share::SCN &physical_checkpoint_scn,
@@ -192,24 +193,28 @@ public:
   static int init_tablet_sstable_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
+      bool rpc_tls_enabled,
       const obcall::ObCopyTabletsSSTableInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableInfoCtx &sstable_info_ctx);
   static int init_sstable_macro_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
+      bool rpc_tls_enabled,
       const obcall::ObCopySSTableMacroRangeInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperSSTableMacroRangeCtx &macro_range_ctx);
   static int init_macro_block_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
+      bool rpc_tls_enabled,
       const obcall::ObCopyMacroBlockRangeArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperMacroBlockCtx &macro_block_ctx);
   static int init_tablet_info_stream(
       const common::ObAddr &src_addr,
       int64_t timeout,
+      bool rpc_tls_enabled,
       const obcall::ObCopyTabletInfoArg &arg,
       common::ObIAllocator &allocator,
       restore::ObRestoreHelperTabletInfoCtx &tablet_info_ctx);

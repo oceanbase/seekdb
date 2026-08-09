@@ -338,11 +338,9 @@ int ObServerRuntime::init(const ObServerRuntimeMeta &meta)
     if (OB_FAIL(construct_module_init_ctx(meta, module_init_ctx_))) {
     } else {
       runtime_meta_ = meta;
-      // Carry the persisted profile selected before runtime construction. The
-      // command-line role remains only a fresh-directory fallback.
-      set_role(share::server_role());
+      set_role(GCTX.server_role_);
+      // Carry the boot-time write capability from the bootstrap runtime.
       set_write_enabled(share::server_is_write_enabled());
-      set_recovery_mode(share::server_is_recovery_mode());
       set_min_cpu(meta.runtime_config_.resource_config_.min_cpu());
       set_max_cpu(meta.runtime_config_.resource_config_.max_cpu());
       const int64_t memory_size = static_cast<double>(runtime_meta_.runtime_config_.resource_config_.memory_size());

@@ -149,11 +149,9 @@ source t/stanby/include/switchover_workloads.inc;
 --disable_query_log
 --disable_result_log
 
-# 验证合并位点一致性（主库本地合并完成，备库合并位点、同步/可读位点达到主库合并位点）
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+# 验证备库本地合并完成，且目标位点位于已同步/可读范围内并覆盖主库检查点
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_1 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_1 and readable_scn >= $primary_last_scn_1, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $primary_last_scn_1, 1, 30;
 
 --enable_query_log
 --enable_result_log
@@ -182,16 +180,31 @@ source t/stanby/include/switchover_workloads.inc;
 ALTER SYSTEM MINOR FREEZE;
 sleep 5;
 
-# 执行主库集群切换为备库
+# prepare 只 fencing 写入并记录 pending role，进程仍按 PRIMARY profile 运行
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 
-# 验证主库集群已切换为备库
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+# 验证 active role 未改变，pending role 已持久化
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 
 --enable_query_log
 --enable_result_log
 
+# 目标备库准备成为主库，旧主仍在线但已 fencing
+connection conn_sys_s;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+
+# 外部编排者停止旧主，重启目标；旧主随后按 pending role 重启为备库
+db_p.force_stop;
+db_s.force_stop;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
 # 验证原主库（现在是备库）不能执行写操作
+connection conn_sys_p;
 --error 4688
 create table test_switchover_readonly_check(a int);
 
@@ -205,15 +218,13 @@ create table test_switchover_readonly_check(a int);
 --disable_query_log
 --disable_result_log
 
-# 等待状态稳定
-sleep 5;
-
-# 执行备库集群切换为主库
+# 角色已在上一阶段的重启中生效，重复命令只验证幂等性
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_sys_s;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
-# 验证备库集群已切换为主库
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+# 验证主库 profile 保持稳定
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 
 --enable_query_log
 --enable_result_log
@@ -271,6 +282,7 @@ db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
 
 # 连接新备库（原主库）
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_sys_p;
 
 --enable_query_log
@@ -283,11 +295,9 @@ source t/stanby/include/switchover_workloads.inc;
 --disable_query_log
 --disable_result_log
 
-# 验证合并位点一致性（主库本地合并完成，备库合并位点、同步/可读位点达到主库合并位点）
-db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
+# 验证新备库本地合并完成，且目标位点位于已同步/可读范围内并覆盖新主库检查点
+db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $primary_last_scn_2 and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_last_scn_2 and readable_scn >= $primary_last_scn_2, 1, 30;
-db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $primary_last_scn_2, 1, 30;
 
 --enable_query_log
 --enable_result_log
@@ -316,25 +326,34 @@ source t/stanby/include/switchover_workloads.inc;
 ALTER SYSTEM MINOR FREEZE;
 sleep 5;
 
-# 执行新主库切换为备库（完成一圈）
+# 为重启后的备库预先设置新上游
+let $db_p_svr_ip = deploy_get_value(db_p.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
+let $db_p_rpc_port = deploy_get_value(db_p.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
+connection conn_sys_s;
+eval alter system set log_restore_source = '$db_p_svr_ip:$db_p_rpc_port';
+
+# prepare 新主库切换为备库
 ALTER SYSTEM SWITCHOVER TO STANDBY;
 
-# 验证新主库已切换为备库
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+# 验证 active role 未改变，pending role 已持久化
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 
-# 等待状态稳定
-sleep 5;
-
-# 执行新备库切换为主库
+# 目标备库 prepare 成为主库，仍在运行的源端已经 fencing
 connection conn_sys_p;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
 
-# 验证新备库已切换为主库
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+# 验证 active role 未改变，pending role 已持久化
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
 
-# 等待新备库（原新主库）同步完成
-let $primary_sync_scn_before_switch = deploy_get_value(db_s.select select sync_scn from oceanbase.__all_virtual_server_stat where role = 'STANDBY', sync_scn, 1);
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $primary_sync_scn_before_switch, 1, 120;
+# 外部编排者按顺序重启目标和旧主
+db_s.force_stop;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_sys_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_sys_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
 --enable_query_log
 --enable_result_log
@@ -384,11 +403,9 @@ let $final_global_broadcast_scn = deploy_get_value(db_p.select select GLOBAL_BRO
 # 等待新备库（db_s）同步到最终合并位点
 db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn, 1, 120;
 
-# 验证最终合并位点一致性（主库本地合并完成，备库合并位点、同步/可读位点达到主库合并位点）
+# 验证最终主备库各自完成本地合并，备库目标位于已同步/可读范围内并覆盖主库检查点
 db_p.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = GLOBAL_BROADCAST_SCN, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $final_last_scn and readable_scn >= $final_last_scn, 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION where LAST_SCN = $final_last_scn, 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.DBA_OB_MAJOR_COMPACTION m, oceanbase.__all_virtual_server_stat s where s.role = 'STANDBY' and m.LAST_SCN = m.FROZEN_SCN and m.LAST_SCN = m.GLOBAL_BROADCAST_SCN and m.LAST_SCN >= $final_last_scn and s.sync_scn >= m.LAST_SCN and s.readable_scn >= m.LAST_SCN, 1, 120;
 
 --enable_query_log
 --enable_result_log

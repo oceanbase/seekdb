@@ -20,11 +20,12 @@
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log.h"
 #include "logservice/ob_log_service.h"
-#include "share/ob_standby_source_util.h"
+#include "standby/ob_standby_source_util.h"
 #include "share/config/ob_server_config.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 #include "standby/restore/ob_standby_sstable_copier.h"
+#include "standby/standby_host.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -34,23 +35,17 @@ namespace standby
 
 ObStandbyBootstrapParam::ObStandbyBootstrapParam()
     : is_standby_cluster_(false),
-      self_(),
-      bandwidth_throttle_(nullptr)
+      source_(),
+      bandwidth_throttle_(nullptr),
+      restore_config_(nullptr)
 {
 }
 
 bool ObStandbyBootstrapParam::is_valid() const
 {
-  return is_standby_cluster_ && self_.is_valid() && nullptr != bandwidth_throttle_;
-}
-
-int ObStandbyBootstrapService::bootstrap(share::SCN &source_end_scn)
-{
-  ObStandbyBootstrapParam param;
-  param.is_standby_cluster_ = GCTX.is_standby_server();
-  param.self_ = GCONF.self_addr_;
-  param.bandwidth_throttle_ = GCTX.bandwidth_throttle_;
-  return bootstrap(param, source_end_scn);
+  return is_standby_cluster_ && !source_.empty()
+      && nullptr != bandwidth_throttle_ && nullptr != restore_config_
+      && restore_config_->is_valid();
 }
 
 int ObStandbyBootstrapService::bootstrap(
@@ -71,7 +66,8 @@ int ObStandbyBootstrapService::bootstrap(
   if (OB_FAIL(ret)) {
   } else {
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(copier.init(primary_addr, param.bandwidth_throttle_))) {
+      if (OB_FAIL(copier.init(
+          primary_addr, param.bandwidth_throttle_, *param.restore_config_))) {
         LOG_WARN("failed to init standby sstable copier", KR(ret), K(primary_addr));
       } else if (OB_FAIL(copier.prepare_replay_base(
                      restore_checkpoint_scn, palf_base_info, source_end_scn))) {
@@ -103,18 +99,19 @@ int ObStandbyBootstrapService::check_bootstrap_source(
 
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid standby bootstrap parameter", KR(ret), K(param.self_),
+    LOG_WARN("invalid standby bootstrap parameter", KR(ret),
         K(param.is_standby_cluster_), KP(param.bandwidth_throttle_));
-  } else if (OB_FAIL(share::ObStandbySourceUtil::get_first_service_addr(
-                 GCONF.log_restore_source.str(), primary_addr))) {
+  } else if (OB_FAIL(StandbySourceParser::get_first_service_addr(
+                 param.source_, primary_addr))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("standby log source is not configured for bootstrap", KR(ret), K(param.self_));
+      LOG_WARN("standby log source is not configured for bootstrap", KR(ret));
     } else {
-      LOG_WARN("failed to get standby bootstrap source", KR(ret), K(param.self_));
+      LOG_WARN("failed to get standby bootstrap source", KR(ret));
     }
   } else {
-    LOG_INFO("got standby bootstrap source", K(primary_addr), K(param.self_));
+    LOG_INFO("got standby bootstrap source", K(primary_addr),
+        "self", param.restore_config_->self_addr_);
   }
   return ret;
 }

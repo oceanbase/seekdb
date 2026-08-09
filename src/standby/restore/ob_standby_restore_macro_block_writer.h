@@ -60,7 +60,8 @@ public:
       const ObMigrationSSTableParam *sstable_param,
       ObICopyMacroBlockReader *reader,
       ObIndexBlockRebuilder *index_block_rebuilder,
-      ObCopyTabletRecordExtraInfo *extra_info
+      ObCopyTabletRecordExtraInfo *extra_info,
+      const int64_t io_timeout_ms
   );
 
   virtual int process(blocksstable::ObMacroBlocksWriteCtx &copied_ctx) override;
@@ -97,6 +98,7 @@ protected:
   ObIndexBlockRebuilder *index_block_rebuilder_;
   blocksstable::ObSSTableMacroBlockChecker macro_checker_;
   ObCopyTabletRecordExtraInfo *extra_info_;
+  int64_t io_timeout_ms_;
 };
 
 class ObStandbyRestoreLocalMacroBlockWriter final : public ObStandbyRestoreMacroBlockWriter

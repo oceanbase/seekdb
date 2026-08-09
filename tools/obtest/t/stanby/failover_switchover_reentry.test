@@ -1,41 +1,15 @@
 # CASE_OWNER:
 #    @nijia.nj
 # CASE_DESC:
-#    Test failover and switchover re-entry at each intermediate status
-#    after ERRSIM-injected failure + server restart (force_stop/nstart).
+#    Verify durable pending-role preparation and restart activation.
+#    Role changes are external-orchestrated; there is no online role state
+#    machine and the failed old primary is not rejoined.
 #
-#    Flow:
-#      Initial: a(db_p) = PRIMARY, b(db_s) = STANDBY (b syncs from a)
-#               a has NO log_restore_source initially
-#
-#    Part 1: Switchover a(db_p) to STANDBY (PRIMARY → STANDBY)
-#      PRIMARY+NORMAL
-#        → PRIMARY + PREPARE SWITCHING TO STANDBY             (crash point 1)
-#        → STANDBY + SWITCHING TO STANDBY                     (crash point 2)
-#        → STANDBY + NORMAL                                   (done)
-#
-#    Setup: Set a's log_restore_source → b (so a can sync from b)
-#
-#    Part 2: Switchover b(db_s) to PRIMARY (STANDBY → PRIMARY)
-#      STANDBY+NORMAL
-#        → STANDBY + PREPARE SWITCHING TO PRIMARY             (crash point 1)
-#        → STANDBY + FLASHBACK                                (crash point 2)
-#        → STANDBY + SWITCHING TO PRIMARY                     (crash point 3)
-#        → PRIMARY + NORMAL                                   (done)
-#
-#    Part 3: Failover a(db_p) to PRIMARY (STANDBY → PRIMARY)
-#      STANDBY+NORMAL
-#        → STANDBY + PREPARE FLASHBACK                        (crash point 1)
-#        → STANDBY + FLASHBACK                                (crash point 2)
-#        → STANDBY + SWITCHING TO PRIMARY                     (crash point 3)
-#        → PRIMARY + NORMAL                                   (done)
-#
-#    ERRSIM points used:
-#    - ERRSIM_AFTER_PERSIST_PREP_SW_TO_STANDBY
-#    - ERRSIM_AFTER_PERSIST_SWITCHING_TO_STANDBY
-#    - ERRSIM_AFTER_PERSIST_PREPARE_FLASHBACK
-#    - ERRSIM_AFTER_PERSIST_FLASHBACK
-#    - ERRSIM_AFTER_PERSIST_SWITCHING_TO_PRIMARY
+#    Coverage:
+#      1. Planned switchover survives a forced stop between prepare and restart.
+#      2. The target becomes PRIMARY only after restart.
+#      3. Failover requires the old primary to be stopped before prepare.
+#      4. A failover target becomes PRIMARY only after restart.
 
 --disable_query_log
 db_p=OBI(cluster=1,proxy_num=0,role=primary);
@@ -47,24 +21,20 @@ db_s.reboot;
 sleep 5;
 --enable_query_log
 
-# Setup connections
 ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 
-# Verify initial state
 --disable_query_log
 --disable_result_log
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
 --enable_result_log
 --enable_query_log
 
-# Create test data on a(db_p)
 connection conn_a;
 create table if not exists test_reentry(id int primary key, name varchar(100));
 insert into test_reentry values(1, 'init_data');
 
-# Wait for b to sync
 --disable_query_log
 --disable_result_log
 db_s.check_until_timeout select count(*) from test_reentry where name = 'init_data', 1, 120;
@@ -72,300 +42,93 @@ db_s.check_until_timeout select count(*) from test_reentry where name = 'init_da
 --enable_query_log
 
 #################################################################################################
-#################  Part 1: Switchover a(db_p) to STANDBY  ######################################
+#################  Part 1: Planned Switchover with Forced Stop  ###############################
 #################################################################################################
---echo ======== Part 1: Switchover a(db_p) to Standby ========
+--echo ======== Part 1: Planned Switchover with Forced Stop ========
 
-connection conn_a;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 1.1: Inject failure at PREPARE_SWITCHING_TO_STANDBY, then restart -----
---echo ---- Phase 1.1: ERRSIM at PREPARE_SWITCHING_TO_STANDBY ----
-connection conn_a;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREP_SW_TO_STANDBY, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM SWITCHOVER TO STANDBY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREP_SW_TO_STANDBY, error_code = 4016, frequency = 0;
-
-# Restart a
---disable_query_log
---disable_result_log
-db_p.force_stop;
-db_p.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
-ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_a;
---echo ---- After restart: verify PRIMARY + PREPARE SWITCHING TO STANDBY ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 1.2: Re-enter, inject failure at SWITCHING_TO_STANDBY, then restart -----
---echo ---- Phase 1.2: ERRSIM at SWITCHING_TO_STANDBY ----
-connection conn_a;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_STANDBY, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM SWITCHOVER TO STANDBY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_STANDBY, error_code = 4016, frequency = 0;
-
-# Restart a
---disable_query_log
---disable_result_log
-db_p.force_stop;
-db_p.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
-ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_a;
---echo ---- After restart: verify STANDBY + SWITCHING TO STANDBY ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 1.3: Final re-entry without ERRSIM → complete -----
---echo ---- Phase 1.3: Complete re-entry ----
-connection conn_a;
-ALTER SYSTEM SWITCHOVER TO STANDBY;
-
---disable_query_log
---disable_result_log
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and switchover_status = 'NORMAL', 1, 60;
---enable_result_log
---enable_query_log
-
-connection conn_a;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
---echo ---- Part 1 completed: Switchover a to standby PASSED ----
-
-#################################################################################################
-#################  Setup: Set log_restore_source for a(db_p) → b(db_s)  ########################
-#################################################################################################
---echo ======== Setup: Set log_restore_source for a(db_p) ========
-
---disable_query_log
---disable_result_log
-
-# Get b's svr_ip and rpc_port (reference: switchover_roundtrip.test)
+# The old primary must know the new source before it is fenced.
 let $db_s_svr_ip = deploy_get_value(db_s.select select svr_ip from oceanbase.__all_virtual_server_stat limit 1, svr_ip, 1);
 let $db_s_rpc_port = deploy_get_value(db_s.select select rpc_port from oceanbase.__all_virtual_server_stat limit 1, rpc_port, 1);
-
-# Set a's log_restore_source to point to b
 connection conn_a;
 eval alter system set log_restore_source = '$db_s_svr_ip:$db_s_rpc_port';
 
-# Verify log_restore_source set successfully
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%$db_s_svr_ip%', 1, 30;
+# VERIFY is observational and cannot create a pending transition.
+ALTER SYSTEM SWITCHOVER TO STANDBY VERIFY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
 
---enable_result_log
---enable_query_log
+# Prepare the source and verify that active role remains PRIMARY.
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+--error 4688
+insert into test_reentry values(2, 'must_be_fenced');
 
---echo log_restore_source set for a(db_p) pointing to b(db_s)
-
-#################################################################################################
-#################  Part 2: Switchover b(db_s) to PRIMARY  ######################################
-#################################################################################################
---echo ======== Part 2: Switchover b(db_s) to Primary ========
-
-ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+# Prepare the target while the fenced source is still serving its final log.
 connection conn_b;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 2.1: Inject failure at PREPARE_FLASHBACK, then restart -----
---echo ---- Phase 2.1: ERRSIM at PREPARE_FLASHBACK ----
-connection conn_b;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREPARE_FLASHBACK, error_code = 4016, frequency = 1;
---error 4016
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREPARE_FLASHBACK, error_code = 4016, frequency = 0;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
 
-# Restart b
---disable_query_log
---disable_result_log
+# A forced stop before activation must preserve the pending role.
+db_p.force_stop;
 db_s.force_stop;
 db_s.nstart;
-sleep 5;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+# Restart the old source as the new standby only after the new primary is ready.
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+db_p.check_until_timeout select count(*) from test_reentry where name = 'init_data', 1, 120;
+
+--echo ---- Part 1 completed: planned switchover activated after restart ----
+
+#################################################################################################
+#################  Part 2: New Primary Log Sync  ###############################################
+#################################################################################################
+--echo ======== Part 2: New Primary Log Sync ========
+
+connection conn_b;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+insert into test_reentry values(2, 'from_new_primary');
+
+--disable_query_log
+--disable_result_log
+db_p.check_until_timeout select count(*) from test_reentry where name = 'from_new_primary', 1, 120;
 --enable_result_log
 --enable_query_log
 
-ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_b;
---echo ---- After restart: verify STANDBY + PREPARE SWITCHING TO PRIMARY ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
+--echo ---- Part 2 completed: restarted standby follows the new primary ----
 
-#----- Phase 2.2: Re-enter, inject failure at FLASHBACK, then restart -----
---echo ---- Phase 2.2: ERRSIM at FLASHBACK ----
-connection conn_b;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_FLASHBACK, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM SWITCHOVER TO PRIMARY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_FLASHBACK, error_code = 4016, frequency = 0;
+#################################################################################################
+#################  Part 3: Failover with Stopped Old Primary  ###############################
+#################################################################################################
+--echo ======== Part 3: Failover with Stopped Old Primary ========
 
-# Restart b
---disable_query_log
---disable_result_log
+# The current primary is the old primary for this failover and must leave the topology.
 db_s.force_stop;
-db_s.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
 
-ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_b;
---echo ---- After restart: verify STANDBY + FLASHBACK ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 2.3: Re-enter, inject failure at SWITCHING_TO_PRIMARY, then restart -----
---echo ---- Phase 2.3: ERRSIM at SWITCHING_TO_PRIMARY ----
-connection conn_b;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_PRIMARY, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM SWITCHOVER TO PRIMARY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_PRIMARY, error_code = 4016, frequency = 0;
-
-# Restart b
---disable_query_log
---disable_result_log
-db_s.force_stop;
-db_s.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
-ob_connect(conn_b, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_b;
---echo ---- After restart: verify STANDBY + SWITCHING TO PRIMARY ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 2.4: Final re-entry without ERRSIM → complete -----
---echo ---- Phase 2.4: Complete re-entry ----
-connection conn_b;
-ALTER SYSTEM SWITCHOVER TO PRIMARY;
-
---disable_query_log
---disable_result_log
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and switchover_status = 'NORMAL', 1, 60;
---enable_result_log
---enable_query_log
-
-connection conn_b;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-select count(*) from test_reentry where name = 'init_data';
-insert into test_reentry values(2, 'from_b');
-select count(*) from test_reentry;
-
---echo ---- Part 2 completed: Switchover b to primary PASSED ----
-
-#################################################################################################
-#################  Wait for a(db_p) to sync from b(db_s)  ######################################
-#################################################################################################
---disable_query_log
---disable_result_log
-# Wait for a to sync data inserted by b
-db_p.check_until_timeout select count(*) from test_reentry where name = 'from_b', 1, 120;
---enable_result_log
---enable_query_log
-
-#################################################################################################
-#################  Part 3: Failover a(db_p) to PRIMARY  ########################################
-#################################################################################################
---echo ======== Part 3: Failover a(db_p) to Primary ========
-
-ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
 connection conn_a;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
+ALTER SYSTEM ACTIVATE STANDBY VERIFY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
 
-#----- Phase 3.1: Inject failure at PREPARE_FLASHBACK, then restart -----
---echo ---- Phase 3.1: ERRSIM at PREPARE_FLASHBACK ----
-connection conn_a;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREPARE_FLASHBACK, error_code = 4016, frequency = 1;
---error 4016
 ALTER SYSTEM ACTIVATE STANDBY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_PREPARE_FLASHBACK, error_code = 4016, frequency = 0;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
 
-# Restart a
---disable_query_log
---disable_result_log
+# Pending PRIMARY is committed only by the next process start.
 db_p.force_stop;
 db_p.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_a;
---echo ---- After restart: verify STANDBY + PREPARE FLASHBACK ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 3.2: Re-enter, inject failure at FLASHBACK, then restart -----
---echo ---- Phase 3.2: ERRSIM at FLASHBACK ----
-connection conn_a;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_FLASHBACK, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM ACTIVATE STANDBY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_FLASHBACK, error_code = 4016, frequency = 0;
-
-# Restart a
---disable_query_log
---disable_result_log
-db_p.force_stop;
-db_p.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
-ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_a;
---echo ---- After restart: verify STANDBY + FLASHBACK ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 3.3: Re-enter, inject failure at SWITCHING_TO_PRIMARY, then restart -----
---echo ---- Phase 3.3: ERRSIM at SWITCHING_TO_PRIMARY ----
-connection conn_a;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_PRIMARY, error_code = 4016, frequency = 1;
---error 4016
-ALTER SYSTEM ACTIVATE STANDBY;
-alter system set_tp tp_name = ERRSIM_AFTER_PERSIST_SWITCHING_TO_PRIMARY, error_code = 4016, frequency = 0;
-
-# Restart a
---disable_query_log
---disable_result_log
-db_p.force_stop;
-db_p.nstart;
-sleep 5;
---enable_result_log
---enable_query_log
-
-ob_connect(conn_a, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
-connection conn_a;
---echo ---- After restart: verify STANDBY + SWITCHING TO PRIMARY ----
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-
-#----- Phase 3.4: Final re-entry without ERRSIM → complete -----
---echo ---- Phase 3.4: Complete re-entry ----
-connection conn_a;
-ALTER SYSTEM ACTIVATE STANDBY;
-
---disable_query_log
---disable_result_log
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and switchover_status = 'NORMAL', 1, 60;
---enable_result_log
---enable_query_log
-
-connection conn_a;
-select role, switchover_status from oceanbase.__all_virtual_server_stat;
-select count(*) from test_reentry;
 insert into test_reentry values(3, 'after_failover');
 select count(*) from test_reentry;
+# 3
 
---echo ---- Part 3 completed: Failover a to primary PASSED ----
+# The failed old primary is intentionally not restarted or rejoined.
+--echo ---- Part 3 completed: failover activated after restart; old primary left out ----
 
 #################################################################################################
 #################  Summary  #####################################################################
 #################################################################################################
 --echo ======== Test Summary ========
---echo All re-entry tests passed:
---echo   Part 1: Switchover a to standby with restart at 2 crash points: PASSED
---echo   Part 2: Switchover b to primary with restart at 3 crash points: PASSED
---echo   Part 3: Failover a to primary with restart at 3 crash points: PASSED
+--echo Durable pending-role restart semantics passed.

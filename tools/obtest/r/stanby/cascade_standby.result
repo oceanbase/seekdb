@@ -36,10 +36,16 @@ insert into test_cascade_standby values(3, 'before_switchover', 300);
 db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 3, 1, 120;
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 3, 1, 180;
 ALTER SYSTEM SWITCHOVER TO STANDBY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 db_p.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE", 1, 10;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_p.force_stop;
+db_s1.force_stop;
+db_s1.nstart;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 db_s1.check_until_timeout select count(*) as cnt from oceanbase.dba_ob_rootservice_jobs where JOB_TYPE = "LOAD_MYSQL_SYS_PACKAGE" and JOB_STATUS = "SUCCESS" and RESULT_CODE = 0, 1, 120;
 insert into test_cascade_standby values(4, 'after_switchover', 400);
 db_p.check_until_timeout select count(*) from test_cascade_standby where id = 4, 1, 120;
@@ -59,9 +65,15 @@ insert into test_cascade_standby values(5, 'before_roundtrip', 500);
 db_p.check_until_timeout select count(*) from test_cascade_standby where id = 5, 1, 120;
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 5, 1, 180;
 ALTER SYSTEM SWITCHOVER TO STANDBY;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_s1.force_stop;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s1.nstart;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 insert into test_cascade_standby values(6, 'after_roundtrip', 600);
 db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 6, 1, 120;
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 6, 1, 180;
@@ -78,25 +90,25 @@ Case 3 completed: Roundtrip switchover in cascade topology verified
 ========== Case 4: Failover in Cascade Topology ==========
 db_s1.check_until_timeout select count(*) from test_cascade_standby where id = 7, 1, 120;
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 7, 1, 180;
+db_p.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
-db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
+db_s1.force_stop;
+db_s1.nstart;
+db_s1.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 insert into test_cascade_standby values(8, 'after_failover', 800);
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 8, 1, 180;
 select count(*) from test_cascade_standby;
 count(*)
 8
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
 Case 4 completed: Failover in cascade topology verified
 ========== Case 5: Dynamic log_restore_source Change ==========
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $db_s1_scn, 1, 120;
 db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source = '', 1, 30;
-db_p.check_until_timeout select count(*) from test_cascade_standby where id = 9, 1, 120;
 select count(*) from test_cascade_standby where id = 9;
 count(*)
 0
 Step 2-3 completed: Empty log_restore_source stops sync (db_s2 cannot get id=9)
-db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_p_rpc_port', 1, 30;
+db_s2.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where log_restore_source like '%:$db_s1_rpc_port', 1, 30;
 db_s2.check_until_timeout select count(*) from test_cascade_standby where id = 9, 1, 120;
 select count(*) from test_cascade_standby;
 count(*)

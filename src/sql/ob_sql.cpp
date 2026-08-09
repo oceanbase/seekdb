@@ -1787,13 +1787,14 @@ int ObSql::check_read_only_privilege(ParseResult &parse_result,
       = ObSQLUtils::cause_implicit_commit(parse_result);
   sql_traits.is_commit_stmt_ = ObSQLUtils::is_commit_stmt(parse_result);
   sql_traits.stmt_type_ = ObSQLUtils::get_sql_item_type(parse_result);
-  const bool is_standby_control_stmt = !share::server_is_primary()
+  const bool is_write_enabled = share::server_is_write_enabled();
+  const bool is_standby_control_stmt = !is_write_enabled
       && ObSQLUtils::is_allowed_on_standby(sql_traits.stmt_type_);
   if (OB_ISNULL(pctx) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (!(session->is_inner() && !session->is_user_session())
-             && !share::server_is_primary()
+             && !is_write_enabled
              && !sql_traits.is_readonly_stmt_
              && !ObSQLUtils::is_allowed_on_standby(sql_traits.stmt_type_)) {
     ret = OB_STANDBY_DATABASE_READ_ONLY;

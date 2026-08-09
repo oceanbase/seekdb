@@ -19,34 +19,25 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/ob_running_mode.h"
 #include "lib/profile/ob_trace_id.h"
-#include "share/ob_schema_status_proxy.h"
-#include "share/config/ob_server_config.h"
-#include "share/ob_server_struct.h"
-#include "share/schema/ob_multi_version_schema_service.h"
+#include "standby/standby_host.h"
 
 namespace oceanbase
 {
 namespace standby
 {
 
-int ObStandbySchemaRefreshTrigger::init(ObStandbySubmitSchemaRefreshTask submit_schema_refresh_task)
+int ObStandbySchemaRefreshTrigger::init(const StandbyConfig &config, IStandbyHost &host)
 {
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_ISNULL(submit_schema_refresh_task)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("submit schema refresh task callback is null", KR(ret));
-  } else if (GCTX.is_embedded_mode()) {
-    submit_schema_refresh_task_ = submit_schema_refresh_task;
-    is_inited_ = true;
-    LOG_INFO("ObStandbySchemaRefreshTrigger skip init in embed mode");
   } else {
-    submit_schema_refresh_task_ = submit_schema_refresh_task;
+    config_ = &config;
+    host_ = &host;
     is_inited_ = true;
-    LOG_INFO("ObStandbySchemaRefreshTrigger init success");
+    LOG_INFO("standby schema refresh trigger initialized", K(config.embedded_mode_));
   }
 
   return ret;
@@ -58,7 +49,7 @@ int ObStandbySchemaRefreshTrigger::start()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby schema refresh trigger is not initialized", KR(ret));
-  } else if (GCTX.is_embedded_mode() || is_scheduled_) {
+  } else if (config_->embedded_mode_ || is_scheduled_) {
   } else if (OB_FAIL(schedule_())) {
     LOG_WARN("failed to schedule standby schema refresh trigger", KR(ret));
   } else {
@@ -79,7 +70,7 @@ int ObStandbySchemaRefreshTrigger::stop()
 int ObStandbySchemaRefreshTrigger::wait()
 {
   int ret = OB_SUCCESS;
-  if (is_inited_ && is_scheduled_ && !GCTX.is_embedded_mode()) {
+  if (is_inited_ && is_scheduled_ && !config_->embedded_mode_) {
     timer_.wait();
     is_scheduled_ = false;
   }
@@ -92,7 +83,8 @@ void ObStandbySchemaRefreshTrigger::destroy()
   stop();
   wait();
   timer_.destroy();
-  submit_schema_refresh_task_ = nullptr;
+  config_ = nullptr;
+  host_ = nullptr;
   is_scheduled_ = false;
   is_inited_ = false;
 }
@@ -116,7 +108,7 @@ void ObStandbySchemaRefreshTrigger::runTimerTask()
   if (OB_FAIL(check_inner_stat_())) {
     LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
-    common::ObCurTraceId::init(GCONF.self_addr_);
+    common::ObCurTraceId::init(config_->self_addr_);
     if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
       LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
     }
@@ -126,7 +118,7 @@ void ObStandbySchemaRefreshTrigger::runTimerTask()
 int ObStandbySchemaRefreshTrigger::check_inner_stat_()
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_inited_)) {
+  if (OB_UNLIKELY(!is_inited_) || OB_ISNULL(config_) || OB_ISNULL(host_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   }
@@ -136,25 +128,12 @@ int ObStandbySchemaRefreshTrigger::check_inner_stat_()
 int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
 {
   int ret = OB_SUCCESS;
-  if (GCTX.is_standby_server()) {
-    int64_t schema_version = OB_INVALID_VERSION;
-    share::schema::ObRefreshSchemaStatus schema_status;
-    share::ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
-    if (OB_ISNULL(schema_status_proxy)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_status_proxy is null", KR(ret));
-    } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
-      LOG_WARN("failed to get tenant refresh schema status", KR(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_schema_version_in_inner_table(*GCTX.sql_proxy_,
-          schema_status, schema_version))) {
-      LOG_WARN("fail to get latest schema version in inner table", K(ret));
-    } else if (OB_ISNULL(submit_schema_refresh_task_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("submit schema refresh task callback is null", KR(ret));
-    } else if (OB_FAIL(submit_schema_refresh_task_(schema_version))) {
-      LOG_WARN("fail to submit async refresh schema task",
-               KR(ret), K(schema_version));
-    }
+  int64_t schema_version = OB_INVALID_VERSION;
+  if (OB_FAIL(host_->get_latest_schema_version(schema_version))) {
+    LOG_WARN("fail to get latest schema version in inner table", K(ret));
+  } else if (OB_FAIL(host_->submit_schema_refresh(schema_version))) {
+    LOG_WARN("fail to submit async refresh schema task",
+             KR(ret), K(schema_version));
   }
 
   return ret;

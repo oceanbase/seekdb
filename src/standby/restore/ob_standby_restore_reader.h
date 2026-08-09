@@ -100,7 +100,8 @@ public:
       const ObITable::TableKey &table_key,
       const ObCopyMacroRangeInfo &copy_macro_range_info,
       const int64_t data_version,
-      const share::SCN backfill_tx_scn);
+      const share::SCN backfill_tx_scn,
+      const int64_t io_timeout_ms);
   int get_next_macro_block(
       blocksstable::ObBufferReader &data,
       obcall::ObCopyMacroBlockHeader &copy_macro_block_header);
@@ -116,6 +117,7 @@ private:
   bool is_inited_;
   ObCopyMacroRangeInfo copy_macro_range_info_;
   int64_t data_version_;
+  int64_t io_timeout_ms_;
   int64_t macro_idx_;
   ObCopyMacroBlockHandle copy_macro_block_handle_[MAX_PREFETCH_MACRO_BLOCK_NUM];
   int64_t handle_idx_;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_restore_helper.h"
 #include "standby/restore/ob_restore_helper_ctx.h"
+#include "standby/standby_host.h"
 #include "standby/ob_standby_grpc.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/tablet/ob_tablet.h"
@@ -51,6 +52,7 @@ ObStandbyRestoreHelper::ObStandbyRestoreHelper()
     task_id_(),
     src_(),
     bandwidth_throttle_(nullptr),
+    config_(nullptr),
     ctx_(nullptr),
     ctx_allocator_("HaHelperCtx")
 {
@@ -66,7 +68,9 @@ bool ObStandbyRestoreHelper::is_valid() const
   return is_inited_
       && src_.is_valid()
       && task_id_.is_valid()
-      && OB_NOT_NULL(bandwidth_throttle_);
+      && OB_NOT_NULL(bandwidth_throttle_)
+      && OB_NOT_NULL(config_)
+      && config_->is_valid();
 }
 
 void ObStandbyRestoreHelper::destroy()
@@ -76,24 +80,28 @@ void ObStandbyRestoreHelper::destroy()
     ctx_ = nullptr;
   }
   bandwidth_throttle_ = nullptr;
+  config_ = nullptr;
 }
 
 int ObStandbyRestoreHelper::init(
     const common::ObAddr &src,
     const share::ObTaskId &task_id,
-    common::ObInOutBandwidthThrottle *bandwidth_throttle)
+    common::ObInOutBandwidthThrottle *bandwidth_throttle,
+    const standby::StandbyConfig &config)
 {
   int ret = OB_SUCCESS;
   if (is_valid()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("standby restore helper init twice", K(ret), KPC(this));
-  } else if (!src.is_valid() || !task_id.is_valid() || OB_ISNULL(bandwidth_throttle)) {
+  } else if (!src.is_valid() || !task_id.is_valid()
+      || OB_ISNULL(bandwidth_throttle) || !config.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(src), K(task_id), KP(bandwidth_throttle));
   } else {
     src_ = src;
     task_id_ = task_id;
     bandwidth_throttle_ = bandwidth_throttle;
+    config_ = &config;
     is_inited_ = true;
   }
   return ret;
@@ -119,6 +127,7 @@ int ObStandbyRestoreHelper::copy_for_task(
       task_helper->task_id_ = task_id_;
       task_helper->src_ = src_;
       task_helper->bandwidth_throttle_ = bandwidth_throttle_;
+      task_helper->config_ = config_;
       task_helper->is_inited_ = true;
       task_helper->ctx_ = nullptr;
       task_helper->ctx_allocator_.reset();
@@ -140,7 +149,7 @@ int ObStandbyRestoreHelper::check_restore_precondition()
   } else {
     obcall::ObCheckRestorePreconditionResult result;
     standby::ObStandbyGrpcClient grpc_client;
-    if (OB_FAIL(grpc_client.init(src_, RPC_TIMEOUT_US))) {
+    if (OB_FAIL(grpc_client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
       LOG_WARN("failed to init grpc client", K(ret), K_(src));
     } else if (OB_FAIL(grpc_client.check_restore_precondition(result))) {
       LOG_WARN("failed to check restore precondition from source", K(ret), K_(src));
@@ -203,7 +212,7 @@ int ObStandbyRestoreHelper::get_ls_view_rpc_timeout_(int64_t &rpc_timeout_us)
   if (!is_valid()) {
     ret = OB_NOT_INIT;
     LOG_WARN("standby restore helper not init", K(ret), KPC(this));
-  } else if (OB_FAIL(grpc_client.init(src_, RPC_TIMEOUT_US))) {
+  } else if (OB_FAIL(grpc_client.init(src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_))) {
     LOG_WARN("failed to init grpc client for ls view tablet count", K(ret), K_(src));
   } else if (OB_FAIL(grpc_client.get_ls_view_tablet_count(tablet_count_result))) {
     LOG_WARN("failed to get ls view tablet count", K(ret), K_(src), K(rpc_timeout_us));
@@ -241,7 +250,7 @@ int ObStandbyRestoreHelper::fetch_ls_meta(
     } else if (OB_FAIL(get_ls_view_rpc_timeout_(rpc_timeout_us))) {
       LOG_WARN("failed to get ls view rpc timeout", K(ret), K_(src));
     } else if (OB_FAIL(oceanbase::standby::ObStandbyGrpcClient::init_ls_view_stream(
-                          src_, rpc_timeout_us, ctx_allocator_, ls_meta,
+                          src_, rpc_timeout_us, config_->rpc_tls_enabled_, ctx_allocator_, ls_meta,
                           physical_checkpoint_scn, *ls_view_ctx))) {
       LOG_WARN("failed to init ls view stream", K(ret), K_(src), K(rpc_timeout_us));
     }
@@ -309,8 +318,8 @@ int ObStandbyRestoreHelper::init_for_fetch_tablet_meta(const common::ObIArray<co
     arg.ls_id_ = ls_id;
     if (OB_FAIL(arg.tablet_id_list_.assign(tablet_id_array))) {
       LOG_WARN("failed to assign tablet id list", K(ret), K(tablet_id_array));
-    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_tablet_info_stream(src_, RPC_TIMEOUT_US,
-                                                                              arg, ctx_allocator_, *tablet_info_ctx))) {
+    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_tablet_info_stream(
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg, ctx_allocator_, *tablet_info_ctx))) {
        LOG_WARN("failed to create tablet info stream", K(ret), K(arg));
     }
   }
@@ -489,7 +498,8 @@ int ObStandbyRestoreHelper::init_for_build_tablets_sstable_info(
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(standby::ObStandbyGrpcClient::init_tablet_sstable_info_stream(
-              src_, RPC_TIMEOUT_US, arg, ctx_allocator_, *sstable_info_ctx))) {
+              src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+              ctx_allocator_, *sstable_info_ctx))) {
         LOG_WARN("failed to init tablet sstable info stream", K(ret), K(arg), K_(src));
       } else {
         sstable_info_ctx->pending_sstable_count_ = 0;
@@ -622,8 +632,9 @@ int ObStandbyRestoreHelper::init_for_sstable_macro_range(const common::ObIArray<
 
     if (OB_FAIL(arg.copy_table_key_array_.assign(copy_table_key_array))) {
       LOG_WARN("failed to assign copy table key array", K(ret), "key_cnt", copy_table_key_array.count());
-    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_sstable_macro_info_stream(src_, RPC_TIMEOUT_US,
-                                                                                arg, ctx_allocator_, *macro_range_ctx))) {
+    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_sstable_macro_info_stream(
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+        ctx_allocator_, *macro_range_ctx))) {
       LOG_WARN("failed to init sstable macro info stream", K(ret), K(arg), K_(src));
     }
 
@@ -730,8 +741,9 @@ int ObStandbyRestoreHelper::init_for_macro_block_copy(
     macro_block_ctx->copy_table_key_ = copy_table_key;
     if (OB_FAIL(arg.copy_macro_range_info_.assign(macro_range_info))) {
       LOG_WARN("failed to assign macro range info", K(ret), K(macro_range_info));
-    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_macro_block_stream(src_, RPC_TIMEOUT_US,
-                                                                        arg, ctx_allocator_, *macro_block_ctx))) {
+    } else if (OB_FAIL(standby::ObStandbyGrpcClient::init_macro_block_stream(
+        src_, RPC_TIMEOUT_US, config_->rpc_tls_enabled_, arg,
+        ctx_allocator_, *macro_block_ctx))) {
       LOG_WARN("failed to init macro block stream", K(ret), K(arg), K_(src));
     } else if (OB_FAIL(macro_block_ctx->data_buffer_.ensure_space(common::OB_DEFAULT_MACRO_BLOCK_SIZE))) {
       LOG_WARN("failed to ensure space for macro block data buffer", K(ret),

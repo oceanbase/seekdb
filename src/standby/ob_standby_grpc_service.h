@@ -26,7 +26,14 @@ class ObGrpcServer;
 namespace standby
 {
 
-int register_standby_grpc_service(obgrpc::ObGrpcServer &grpc_server);
+struct StandbyConfig;
+class StandbyGrpcService;
+
+int create_and_register_standby_grpc_service(
+    obgrpc::ObGrpcServer &grpc_server,
+    const StandbyConfig &config,
+    StandbyGrpcService *&service);
+void destroy_standby_grpc_service(StandbyGrpcService *&service);
 
 } // namespace standby
 } // namespace oceanbase

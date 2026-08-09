@@ -29,6 +29,10 @@
 
 namespace oceanbase
 {
+namespace standby
+{
+struct StandbyConfig;
+}
 namespace restore
 {
 class ObStandbyRestoreHelper
@@ -42,7 +46,9 @@ public:
   int init(
       const common::ObAddr &src,
       const share::ObTaskId &task_id,
-      common::ObInOutBandwidthThrottle *bandwidth_throttle);
+      common::ObInOutBandwidthThrottle *bandwidth_throttle,
+      const standby::StandbyConfig &config);
+  const standby::StandbyConfig &get_config() const { return *config_; }
   int check_restore_precondition();
   int init_for_ls_view();
   int fetch_next_tablet_info(obcall::ObCopyTabletInfo &tablet_info);
@@ -89,6 +95,7 @@ private:
   share::ObTaskId task_id_;
   common::ObAddr src_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
+  const standby::StandbyConfig *config_;
   ObIRestoreHelperCtx *ctx_;
   common::ObArenaAllocator ctx_allocator_;
   DISALLOW_COPY_AND_ASSIGN(ObStandbyRestoreHelper);

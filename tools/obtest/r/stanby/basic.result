@@ -6,34 +6,36 @@ ALTER SYSTEM SWITCHOVER TO STANDBY VERIFY;
 db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 role
 PRIMARY
+alter system set log_restore_source = '127.0.0.1:42001';
 ALTER SYSTEM SWITCHOVER TO STANDBY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 60;
-db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
-role
-STANDBY
-db_p.mysql_p select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn = $db_p_final_scn;
-count(*)
-1
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_p.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
+role	pending_role	switchover_status
+PRIMARY	STANDBY	PREPARING
 create table test_table_standby(a int);
 ERROR HY000: standby tenant is read only
 insert into test_table_primary values(2, 2);
 ERROR HY000: standby tenant is read only
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 120;
+db_p.force_stop;
+db_s.force_stop;
+db_s.nstart;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 Case 1 completed: Primary cluster successfully switched to standby
 ========== Case 2: Standby Cluster Switchover to Primary ==========
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $db_p_final_scn, 1, 60;
-create table test_table_standby_s(a int);
-ERROR HY000: standby tenant is read only
-insert into test_table_primary values(3, 3);
-ERROR HY000: standby tenant is read only
 ALTER SYSTEM SWITCHOVER TO PRIMARY VERIFY;
-db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
-role
-STANDBY
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
+role	pending_role	switchover_status
+PRIMARY	INVALID	NORMAL
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
-db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
-role
-PRIMARY
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
+db_s.mysql_p select role, pending_role, switchover_status from oceanbase.__all_virtual_server_stat;
+role	pending_role	switchover_status
+PRIMARY	INVALID	NORMAL
 create table if not exists test_table_new_primary(a int primary key, b int);
 insert into test_table_new_primary values(1, 1);
 Case 2 completed: Standby cluster successfully switched to primary
@@ -50,19 +52,14 @@ ALTER SYSTEM ACTIVATE STANDBY VERIFY;
 db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
 role
 STANDBY
+db_s.force_stop;
 ALTER SYSTEM ACTIVATE STANDBY;
-db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 60;
-db_p.mysql_p select role from oceanbase.__all_virtual_server_stat;
-role
-PRIMARY
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'PRIMARY' and switchover_status = 'PREPARING', 1, 60;
+db_p.force_stop;
+db_p.nstart;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 60;
 create table if not exists test_table_failover_primary(a int primary key, b int);
 insert into test_table_failover_primary values(1, 1);
-db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY', 1, 30;
-db_s.mysql_p select role from oceanbase.__all_virtual_server_stat;
-role
-PRIMARY
-create table if not exists test_table_original_primary(a int primary key, b int);
-insert into test_table_original_primary values(1, 1);
 Case 3 completed: Standby cluster successfully failed over to primary
 ========== Test Summary ==========
 All test cases completed successfully:

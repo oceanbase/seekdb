@@ -30,20 +30,22 @@ class ObInOutBandwidthThrottle;
 namespace standby
 {
 
+struct StandbyConfig;
+
 struct ObStandbyBootstrapParam final
 {
   ObStandbyBootstrapParam();
   bool is_valid() const;
 
   bool is_standby_cluster_;
-  common::ObAddr self_;
+  common::ObString source_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
+  const StandbyConfig *restore_config_;
 };
 
 class ObStandbyBootstrapService final
 {
 public:
-  static int bootstrap(share::SCN &source_end_scn);
   static int bootstrap(
       const ObStandbyBootstrapParam &param,
       share::SCN &source_end_scn);

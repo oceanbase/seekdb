@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_standby_restore_macro_block_writer.h"
-#include "share/config/ob_server_config.h"
 #include "share/ob_io_device_helper.h"
 
 namespace oceanbase
@@ -37,7 +36,8 @@ ObStandbyRestoreMacroBlockWriter::ObStandbyRestoreMacroBlockWriter()
    reader_(NULL),
    index_block_rebuilder_(nullptr),
    macro_checker_(),
-   extra_info_(nullptr)
+   extra_info_(nullptr),
+   io_timeout_ms_(0)
 {
 }
 
@@ -49,7 +49,8 @@ int ObStandbyRestoreMacroBlockWriter::init(
     const ObMigrationSSTableParam *sstable_param,
     ObICopyMacroBlockReader *reader,
     ObIndexBlockRebuilder *index_block_rebuilder,
-    ObCopyTabletRecordExtraInfo *extra_info)
+    ObCopyTabletRecordExtraInfo *extra_info,
+    const int64_t io_timeout_ms)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -62,7 +63,8 @@ int ObStandbyRestoreMacroBlockWriter::init(
             || OB_ISNULL(sstable_param)
             || OB_ISNULL(reader)
             || OB_ISNULL(index_block_rebuilder)
-            || OB_ISNULL(extra_info))
+            || OB_ISNULL(extra_info)
+            || io_timeout_ms <= 0)
   {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tenant_id), K(tablet_id), KP(sstable_param),
@@ -78,6 +80,7 @@ int ObStandbyRestoreMacroBlockWriter::init(
     reader_ = reader;
     index_block_rebuilder_ = index_block_rebuilder;
     extra_info_ = extra_info;
+    io_timeout_ms_ = io_timeout_ms;
     is_inited_ = true;
   }
   return ret;
@@ -293,7 +296,7 @@ int ObStandbyRestoreLocalMacroBlockWriter::set_macro_write_info_(
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sys_module_id(ObIOModule::SSTABLE_MACRO_BLOCK_WRITE_IO);
     write_info.io_desc_.set_sealed();
-    write_info.io_timeout_ms_ = (GCONF._data_storage_io_timeout / 1000L);
+    write_info.io_timeout_ms_ = io_timeout_ms_;
     write_info.offset_ = 0;
     opt.set_data_macro_object_opt();
   }

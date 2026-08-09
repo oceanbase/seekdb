@@ -249,8 +249,6 @@ private:
   int online_local_log_(const LocalLogMode log_mode);
   int start_local_log_(const int64_t deadline_us = INT64_MAX);
   int stop_local_log_(const int64_t deadline_us = INT64_MAX);
-  int switch_to_local_append_mode_(const int64_t deadline_us);
-  int switch_to_local_replay_mode_(const int64_t deadline_us);
   int update_tablet_table_store_without_lock_(
       const ObTabletID &tablet_id,
       const ObUpdateTableStoreParam &param,

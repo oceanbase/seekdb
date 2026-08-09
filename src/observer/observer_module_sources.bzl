@@ -61,7 +61,7 @@ def observer_validate_source_inventory(
             "Observer Unity baseline changed: groups=%s sources=%s" %
             (len(unity_groups), unity_count),
         )
-    if standalone_count != 6:
+    if standalone_count != 5:
         fail("Observer standalone baseline changed: %s" % standalone_count)
 
     ignored = {path: True for path in ignored_sources}

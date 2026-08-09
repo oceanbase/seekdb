@@ -39,7 +39,10 @@ public:
     PREPARE_SWITCHING_TO_PRIMARY_STATUS = 5,
     PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS = 6,
     FLASHBACK_STATUS = 7,
-    MAX_STATUS = 8
+    // The restart-based design has one durable preparation state. The older
+    // values remain readable, but no new code advances through those phases.
+    PREPARING_STATUS = 8,
+    MAX_STATUS = 9
   };
 public:
   ObServerSwitchoverStatus() : value_(INVALID_STATUS) {}
@@ -75,6 +78,7 @@ IS_SWITCHOVER_STATUS(SWITCHING_TO_STANDBY_STATUS, switching_to_standby)
 IS_SWITCHOVER_STATUS(PREPARE_SWITCHING_TO_PRIMARY_STATUS, prepare_switching_to_primary)
 IS_SWITCHOVER_STATUS(PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS, prepare_flashback_for_failover_to_primary)
 IS_SWITCHOVER_STATUS(FLASHBACK_STATUS, flashback)
+IS_SWITCHOVER_STATUS(PREPARING_STATUS, preparing)
 #undef IS_SWITCHOVER_STATUS
 
   TO_STRING_KV("switchover_status", to_str(), K_(value));
@@ -91,6 +95,7 @@ static const ObServerSwitchoverStatus SWITCHING_TO_STANDBY_SWITCHOVER_STATUS(ObS
 static const ObServerSwitchoverStatus PREP_SWITCHING_TO_PRIMARY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARE_SWITCHING_TO_PRIMARY_STATUS);
 static const ObServerSwitchoverStatus PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARE_FLASHBACK_FOR_FAILOVER_TO_PRIMARY_STATUS);
 static const ObServerSwitchoverStatus FLASHBACK_SWITCHOVER_STATUS(ObServerSwitchoverStatus::FLASHBACK_STATUS);
+static const ObServerSwitchoverStatus PREPARING_SWITCHOVER_STATUS(ObServerSwitchoverStatus::PREPARING_STATUS);
 
 }  // share
 }  // oceanbase
