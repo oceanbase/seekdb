@@ -3324,7 +3324,7 @@ id	field	type	length	precision	nullable
 38	create_time	5	0	20	0
 39	role	22	64	-1	0
 40	switchover_status	22	100	-1	0
-41	log_restore_source	22	1024	-1	0
+41	log_restore_source	22	4096	-1	0
 42	sync_scn	10	0	20	0
 43	readable_scn	10	0	20	0
 44	pending_role	22	64	-1	0
