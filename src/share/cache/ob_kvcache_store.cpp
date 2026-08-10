@@ -831,25 +831,6 @@ int ObKVCacheStore::alloc_mbhandle(
   ObKVStoreMemBlock *mem_block = NULL;
   char *buf = NULL;
 
-  // The periodic washer's selection heap covers one batch per pass. Allow that
-  // much burst space, then make new allocations keep pace with reclamation so
-  // the jemalloc backend cannot outrun the configured cache policy unchecked.
-  const int64_t current_cache_size = ATOMIC_LOAD(&global_status_.store_size_);
-  const int64_t memory_budget = lib::get_memory_budget();
-  if (need_sync_wash_for_allocation_pressure(
-      current_cache_size, block_size, memory_budget, WASH_HEAP_SIZE)) {
-    int tmp_ret = OB_SUCCESS;
-    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
-    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
-      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
-        COMMON_LOG(WARN, "Fail to synchronously wash KV cache under allocation pressure",
-            K(tmp_ret), K(block_size), K(current_cache_size), K(memory_budget));
-      }
-    } else {
-      free_mbs(mb_list_.resource_mgr_, wash_blocks);
-    }
-  }
-
   const int64_t cache_store_size = ATOMIC_AAF(&global_status_.store_size_, block_size);
 
   if (!mb_list_.is_valid()) {
@@ -858,28 +839,8 @@ int ObKVCacheStore::alloc_mbhandle(
   }
 
   if (OB_FAIL(ret)) {
-  } else {
-    buf = static_cast<char*>(alloc_mb(mb_list_.resource_mgr_, block_size));
-    if (OB_ISNULL(buf)) {
-      // The raw cache allocator has no ObMemoryMgr pressure callback in
-      // jemalloc mode. Wash and retry here so an allocation failure is still a
-      // recoverable cache-pressure event.
-      int tmp_ret = OB_SUCCESS;
-      ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
-      if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
-        if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
-          COMMON_LOG(WARN, "Fail to synchronously wash KV cache after memblock allocation failure",
-              K(tmp_ret), K(block_size));
-        }
-      } else {
-        free_mbs(mb_list_.resource_mgr_, wash_blocks);
-      }
-      buf = static_cast<char*>(alloc_mb(mb_list_.resource_mgr_, block_size));
-    }
-  }
-
-  if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(buf)) {
+  } else if (NULL == (buf = static_cast<char*>(alloc_mb(
+            mb_list_.resource_mgr_, block_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(WARN, "Fail to allocate memory, ", K(block_size), K(ret));
   } else {

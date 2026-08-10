@@ -111,30 +111,6 @@ public:
   {
     return MAX(cache_size - compute_fixed_cache_limit(memory_budget, block_size), 0);
   }
-  static int64_t compute_allocation_pressure_limit(
-      const int64_t memory_budget,
-      const int64_t block_size,
-      const int64_t burst_block_count)
-  {
-    const int64_t cache_limit = compute_fixed_cache_limit(memory_budget, block_size);
-    const int64_t max_burst_block_count = cache_limit > 0 && block_size > 0
-        ? (INT64_MAX - cache_limit) / block_size
-        : 0;
-    return burst_block_count >= 0
-        ? cache_limit + MIN(burst_block_count, max_burst_block_count) * block_size
-        : 0;
-  }
-  static bool need_sync_wash_for_allocation_pressure(
-      const int64_t cache_size,
-      const int64_t block_size,
-      const int64_t memory_budget,
-      const int64_t burst_block_count)
-  {
-    const int64_t pressure_limit = compute_allocation_pressure_limit(
-        memory_budget, block_size, burst_block_count);
-    return cache_size >= 0 && block_size > 0 && pressure_limit > 0
-        && cache_size > pressure_limit - block_size;
-  }
 private:
   int try_flush_washable_mb(lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
             const int64_t size_need_washed = INT64_MAX, const bool force_flush = false);
