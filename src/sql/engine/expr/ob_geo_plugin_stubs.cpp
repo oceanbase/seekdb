@@ -27,10 +27,12 @@ namespace sql
 {
 
 #if !SEEKDB_ENABLE_CORE_GIS
-int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
+int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
+                                 common::ObSrsCacheGuard &srs_guard,
                                  const uint32_t srid,
                                  const common::ObSrsItem *&srs)
 {
+  (void)ctx;
   (void)srs_guard;
   (void)srid;
   srs = nullptr;
@@ -38,7 +40,7 @@ int ObGeoExprUtils::get_srs_item(omt::ObSrsCacheGuard &srs_guard,
 }
 
 int ObGeoExprUtils::get_srs_item(ObEvalCtx &ctx,
-                                 omt::ObSrsCacheGuard &srs_guard,
+                                 common::ObSrsCacheGuard &srs_guard,
                                  const common::ObString &wkb,
                                  const common::ObSrsItem *&srs,
                                  bool use_little_bo,

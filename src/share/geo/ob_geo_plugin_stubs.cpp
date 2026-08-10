@@ -76,6 +76,13 @@ uint32_t ObSrsItem::get_srid() const
   return (srs_info_ == nullptr) ? 0 : srs_info_->get_srid();
 }
 
+int64_t ObSrsBoundsItem::to_string(char *buf, const int64_t buf_len) const
+{
+  int64_t pos = 0;
+  J_KV(K(minX_), K(minY_), K(maxX_), K(maxY_));
+  return pos;
+}
+
 int ObSrsWktParser::parse_srs_wkt(common::ObIAllocator &, uint64_t,
                                   const common::ObString &,
                                   ObSpatialReferenceSystemBase *&srs)

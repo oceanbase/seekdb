@@ -20,5 +20,12 @@ if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk)
 endif()
 
+if (NOT SEEKDB_ENABLE_CORE_GIS)
+  # The inventory-pruned core still needs the narrow ABI shims used by SQL
+  # expression adapters.  Geometry parsing and SRS/codec work is delegated to
+  # plugins; these definitions intentionally return OB_NOT_SUPPORTED.
+  target_sources(ob_share PRIVATE geo/ob_geo_plugin_stubs.cpp)
+endif()
+
 add_library(ob_share_static STATIC EXCLUDE_FROM_ALL)
 target_link_libraries(ob_share_static PUBLIC ob_share ob_share_extra)

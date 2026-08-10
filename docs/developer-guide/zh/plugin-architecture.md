@@ -10,7 +10,7 @@
 > 本文使用“必须”“禁止”“应”“可以”表达规范强度。本文描述的是 v1 的目标契约，
 > 不代表所有机制已经实现。尤其是签名包 manifest parser、签名链验证和 manifest
 > 全字段对账目前尚未完成；当前实现了 verifier token 的核心 identity/digest
-> 绑定、进程内 activation 握手，以及基于本地 `meta.db` 的实验性持久 catalog/恢复协调器；
+> 绑定、进程内 activation 握手，以及基于 seekdb SQL 系统目录的实验性持久 catalog/恢复协调器；
 > `SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS=ON` 时，`ObServer` 已在 schema/timezone 就绪后、
 > `net_frame_.start()` 前接入本地 catalog-identity verifier/loader，可加载和重放已安装的
 > 本地插件；一期明确不做签名信任链和 SQL 管理入口，GIS typed SPI 已完成。
@@ -48,7 +48,7 @@ R0 代码落点与诚实状态：
   generation/incarnation/operation identity、activation/disable permit、启动恢复绑定入口、
   结构化 outcome、BLOCKED，以及已发布 generation 的 terminal-only physical close；
   从未发布且已证明安全回滚的 failed load 例外见第 7 节。
-- `src/share/plugin/ob_plugin_catalog.*` 与 `__all_plugin_*` SQLite 表：package、operation、
+- `src/share/plugin/ob_plugin_catalog.*` 与 `__all_plugin_*` SQL 系统表：package、operation、
   service/extension owner、dependency、非复用 generation/operation identity，activation/
   restricted-disable permit、启动恢复计划和 ready 前一致性检查。稳定对象/数据依赖在同一
   不可变 R1 package 的新 runtime generation 激活提交时原子重绑；插件依赖按 consumer
@@ -343,13 +343,13 @@ catalog 是 desired state 和持久依赖关系的唯一事实源；运行时 re
   profile 启用时持久化；
 - 操作者、时间、审批/审计标识。
 
-当前实验性实现已在 seekdb 本地 WAL `meta.db` 中落地 package、operation/intent、service/
+当前实验性实现已在 seekdb SQL 系统目录中落地 package、operation/intent、service/
 extension owner 和 dependency 表，并由 `ObPluginCatalog` 实现 activation、restricted-disable、
 `UNINSTALL ... RESTRICT` store 语义及启动恢复计划。schema/DDL 适配器可以把 dependency
-增删加入调用方已有的 SQLite 写事务；该路径禁止再取得 catalog mutex，使用 SQLite writer
+增删加入调用方已有的 SQL 写事务；该路径禁止再取得 catalog mutex，使用 SQL writer
 作为与 disable 竞争的线性化点，避免 writer→mutex 与 mutex→writer 反序。调用方持有该
 writer transaction 期间不得调用任何会取得 catalog mutex 的其他 API，必须先 commit/rollback；
-普通管理路径的唯一顺序保持为 catalog mutex → SQLite writer。
+普通管理路径的唯一顺序保持为 catalog mutex → SQL writer。
 
 这仍不是可交付的完整生产管理面：experimental ON 时，`ObServer::start()` 在
 schema/timezone 检查后、`net_frame_.start()` 前执行 local identity verifier/loader 启动恢复。
@@ -793,7 +793,7 @@ core compatibility 层并增加 static assertion/旧数据反序列化 fixture�
 ## 13. GIS 分阶段迁移计划
 
 下列阶段是依赖关系，不得跳序；当前 R1 已完成 GIS 入口插件化。
-截至本 RFC 对应的实现，`plugins/gis` 已建立 geometry type/codec、`ST_Point`、四参数
+截至本 RFC 对应的实现，`plugins/gis` 已建立 geometry type/codec、`POINT`、四参数
 `ST_MakeEnvelope`、2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` execution-SPI 垂直切片，
 其余算法、codec、SRS 和空间索引均通过统一 execution SPI 暴露；core-only 已通过无
 GIS/S2/Boost 构建及符号/依赖扫描。签名信任和 SQL 管理矩阵留待后续安全阶段。
@@ -815,7 +815,7 @@ GIS/S2/Boost 构建及符号/依赖扫描。签名信任和 SQL 管理矩阵留�
 失败路径，以及 durable catalog intent/store、owner/dependency、RESTRICT 查询和恢复 planner。
 experimental ON 时还已接入位于 schema/timezone-ready 与 `net_frame_.start()` 之间的
 local identity verifier/loader gate；缺失 artifact 或 BLOCKED 状态保留 durable evidence 并
-拒绝启动，已安装且对账成功的本地插件可按恢复计划加载；`ST_Point`、`ST_MakeEnvelope`、
+拒绝启动，已安装且对账成功的本地插件可按恢复计划加载；`POINT`、`ST_MakeEnvelope`、
 2D/3D `ST_MakePoint`、`ST_X`、`ST_Y`、`ST_SRID`、`ST_AsWKB`、`ST_AsBinary`、`_ST_GeometryType`、`ST_IsValid`、`ST_AsText`、`ST_AsWKT`、`ST_GeomFromWKB`、`ST_GeometryFromWKB`、`_ST_SetSRID`、`ST_GeomFromText`、`ST_GeometryFromText`、`ST_Area`、`ST_Length`、`ST_Distance` 已完成 execution-SPI 到 SQL 表达式的适配。签名信任、SQL 管理入口、catalog object materializer、
 签名信任、SQL 管理入口和 catalog object materializer 仍未纳入一期范围，因此当前仍是
 开发预览；GIS execution-SPI 迁移和 core-only 构建闭环已完成。

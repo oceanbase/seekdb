@@ -191,7 +191,7 @@ int ObExprSTCoordinate::eval_common(const ObExpr &expr,
     ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
     ObString wkb = datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
-        tmp_allocator, *datum, expr.args_[0]->datum_meta_,
+        ctx.exec_ctx_, tmp_allocator, *datum, expr.args_[0]->datum_meta_,
         expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
       LOG_WARN("failed to materialize GIS coordinate geometry", K(ret), K(func_name));
       return ret;

@@ -206,7 +206,6 @@ endif()
 # selected CMake build directory and expose its C ABI header to the migrated
 # src/oblib and Observer sources.
 include(cmake/Rust.cmake)
-include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
 add_subdirectory(plugins EXCLUDE_FROM_ALL)
 add_subdirectory(src)

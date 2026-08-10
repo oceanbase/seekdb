@@ -8,6 +8,11 @@ add_library(ob_base INTERFACE)
 target_include_directories(
   ob_base_without_pass INTERFACE
   ${CMAKE_SOURCE_DIR}
+  # Public SDK headers (including seekdb/plugin/*) are consumed by core
+  # adapter declarations such as observer/ob_server.h.  Keep this on the
+  # core interface; plugin targets link only seekdb_plugin_sdk and do not
+  # inherit the source-tree include path.
+  ${CMAKE_SOURCE_DIR}/include
   # Generated inner-table headers must shadow the checked-in snapshots.  The
   # schema definition is authoritative and may intentionally remove entries.
   ${CMAKE_BINARY_DIR}/generated
