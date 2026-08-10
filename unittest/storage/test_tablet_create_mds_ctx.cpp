@@ -21,7 +21,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/ob_errno.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/compile_utility/compile_mapper.h"
 #include "storage/multi_data_source/mds_ctx.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
@@ -37,18 +37,12 @@ using namespace oceanbase::unittest;
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObMemstoreFreezer;
+}
 namespace unittest
 {
-class TestMdsModuleProvider final : public share::ObIModuleProvider
-{
-public:
-  storage::ObMemstoreFreezer *memstore_freezer() override
-  {
-    // MdsFactory only checks module readiness before copying the context.
-    return reinterpret_cast<storage::ObMemstoreFreezer *>(this);
-  }
-};
-
 class TestTabletCreateMdsCtx : public ::testing::Test
 {
 public:
@@ -57,18 +51,19 @@ public:
 
   void SetUp() override
   {
-    old_module_provider_ = share::g_mp;
-    share::g_mp = &module_provider_;
+    old_memstore_freezer_ = share::server_service<storage::ObMemstoreFreezer>();
+    // MdsFactory only checks whether the service has been bound before copying.
+    share::bind_server_service<storage::ObMemstoreFreezer>(
+        reinterpret_cast<storage::ObMemstoreFreezer *>(this));
   }
 
   void TearDown() override
   {
-    share::g_mp = old_module_provider_;
+    share::bind_server_service<storage::ObMemstoreFreezer>(old_memstore_freezer_);
   }
 
 protected:
-  TestMdsModuleProvider module_provider_;
-  share::ObIModuleProvider *old_module_provider_ = nullptr;
+  storage::ObMemstoreFreezer *old_memstore_freezer_ = nullptr;
 };
 
 TEST_F(TestTabletCreateMdsCtx, start_mds_ctx)
