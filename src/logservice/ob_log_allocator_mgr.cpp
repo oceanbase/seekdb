@@ -173,14 +173,14 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
       if (has_memstore) {
         if (memstore_limit <= 0) {
           OB_LOG(WARN, "memstore memory limit is unexpected", K(memstore_limit));
+        } else if (memory_size > memstore_limit) {
+          new_limit = memory_size - memstore_limit;
         } else {
-          // ObLogAllocator historically treats a non-positive limit as "do not
-          // update" and starts unlimited. Keep that behavior deterministic
-          // when the independently configured Memstore limit leaves no
-          // remainder in memory_budget.
-          new_limit = memory_size > memstore_limit
-              ? memory_size - memstore_limit
-              : INT64_MAX;
+          // Memstore shares TxShare with the other transaction modules, so its
+          // limit is an upper bound rather than reserved memory. Keep the log
+          // allocator bounded by memory_budget when subtraction has no
+          // positive remainder.
+          new_limit = memory_size;
         }
       }
       ObLogAllocator *log_allocator = NULL;
