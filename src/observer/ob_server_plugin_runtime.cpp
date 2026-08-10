@@ -218,135 +218,82 @@ bool parse_semantic_version(const std::string &text,
   return version.major != 0;
 }
 
-int discover_plugin_packages(share::plugin::ObPluginCatalog &catalog,
-                             const std::string &trusted_directory,
-                             std::string &error)
+// Locate one package without mutating the durable catalog.  The package
+// directory is merely a candidate source; INSTALL PLUGIN is the operation
+// which pins it and changes desired state.
+int find_plugin_package(const std::string &trusted_directory,
+                        const std::string &plugin_name,
+                        const std::string &soname,
+                        share::plugin::ObPluginPackageInstallSpec &spec,
+                        std::string &error)
 {
   namespace fs = std::filesystem;
-  int ret = OB_SUCCESS;
+  int ret = OB_ENTRY_NOT_EXIST;
   error.clear();
   try {
-    LOG_INFO("plugin startup discovery begin", K(trusted_directory.c_str()));
-    std::error_code iterator_error;
     const fs::path root(trusted_directory);
-    for (const fs::directory_entry &package_dir_entry :
-         fs::directory_iterator(root, iterator_error)) {
-      if (iterator_error) {
-        ret = OB_IO_ERROR;
-        error = "failed to enumerate plugin directory";
-        break;
-      }
-      if (!package_dir_entry.is_directory(iterator_error) || iterator_error) {
-        iterator_error.clear();
-        continue;
-      }
-
-      const fs::path package_dir = package_dir_entry.path();
-      const fs::path manifest_path = package_dir / "plugin.toml";
-      if (!fs::is_regular_file(manifest_path, iterator_error) || iterator_error) {
-        iterator_error.clear();
-        continue;
-      }
-
+    std::error_code ec;
+    for (const fs::directory_entry &entry : fs::directory_iterator(root, ec)) {
+      if (ec) break;
+      if (!entry.is_directory(ec)) { ec.clear(); continue; }
+      const fs::path manifest_path = entry.path() / "plugin.toml";
+      if (!fs::is_regular_file(manifest_path, ec)) { ec.clear(); continue; }
       std::ifstream manifest(manifest_path);
-      if (!manifest.is_open()) {
-        ret = OB_IO_ERROR;
-        error = "failed to open plugin manifest '" + manifest_path.string() + "'";
-        break;
-      }
-
-      std::string plugin_id;
-      std::string package_version;
-      std::string build_id;
-      std::string entrypoint;
-      std::string catalog_version;
-      std::string data_format_version;
-      std::string line;
+      if (!manifest.is_open()) continue;
+      std::string id, version, build, entrypoint, catalog_version, format_version, line;
       while (std::getline(manifest, line)) {
         const size_t comment = line.find('#');
         if (comment != std::string::npos) line.resize(comment);
-        (void)parse_manifest_value(line, "plugin_id", plugin_id);
-        (void)parse_manifest_value(line, "package_version", package_version);
-        (void)parse_manifest_value(line, "build_id", build_id);
+        (void)parse_manifest_value(line, "plugin_id", id);
+        (void)parse_manifest_value(line, "package_version", version);
+        (void)parse_manifest_value(line, "build_id", build);
         (void)parse_manifest_value(line, "entrypoint", entrypoint);
         (void)parse_manifest_value(line, "catalog_schema_version", catalog_version);
-        (void)parse_manifest_value(line, "data_format_version", data_format_version);
+        (void)parse_manifest_value(line, "data_format_version", format_version);
       }
-      if (manifest.bad() || plugin_id.empty() || package_version.empty() ||
-          build_id.empty() || entrypoint.empty() || catalog_version.empty() ||
-          data_format_version.empty()) {
-        ret = OB_INVALID_ARGUMENT;
-        error = "plugin manifest is missing required identity fields '" +
-                manifest_path.string() + "'";
-        break;
+      const fs::path rel = (entry.path() / fs::path(entrypoint)).lexically_relative(root);
+      const std::string rel_name = rel.generic_string();
+      const bool name_matches = plugin_name == id ||
+          (id.size() > plugin_name.size() &&
+           id.compare(id.size() - plugin_name.size(), plugin_name.size(), plugin_name) == 0 &&
+           id[id.size() - plugin_name.size() - 1] == '.');
+      const bool soname_matches = soname == rel_name || soname == entrypoint;
+      if (!name_matches || !soname_matches || rel_name.empty() ||
+          rel_name == ".." || rel_name.rfind("../", 0) == 0 ||
+          fs::path(entrypoint).is_absolute() ||
+          !fs::is_regular_file(root / fs::path(rel_name), ec)) {
+        ec.clear();
+        continue;
       }
-
-      share::plugin::ObPluginPackageInstallSpec spec;
-      spec.artifact_.plugin_id_ = plugin_id;
-      spec.artifact_.build_id_ = build_id;
-      if (!parse_semantic_version(package_version, spec.artifact_.package_version_) ||
+      spec = share::plugin::ObPluginPackageInstallSpec();
+      spec.relative_path_ = rel_name;
+      spec.artifact_.plugin_id_ = id;
+      spec.artifact_.build_id_ = build;
+      if (!parse_semantic_version(version, spec.artifact_.package_version_) ||
           !parse_uint32_value(catalog_version, spec.artifact_.catalog_version_) ||
-          !parse_uint32_value(data_format_version,
-                              spec.artifact_.data_format_version_)) {
+          !parse_uint32_value(format_version, spec.artifact_.data_format_version_)) {
         ret = OB_INVALID_ARGUMENT;
-        error = "plugin manifest has invalid identity fields '" +
-                manifest_path.string() + "'";
+        error = "plugin manifest has invalid identity fields '" + manifest_path.string() + "'";
         break;
       }
-
-      const fs::path entrypoint_relative(entrypoint);
-      const fs::path entrypoint_path = package_dir / entrypoint_relative;
-      const fs::path relative_entrypoint = entrypoint_path.lexically_relative(root);
-      const std::string relative_path = relative_entrypoint.generic_string();
-      std::error_code entrypoint_error;
-      const bool entrypoint_exists =
-          fs::is_regular_file(entrypoint_path, entrypoint_error);
-      if (entrypoint_relative.is_absolute() || relative_path.empty() ||
-          relative_path == ".." || relative_path.rfind("../", 0) == 0 ||
-          !entrypoint_exists || entrypoint_error) {
-        ret = OB_INVALID_ARGUMENT;
-        error = "plugin manifest entrypoint is outside the plugin directory or missing '" +
-                manifest_path.string() + "'";
-        break;
-      }
-
-      spec.relative_path_ = relative_path;
-      // R0 deliberately has no signature/content-hash trust.  The digest is
-      // still required as a catalog identity field and is replaced by the
-      // production package verifier in a later phase.
       spec.artifact_.package_digest_ =
           "sha256:0000000000000000000000000000000000000000000000000000000000000000";
       spec.verification_level_ = share::plugin::ObPluginVerificationLevel::IDENTITY_PINNED;
-      spec.operator_id_ = "startup.autodiscovery";
-      spec.audit_id_ = "startup." + plugin_id;
-
-      LOG_INFO("plugin startup discovery found package",
-               K(plugin_id.c_str()), K(manifest_path.string().c_str()));
-
-      share::plugin::ObPluginCatalogRecord existing;
-      const int get_ret = catalog.get_record(plugin_id, existing);
-      if (OB_ENTRY_NOT_EXIST == get_ret) {
-        if (OB_FAIL(catalog.install_package(spec, error))) {
-          break;
-        }
-        LOG_INFO("plugin startup discovery installed package",
-                 K(plugin_id.c_str()));
-      } else if (OB_SUCCESS != get_ret) {
-        ret = get_ret;
-        error = "failed to inspect discovered plugin '" + plugin_id + "'";
-        break;
-      }
+      spec.operator_id_ = "sql.install_plugin";
+      spec.audit_id_ = "sql.install." + id;
+      ret = OB_SUCCESS;
+      break;
     }
-    if (OB_SUCCESS == ret && iterator_error) {
-      ret = OB_IO_ERROR;
-      error = "failed to enumerate plugin directory";
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      error = "no plugin package matches PLUGIN '" + plugin_name +
+              "' SONAME '" + soname + "'";
     }
   } catch (const std::bad_alloc &) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    error = "plugin discovery allocation failed";
+    error = "plugin package lookup allocation failed";
   } catch (...) {
     ret = OB_ERR_UNEXPECTED;
-    error = "unexpected plugin discovery failure";
+    error = "unexpected plugin package lookup failure";
   }
   return ret;
 }
@@ -525,18 +472,9 @@ int ObServerPluginRuntime::recover_before_server_ready(std::string &error)
       error = "plugin catalog is not initialized";
     }
 
-    if (OB_SUCC(ret)) {
-      std::string discovery_error;
-      if (OB_FAIL(discover_plugin_packages(*impl_->catalog_,
-                                           impl_->trusted_directory_,
-                                           discovery_error))) {
-        if (discovery_error.empty()) {
-          error = "failed to discover plugin packages";
-        } else {
-          error = discovery_error;
-        }
-      }
-    }
+    // Startup only restores rows previously persisted by INSTALL PLUGIN.
+    // Packages found on disk are candidates until an administrator explicitly
+    // installs them; this matches MySQL/Percona lifecycle semantics.
 
     // Keep blocked and missing-artifact failures read-only. This preserves the
     // durable evidence while still allowing an installed local package to be
@@ -595,6 +533,121 @@ int ObServerPluginRuntime::recover_before_server_ready(std::string &error)
     set_bridge_error_noexcept(
         error, "unexpected plugin server-ready bridge failure");
   }
+  return ret;
+}
+
+int ObServerPluginRuntime::install_plugin(const std::string &plugin_name,
+                                          const std::string &soname,
+                                          std::string &error)
+{
+  int ret = OB_SUCCESS;
+  error.clear();
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  try {
+    if (!impl_ || !impl_->initialized_ || !impl_->catalog_ || !impl_->loader_) {
+      ret = OB_NOT_INIT;
+      error = "plugin runtime is not initialized";
+    } else {
+      LOG_INFO("explicit plugin install begin",
+               K(plugin_name.c_str()), K(soname.c_str()));
+      share::plugin::ObPluginPackageInstallSpec spec;
+      if (OB_FAIL(find_plugin_package(impl_->trusted_directory_, plugin_name,
+                                      soname, spec, error))) {
+        LOG_WARN("explicit plugin package lookup failed", K(ret), KCSTRING(error.c_str()));
+      } else if (OB_FAIL(impl_->catalog_->install_package(spec, error))) {
+        LOG_WARN("explicit plugin catalog install failed", K(ret), KCSTRING(error.c_str()));
+      } else {
+        LOG_INFO("explicit plugin catalog install committed",
+                 K(spec.artifact_.plugin_id_.c_str()), K(spec.relative_path_.c_str()));
+        uint64_t generation = 0;
+        ret = impl_->loader_->load(spec.relative_path_, &generation);
+        if (OB_SUCCESS != ret) {
+          error = impl_->loader_->last_error();
+          if (error.empty()) error = "plugin activation failed";
+          LOG_ERROR("explicit plugin activation failed", K(ret), KCSTRING(error.c_str()));
+        } else {
+          LOG_INFO("explicit plugin activation succeeded",
+                   K(spec.artifact_.plugin_id_.c_str()), K(generation));
+        }
+      }
+    }
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    error = "plugin install allocation failed";
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+    error = "unexpected plugin install failure";
+  }
+#else
+  UNUSED(plugin_name);
+  UNUSED(soname);
+  ret = OB_NOT_SUPPORTED;
+  error = "experimental plugin support is disabled";
+#endif
+  return ret;
+}
+
+int ObServerPluginRuntime::uninstall_plugin(const std::string &plugin_name,
+                                            std::string &error)
+{
+  int ret = OB_SUCCESS;
+  error.clear();
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  try {
+    if (!impl_ || !impl_->initialized_ || !impl_->catalog_ || !impl_->loader_) {
+      ret = OB_NOT_INIT;
+      error = "plugin runtime is not initialized";
+    } else {
+      std::string plugin_id = plugin_name;
+      share::plugin::ObPluginCatalogRecord record;
+      ret = impl_->catalog_->get_record(plugin_id, record);
+      if (OB_ENTRY_NOT_EXIST == ret) {
+        std::vector<share::plugin::ObPluginCatalogRecord> records;
+        ret = impl_->catalog_->list_records(records);
+        for (const auto &candidate : records) {
+          if (candidate.plugin_id_ == plugin_name ||
+              (candidate.plugin_id_.size() > plugin_name.size() &&
+               candidate.plugin_id_.compare(candidate.plugin_id_.size() - plugin_name.size(),
+                                            plugin_name.size(), plugin_name) == 0 &&
+               candidate.plugin_id_[candidate.plugin_id_.size() - plugin_name.size() - 1] == '.')) {
+            plugin_id = candidate.plugin_id_;
+            record = candidate;
+            ret = OB_SUCCESS;
+            break;
+          }
+        }
+      }
+      if (OB_SUCCESS == ret && record.actual_state_ == share::plugin::ObPluginState::ACTIVE) {
+        ret = impl_->loader_->disable(plugin_id, 30L * 1000L * 1000L);
+        if (OB_ENTRY_NOT_EXIST == ret) ret = OB_SUCCESS;
+        if (OB_SUCCESS != ret) {
+          error = impl_->loader_->last_error();
+          if (error.empty()) error = "plugin disable failed";
+        }
+      }
+      if (OB_SUCCESS == ret) {
+        std::vector<share::plugin::ObPluginRestrictBlocker> blockers;
+        ret = impl_->catalog_->uninstall_restrict(
+            plugin_id, "sql.uninstall_plugin", "sql.uninstall." + plugin_id,
+            blockers, error);
+      }
+      if (OB_SUCCESS == ret) error.clear();
+      if (OB_ENTRY_NOT_EXIST == ret && error.empty()) {
+        error = "plugin is not installed: " + plugin_name;
+      }
+    }
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    error = "plugin uninstall allocation failed";
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+    error = "unexpected plugin uninstall failure";
+  }
+#else
+  UNUSED(plugin_name);
+  ret = OB_NOT_SUPPORTED;
+  error = "experimental plugin support is disabled";
+#endif
   return ret;
 }
 

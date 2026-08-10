@@ -80,6 +80,7 @@
 %token <node> OUTLINE_DEFAULT_TOKEN/*use for outline parser to just filter hint of query_sql*/
 %token <node> ID_DOT_ID_DOT_ID
 %token <node> ID_DOT_ID
+%token INSTALL UNINSTALL PLUGIN SONAME PLUGINS
 /*empty_query::
 // (1) 对于只有空格或者;的查询语句需要报错：如："" 或者 "   " 或者 ";" 或者 " ;  " 都需要报错：err_msg:Query was empty  errno:1065
 // (2) 对于只含有注释或者空格或者;的查询语句则需要返回成功：如："#fadfadf " 或者"/**\/" 或者 "/**\/  ;" 返回成功
@@ -421,7 +422,7 @@ END_P SET_VAR DELIMITER
 %type <node> opt_equal_mark opt_default_mark read_only_or_write not not2
 %type <node> int_or_decimal
 %type <node> opt_column_attribute_list column_attribute column_attribute_list opt_column_default_value opt_column_default_value_list
-%type <node> show_stmt from_or_in columns_or_fields database_or_schema index_or_indexes_or_keys opt_from_or_in_database_clause opt_show_condition opt_desc_column_option opt_status opt_storage opt_show_engine check_table_options check_table_option
+%type <node> show_stmt plugin_stmt from_or_in columns_or_fields database_or_schema index_or_indexes_or_keys opt_from_or_in_database_clause opt_show_condition opt_desc_column_option opt_status opt_storage opt_show_engine check_table_options check_table_option
 %type <node> prepare_stmt stmt_name preparable_stmt
 %type <node> variable_set_stmt var_and_val_list var_and_val to_or_eq set_expr_or_default sys_var_and_val
 %type <node> execute_stmt argument_list argument opt_using_args
@@ -649,6 +650,7 @@ stmt:
   | load_data_stmt          { $$ = $1; check_question_mark($$, result); }
   | optimize_stmt     { $$ = $1; check_question_mark($$, result); }
   | flush_privileges_stmt { $$ = $1; check_question_mark($$, result); }
+  | plugin_stmt            { $$ = $1; check_question_mark($$, result); }
   | dump_memory_stmt  { $$ = $1; check_question_mark($$, result); }
   | get_diagnostics_stmt    { $$ = $1; question_mark_issue($$, result); }
   | pl_expr_stmt            { $$ = $1; question_mark_issue($$, result); }
@@ -12625,6 +12627,11 @@ CLASS_ORIGIN
  *
  *****************************************************************************/
 show_stmt:
+SHOW PLUGINS
+{
+  malloc_terminal_node($$, result->malloc_pool_, T_SHOW_PLUGINS);
+}
+|
 SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_condition
 {
   ParseNode *value = NULL;
@@ -12853,6 +12860,17 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
 | CHECK TABLE table_list
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_SHOW_CHECK_TABLE, 1, $3);
+}
+;
+
+plugin_stmt:
+INSTALL PLUGIN NAME_OB SONAME STRING_VALUE
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_INSTALL_PLUGIN, 2, $3, $5);
+}
+| UNINSTALL PLUGIN NAME_OB
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_UNINSTALL_PLUGIN, 1, $3);
 }
 ;
 
@@ -15483,60 +15501,6 @@ alter_with_opt_hint SYSTEM REFRESH MEMORY STAT
 {
   (void)($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REFRESH_MEMORY_STAT, 1, NULL);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_STANDBY, 1, verify_node);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO STANDBY VERIFY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_STANDBY, 1, verify_node);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO PRIMARY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_PRIMARY, 1, verify_node);
-}
-|
-alter_with_opt_hint SYSTEM SWITCHOVER TO PRIMARY VERIFY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_SWITCHOVER_TO_PRIMARY, 1, verify_node);
-}
-|
-alter_with_opt_hint SYSTEM ACTIVATE STANDBY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 0;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ACTIVATE_STANDBY, 1, verify_node);
-}
-|
-alter_with_opt_hint SYSTEM ACTIVATE STANDBY VERIFY
-{
-  (void)($1);
-  ParseNode *verify_node = NULL;
-  malloc_terminal_node(verify_node, result->malloc_pool_, T_INT);
-  verify_node->value_ = 1;
-  malloc_non_terminal_node($$, result->malloc_pool_, T_ACTIVATE_STANDBY, 1, verify_node);
 }
 |
 alter_with_opt_hint SYSTEM REFRESH IO CALIBRATION opt_storage_name opt_calibration_list

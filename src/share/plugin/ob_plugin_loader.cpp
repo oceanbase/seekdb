@@ -2852,6 +2852,19 @@ int ObPluginLoader::disable(const std::string &plugin_id, const int64_t drain_ti
       try {
         if (OB_SUCCESS == ret) {
           module->last_error_.clear();
+          // A successfully stopped generation is no longer resident from the
+          // management API's perspective.  Keep its immutable Module record
+          // in modules_ for generation/audit history, but remove it from the
+          // active index so a later INSTALL PLUGIN can create a new fenced
+          // generation after UNINSTALL PLUGIN.
+          if (module->owner_ &&
+              module->owner_->state() == ObPluginState::STOPPED) {
+            const auto active_it = impl_->active_.find(plugin_id);
+            if (active_it != impl_->active_.end() &&
+                active_it->second == module) {
+              impl_->active_.erase(active_it);
+            }
+          }
         } else {
           module->last_error_ = error;
         }

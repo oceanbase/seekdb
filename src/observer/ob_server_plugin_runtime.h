@@ -51,6 +51,12 @@ public:
   int init(common::ObISQLClient *sql_client,
            const std::string &trusted_directory = std::string());
   int recover_before_server_ready(std::string &error);
+  // MySQL-compatible lifecycle management. Filesystem discovery only finds
+  // candidates; these calls persist installation and alter resident runtime.
+  int install_plugin(const std::string &plugin_name,
+                     const std::string &soname,
+                     std::string &error);
+  int uninstall_plugin(const std::string &plugin_name, std::string &error);
   int execute_function(const char *service_id,
                        uint32_t abi_major,
                        uint32_t required_minor,

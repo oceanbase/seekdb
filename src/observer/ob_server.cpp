@@ -1626,6 +1626,7 @@ int ObServer::init_plugin_runtime(const ObServerOptions &opts)
     }
     if (OB_SUCC(ret)) {
       plugin_runtime_ = std::move(runtime);
+      GCTX.plugin_runtime_ = plugin_runtime_.get();
     }
   }
   return ret;
@@ -1650,6 +1651,7 @@ int ObServer::check_plugin_server_ready()
 void ObServer::destroy_plugin_runtime() noexcept
 {
   if (plugin_runtime_) {
+    GCTX.plugin_runtime_ = nullptr;
     plugin_runtime_->destroy();
     plugin_runtime_.reset();
   }
