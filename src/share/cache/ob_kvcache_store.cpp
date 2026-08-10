@@ -850,11 +850,7 @@ int ObKVCacheStore::alloc_mbhandle(
   } else {
     mem_block = new (buf) ObKVStoreMemBlock(buf + sizeof(ObKVStoreMemBlock),
         block_size - sizeof(ObKVStoreMemBlock));
-    while (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
-      if (OB_UNLIKELY(!try_supply_mb(SUPPLY_MB_NUM_ONCE))) {
-        break;
-      }
-    }
+    ret = pop_mb_handle_with_recovery(block_size, mb_handle);
 
     if (OB_FAIL(ret)) {
       mem_block->~ObKVStoreMemBlock();
@@ -940,6 +936,62 @@ bool ObKVCacheStore::try_reserve_store_size(
     }
   }
   return reserved;
+}
+
+int ObKVCacheStore::pop_mb_handle_with_recovery(
+    const int64_t block_size,
+    ObKVMemBlockHandle *&mb_handle)
+{
+  int ret = mb_handles_pool_.pop(mb_handle);
+
+  // Handle objects are preallocated at init and published to the free pool in
+  // batches. Publish all unused objects before attempting reclamation.
+  while (OB_ENTRY_NOT_EXIST == ret && try_supply_mb(SUPPLY_MB_NUM_ONCE)) {
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // First reclaim handles whose memblocks have already been released and are
+    // only waiting in the qclock retire station.
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // Then finish reclamation of memblocks that a previous wash has already
+    // retired. This does not select any additional cache block for eviction.
+    int tmp_ret = OB_SUCCESS;
+    uint64_t reclaimed_size = 0;
+    WashCallBack callback(*this, reclaimed_size);
+    if (OB_TMP_FAIL(HazardDomain::get_instance().reclaim(callback))) {
+      COMMON_LOG(WARN, "Fail to reclaim retired KV cache memblocks for mb handle",
+          K(tmp_ret), K(reclaimed_size));
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // No retired handle is reusable. Retire one full memblock, reclaim it and
+    // retry as the last allocation-pressure fallback.
+    int tmp_ret = OB_SUCCESS;
+    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
+      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache for mb handle",
+            K(tmp_ret), K(block_size));
+      }
+    } else {
+      free_mbs(mb_list_.resource_mgr_, wash_blocks);
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  return ret;
 }
 
 void ObKVCacheStore::compute_wash_size(int64_t &wash_size)

@@ -107,12 +107,10 @@ int ObCodeGenerator::detect_batch_size(
     
     double scan_cardinality = 0;
     // TODO bin.lb: move to optimizer and more sophisticated rules
-    bool rowsets_enabled = true && GCONF._rowsets_enabled;
     int64_t lob_rowsets_max_rows = GCONF._lob_rowsets_max_rows;
     const ObOptParamHint *opt_params = &log_plan.get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     if (OB_FAIL(opt_params->get_integer_opt_param(ObOptParamHint::LOB_ROWSETS_MAX_ROWS, lob_rowsets_max_rows))) {
-    } else if (OB_FAIL(opt_params->get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, rowsets_enabled))) {
-    } else if (rowsets_enabled) {
+    } else {
       // TODO bin.lb; check all sub plans
       OZ(ObStaticEngineCG::check_vectorize_supported(vectorize,
                                                      stop_checking,
@@ -132,7 +130,7 @@ int ObCodeGenerator::detect_batch_size(
       // without forcing that operator onto an unsupported scalar path.
       // set max_batch_size = 1
       // if all physical operator is not registered as vec op, disable vectorization
-      if (rowsets_enabled && has_registered_vec_op) {
+      if (has_registered_vec_op) {
         batch_size = 1;
       } else {
         batch_size = 0;

@@ -12,7 +12,7 @@ connect(conn0,$ip0,root@obtest,,test,$sql_port0);
 connect(conn1,$ip0,root@sys,,oceanbase,$sql_port0);
 
 connection conn0;
-alter system set _rowsets_enabled=false;
+alter system set _rowsets_max_rows=1;
 create table test.t1(c1 int primary key, c2 int, c3 int, unique key u_idx(c2), index idx(c3));
 
 # insert data

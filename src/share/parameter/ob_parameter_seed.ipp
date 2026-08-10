@@ -276,9 +276,6 @@ DEF_PARAM(undo_retention, INT, OB_CLUSTER_PARAMETER, "1800", "[0, 4294967295]",
 DEF_PARAM(_mvcc_gc_using_min_txn_snapshot, BOOL, OB_CLUSTER_PARAMETER, "True",
         "specifies enable mvcc gc using active txn snapshot",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_rowsets_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
-         "specifies whether vectorized sql execution engine is activated",
-         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_rowsets_target_maxsize, INT, OB_CLUSTER_PARAMETER, "524288", "[262144, 8388608]",
         "the size of the memory reserved for vectorized sql engine. Range: [262144, 8388608]",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

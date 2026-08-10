@@ -292,7 +292,6 @@ _px_task_rebalance_trigger_time
 _px_worker_share_plan_enabled
 _query_record_size_limit
 _recyclebin_object_purge_frequency
-_rowsets_enabled
 _rowsets_max_rows
 _rowsets_target_maxsize
 _schema_memory_recycle_interval

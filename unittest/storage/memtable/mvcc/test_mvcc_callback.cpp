@@ -716,6 +716,22 @@ TEST_F(TestTxCallbackList, checksum_follower_tx_end)
   EXPECT_EQ(share::SCN::max_scn(), callback_list_.checksum_scn_);
 }
 
+TEST_F(TestTxCallbackList, checksum_checkpoint_recovery_restores_base_and_scn)
+{
+  const uint64_t checkpoint_checksum = 1845692038;
+  share::SCN checkpoint_scn;
+  uint64_t restored_checksum = 0;
+  share::SCN restored_scn;
+
+  ASSERT_EQ(OB_SUCCESS, checkpoint_scn.convert_for_tx(13));
+  ASSERT_EQ(OB_SUCCESS,
+            callback_list_.update_checksum(checkpoint_checksum, checkpoint_scn));
+
+  callback_list_.get_checksum_and_scn(restored_checksum, restored_scn);
+  EXPECT_EQ(checkpoint_checksum, restored_checksum);
+  EXPECT_EQ(checkpoint_scn, restored_scn);
+}
+
 TEST_F(TestTxCallbackList, checksum_leader_tx_end_harder)
 {
   TRANS_LOG(INFO, "CASE: checksum_leader_tx_end_harder");

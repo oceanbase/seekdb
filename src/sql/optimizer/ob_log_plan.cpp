@@ -4853,7 +4853,6 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
   bool force_hash_rollup = false;
   ObObj hash_rollup_policy;
   ObQueryCtx *query_ctx = nullptr;
-  bool rowsets_enabled = true;
   if (OB_FAIL(candidates_.get_best_plan(best_plan))) {
   } else if (OB_ISNULL(best_plan) ||
              OB_ISNULL(stmt = get_stmt()) ||
@@ -4868,7 +4867,6 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
   } else if (OB_FAIL(query_ctx->query_hint_.global_hint_.opt_params_.get_hash_rollup_param(hash_rollup_policy,
                                                                                            has_rollup_opt_param))) {
   } else {
-    rowsets_enabled = true && GCONF._rowsets_enabled;
     enable_hash_rollup = has_rollup_opt_param ?
                            (hash_rollup_policy.get_string().case_compare("auto") == 0
                            || hash_rollup_policy.get_string().case_compare("forced") == 0) :
@@ -4880,12 +4878,9 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
                                  GCONF._use_hash_rollup.case_compare("forced") == 0);
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(query_ctx->query_hint_.global_hint_.opt_params_.get_bool_opt_param(
-               ObOptParamHint::ROWSETS_ENABLED, rowsets_enabled))) {
   } else if (FALSE_IT(
                groupby_helper.enable_hash_rollup_ =
-                 (rowsets_enabled
-                  && rollup_exprs.count() > 0
+                 (rollup_exprs.count() > 0
                   && enable_hash_rollup
                   && !get_optimizer_context().is_cost_evaluation()))) { // TODO: adjust expr replacement in ObLogExpand and remove this
   } else if (FALSE_IT(groupby_helper.force_hash_rollup_ = (groupby_helper.enable_hash_rollup_ && force_hash_rollup))) {
@@ -5362,23 +5357,18 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
   
   enable_aggr_push_down = false;
   enable_groupby_push_down = false;
-  bool is_exist_hint = false;
-  bool hint_rowsets_enable = false;
   int64_t hint_level = INT64_MAX;
   const ObGlobalHint &global_hint = optimizer_context_.get_global_hint();
   if (OB_FAIL(global_hint.opt_params_.get_integer_opt_param(ObOptParamHint::PUSHDOWN_STORAGE_LEVEL, hint_level))) {
-  } else if (OB_FAIL(global_hint.opt_params_.get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED, hint_rowsets_enable, is_exist_hint))) {
   } else {
-    const bool rowsets_enabled = is_exist_hint ? hint_rowsets_enable : (true && GCONF._rowsets_enabled);
     if (hint_level == INT64_MAX) {
 
       enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(GCONF._pushdown_storage_level);
-      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(GCONF._pushdown_storage_level)
-                                && rowsets_enabled;
+      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(GCONF._pushdown_storage_level);
 
     } else {
       enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(hint_level);
-      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(hint_level) && rowsets_enabled;
+      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(hint_level);
     }
   }
   return ret;
@@ -13429,9 +13419,6 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
   
   ObQueryCtx *query_ctx = get_optimizer_context().get_query_ctx();
   ObRawExpr* group_expr = NULL;
-  const ObGlobalHint &global_hint = optimizer_context_.get_global_hint();
-  bool is_exist_hint = false;
-  bool hint_rowsets_enable = false;
   can_pushdown = false;
   if (OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
@@ -13447,13 +13434,8 @@ int ObLogPlan::check_can_scala_storage_pushdown(ObSQLSessionInfo &session_info,
     LOG_WARN("get unexpected null", K(ret));
   } else if (group_expr->get_expr_type() != T_FUN_SYS_CALC_PARTITION_ID) {
     // do nothing
-      } else if (OB_FAIL(global_hint.opt_params_.get_bool_opt_param(ObOptParamHint::ROWSETS_ENABLED,
-                                                                hint_rowsets_enable,
-                                                                is_exist_hint))) {
   } else {
-    bool rowsets_enabled = is_exist_hint ? hint_rowsets_enable :
-                                           (true && GCONF._rowsets_enabled);
-    can_pushdown = rowsets_enabled;
+    can_pushdown = true;
   }
-    return ret;
+  return ret;
 }
