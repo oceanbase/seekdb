@@ -9,8 +9,8 @@
 #   ./package/pkg/seekdb-pkg-build.sh [options] PROJECT_NAME VERSION RELEASE
 #
 # Example:
-#   ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.3.0 1
-#   # produces: package/pkg/seekdb-1.3.0-1-macos15-arm64.pkg
+#   ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.4.0 1
+#   # produces: package/pkg/seekdb-1.4.0-1-macos15-arm64.pkg
 #
 # Env:
 #   SEEKDB_BUILD   Build directory (default: <repo>/build_release)
@@ -32,7 +32,7 @@ usage() {
 Usage: seekdb-pkg-build.sh [options] PROJECT_NAME VERSION RELEASE
 
   PROJECT_NAME    Package name (e.g. seekdb)
-  VERSION         Version string (e.g. 1.3.0)
+  VERSION         Version string (e.g. 1.4.0)
   RELEASE         Release number (e.g. 1)
 
 Options:
@@ -48,7 +48,7 @@ Environment:
 Typical workflow:
   cd <oceanbase-lite>
   SEEKDB_BUILD=/path/to/macos-artifacts \
-    ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.3.0 1
+    ./package/pkg/seekdb-pkg-build.sh --pkg seekdb 1.4.0 1
 EOF
 }
 
