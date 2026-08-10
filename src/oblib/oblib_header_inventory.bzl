@@ -399,6 +399,7 @@ OBLIB_HEADER_TARGETS = {
         ":oblib_db_values_model",
         ":oblib_db_values_runtime",
         ":oblib_db_values_services",
+        ":oblib_encoding_base",
         ":oblib_foundation_base",
         ":oblib_foundation_integration",
         ":oblib_foundation_services",
