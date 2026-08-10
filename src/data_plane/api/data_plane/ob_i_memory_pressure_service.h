@@ -28,7 +28,6 @@ class ObIMemoryPressureService
 {
 public:
   virtual ~ObIMemoryPressureService() {}
-  virtual int64_t memstore_limit_percentage() const = 0;
   virtual int get_memstore_condition(
       int64_t &active_memstore_used,
       int64_t &total_memstore_used,

@@ -18,7 +18,6 @@
 #define OCEANBASE_ALLOCATOR_OB_SHARED_MEMORY_ALLOCATOR_MGR_H_
 
 #include "storage/allocator/ob_memstore_allocator.h"
-#include "share/rc/ob_module_provider.h"
 #include "storage/allocator/ob_tx_data_allocator.h"
 #include "storage/allocator/ob_mds_allocator.h"
 #include "storage/allocator/ob_vector_allocator.h"
@@ -48,18 +47,12 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(tx_data_allocator_.init("TX_DATA_SLICE"))) {
-      SHARE_LOG(ERROR, "init tx data allocator failed", KR(ret));
     } else if (OB_FAIL(memstore_allocator_.init())) {
-      SHARE_LOG(ERROR, "init memstore allocator failed", KR(ret));
     } else if (OB_FAIL(mds_allocator_.init())) {
-      SHARE_LOG(ERROR, "init mds allocator failed", KR(ret));
     } else if (OB_FAIL(tx_data_op_allocator_.init())) {
-      SHARE_LOG(ERROR, "init tx data op allocator failed", KR(ret));
     } else if (OB_FAIL(vector_allocator_.init())) {
-      SHARE_LOG(ERROR, "init vector allocator failed", KR(ret));
     } else if (OB_FAIL(share_resource_throttle_tool_.init(
                    &memstore_allocator_, &tx_data_allocator_, &mds_allocator_, &vector_allocator_))) {
-      SHARE_LOG(ERROR, "init share resource throttle tool failed", KR(ret));
     } else {
       SHARE_LOG(INFO, "finish init runtime shared memory allocator mgr", KP(this));
     }

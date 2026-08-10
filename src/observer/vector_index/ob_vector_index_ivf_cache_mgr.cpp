@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "ob_vector_index_ivf_cache_mgr.h"
-#include "observer/vector_index/ob_plugin_vector_index_util.h"
+#include "query/vector/ob_vector_index_cache.h"
+#include "query/vector/ob_vector_query_result.h"
+#include "storage/allocator/ob_vector_allocator.h"
 
 namespace oceanbase
 {
@@ -25,6 +26,17 @@ using namespace sql;
 using namespace common;
 namespace share
 {
+
+int64_t ObIvfICache::get_actual_memory_used()
+{
+  return sub_mem_ctx_->used();
+}
+
+int64_t ObIvfICache::get_memory_hold()
+{
+  return nullptr == sub_mem_ctx_ ? 0 : sub_mem_ctx_->hold();
+}
+
 /////////////////////////////////////
 // implement of ObIvfCacheMgrGuard //
 /////////////////////////////////////
@@ -139,7 +151,6 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
   } else if (!is_reach_limit_) {
     if (OB_FAIL(
             ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (curr_used + base > memory_limit_size) {
       is_reach_limit_ = true;
     }
@@ -148,7 +159,6 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
     reach_limit_cnt_ = 0;
     if (OB_FAIL(
             ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-      LOG_WARN("failed to get vector mem limit size.", K(ret));
     } else if (curr_used + base < memory_limit_size) {
       is_reach_limit_ = false;
     }
@@ -203,11 +213,8 @@ int ObIvfCacheMgr::create_cache_obj(const IvfCacheKey &key, ObIvfICache *&cache_
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_memory_limit(cache_obj->get_expect_memory_used(key, vec_param_)))) {
-    LOG_WARN("fail to check memory limit", K(ret));
   } else if (OB_FAIL(cache_obj->init(mem_ctx_, key, vec_param_, all_vsag_use_mem_))) {
-    LOG_WARN("fail to init cache obj", K(ret));
   } else if (OB_FAIL(check_memory_limit(0))) {
-    LOG_WARN("fail to check memory limit", K(ret));
   }
   
   if (OB_FAIL(ret) && OB_NOT_NULL(cache_obj)) {
@@ -225,35 +232,27 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
   int64_t pos = 0;
   if (OB_FAIL(databuff_printf(
           info.statistics_, sizeof(info.statistics_), pos, "actual_memory_used=%ld;", get_actual_memory_used()))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "ref_cnt=%ld;", ref_cnt_))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "is_reach_limit=%d;", is_reach_limit_))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(
                  info.statistics_, sizeof(info.statistics_), pos, "reach_limit_cnt=%d;", reach_limit_cnt_))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "is_inited=%d;", is_inited_))) {
-    LOG_WARN("failed to fill statistics", K(ret), K(this));
   } else {
     ObCStringHelper helper;
     if (OB_FAIL(databuff_printf(
                    info.statistics_, sizeof(info.statistics_), pos, "index_param=%s;", helper.convert(vec_param_)))) {
-      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else {
     if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "["))) {
-      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
     FOREACH_X(iter, cache_objs_, OB_SUCC(ret))
     {
       IvfCacheType cache_type = iter->first.type_;
       if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "{cache_type=%d;", cache_type))) {
-        LOG_WARN("failed to fill statistics", K(ret), K(this));
       }
       switch (cache_type) {
         case IvfCacheType::IVF_CENTROID_CACHE: 
@@ -264,19 +263,15 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
           if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "capacity=%ld;", cache->get_capacity()))) {
-              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "cent_vec_dim=%d;", cache->cent_vec_dim_))) {
-              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "count=%d;", cache->count_))) {
-              LOG_WARN("failed to fill statistics", K(ret), K(this));
           } else if (OB_FAIL(databuff_printf(info.statistics_,
                   sizeof(info.statistics_), pos,
                   "nlist=%d;} ", cache->nlist_))) {
-              LOG_WARN("failed to fill statistics", K(ret), K(this));
           }
           break;
         }
@@ -288,7 +283,6 @@ int ObIvfCacheMgr::fill_cache_info(ObVectorIndexInfo &info){
       }
     }
     if (OB_FAIL(databuff_printf(info.statistics_, sizeof(info.statistics_), pos, "]"))) {
-      LOG_WARN("failed to fill statistics", K(ret), K(this));
     }
   }
   return ret;
@@ -387,7 +381,6 @@ int ObIvfCentCache::init(ObIvfMemContext *parent_mem_ctx, const IvfCacheKey &key
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIvfICache::inner_init(parent_mem_ctx, all_vsag_use_mem))) {
-    LOG_WARN("fail to do ObIvfICache inner init", K(ret));
   } else {
     center_prefix_ = 0;
     switch (key.type_) {

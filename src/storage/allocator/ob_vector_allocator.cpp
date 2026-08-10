@@ -17,7 +17,7 @@
 
 #include "ob_vector_allocator.h"
 #include "share/config/ob_server_config.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "lib/literals/ob_literals.h"  // _ms literal(free within lib)
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
@@ -55,7 +55,7 @@ int64_t ObVectorAllocator::hold()
 
 int64_t ObVectorAllocator::get_rb_mem_used()
 {
-  ObRbMemMgr *rb_mgr = share::g_mp->rb_mem_mgr();
+  ObRbMemMgr *rb_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObRbMemMgr>();
   return rb_mgr != nullptr ? rb_mgr->get_vec_idx_used() : 0;
 }
 
@@ -133,16 +133,14 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   ObMemAttr attr("VIndexVsagADP", ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }
@@ -203,16 +201,14 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
 {
   INIT_SUCC(ret);
   lib::ContextParam param;
-  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>();
   ObMemAttr attr(label, ObCtxIds::VECTOR_CTX_ID);
   param.set_mem_attr(attr)
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }

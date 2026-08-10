@@ -18,7 +18,7 @@
 
 #include "ob_memstore_freezer_common.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
 {
@@ -229,7 +229,7 @@ ObMemstoreFreezeGuard::ObMemstoreFreezeGuard(int &err_code, const ObMemstoreInfo
       error_code_(err_code),
       time_guard_("FREEZE_CHECKER", warn_threshold)
 {
-  ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+  ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
   pre_retire_pos_ = memstore_allocator.get_retire_clock();
 }
 
@@ -237,9 +237,8 @@ ObMemstoreFreezeGuard::~ObMemstoreFreezeGuard()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(error_code_)) {
-    LOG_WARN("[FREEZE_CHECKER]global freeze failed, skip check frozen memstore", KR(error_code_));
   } else {
-    ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
+    ObMemstoreAllocator &memstore_allocator = ::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->memstore_allocator();
     int64_t curr_frozen_pos = 0;
     curr_frozen_pos = memstore_allocator.get_frozen_memstore_pos();
     const bool retired_mem_frozen = (curr_frozen_pos >= pre_retire_pos_);

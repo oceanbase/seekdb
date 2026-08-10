@@ -24,6 +24,8 @@
 // Android uses Bionic, no glibc headers
 #elif defined(__linux__)
 #include <gnu/libc-version.h>
+#include <errno.h>
+#include <limits.h>
 #endif
 #ifdef _WIN32
 #include <windows.h>

@@ -507,7 +507,6 @@ public:
   common::ObIOService * io_service() { return mods_io_service_; }
   storage::mds::ObMdsService * mds_service() { return mods_mds_service_; }
   share::ObSharedMemAllocMgr * shared_mem_alloc_mgr() { return mods_shared_mem_alloc_mgr_; }
-  int get_memstore_limit_percentage(int64_t &limit_percent) override;
   int set_memstore_threshold() override;
   int get_server_cpu(double &min_cpu, double &max_cpu)
   {
@@ -590,7 +589,6 @@ public:
     return this;
   }
   query::ObIVectorIndexService * vector_index_service();
-  int64_t memstore_limit_percentage() const override;
   int get_memstore_condition(
       int64_t &active_memstore_used,
       int64_t &total_memstore_used,

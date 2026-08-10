@@ -17,7 +17,7 @@
 
 #include "ob_mds_allocator.h"
 #include "lib/alloc/alloc_func.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::storage::mds;
@@ -68,7 +68,7 @@ void ObMdsAllocator::adaptive_update_limit(const int64_t holding_size,
 ObMdsThrottleGuard::ObMdsThrottleGuard(const bool for_replay, const int64_t abs_expire_time)
     : for_replay_(for_replay), abs_expire_time_(abs_expire_time)
 {
-  throttle_tool_ = &(share::g_mp->shared_mem_alloc_mgr()->share_resource_throttle_tool());
+  throttle_tool_ = &(::oceanbase::share::server_service<::oceanbase::share::ObSharedMemAllocMgr>()->share_resource_throttle_tool());
   if (0 == abs_expire_time) {
     abs_expire_time_ =
         ObClockGenerator::getClock() + ObThrottleUnit<ObMdsThrottleGuard>::DEFAULT_MAX_THROTTLE_TIME;
@@ -100,7 +100,6 @@ void *ObMdsAllocator::alloc(const int64_t size, const int64_t abs_expire_time)
     share::mds_throttled_alloc() += size;
   }
   void *obj = allocator_.alloc(size);
-  MDS_LOG(DEBUG, "mds alloc ", K(size), KP(obj), K(abs_expire_time));
   return obj;
 }
 

@@ -15,8 +15,7 @@
  */
 
 #include "share/config/ob_server_config.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
-#include "share/rc/ob_module_provider.h"
+#include "share/rc/ob_server_runtime.h"
 #include "ob_log_allocator_mgr.h"
 #include "ob_log_allocator.h"
 
@@ -54,7 +53,6 @@ int ObLogAllocatorMgr::delete_log_allocator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_allocator_())) {
-    OB_LOG(WARN, "delete_allocator_ failed", K(ret));
   } else {
     OB_LOG(INFO, "delete_allocator_ success");
   }
@@ -75,7 +73,6 @@ int ObLogAllocatorMgr::get_allocator_(Allocator *&out_allocator)
 
     if (NULL == out_allocator) {
       if (OB_FAIL(create_allocator_(out_allocator))) {
-        OB_LOG(WARN, "fail to create_allocator_", K(ret));
       }
     }
   }
@@ -119,7 +116,6 @@ int ObLogAllocatorMgr::create_allocator_(Allocator *&out_allocator)
     } else {
       Allocator *new_allocator = NULL;
       if (OB_FAIL(construct_allocator_(new_allocator))) {
-        OB_LOG(WARN, "fail to construct_allocator_", K(ret));
       } else if (!ATOMIC_BCAS(&allocator_, NULL, new_allocator)) {
         out_allocator = ATOMIC_LOAD(&allocator_);
         if (NULL != new_allocator) {
@@ -189,7 +185,6 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
       }
       ObLogAllocator *log_allocator = NULL;
       if (OB_TMP_FAIL(get_allocator_(log_allocator))) {
-        OB_LOG(WARN, "get_allocator_ failed", K(tmp_ret));
       } else if (NULL == log_allocator) {
         OB_LOG(WARN, "get_allocator_ failed");
       } else {
@@ -203,9 +198,12 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
       }
 
       SERVER_MODULE_SCOPE {
-        ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
-        if (OB_FAIL(memstore_allocator.set_memstore_threshold())) {
-          OB_LOG(WARN, "failed to set_memstore_threshold of memstore allocator", K(ret));
+        share::ObIMemstoreRuntime *runtime =
+            share::server_service<share::ObIMemstoreRuntime>();
+        if (OB_ISNULL(runtime)) {
+          ret = OB_NOT_INIT;
+          OB_LOG(WARN, "memstore runtime is unavailable", K(ret));
+        } else if (OB_FAIL(runtime->set_memstore_threshold())) {
         } else {
           OB_LOG(INFO, "succ to set_memstore_threshold of memstore allocator", K(ret));
         }

@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "ob_plugin_vector_index_util.h"
 #include "share/config/ob_server_config.h"
+#include "query/vector/ob_vector_query_result.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/das/iter/ob_das_iter.h"
@@ -134,7 +134,6 @@ int ObVectorQueryRowkeyIterator::get_next_rows(ObIArray<common::ObRowkey>& rowke
     ObObj *obj = nullptr;
     if (batch_size_ > 0) {
       if (OB_FAIL(rowkeys.reserve(batch_size_))) {
-        LOG_WARN("failed reserve rowkeys", K(ret));
       } else {
         int64_t index = 0;
         for (; index < batch_size_ && cur_pos_ < total_; ++index) {
@@ -210,7 +209,6 @@ int ObVectorQueryVidIterator::add_result(int64_t add_vid, float add_distance, co
     distance_[total_] = add_distance;
     if (OB_NOT_NULL(extra_info)) {
       if (OB_FAIL(extra_info_ptr_.set_no_copy(total_, extra_info))){
-        LOG_WARN("failed to set extra info", K(ret), K(extra_info_ptr_), K(extra_info));
       }
     }
     ++total_;
@@ -268,7 +266,6 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
 {
   INIT_SUCC(ret);
   if (OB_FAIL(reset_obj())) {
-    LOG_WARN("fail to reset obj.", K(ret));
   } else if (cur_pos_ < total_) {
     row_->reset();
     obj_[0].set_float(distance_[cur_pos_]);
@@ -285,8 +282,6 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
         }
         if (OB_FAIL(ObVecExtraInfo::extra_buf_to_obj(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
                                                      extra_column_count_, obj_ + 2))) {
-          LOG_WARN("failed to get extra info", K(ret), K(extra_info_ptr_[cur_pos_]), K(extra_info_actual_size_),
-                   K(extra_column_count_));
         }
       }
     }
@@ -294,7 +289,6 @@ int ObVectorQueryVidIterator::get_next_row(ObNewRow *&row, const sql::ExprFixedA
     if (OB_SUCC(ret) && (rel_count_ > 0 && !no_rel) && OB_NOT_NULL(rel_map_ptr_)) {
       double* rel_ptr = nullptr;
       if (OB_FAIL(rel_map_ptr_->get_refactored(vids_[cur_pos_], rel_ptr))) {
-        LOG_WARN("failed to find rel_ptr", K(ret), K(vids_[cur_pos_]));
       } else if (OB_ISNULL(rel_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("rel_ptr is null", K(ret), K(vids_[cur_pos_]));
@@ -356,8 +350,6 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
               if (OB_FAIL(ObVecExtraInfo::extra_buf_to_obj(extra_info_ptr_[cur_pos_], extra_info_actual_size_,
                                                            extra_column_count_,
                                                            obj + index * one_size_obj_count + 2))) {
-                LOG_WARN("failed to get extra info", K(ret), K(extra_info_ptr_[cur_pos_]), K(extra_info_actual_size_),
-                         K(extra_column_count_));
               }
             }
           }
@@ -365,7 +357,6 @@ int ObVectorQueryVidIterator::get_next_rows(ObNewRow *&row, int64_t &size, const
           if (OB_SUCC(ret) && rel_count_ > 0 && OB_NOT_NULL(rel_map_ptr_)) {
             double* rel_ptr = nullptr;
             if (OB_FAIL(rel_map_ptr_->get_refactored(vids_[cur_pos_], rel_ptr))) {
-              LOG_WARN("failed to find rel_ptr", K(ret), K(vids_[cur_pos_]));
             } else if (OB_ISNULL(rel_ptr)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("rel_ptr is null", K(ret), K(vids_[cur_pos_]));
@@ -415,7 +406,6 @@ int ObPluginVectorIndexHelper::driect_merge_delta_and_snap_vids(const ObVsagQuer
     while (res_num < second.total_ && OB_SUCC(ret)) {
       if (!extra_info_result.is_null()) {
         if (OB_FAIL(extra_info_result.set_with_copy(res_num, second.extra_info_ptr_[res_num], second.extra_info_ptr_.extra_info_actual_size_))) {
-          LOG_WARN("set extra info failed", K(ret), K(second.extra_info_ptr_), K(res_num));
         }
       }
       vids_result[res_num] = second.vids_[res_num];
@@ -427,15 +417,12 @@ int ObPluginVectorIndexHelper::driect_merge_delta_and_snap_vids(const ObVsagQuer
     const int64_t hashset_size = first.total_;
     common::hash::ObHashSet<int64_t> vid_hash_set;
     if (OB_FAIL(vid_hash_set.create(hashset_size))){
-      LOG_WARN("fail to create vid hashset id set failed", KR(ret), K(hashset_size));
     } else {
       while (res_num < first.total_ && OB_SUCC(ret)) {
         if (OB_FAIL(vid_hash_set.set_refactored(first.vids_[res_num]))) {
-          LOG_WARN("fail to set vid to hashset", K(first.vids_[res_num]));
         } else {
           if (!extra_info_result.is_null()) {
             if (OB_FAIL(extra_info_result.set_with_copy(res_num, first.extra_info_ptr_[res_num], first.extra_info_ptr_.extra_info_actual_size_))) {
-              LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(res_num));
             }
           }
           vids_result[res_num] = first.vids_[res_num];
@@ -453,7 +440,6 @@ int ObPluginVectorIndexHelper::driect_merge_delta_and_snap_vids(const ObVsagQuer
           ret = OB_SUCCESS;
           if (!extra_info_result.is_null()) {
             if (OB_FAIL(extra_info_result.set_with_copy(res_num, second.extra_info_ptr_[res_num - first.total_], second.extra_info_ptr_.extra_info_actual_size_))) {
-              LOG_WARN("set extra info failed", K(ret), K(second.extra_info_ptr_), K(res_num));
             }
           }
           vids_result[res_num] = second.vids_[res_num - first.total_];
@@ -486,7 +472,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
     while (res_num < total && res_num < second.total_ && OB_SUCC(ret)) {
       if (!extra_info_result.is_null()) {
         if (OB_FAIL(extra_info_result.set_with_copy(res_num, second.extra_info_ptr_[res_num], second.extra_info_ptr_.extra_info_actual_size_))) {
-          LOG_WARN("set extra info failed", K(ret), K(second.extra_info_ptr_), K(res_num));
         }
       }
       vids_result[res_num] = second.vids_[res_num];
@@ -498,7 +483,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
     while (res_num < total && res_num < first.total_ && OB_SUCC(ret)) {
       if (!extra_info_result.is_null()) {
         if (OB_FAIL(extra_info_result.set_with_copy(res_num, first.extra_info_ptr_[res_num], first.extra_info_ptr_.extra_info_actual_size_))) {
-          LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(res_num));
         }
       }
       vids_result[res_num] = first.vids_[res_num];
@@ -513,7 +497,6 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
     const int64_t hashset_size = total;
     common::hash::ObHashSet<int64_t> vid_hash_set;
     if (OB_FAIL(vid_hash_set.create(hashset_size))){
-      LOG_WARN("fail to create vid hashset id set failed", KR(ret), K(hashset_size));
     } else {
       int64_t i = 0, j = 0;
       while (OB_SUCC(ret) && res_num < total && i < first.total_ && j < second.total_) {
@@ -523,11 +506,9 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
             i++; // skip
           } else if (OB_HASH_NOT_EXIST == tmp_ret) {
             if (OB_FAIL(vid_hash_set.set_refactored(first.vids_[i]))) {
-              LOG_WARN("fail to set vid to hashset", K(first.vids_[i]));
             } else {
               if (!extra_info_result.is_null()) {
                 if (OB_FAIL(extra_info_result.set_with_copy(res_num, first.extra_info_ptr_[i], first.extra_info_ptr_.extra_info_actual_size_))) {
-                  LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(i), K(res_num));
                 }
               }
               float_result[res_num] = first.distances_[i];
@@ -542,11 +523,9 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
             j++; // skip
           } else if (OB_HASH_NOT_EXIST == tmp_ret) {
             if (OB_FAIL(vid_hash_set.set_refactored(second.vids_[j]))) {
-              LOG_WARN("fail to set vid to hashset", K(second.vids_[j]));
             } else {
               if (!extra_info_result.is_null()) {
                 if (OB_FAIL(extra_info_result.set_with_copy(res_num, second.extra_info_ptr_[j], second.extra_info_ptr_.extra_info_actual_size_))) {
-                  LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(j), K(res_num));
                 }
               }
               float_result[res_num] = second.distances_[j];
@@ -564,11 +543,9 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
           i++; // skip
         } else if (OB_HASH_NOT_EXIST == tmp_ret) {
           if (OB_FAIL(vid_hash_set.set_refactored(first.vids_[i]))) {
-            LOG_WARN("fail to set vid to hashset", K(first.vids_[i]));
           } else {
             if (!extra_info_result.is_null()) {
               if (OB_FAIL(extra_info_result.set_with_copy(res_num, first.extra_info_ptr_[i], first.extra_info_ptr_.extra_info_actual_size_))) {
-                LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(i), K(res_num));
               }
             }
             float_result[res_num] = first.distances_[i];
@@ -585,11 +562,9 @@ int ObPluginVectorIndexHelper::sort_merge_delta_and_snap_vids(const ObVsagQueryR
           j++; // skip
         } else if (OB_HASH_NOT_EXIST == tmp_ret) {
           if (OB_FAIL(vid_hash_set.set_refactored(second.vids_[j]))) {
-            LOG_WARN("fail to set vid to hashset", K(second.vids_[j]));
           } else {
             if (!extra_info_result.is_null()) {
               if (OB_FAIL(extra_info_result.set_with_copy(res_num, second.extra_info_ptr_[j], second.extra_info_ptr_.extra_info_actual_size_))) {
-                LOG_WARN("set extra info failed", K(ret), K(first.extra_info_ptr_), K(j), K(res_num));
               }
             }
             float_result[res_num] = second.distances_[j];
@@ -614,7 +589,6 @@ int ObPluginVectorIndexHelper::get_vector_memory_limit_size(int64_t& memory_limi
   bool ret = OB_SUCCESS;
   {
     memory_limit = GMEMCONF.get_vector_memory_limit();
-    LOG_TRACE("vector index memory limit debug", K(memory_limit));
   }
   return ret;
 }

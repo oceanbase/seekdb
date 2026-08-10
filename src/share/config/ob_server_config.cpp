@@ -34,8 +34,6 @@
 #include "share/config/ob_runtime_config.h"
 #include "share/cache/ob_kvcache_struct.h"
 #include "share/ob_errno.h"
-#include "share/ob_rpc_struct.h"
-#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -96,7 +94,6 @@ int ObServerConfig::read_config(const ObSystemConfig &system_config,
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
       temp_ret = system_config.read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
-        OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
     }
   }

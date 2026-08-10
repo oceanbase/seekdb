@@ -51,12 +51,9 @@ int ObIKVCacheStore::store(
   const int64_t key_size = key.size();
   const int64_t value_size = value.size();
   if (OB_FAIL(alloc_kvpair(key_size, value_size, kvpair, hazptr_holder, policy))) {
-    COMMON_LOG(WARN, "failed to alloc", K(ret), K(key_size), K(value_size));
   } else {
     if (OB_FAIL(key.deep_copy(reinterpret_cast<char *>(kvpair->key_), key_size, kvpair->key_))) {
-      COMMON_LOG(WARN, "failed to deep copy key", K(ret));
     } else if (OB_FAIL(value.deep_copy(reinterpret_cast<char *>(kvpair->value_), value_size, kvpair->value_))) {
-      COMMON_LOG(WARN, "failed to deep copy value", K(ret));
     }
     if (OB_FAIL(ret)) {
       hazptr_holder.release();
@@ -76,7 +73,6 @@ int ObIKVCacheStore::alloc_kvpair(
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
-    COMMON_LOG(WARN, "failed to allocate kvpair", K(key_size), K(value_size), K(policy));
   }
 
   return ret;
@@ -126,7 +122,6 @@ int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
       COMMON_LOG(ERROR, "Fail to allocate memory for mb_handles_, ", K_(max_mb_num), K(ret));
     } else if (FALSE_IT(mb_handles = mb_handles_)) {
     } else if (OB_FAIL(mb_handles_pool_.init(max_mb_num_, (char*)(buf) + sizeof(ObKVMemBlockHandle) * max_mb_num_))) {
-      COMMON_LOG(WARN, "Fail to init mb_handles_pool_, ", K(ret));
     } else {
       MEMSET(buf, 0, sizeof(ObKVMemBlockHandle) * max_mb_num_);
       block_size_ = block_size;
@@ -137,9 +132,7 @@ int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(prepare_wash_structs())) {
-        COMMON_LOG(WARN, "preapre wash structs failed", K(ret));
     } else if (OB_FAIL(mb_list_.init())) {
-      COMMON_LOG(WARN, "mb_list_ init failed", K(ret));
     }
   }
 
@@ -225,10 +218,8 @@ int ObKVCacheStore::alloc_kvpair_without_retry(
     //large kv
     const int64_t big_block_size = align_kv_size + sizeof(ObKVStoreMemBlock);
     if (OB_FAIL(alloc(policy, big_block_size, mb_handle))) {
-      COMMON_LOG(WARN, "alloc failed", K(ret), K(big_block_size));
     } else {
       if (OB_FAIL(hazptr_holder.protect(protect_success, mb_handle))) {
-        COMMON_LOG(WARN, "protect failed", KP(mb_handle));
       } else if (protect_success) {
         if (OB_FAIL(mb_handle->alloc(key_size, value_size, align_kv_size, kvpair))) {
           hazptr_holder.release();
@@ -251,7 +242,6 @@ int ObKVCacheStore::alloc_kvpair_without_retry(
       mb_handle = get_curr_mb(policy);
       if (NULL != mb_handle) {
         if (OB_FAIL(hazptr_holder.protect(protect_success, mb_handle))) {
-          COMMON_LOG(WARN, "failed to protect mb handle", KP(mb_handle));
         } else if (protect_success) {
           if (mb_status_match(policy, mb_handle)) {
             if (OB_FAIL(mb_handle->alloc(key_size, value_size, align_kv_size, kvpair))) {
@@ -271,13 +261,11 @@ int ObKVCacheStore::alloc_kvpair_without_retry(
       if (OB_SUCC(ret)) {
         ObKVMemBlockHandle *new_mb_handle = NULL;
         if (OB_FAIL(alloc(policy, block_size, new_mb_handle))) {
-          COMMON_LOG(WARN, "alloc failed", K(ret), K(block_size));
         } else if (ATOMIC_BCAS((uint64_t*)(&get_curr_mb(policy)), (uint64_t)mb_handle, (uint64_t)new_mb_handle)) {
           if (NULL != mb_handle) {
             mb_handle->set_full(global_status_.base_mb_score_);
           }
         } else if (OB_FAIL(free(new_mb_handle))) {
-          COMMON_LOG(ERROR, "free failed", K(ret));
         }
       }
     } while (OB_SUCC(ret));
@@ -324,7 +312,6 @@ int ObKVCacheStore::refresh_score()
   bool protect_success;
   for (i = 0; OB_SUCC(ret) && i < cur_mb_num_; i++) {
     if (OB_FAIL(hazptr_holder.protect(protect_success, &mb_handles_[i]))) {
-      COMMON_LOG(WARN, "failed to protect mb_handle");
     } else if (protect_success) {
       score = mb_handles_[i].score_ * CACHE_SCORE_DECAY_FACTOR + (double)(mb_handles_[i].recent_get_cnt_);
       mb_handles_[i].score_ = score;
@@ -392,7 +379,6 @@ bool ObKVCacheStore::wash()
       ret = hazptr_holder.protect(protect_success, &mb_handles_[i]);
     } while (OB_UNLIKELY(OB_ALLOCATE_MEMORY_FAILED == ret));
     if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "failed to protect mb_handle");
     } else if (protect_success) {
       // refresh score inline (merged from refresh_score() to halve hazptr ops)
       double score = mb_handles_[i].score_ * CACHE_SCORE_DECAY_FACTOR + (double)(mb_handles_[i].recent_get_cnt_);
@@ -413,10 +399,6 @@ bool ObKVCacheStore::wash()
         if (!washed) {
           if (OB_TMP_FAIL(tmp_washbale_size_info_.add_washable_size(
                   mb_handles_[i].mem_block_->get_hold_size()))) {
-            COMMON_LOG(WARN,
-                      "Fail to add washable size",
-                      K(tmp_ret),
-                      K(OB_SERVER_RUNTIME_ID));
           }
           wash_heap_.add(&mb_handles_[i]);
         }
@@ -457,9 +439,7 @@ int ObKVCacheStore::get_washable_size(int64_t &washable_size)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(washbale_size_info_.get_size(washable_size))) {
-    COMMON_LOG(WARN, "Fail to get washable size", K(ret));
   }
-  COMMON_LOG(DEBUG, "get washable size details", K(ret), K(washable_size));
 
   return ret;
 }
@@ -475,7 +455,6 @@ void ObKVCacheStore::flush_washable_mbs()
     {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(flush_washable_mbs(false))) {
-        COMMON_LOG(WARN, "Fail to flush washable memblock", K(tmp_ret));
       }
     }
   }
@@ -493,10 +472,8 @@ int ObKVCacheStore::flush_washable_mbs(const bool force_flush)
   } else if (force_flush) {
     lib::ObMutexGuard guard(wash_out_lock_);
     if (OB_FAIL(try_flush_washable_mb(flush_blocks, INT64_MAX, force_flush))) {
-      COMMON_LOG(WARN, "Fail to try flush mb", K(ret), K(force_flush));
     }
   } else if (OB_FAIL(try_flush_washable_mb(flush_blocks, INT64_MAX, force_flush))) {
-    COMMON_LOG(WARN, "Fail to try flush mb", K(ret), K(force_flush));
   }
 
   return ret;
@@ -533,7 +510,6 @@ void ObKVCacheStore::SyncWashCallBack::operator()(ObKVMemBlockHandle* handle)
   void* buf;
   int64_t hold_size;
   if (OB_FAIL(store_.do_wash_mb(handle, buf, hold_size))) {
-    COMMON_LOG(WARN, "Fail to wash memblock", K(ret));
   } else if (size_washed_ >= size_to_wash_) {
     store_.free_mb(store_.mb_list_.resource_mgr_, buf);
   } else {
@@ -587,7 +563,6 @@ int ObKVCacheStore::try_flush_washable_mb(ObICacheWasher::ObCacheMemBlock*& wash
         INIT_SUCC(tmp_ret);
         if (TC_REACH_TIME_INTERVAL(3 * 1000 * 1000 /* 3s */)) {
           if (OB_TMP_FAIL(print_memblock_info(head))) {
-            COMMON_LOG(WARN, "Fail to print memblock info", K(tmp_ret));
           }
         }
         COMMON_LOG(INFO, "can not find enough memory block to wash", K(ret), K(size_washed), K(size_to_wash));
@@ -641,7 +616,6 @@ int ObKVCacheStore::inner_flush_washable_mb(const int64_t size_to_wash, int64_t&
           ret = hazptr_holder.protect(protect_success, handle);
         } while (OB_UNLIKELY(OB_ALLOCATE_MEMORY_FAILED == ret));
         if (OB_FAIL(ret)) {
-          COMMON_LOG(WARN, "failed to protect mb_handle", KP(handle));
         }
         if (protect_success) {
           status = handle->get_status();
@@ -711,7 +685,6 @@ int ObKVCacheStore::inner_push_memblock_info(const ObKVMemBlockHandle &handle, O
     ret = OB_IO_ERROR;
     COMMON_LOG(WARN, "Fail to snprintf memblock pointer", K(ret), K(errno), KERRNOMSG(errno));
   } else if (OB_FAIL(memblock_infos.push_back(mb_info))) {
-    COMMON_LOG(WARN, "Fail to push memblock info", K(ret), K(mb_info));
   }
 
   return ret;
@@ -737,10 +710,8 @@ int ObKVCacheStore::get_memblock_info(ObIArray<ObKVCacheStoreMemblockInfo> &memb
     for (int i = 0; OB_SUCC(ret) && i < cur_mb_num_; ++i) {
       ObKVMemBlockHandle& handle = mb_handles_[i];
       if (OB_FAIL(hazptr_holder.protect(protect_success, &handle))) {
-        COMMON_LOG(WARN, "Failed to protect memblock", K(ret));
       } else if (!protect_success) {
       } else if (OB_FAIL(inner_push_memblock_info(handle, memblock_infos))) {
-        COMMON_LOG(WARN, "Failed to inner push memblock info", K(ret));
       }
       if (protect_success) {
         hazptr_holder.release();
@@ -779,7 +750,6 @@ int ObKVCacheStore::print_memblock_info(ObDLink* head)
         bool protect_success;
         while (OB_SUCC(ret) && head != handle) {
           if (OB_FAIL(hazptr_holder.protect(protect_success, handle))) {
-            COMMON_LOG(WARN, "failed to protect mb_handle", KP(handle));
           } else if (protect_success) {
             if (OB_FAIL(databuff_printf(buf, BUFLEN, ctx_pos, 
                 "[CACHE-SYNC-WASH] status=%8d | policy=%8d | kv_cnt=%8ld | get_cnt=%8ld | score=%8lf |\n",
@@ -788,7 +758,6 @@ int ObKVCacheStore::print_memblock_info(ObDLink* head)
                 handle->kv_cnt_,
                 handle->get_cnt_,
                 handle->score_))) {
-              COMMON_LOG(WARN, "Fail to print memblock info", K(ret), K(ctx_pos));
             }
             hazptr_holder.release();
           }
@@ -813,7 +782,6 @@ int ObKVCacheStore::alloc_mbhandle(const int64_t block_size, ObKVMemBlockHandle 
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_mbhandle(policy, block_size, mb_handle))) {
-    LOG_WARN("alloc_mbhandle failed", K(ret), K(policy), K(block_size));
   }
   return ret;
 }
@@ -827,7 +795,6 @@ int ObKVCacheStore::alloc_mbhandle(ObKVMemBlockHandle *&mb_handle)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_mbhandle(policy, block_size_, mb_handle))) {
-    LOG_WARN("alloc_mbhandle failed", K(ret), K(policy), K_(block_size));
   }
   return ret;
 }
@@ -846,11 +813,9 @@ int ObKVCacheStore::free_mbhandle(ObKVMemBlockHandle *mb_handle, const bool do_r
     int64_t mb_size = 0;
     
     if (OB_FAIL(do_wash_mb(mb_handle, buf, mb_size))) {
-      COMMON_LOG(ERROR, "do_wash_mb failed", K(ret));
     } else {
       free_mb(mb_list_.resource_mgr_, buf);
       if (OB_FAIL(remove_mb_handle(mb_handle, do_retire))) {
-        COMMON_LOG(WARN, "remove_mb failed", K(ret));
       }
     }
   }
@@ -913,7 +878,6 @@ int ObKVCacheStore::alloc_mbhandle(
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "mb_list_.head_ is null", K(ret));
     } else if (OB_FAIL(insert_mb_handle(head, mb_handle))) {
-      COMMON_LOG(WARN, "insert_mb_handle failed", K(ret));
     }
   } else {
     ATOMIC_SAF(&global_status_.store_size_, block_size);
@@ -1017,7 +981,6 @@ int ObKVCacheStore::prepare_wash_structs()
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(init_wash_heap(wash_heap_, WASH_HEAP_SIZE))) {
-    COMMON_LOG(WARN, "Fail to pre-allocate wash heap", K(ret));
   }
 
   return ret;
@@ -1128,7 +1091,6 @@ void ObKVCacheStore::reuse_mb_handles(HazardList &reclaim_list)
     ObKVMemBlockHandle *mb_handle = CONTAINER_OF(p, ObKVMemBlockHandle, retire_link_);
     mb_handle->reset();
     if (OB_FAIL(mb_handles_pool_.push(mb_handle))) {
-      COMMON_LOG(ERROR, "push mb_handle to pool failed", K(ret));
     }
   }
 }
@@ -1145,7 +1107,6 @@ bool ObKVCacheStore::try_supply_mb(const int64_t mb_count)
     if (ATOMIC_BCAS(&cur_mb_num_, old_num, new_num)) {
       for (int64_t i = old_num; OB_SUCCESS == ret && i < new_num; i++) {
         if (OB_FAIL(mb_handles_pool_.push(&(mb_handles_[i])))) {
-          COMMON_LOG(ERROR, "supply mb failed", K(ret));
         }
       }
     } else {
