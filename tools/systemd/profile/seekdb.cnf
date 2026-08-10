@@ -6,4 +6,3 @@ redo-dir=/var/lib/oceanbase/store/redo
 # These parameters are valid only during initialization
 port=2881
 cpu_count=4
-_memory_budget=2G

@@ -67,7 +67,7 @@ DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
 DEF_PARAM(_memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 means max(1G, 40% of effective system memory). Range: 0, [1G,).",
+        "0 means max(1G, 20% of effective system memory). Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
@@ -77,7 +77,7 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
 DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
         "the maximum memory used by KV cache. 0 derives the limit from effective system memory. "
-        "The automatic value is min(1T, 10% of effective system memory). "
+        "The automatic value is min(1T, 30% of effective system memory). "
         "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",

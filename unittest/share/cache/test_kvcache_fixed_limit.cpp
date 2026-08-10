@@ -72,5 +72,25 @@ TEST(TestKVCacheFixedLimit, computes_store_block_excess)
                                                                block_size));
 }
 
+TEST(TestKVCacheFixedLimit, reserves_store_size_without_quota_overshoot)
+{
+  const int64_t mib = 1L << 20;
+  const int64_t cache_limit = 90L * mib;
+  const int64_t block_size = 2L * mib;
+
+  EXPECT_TRUE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit - block_size, block_size, cache_limit));
+  EXPECT_FALSE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit - block_size + 1, block_size, cache_limit));
+  EXPECT_FALSE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit, block_size, cache_limit));
+  EXPECT_FALSE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit + block_size, block_size, cache_limit));
+  EXPECT_FALSE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit - block_size, 0, cache_limit));
+  EXPECT_FALSE(ObKVCacheStore::can_reserve_cache_size(
+      cache_limit - block_size, block_size, 0));
+}
+
 } // namespace common
 } // namespace oceanbase

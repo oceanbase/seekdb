@@ -72,10 +72,10 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
 {
   EXPECT_EQ(ONE_GIB,
             ObServerMemoryConfig::calculate_automatic_memory_budget(0));
-  EXPECT_EQ(4 * ONE_GIB,
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 20),
             ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB));
 
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 30),
             ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB));
   EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 10),
             ObServerMemoryConfig::resolve_memstore_memory_limit(0, 10 * ONE_GIB));
@@ -224,9 +224,3 @@ TEST(TestServerMemoryConfig, kvcache_limit_does_not_exceed_startup_capacity)
 
 } // namespace common
 } // namespace oceanbase
-
-int main(int argc, char **argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

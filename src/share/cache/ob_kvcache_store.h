@@ -113,6 +113,14 @@ public:
   {
     return MAX(cache_size - compute_fixed_cache_limit(cache_memory_limit, block_size), 0);
   }
+  static bool can_reserve_cache_size(const int64_t cache_size,
+                                     const int64_t allocation_size,
+                                     const int64_t cache_limit)
+  {
+    return cache_size >= 0 && allocation_size > 0 && cache_limit > 0
+        && cache_size <= cache_limit
+        && allocation_size <= cache_limit - cache_size;
+  }
 
 private:
   int try_flush_washable_mb(lib::ObICacheWasher::ObCacheMemBlock*& wash_blocks,
@@ -185,6 +193,9 @@ private:
     const enum ObKVCachePolicy policy,
     const int64_t block_size,
     ObKVMemBlockHandle *&mb_handle);
+  int reserve_store_size(const int64_t block_size);
+  bool try_reserve_store_size(const int64_t block_size,
+                              const int64_t cache_limit);
   void compute_wash_size(int64_t &wash_size);
   void wash_mb(ObKVMemBlockHandle *mb_handle);
   void wash_mbs(WashHeap &heap);
