@@ -64,7 +64,6 @@ int ObSrvNetworkFrame::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(request_qhandler_.init())) {
-  } else if (OB_FAIL(deliver_.init())) {
   } else {
     LOG_INFO("init network frame successfully");
   }
@@ -134,14 +133,6 @@ void ObSrvNetworkFrame::wait()
   obmysql::global_sql_nio_server->wait();
 }
 
-int ObSrvNetworkFrame::stop()
-{
-  int ret = OB_SUCCESS;
-  deliver_.stop();
-  return ret;
-}
-
-	
 void ObSrvNetworkFrame::sql_nio_stop()
 {
   if (NULL != obmysql::global_sql_nio_server) {

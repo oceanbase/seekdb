@@ -1572,17 +1572,6 @@ int ObServer::stop()
     ObIOManager::get_instance().stop();
     FLOG_INFO("io manager stopped");
 
-
-    // net frame, ensure net_frame should stop after server_runtime_controller_
-    // stopping.
-    FLOG_INFO("begin to stop net frame");
-    if (OB_FAIL(net_frame_.stop())) {
-      FLOG_WARN("fail to stop net frame", KR(ret));
-      fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
-    } else {
-      FLOG_INFO("net frame stopped");
-    }
-
     FLOG_INFO("begin to stop kv global cache");
     ObKVGlobalCache::get_instance().stop();
     FLOG_INFO("kv global cache stopped");

@@ -624,13 +624,14 @@ int ObServerRuntime::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_REQUEST_RUNTIME_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_MYSQL: {
-        if (req.is_retry_on_lock()) {
-          if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-          }
-        } else {
+        if (!req.is_retry_on_lock()) {
           ATOMIC_INC(&recv_mysql_cnt_);
-          if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-          }
+        }
+        // Keep authentication ahead of normal SQL regardless of whether the
+        // client uses TCP, a Unix domain socket, or a Windows named pipe.
+        const int priority = req.is_retry_on_lock() || req.is_auth_request()
+                           ? RQ_HIGH : RQ_NORMAL;
+        if (OB_FAIL(req_queue_.push(&req, priority, true))) {
         }
         break;
       }
