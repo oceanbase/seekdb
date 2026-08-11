@@ -2229,9 +2229,12 @@ int ObServer::init_global_kvcache()
   // The capacity is fixed to twice the initial limit by the memory config.
   // The handle pool should support dynamic expansion in the future.
   const int64_t max_cache_size = GMEMCONF.get_kvcache_memory_capacity();
+  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
   const ObKVCacheRuntimeOptions runtime_options(
-      GCONF._cache_wash_interval);
-  if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(bucket_num))) {
+      GCONF._cache_wash_interval,
+      cache_memory_limit);
+  if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(
+      cache_memory_limit, bucket_num))) {
     LOG_WARN("Failed to get suitable bucket num");
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                    max_cache_size,
