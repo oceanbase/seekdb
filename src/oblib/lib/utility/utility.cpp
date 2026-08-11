@@ -355,11 +355,11 @@ void update_cgroup_hierarchy_limit(const CgroupMountInfo &mount_info,
 } // namespace
 #endif
 
+#if defined(__linux__) && !defined(__ANDROID__)
 int64_t get_cgroup_memory_limit(
     const char *proc_cgroup_path, const char *proc_mountinfo_path)
 {
   int64_t minimum_limit = 0;
-#if defined(__linux__) && !defined(__ANDROID__)
   if (nullptr != proc_cgroup_path && nullptr != proc_mountinfo_path) {
     char cgroup_v1_path[PATH_MAX] = {0};
     char cgroup_v2_path[PATH_MAX] = {0};
@@ -395,12 +395,17 @@ int64_t get_cgroup_memory_limit(
       }
     }
   }
-#else
-  (void)proc_cgroup_path;
-  (void)proc_mountinfo_path;
-#endif
   return minimum_limit;
 }
+#else
+int64_t get_cgroup_memory_limit(
+    const char *proc_cgroup_path, const char *proc_mountinfo_path)
+{
+  (void)proc_cgroup_path;
+  (void)proc_mountinfo_path;
+  return 0;
+}
+#endif
 
 int64_t get_effective_memory_size()
 {
