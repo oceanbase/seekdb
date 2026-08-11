@@ -61,6 +61,7 @@ enable_record_trace_id
 enable_record_trace_log
 enable_rich_error_msg
 enable_rpc_authentication_bypass
+enable_rpc_service
 enable_rpc_tls
 enable_sql_operator_dump
 enable_sys_table_ddl
@@ -69,6 +70,7 @@ freeze_trigger_percentage
 internal_sql_execute_timeout
 job_queue_processes
 json_document_max_depth
+kvcache_memory_limit
 lob_enable_block_cache_threshold
 location_cache_refresh_sql_timeout
 log_disk_percentage
@@ -85,9 +87,9 @@ max_partition_num
 max_stale_time_for_weak_consistency
 max_string_print_length
 max_syslog_file_count
-memory_budget
 memory_chunk_cache_size
 memory_limit
+memstore_memory_limit
 merger_check_interval
 micro_block_merge_verify_level
 minor_compact_trigger
@@ -151,6 +153,7 @@ undo_retention
 use_ipv6
 vector_index_memory_saving_mode
 vector_index_optimize_duty_time
+vector_memory_limit
 weak_read_version_refresh_interval
 workarea_size_policy
 workers_per_cpu_quota
@@ -238,6 +241,7 @@ _max_malloc_sample_interval
 _max_px_workers_per_cpu
 _max_schema_slot_num
 _max_tablet_cnt_per_gb
+_memory_budget
 _memstore_limit_percentage
 _minor_compaction_amplification_factor
 _minor_merge_write_amplification_threshold
