@@ -73,15 +73,15 @@ adb shell chmod +x /data/local/tmp/seekdb
 adb shell "mkdir -p /data/local/tmp/seekdb_data"
 adb shell "/data/local/tmp/seekdb --nodaemon \
   --base-dir /data/local/tmp/seekdb_data \
-  --parameter _memory_budget=4G \
+  --parameter memory_budget=4G \
   --parameter datafile_size=2G \
   --parameter datafile_maxsize=4G \
   --parameter log_disk_size=2G \
   --log-level INFO"
 ```
 
-Explicit resource values are recommended on Android. When `_memory_budget` is
-zero or omitted, it defaults to the greater of 1 GiB and 40% of effective system
+Explicit resource values are recommended on Android. When `memory_budget` is
+zero or omitted, it defaults to the greater of 1 GiB and 50% of effective system
 memory; size it together with the data and log files for the available device
 resources.
 

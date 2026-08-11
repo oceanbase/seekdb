@@ -224,7 +224,7 @@ int64_t ObServerMemoryConfig::resolve_vector_memory_limit(
 int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
 {
   int ret = OB_SUCCESS;
-  const int64_t configured_memory_budget = server_config._memory_budget;
+  const int64_t configured_memory_budget = server_config.memory_budget;
   int64_t memory_budget = configured_memory_budget;
   const int64_t physical_memory = get_phy_mem_size();
   const int64_t cgroup_memory_limit = get_cgroup_memory_limit();

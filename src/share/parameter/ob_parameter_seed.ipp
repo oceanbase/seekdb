@@ -64,7 +64,7 @@ DEF_PARAM(net_thread_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,128]",
 DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
         "the size of the local server runtime task queue. Range: [1024,+∞)",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
+DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
         "0 means max(1G, 50% of effective system memory), where effective memory is "
@@ -82,13 +82,13 @@ DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by Memstore. 0 derives the limit from _memory_budget. "
-        "The automatic value is 80% of _memory_budget. "
+        "the maximum memory used by Memstore. 0 derives the limit from memory_budget. "
+        "The automatic value is 80% of memory_budget. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
-        "the maximum memory used by the vector module. 0 derives the limit from _memory_budget. "
-        "The automatic value is 80% of _memory_budget. "
+        "the maximum memory used by the vector module. 0 derives the limit from memory_budget. "
+        "The automatic value is 80% of memory_budget. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",

@@ -35,7 +35,7 @@ class ServerConfigRestore
 public:
   ServerConfigRestore()
     : memory_limit_(GCONF.memory_limit),
-      memory_budget_(GCONF._memory_budget),
+      memory_budget_(GCONF.memory_budget),
       kvcache_memory_limit_(GCONF.kvcache_memory_limit),
       memstore_memory_limit_(GCONF.memstore_memory_limit),
       vector_memory_limit_(GCONF.vector_memory_limit),
@@ -47,7 +47,7 @@ public:
   ~ServerConfigRestore()
   {
     GCONF.memory_limit = memory_limit_;
-    GCONF._memory_budget = memory_budget_;
+    GCONF.memory_budget = memory_budget_;
     GCONF.kvcache_memory_limit = kvcache_memory_limit_;
     GCONF.memstore_memory_limit = memstore_memory_limit_;
     GCONF.vector_memory_limit = vector_memory_limit_;
@@ -95,7 +95,7 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
 
 TEST(TestServerMemoryConfig, capacity_unit_check_accepts_only_unitless_zero)
 {
-  EXPECT_TRUE(GCONF._memory_budget.check_unit("0"));
+  EXPECT_TRUE(GCONF.memory_budget.check_unit("0"));
   EXPECT_TRUE(GCONF.kvcache_memory_limit.check_unit("0"));
   EXPECT_TRUE(GCONF.memstore_memory_limit.check_unit("0"));
   EXPECT_TRUE(GCONF.vector_memory_limit.check_unit("0"));
@@ -119,7 +119,7 @@ TEST(TestServerMemoryConfig, reload_uses_explicit_memory_budget)
   ServerConfigRestore restore;
   ObServerMemoryConfig memory_config;
 
-  GCONF._memory_budget = 3 * ONE_GIB;
+  GCONF.memory_budget = 3 * ONE_GIB;
   GCONF.memory_limit = 8 * ONE_GIB;
   GCONF.kvcache_memory_limit = 3 * ONE_GIB;
   GCONF.memstore_memory_limit = 4 * ONE_GIB;
@@ -154,7 +154,7 @@ TEST(TestServerMemoryConfig, legacy_percentage_parameters_are_accepted_but_ignor
   ServerConfigRestore restore;
   ObServerMemoryConfig memory_config;
 
-  GCONF._memory_budget = 3 * ONE_GIB;
+  GCONF.memory_budget = 3 * ONE_GIB;
   GCONF.kvcache_memory_limit = ONE_GIB;
   GCONF.memstore_memory_limit = 4 * ONE_GIB;
   GCONF.vector_memory_limit = 5 * ONE_GIB;
@@ -187,7 +187,7 @@ TEST(TestServerMemoryConfig, reload_uses_automatic_budget_independent_of_memory_
       ObServerMemoryConfig::calculate_automatic_memory_budget(
           effective_memory);
 
-  GCONF._memory_budget = 0;
+  GCONF.memory_budget = 0;
   GCONF.memory_limit = 4 * ONE_GIB;
   GCONF.kvcache_memory_limit = 0;
   GCONF.memstore_memory_limit = 0;
@@ -215,7 +215,7 @@ TEST(TestServerMemoryConfig, kvcache_limit_does_not_exceed_startup_capacity)
   ServerConfigRestore restore;
   ObServerMemoryConfig memory_config;
 
-  GCONF._memory_budget = ONE_GIB;
+  GCONF.memory_budget = ONE_GIB;
   GCONF.kvcache_memory_limit = ONE_GIB;
   GCONF.memstore_memory_limit = 0;
   GCONF.vector_memory_limit = 0;
