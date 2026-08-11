@@ -43,11 +43,6 @@ DEF_PARAM(_datafile_usage_upper_bound_percentage, INT, OB_CLUSTER_PARAMETER, "90
         "the percentage of disk space usage upper bound to trigger datafile extend. Range: [5,99] in integer",
         ObParameterAttr(Section::SSTABLE, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 //// observer config
-DEF_PARAM(enable_rpc_service, BOOL, OB_CLUSTER_PARAMETER, "False",
-        "specifies whether the standby gRPC service is enabled. "
-        "Enabling takes effect dynamically; disabling takes effect after restart. "
-        "Value: True: enabled False: disabled",
-        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_rpc_tls, BOOL, OB_CLUSTER_PARAMETER, "False",
         "specifies whether mutual TLS (mTLS) is enabled for inter-node RPC communication. "
         "When True, certificates must exist in the wallet directory. "
@@ -72,7 +67,8 @@ DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
 DEF_PARAM(_memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 means max(1G, 50% of physical system memory). Range: 0, [1G,).",
+        "0 means max(1G, 50% of effective system memory), where effective memory is "
+        "the smaller of physical memory and the cgroup memory limit. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
@@ -81,8 +77,8 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
-        "the maximum memory used by KV cache. 0 derives the limit from physical system memory. "
-        "The automatic value is min(1T, 30% of physical system memory). "
+        "the maximum memory used by KV cache. 0 derives the limit from effective system memory. "
+        "The automatic value is min(1T, 30% of effective system memory). "
         "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",

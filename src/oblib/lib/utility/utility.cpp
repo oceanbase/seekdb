@@ -52,6 +52,366 @@ extern "C"
   {}
 }
 
+#if defined(__linux__) && !defined(__ANDROID__)
+namespace
+{
+struct CgroupMountInfo
+{
+  CgroupMountInfo() : valid_(false), match_score_(-1)
+  {
+    root_[0] = '\0';
+    mount_point_[0] = '\0';
+  }
+
+  char root_[PATH_MAX];
+  char mount_point_[PATH_MAX];
+  bool valid_;
+  int64_t match_score_;
+};
+
+bool copy_path(const char *source, char *destination, const int64_t destination_size)
+{
+  bool succeeded = nullptr != source && nullptr != destination && destination_size > 0;
+  if (succeeded) {
+    const int copied = snprintf(destination, destination_size, "%s", source);
+    succeeded = copied >= 0 && copied < destination_size;
+  }
+  if (!succeeded && nullptr != destination && destination_size > 0) {
+    destination[0] = '\0';
+  }
+  return succeeded;
+}
+
+bool unescape_mountinfo_path(const char *input, char *output, const int64_t output_size)
+{
+  bool succeeded = nullptr != input && nullptr != output && output_size > 0;
+  int64_t input_pos = 0;
+  int64_t output_pos = 0;
+  while (succeeded && '\0' != input[input_pos]) {
+    unsigned char value = static_cast<unsigned char>(input[input_pos]);
+    int64_t consumed = 1;
+    if ('\\' == value && '\0' != input[input_pos + 1] &&
+        '\0' != input[input_pos + 2] && '\0' != input[input_pos + 3] &&
+        input[input_pos + 1] >= '0' && input[input_pos + 1] <= '7' &&
+        input[input_pos + 2] >= '0' && input[input_pos + 2] <= '7' &&
+        input[input_pos + 3] >= '0' && input[input_pos + 3] <= '7') {
+      value = static_cast<unsigned char>((input[input_pos + 1] - '0') * 64 +
+                                         (input[input_pos + 2] - '0') * 8 +
+                                         input[input_pos + 3] - '0');
+      consumed = 4;
+    }
+    if ('\0' == value || output_pos + 1 >= output_size) {
+      succeeded = false;
+    } else {
+      output[output_pos++] = static_cast<char>(value);
+      input_pos += consumed;
+    }
+  }
+  if (nullptr != output && output_size > 0) {
+    output[succeeded ? output_pos : 0] = '\0';
+  }
+  return succeeded;
+}
+
+bool controller_list_contains(const char *controller_list, const char *target)
+{
+  bool found = false;
+  if (nullptr != controller_list && nullptr != target) {
+    const int64_t target_length = strlen(target);
+    for (const char *token = controller_list; !found && '\0' != *token;) {
+      const char *token_end = strchr(token, ',');
+      if (nullptr == token_end) {
+        token_end = token + strlen(token);
+      }
+      found = token_end - token == target_length &&
+              0 == strncmp(token, target, target_length);
+      token = '\0' == *token_end ? token_end : token_end + 1;
+    }
+  }
+  return found;
+}
+
+bool is_cgroup_path_prefix(const char *prefix, const char *path)
+{
+  bool is_prefix = false;
+  if (nullptr != prefix && nullptr != path) {
+    const int64_t prefix_length = strlen(prefix);
+    is_prefix = prefix_length > 0 &&
+                0 == strncmp(prefix, path, prefix_length) &&
+                ('/' == prefix[prefix_length - 1] ||
+                 '\0' == path[prefix_length] || '/' == path[prefix_length]);
+  }
+  return is_prefix;
+}
+
+bool init_cgroup_mount(const char *escaped_root,
+                       const char *escaped_mount_point,
+                       const char *group_path,
+                       CgroupMountInfo &mount_info)
+{
+  char root[PATH_MAX] = {0};
+  char mount_point[PATH_MAX] = {0};
+  bool succeeded = unescape_mountinfo_path(escaped_root, root, sizeof(root)) &&
+                   unescape_mountinfo_path(
+                       escaped_mount_point, mount_point, sizeof(mount_point)) &&
+                   '/' == root[0] && '/' == mount_point[0];
+  if (succeeded) {
+    const int64_t match_score = is_cgroup_path_prefix(root, group_path)
+        ? static_cast<int64_t>(strlen(root)) + 1
+        : 0;
+    if (!mount_info.valid_ || match_score > mount_info.match_score_) {
+      succeeded = copy_path(root, mount_info.root_, sizeof(mount_info.root_)) &&
+                  copy_path(mount_point, mount_info.mount_point_,
+                            sizeof(mount_info.mount_point_));
+      mount_info.valid_ = succeeded;
+      mount_info.match_score_ = succeeded ? match_score : -1;
+    }
+  }
+  return succeeded;
+}
+
+void set_default_cgroup_mount(const char *mount_point, CgroupMountInfo &mount_info)
+{
+  mount_info.valid_ = copy_path("/", mount_info.root_, sizeof(mount_info.root_)) &&
+                      copy_path(mount_point, mount_info.mount_point_,
+                                sizeof(mount_info.mount_point_));
+  mount_info.match_score_ = mount_info.valid_ ? 0 : -1;
+}
+
+bool read_cgroup_paths(const char *cgroup_path,
+                       char *cgroup_v1_path,
+                       const int64_t cgroup_v1_path_size,
+                       char *cgroup_v2_path,
+                       const int64_t cgroup_v2_path_size)
+{
+  bool found_path = false;
+  FILE *file = fopen(cgroup_path, "r");
+  if (nullptr != file) {
+    char line[PATH_MAX + 128] = {0};
+    while (nullptr != fgets(line, sizeof(line), file)) {
+      char *first_colon = strchr(line, ':');
+      char *second_colon = nullptr == first_colon ? nullptr : strchr(first_colon + 1, ':');
+      if (nullptr != first_colon && nullptr != second_colon) {
+        *first_colon = '\0';
+        *second_colon = '\0';
+        const char *hierarchy_id = line;
+        const char *controllers = first_colon + 1;
+        char *group_path = second_colon + 1;
+        group_path[strcspn(group_path, "\r\n")] = '\0';
+        if ('/' == group_path[0] && 0 == strcmp(hierarchy_id, "0") &&
+            '\0' == controllers[0]) {
+          found_path = copy_path(
+              group_path, cgroup_v2_path, cgroup_v2_path_size) || found_path;
+        } else if ('/' == group_path[0] &&
+                   controller_list_contains(controllers, "memory")) {
+          found_path = copy_path(
+              group_path, cgroup_v1_path, cgroup_v1_path_size) || found_path;
+        }
+      }
+    }
+    fclose(file);
+  }
+  return found_path;
+}
+
+void find_cgroup_mounts(const char *mountinfo_path,
+                        const char *cgroup_v1_path,
+                        const char *cgroup_v2_path,
+                        CgroupMountInfo &cgroup_v1_mount,
+                        CgroupMountInfo &cgroup_v2_mount)
+{
+  FILE *file = fopen(mountinfo_path, "r");
+  if (nullptr != file) {
+    char line[2 * PATH_MAX + 1024] = {0};
+    while (nullptr != fgets(line, sizeof(line), file)) {
+      char *separator = strstr(line, " - ");
+      if (nullptr != separator) {
+        *separator = '\0';
+        char *left_save_ptr = nullptr;
+        char *root = nullptr;
+        char *mount_point = nullptr;
+        for (int field_index = 0; field_index <= 4; ++field_index) {
+          char *field = strtok_r(
+              0 == field_index ? line : nullptr, " \t\r\n", &left_save_ptr);
+          if (3 == field_index) {
+            root = field;
+          } else if (4 == field_index) {
+            mount_point = field;
+          }
+        }
+
+        char *right_save_ptr = nullptr;
+        char *file_system_type = strtok_r(separator + 3, " \t\r\n", &right_save_ptr);
+        (void)strtok_r(nullptr, " \t\r\n", &right_save_ptr); // mount source
+        char *super_options = strtok_r(nullptr, " \t\r\n", &right_save_ptr);
+        if (nullptr != root && nullptr != mount_point &&
+            nullptr != file_system_type && nullptr != super_options) {
+          if ('\0' != cgroup_v2_path[0] && 0 == strcmp(file_system_type, "cgroup2")) {
+            (void)init_cgroup_mount(
+                root, mount_point, cgroup_v2_path, cgroup_v2_mount);
+          } else if ('\0' != cgroup_v1_path[0] &&
+                     0 == strcmp(file_system_type, "cgroup") &&
+                     controller_list_contains(super_options, "memory")) {
+            (void)init_cgroup_mount(
+                root, mount_point, cgroup_v1_path, cgroup_v1_mount);
+          }
+        }
+      }
+    }
+    fclose(file);
+  }
+}
+
+bool get_mounted_cgroup_path(const CgroupMountInfo &mount_info,
+                             const char *group_path,
+                             char *mounted_group_path,
+                             const int64_t mounted_group_path_size)
+{
+  bool succeeded = mount_info.valid_ && nullptr != group_path && '/' == group_path[0] &&
+                   nullptr != mounted_group_path && mounted_group_path_size > 0;
+  const char *relative_path = group_path;
+  if (succeeded && 0 != strcmp(mount_info.root_, "/") &&
+      is_cgroup_path_prefix(mount_info.root_, group_path)) {
+    relative_path += strlen(mount_info.root_);
+    if ('\0' == relative_path[0]) {
+      relative_path = "/";
+    }
+  }
+  if (succeeded) {
+    succeeded = copy_path(
+        relative_path, mounted_group_path, mounted_group_path_size);
+  }
+  return succeeded;
+}
+
+bool read_cgroup_memory_limit(const char *path, int64_t &limit)
+{
+  static constexpr unsigned long long CGROUP_V1_UNLIMITED_THRESHOLD =
+      static_cast<unsigned long long>(INT64_MAX) - (1ULL << 30);
+  bool found = false;
+  FILE *file = fopen(path, "r");
+  if (nullptr != file) {
+    char value_buf[64] = {0};
+    if (nullptr != fgets(value_buf, sizeof(value_buf), file)) {
+      char *value_begin = value_buf;
+      while (isspace(*value_begin)) {
+        ++value_begin;
+      }
+      char *value_end = value_begin + strlen(value_begin);
+      while (value_end > value_begin && isspace(value_end[-1])) {
+        --value_end;
+      }
+      *value_end = '\0';
+      if (0 != strcmp(value_begin, "max")) {
+        char *parsed_end = nullptr;
+        errno = 0;
+        const unsigned long long value = strtoull(value_begin, &parsed_end, 10);
+        if (0 == errno && parsed_end != value_begin && '\0' == *parsed_end &&
+            value > 0 && value < CGROUP_V1_UNLIMITED_THRESHOLD) {
+          limit = static_cast<int64_t>(value);
+          found = true;
+        }
+      }
+    }
+    fclose(file);
+  }
+  return found;
+}
+
+void update_cgroup_hierarchy_limit(const CgroupMountInfo &mount_info,
+                                   const char *group_path,
+                                   const char *limit_file,
+                                   int64_t &minimum_limit)
+{
+  char current_path[PATH_MAX] = {0};
+  if (get_mounted_cgroup_path(
+          mount_info, group_path, current_path, sizeof(current_path))) {
+    bool finished = false;
+    while (!finished) {
+      char limit_path[PATH_MAX] = {0};
+      const int path_length = 0 == strcmp(current_path, "/")
+          ? snprintf(limit_path, sizeof(limit_path), "%s/%s",
+                     mount_info.mount_point_, limit_file)
+          : snprintf(limit_path, sizeof(limit_path), "%s%s/%s",
+                     mount_info.mount_point_, current_path, limit_file);
+      int64_t current_limit = 0;
+      if (path_length > 0 && path_length < static_cast<int>(sizeof(limit_path)) &&
+          read_cgroup_memory_limit(limit_path, current_limit) &&
+          current_limit < minimum_limit) {
+        minimum_limit = current_limit;
+      }
+
+      char *last_slash = strrchr(current_path, '/');
+      if (nullptr == last_slash || last_slash == current_path) {
+        finished = 0 == strcmp(current_path, "/");
+        current_path[0] = '/';
+        current_path[1] = '\0';
+      } else {
+        *last_slash = '\0';
+      }
+    }
+  }
+}
+} // namespace
+#endif
+
+int64_t get_cgroup_memory_limit(
+    const char *proc_cgroup_path, const char *proc_mountinfo_path)
+{
+  int64_t minimum_limit = 0;
+#if defined(__linux__) && !defined(__ANDROID__)
+  if (nullptr != proc_cgroup_path && nullptr != proc_mountinfo_path) {
+    char cgroup_v1_path[PATH_MAX] = {0};
+    char cgroup_v2_path[PATH_MAX] = {0};
+    if (read_cgroup_paths(proc_cgroup_path,
+                          cgroup_v1_path, sizeof(cgroup_v1_path),
+                          cgroup_v2_path, sizeof(cgroup_v2_path))) {
+      CgroupMountInfo cgroup_v1_mount;
+      CgroupMountInfo cgroup_v2_mount;
+      find_cgroup_mounts(proc_mountinfo_path,
+                         cgroup_v1_path, cgroup_v2_path,
+                         cgroup_v1_mount, cgroup_v2_mount);
+      if ('\0' != cgroup_v2_path[0]) {
+        if (!cgroup_v2_mount.valid_) {
+          set_default_cgroup_mount("/sys/fs/cgroup", cgroup_v2_mount);
+        }
+        minimum_limit = INT64_MAX;
+        update_cgroup_hierarchy_limit(
+            cgroup_v2_mount, cgroup_v2_path, "memory.max", minimum_limit);
+      }
+      if ('\0' != cgroup_v1_path[0]) {
+        if (!cgroup_v1_mount.valid_) {
+          set_default_cgroup_mount("/sys/fs/cgroup/memory", cgroup_v1_mount);
+        }
+        if (0 == minimum_limit) {
+          minimum_limit = INT64_MAX;
+        }
+        update_cgroup_hierarchy_limit(
+            cgroup_v1_mount, cgroup_v1_path,
+            "memory.limit_in_bytes", minimum_limit);
+      }
+      if (INT64_MAX == minimum_limit) {
+        minimum_limit = 0;
+      }
+    }
+  }
+#else
+  (void)proc_cgroup_path;
+  (void)proc_mountinfo_path;
+#endif
+  return minimum_limit;
+}
+
+int64_t get_effective_memory_size()
+{
+  const int64_t physical_memory = get_phy_mem_size();
+  const int64_t cgroup_memory_limit = get_cgroup_memory_limit();
+  return cgroup_memory_limit > 0 &&
+                 (physical_memory <= 0 || cgroup_memory_limit < physical_memory)
+      ? cgroup_memory_limit
+      : physical_memory;
+}
+
 void hex_dump(const void *data, const int32_t size,
               const bool char_type /*= true*/, const int32_t log_level /*= OB_LOG_LEVEL_DEBUG*/)
 {

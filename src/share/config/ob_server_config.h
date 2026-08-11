@@ -131,9 +131,9 @@ public:
   ObServerMemoryConfig();
   static ObServerMemoryConfig &get_instance();
   int reload_config(const ObServerConfig& server_config);
-  static int64_t calculate_automatic_memory_budget(const int64_t physical_memory);
+  static int64_t calculate_automatic_memory_budget(const int64_t system_memory);
   static int64_t resolve_kvcache_memory_limit(const int64_t configured_limit,
-                                              const int64_t physical_memory);
+                                              const int64_t system_memory);
   static int64_t resolve_memstore_memory_limit(const int64_t configured_limit,
                                                const int64_t memory_budget);
   static int64_t resolve_vector_memory_limit(const int64_t configured_limit,
