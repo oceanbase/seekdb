@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_log_allocator_mgr.h"
 #include "ob_log_allocator.h"
@@ -162,27 +161,13 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else {
-      const bool has_memstore = runtime_config.has_memstore_;
       int32_t nway = static_cast<int32_t>(runtime_config.resource_config_.max_cpu());
       if (nway == 0) {
         nway = 1;
       }
+      // Module limits are upper bounds rather than reserved memory. Use the
+      // full runtime memory budget as the sizing base for the log allocator.
       const int64_t memory_size = runtime_config.resource_config_.memory_size();
-      const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
-      int64_t new_limit = memory_size;
-      if (has_memstore) {
-        if (memstore_limit <= 0) {
-          OB_LOG(WARN, "memstore memory limit is unexpected", K(memstore_limit));
-        } else if (memory_size > memstore_limit) {
-          new_limit = memory_size - memstore_limit;
-        } else {
-          // Memstore shares TxShare with the other transaction modules, so its
-          // limit is an upper bound rather than reserved memory. Keep the log
-          // allocator bounded by memory_budget when subtraction has no
-          // positive remainder.
-          new_limit = memory_size;
-        }
-      }
       ObLogAllocator *log_allocator = NULL;
       if (OB_TMP_FAIL(get_allocator_(log_allocator))) {
       } else if (NULL == log_allocator) {
@@ -190,11 +175,11 @@ int ObLogAllocatorMgr::update_memory_limit(const share::ObServerRuntimeConfig &r
       } else {
         log_allocator->set_nway(nway);
         int64_t previous_limit = log_allocator->get_limit();
-        if (previous_limit != new_limit) {
-          log_allocator->set_limit(new_limit);
+        if (previous_limit != memory_size) {
+          log_allocator->set_limit(memory_size);
         }
         OB_LOG(INFO, "ObLogAllocator memory limit updated", K(ret),
-             K(nway), K(new_limit), K(previous_limit), K(memstore_limit), K(runtime_config));
+             K(nway), K(memory_size), K(previous_limit), K(runtime_config));
       }
 
       SERVER_MODULE_SCOPE {
