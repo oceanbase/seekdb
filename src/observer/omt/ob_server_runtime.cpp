@@ -21,6 +21,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "share/ob_cpu_share_calculator.h"
 
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
@@ -624,13 +625,14 @@ int ObServerRuntime::recv_request(ObRequest &req)
     req.set_trace_point(ObRequest::OB_REQUEST_RUNTIME_RECEIVED);
     switch (req.get_type()) {
       case ObRequest::OB_MYSQL: {
-        if (req.is_retry_on_lock()) {
-          if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-          }
-        } else {
+        if (!req.is_retry_on_lock()) {
           ATOMIC_INC(&recv_mysql_cnt_);
-          if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-          }
+        }
+        // Keep authentication ahead of normal SQL regardless of whether the
+        // client uses TCP, a Unix domain socket, or a Windows named pipe.
+        const int priority = req.is_retry_on_lock() || req.is_auth_request()
+                           ? RQ_HIGH : RQ_NORMAL;
+        if (OB_FAIL(req_queue_.push(&req, priority, true))) {
         }
         break;
       }
@@ -802,6 +804,10 @@ void ObServerRuntime::check_parallel_servers_target()
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
   } else {
+    val = ObCpuShareCalculator::resolve_parallel_servers_target(
+        val,
+        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
+        GCONF.px_workers_per_cpu_quota);
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }
