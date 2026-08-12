@@ -3188,7 +3188,7 @@ int ObLSTabletService::insert_tablet_rows(
         }
 #endif
       } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }
@@ -3265,7 +3265,7 @@ int ObLSTabletService::put_tablet_rows(
                                  *run_ctx.col_descs_,
                                  rows_info))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }

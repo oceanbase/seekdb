@@ -211,7 +211,7 @@ void ObTabletMiniMergeCtx::try_schedule_compaction_after_mini(ObTabletHandle &ta
     } else if (OB_TMP_FAIL(ObTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         static_param_.ls_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != tmp_ret) {
-        LOG_ERROR_RET(tmp_ret, "failed to schedule special tablet minor merge",
+        LOG_WARN_RET(tmp_ret, "failed to schedule special tablet minor merge",
                       "tablet_id", get_tablet_id());
       }
     }

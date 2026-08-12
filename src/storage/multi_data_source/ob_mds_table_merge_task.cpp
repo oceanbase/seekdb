@@ -212,7 +212,7 @@ void ObMdsTableMergeTask::try_schedule_compaction_after_mds_mini(compaction::ObT
     } else if (OB_FAIL(ObTabletScheduler::schedule_tablet_minor_merge<ObTabletMergeExecuteDag>(
         compaction::MDS_MINOR_MERGE, ctx.static_param_.ls_, tablet_handle))) {
       if (OB_SIZE_OVERFLOW != ret) {
-        LOG_ERROR("failed to schedule special tablet minor merge which triggle mds",
+        LOG_WARN("failed to schedule special tablet minor merge which triggle mds",
             K(ret), K(tablet_id), KPC(mds_merge_dag_));
       }
     } else {
