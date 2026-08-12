@@ -4,7 +4,7 @@
 #test generated column
 
 --disable_warnings
-drop table if exists t, t1, t2, t3;
+drop table if exists t, t1, t2, t3, t4;
 --enable_warnings
 --result_format 4
 
@@ -65,7 +65,13 @@ create table t3(c1 varchar(10), c2 varchar(8) generated always as (substring(c1,
 
 explain basic select * from t3 where c1 = 'bcde';
 
-drop table t1, t2, t3;
+# generated column and its dependent column are both partition keys
+create table t4(c1 int, c2 varchar(20), c3 int generated always as (length(c4)), c4 varchar(20)) partition by key(c3, c4) partitions 2;
+insert into t4(c1, c2, c4) values(1, 'x', 'ab');
+create index idx_t4_c2 on t4(c2);
+select c1, c2, c3, c4 from t4 force index(idx_t4_c2);
+
+drop table t1, t2, t3, t4;
 
 --disable_warnings
 drop table if exists test;

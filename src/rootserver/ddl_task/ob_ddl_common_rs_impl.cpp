@@ -415,13 +415,14 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
         // Add part keys and their cascaded columns first
         for (int64_t i = 0; OB_SUCC(ret) && i < src_column_ids.count(); ++i) {
           const ObColumnSchemaV2 *column_schema = nullptr;
-          const int64_t col_id = src_column_ids.at(i).col_id_;
+          const uint64_t col_id = src_column_ids.at(i).col_id_;
           if (OB_ISNULL(column_schema = source_table_schema->get_column_schema(col_id))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("error unexpected, column schema must not be nullptr", K(ret));
           } else if (!column_schema->is_tbl_part_key_column()) {
             // do nothing
-          } else if (OB_FAIL(extra_column_ids.push_back(col_id))) {
+          } else if (!is_contain(extra_column_ids, col_id)
+                     && OB_FAIL(extra_column_ids.push_back(col_id))) {
           } else if (column_schema->is_generated_column()) {
             ObSEArray<uint64_t, 5> cascaded_columns;
             if (OB_FAIL(column_schema->get_cascaded_column_ids(cascaded_columns))) {

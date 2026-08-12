@@ -1,4 +1,4 @@
-drop table if exists t, t1, t2, t3;
+drop table if exists t, t1, t2, t3, t4;
 result_format: 4
 create table t1(c1 varchar(10) primary key, c2 varchar(8) generated always as (substring(c1, 2)) virtual, c3 int) partition by key(c2) partitions 5;
 
@@ -276,7 +276,17 @@ Outputs & filters:
       is_index_back=false, is_global_index=false, filter_before_indexback[false], 
       range_key([t3.__pk_increment]), range(MIN ; MAX)always true
 
-drop table t1, t2, t3;
+create table t4(c1 int, c2 varchar(20), c3 int generated always as (length(c4)), c4 varchar(20)) partition by key(c3, c4) partitions 2;
+insert into t4(c1, c2, c4) values(1, 'x', 'ab');
+create index idx_t4_c2 on t4(c2);
+select c1, c2, c3, c4 from t4 force index(idx_t4_c2);
++------+------+------+------+
+| c1   | c2   | c3   | c4   |
++------+------+------+------+
+|    1 | x    |    2 | ab   |
++------+------+------+------+
+
+drop table t1, t2, t3, t4;
 
 drop table if exists test;
 create table test(pk1 int, pk2 int, first_name varchar(100), last_name varchar(100), primary key(pk1, pk2));
