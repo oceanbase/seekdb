@@ -1723,6 +1723,9 @@ int ObTablet::load_deserialize_current(
     if (OB_UNLIKELY(ObSecondaryMetaType::TABLET_MACRO_INFO != desc.type_ || desc.length_ <= 0)) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("invalid inline tablet macro info descriptor", K(ret), K(desc));
+    } else if (OB_UNLIKELY(len - new_pos < desc.length_)) {
+      ret = OB_DESERIALIZE_ERROR;
+      LOG_WARN("buffer is not enough for inline tablet macro info", K(ret), K(len), K(new_pos), K(desc));
     } else if (OB_UNLIKELY(!tablet_addr_.is_valid() || !tablet_addr_.is_block())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet address is invalid", K(ret), K(tablet_addr_));
@@ -1730,21 +1733,16 @@ int ObTablet::load_deserialize_current(
     } else if (OB_UNLIKELY(size < desc.length_)) {
       ret = OB_DESERIALIZE_ERROR;
       LOG_WARN("tablet block is smaller than inline tablet macro info", K(ret), K(size), K(desc));
+    } else if (OB_FAIL(deserialize_macro_info(
+        allocator, buf, new_pos + desc.length_, new_pos, macro_info_addr_.ptr_))) {
+    } else if (OB_UNLIKELY(new_pos - secondary_meta_pos != desc.length_)) {
+      ret = OB_DESERIALIZE_ERROR;
+      LOG_WARN("inline tablet macro info length mismatch", K(ret), K(new_pos), K(secondary_meta_pos), K(desc));
     } else if (OB_FAIL(macro_info_addr_.addr_.set_block_addr(
         macro_id,
         offset + (size - desc.length_),
         desc.length_,
         ObMetaDiskAddr::DiskType::RAW_BLOCK))) {
-    } else if (len - new_pos >= desc.length_) {
-      // The first-level tablet load intentionally reads only a prefix of a RAW_BLOCK. Keep the
-      // address so macro info can be loaded lazily when the prefix does not contain the inline
-      // bytes in full.
-      if (OB_FAIL(deserialize_macro_info(
-          allocator, buf, new_pos + desc.length_, new_pos, macro_info_addr_.ptr_))) {
-      } else if (OB_UNLIKELY(new_pos - secondary_meta_pos != desc.length_)) {
-        ret = OB_DESERIALIZE_ERROR;
-        LOG_WARN("inline tablet macro info length mismatch", K(ret), K(new_pos), K(secondary_meta_pos), K(desc));
-      }
     }
   }
 
@@ -1906,6 +1904,9 @@ int ObTablet::deserialize(
       if (OB_UNLIKELY(ObSecondaryMetaType::TABLET_MACRO_INFO != desc.type_ || desc.length_ <= 0)) {
         ret = OB_DESERIALIZE_ERROR;
         LOG_WARN("invalid inline tablet macro info descriptor", K(ret), K(desc));
+      } else if (OB_UNLIKELY(len - new_pos < desc.length_)) {
+        ret = OB_DESERIALIZE_ERROR;
+        LOG_WARN("buffer is not enough for inline tablet macro info", K(ret), K(len), K(new_pos), K(desc));
       } else if (OB_UNLIKELY(!tablet_addr_.is_valid() || !tablet_addr_.is_block())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet address is invalid", K(ret), K(tablet_addr_));
@@ -1918,7 +1919,7 @@ int ObTablet::deserialize(
           offset + (size - desc.length_),
           desc.length_,
           ObMetaDiskAddr::DiskType::RAW_BLOCK))) {
-      } else if (len - new_pos >= desc.length_) {
+      } else {
         ObTabletMacroInfo *tablet_macro_info = nullptr;
         int64_t macro_info_size = 0;
         if (OB_FAIL(deserialize_macro_info(
