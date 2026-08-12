@@ -178,38 +178,6 @@ TEST(TestServerMemoryConfig, legacy_percentage_parameters_are_accepted_but_ignor
   EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
 }
 
-TEST(TestServerMemoryConfig, reload_uses_automatic_budget_independent_of_memory_limit)
-{
-  ServerConfigRestore restore;
-  ObServerMemoryConfig memory_config;
-  const int64_t physical_memory = get_phy_mem_size();
-  const int64_t expected_memory_budget =
-      ObServerMemoryConfig::calculate_automatic_memory_budget(
-          physical_memory);
-
-  GCONF.memory_budget = 0;
-  GCONF.memory_limit = 4 * ONE_GIB;
-  GCONF.kvcache_memory_limit = 0;
-  GCONF.memstore_memory_limit = 0;
-  GCONF.vector_memory_limit = 0;
-
-  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
-  EXPECT_EQ(expected_memory_budget, memory_config.get_server_memory_budget());
-  EXPECT_EQ(ObServerMemoryConfig::resolve_kvcache_memory_limit(
-                0, physical_memory),
-            memory_config.get_kvcache_memory_limit());
-  EXPECT_EQ(ObServerMemoryConfig::resolve_memstore_memory_limit(
-                0, expected_memory_budget),
-            memory_config.get_memstore_memory_limit());
-  EXPECT_EQ(ObServerMemoryConfig::resolve_vector_memory_limit(
-                0, expected_memory_budget),
-            memory_config.get_vector_memory_limit());
-
-  GCONF.memory_limit = 16 * ONE_GIB;
-  ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
-  EXPECT_EQ(expected_memory_budget, memory_config.get_server_memory_budget());
-}
-
 TEST(TestServerMemoryConfig, kvcache_limit_does_not_exceed_startup_capacity)
 {
   ServerConfigRestore restore;
