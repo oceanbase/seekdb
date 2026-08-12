@@ -27,7 +27,8 @@ namespace common
 
 int64_t ObCpuShareCalculator::calc_px_pool_share(int64_t min_cpu)
 {
-  return std::max(static_cast<int64_t>(3), min_cpu * GCONF.px_workers_per_cpu_quota);
+  return resolve_parallel_servers_target(
+      0, min_cpu, GCONF.px_workers_per_cpu_quota);
 }
 
 } // namespace common

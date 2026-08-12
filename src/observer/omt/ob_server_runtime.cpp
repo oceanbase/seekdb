@@ -21,6 +21,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "share/interrupt/ob_global_interrupt_call.h"
+#include "share/ob_cpu_share_calculator.h"
 
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
@@ -803,6 +804,10 @@ void ObServerRuntime::check_parallel_servers_target()
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
   } else {
+    val = ObCpuShareCalculator::resolve_parallel_servers_target(
+        val,
+        static_cast<int64_t>(GCONF.get_server_default_min_cpu()),
+        GCONF.px_workers_per_cpu_quota);
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }
 }
