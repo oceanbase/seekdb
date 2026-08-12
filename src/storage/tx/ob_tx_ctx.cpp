@@ -425,7 +425,7 @@ int ObTxCtx::handle_timeout(const int64_t delay)
               *log_service, clog_is_full, clog_is_hang))) {
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_EAGAIN);
-            TRANS_LOG(ERROR, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
+            TRANS_LOG(WARN, "clog disk has fatal error, make scheduler retry commit", K(tmp_ret), KPC(this));
           }
         }
       }

@@ -81,6 +81,8 @@ ObKVCacheStore::ObKVCacheStore()
     : inited_(false),
       cur_mb_num_(0),
       max_mb_num_(0),
+      max_cache_size_(0),
+      cache_memory_limit_(0),
       block_size_(0),
       block_payload_size_(0),
       mb_handles_(NULL),
@@ -99,7 +101,9 @@ ObKVCacheStore::~ObKVCacheStore()
   destroy();
 }
 
-int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
+int ObKVCacheStore::init(const int64_t max_cache_size,
+                         const int64_t block_size,
+                         const int64_t cache_memory_limit)
 {
   int ret = OB_SUCCESS;
   void *buf = NULL;
@@ -107,11 +111,16 @@ int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The ObKVCacheStore has been inited, ", K(ret));
   } else if (OB_UNLIKELY(max_cache_size <= block_size * 3)
+      || OB_UNLIKELY(max_cache_size > MAX_CACHE_SIZE)
+      || OB_UNLIKELY(cache_memory_limit <= 0)
+      || OB_UNLIKELY(cache_memory_limit > max_cache_size)
       || OB_UNLIKELY(block_size <= (int64_t)(sizeof(ObKVStoreMemBlock)))) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid arguments, ", K(max_cache_size),
-      K(block_size), K(ret));
+      K(block_size), K(cache_memory_limit), K(ret));
   } else {
+    max_cache_size_ = max_cache_size;
+    ATOMIC_STORE(&cache_memory_limit_, cache_memory_limit);
     max_mb_num_ = compute_mb_handle_num(max_cache_size, block_size);
     if (NULL == (mb_handles_ = static_cast<ObKVMemBlockHandle*>(
                             buf = ob_malloc((sizeof(ObKVMemBlockHandle) + sizeof(ObKVMemBlockHandle*)) * max_mb_num_,
@@ -136,7 +145,8 @@ int ObKVCacheStore::init(const int64_t max_cache_size, const int64_t block_size)
 
   if (OB_SUCC(ret)) {
     inited_ = true;
-    COMMON_LOG(INFO, "ObKVCacheStore init success", K(max_cache_size), K(block_size));
+    COMMON_LOG(INFO, "ObKVCacheStore init success", K(max_cache_size), K(block_size),
+               K(cache_memory_limit));
   }
   if (!inited_) {
     destroy();
@@ -167,6 +177,8 @@ void ObKVCacheStore::destroy()
   }
 
   mb_handles_pool_.destroy();
+  max_cache_size_ = 0;
+  ATOMIC_STORE(&cache_memory_limit_, 0);
   block_size_ = 0;
   block_payload_size_ = 0;
 
@@ -174,6 +186,23 @@ void ObKVCacheStore::destroy()
   cur_mb_num_ = 0;
   global_status_.reset();
   inited_ = false;
+}
+
+int ObKVCacheStore::set_cache_memory_limit(const int64_t cache_memory_limit)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    COMMON_LOG(WARN, "The ObKVCacheStore has not been inited", K(ret));
+  } else if (OB_UNLIKELY(cache_memory_limit <= 0)
+             || OB_UNLIKELY(cache_memory_limit > max_cache_size_)) {
+    ret = OB_INVALID_ARGUMENT;
+    COMMON_LOG(WARN, "Invalid cache memory limit", K(ret), K(cache_memory_limit),
+               K_(max_cache_size));
+  } else {
+    ATOMIC_STORE(&cache_memory_limit_, cache_memory_limit);
+  }
+  return ret;
 }
 
 
@@ -827,35 +856,17 @@ int ObKVCacheStore::alloc_mbhandle(
   ObKVMemBlockHandle *&mb_handle)
 {
   int ret = OB_SUCCESS;
+  bool release_reserved_size = false;
   mb_handle = NULL;
   ObKVStoreMemBlock *mem_block = NULL;
   char *buf = NULL;
 
-  // The jemalloc backend allocates cache blocks outside ObMemoryMgr's normal
-  // allocation-pressure path, so it cannot rely on that path to trigger a
-  // synchronous cache wash.  Apply backpressure here when a new block would
-  // exceed the fixed KV cache quota; otherwise a burst can outrun the periodic
-  // washer and exhaust every preallocated memblock handle.
-  const int64_t current_cache_size = ATOMIC_LOAD(&global_status_.store_size_);
-  const int64_t memory_budget = lib::get_memory_budget();
-  if (need_sync_wash_before_alloc(current_cache_size, block_size, memory_budget)) {
-    int tmp_ret = OB_SUCCESS;
-    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
-    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
-      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
-        COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
-            K(tmp_ret), K(block_size), K(current_cache_size), K(memory_budget));
-      }
-    } else {
-      free_mbs(mb_list_.resource_mgr_, wash_blocks);
-    }
-  }
-
-  const int64_t cache_store_size = ATOMIC_AAF(&global_status_.store_size_, block_size);
-
   if (!mb_list_.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(ERROR, "mb_list_ is invalid", K(ret));
+  } else if (OB_FAIL(reserve_store_size(block_size))) {
+  } else {
+    release_reserved_size = true;
   }
 
   if (OB_FAIL(ret)) {
@@ -866,19 +877,13 @@ int ObKVCacheStore::alloc_mbhandle(
   } else {
     mem_block = new (buf) ObKVStoreMemBlock(buf + sizeof(ObKVStoreMemBlock),
         block_size - sizeof(ObKVStoreMemBlock));
-    while (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
-      if (OB_UNLIKELY(!try_supply_mb(SUPPLY_MB_NUM_ONCE))) {
-        purge_mb_handle_retire_station();
-        if (OB_FAIL(mb_handles_pool_.pop(mb_handle))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        }
-        break;
-      }
-    }
+    ret = pop_mb_handle_with_recovery(block_size, mb_handle);
 
     if (OB_FAIL(ret)) {
       mem_block->~ObKVStoreMemBlock();
       free_mb(mb_list_.resource_mgr_, mem_block);
+      mem_block = NULL;
+      buf = NULL;
       COMMON_LOG(WARN, "Fail to pop mb_handle, ", K(ret));
     } else {
       if (LRU == policy) {
@@ -891,6 +896,7 @@ int ObKVCacheStore::alloc_mbhandle(
       mb_handle->last_modified_time_us_ = ObTimeUtility::current_time_us();
       WEAK_BARRIER();
       ATOMIC_STORE_RLX(&mb_handle->status_, ObKVMBHandleStatus::USING);
+      release_reserved_size = false;
     }
   }
 
@@ -901,21 +907,129 @@ int ObKVCacheStore::alloc_mbhandle(
       COMMON_LOG(WARN, "mb_list_.head_ is null", K(ret));
     } else if (OB_FAIL(insert_mb_handle(head, mb_handle))) {
     }
-  } else {
+  }
+
+  if (release_reserved_size) {
     ATOMIC_SAF(&global_status_.store_size_, block_size);
   }
 
   return ret;
 }
 
+int ObKVCacheStore::reserve_store_size(const int64_t block_size)
+{
+  int ret = OB_SUCCESS;
+  const int64_t cache_memory_limit = ATOMIC_LOAD(&cache_memory_limit_);
+  const int64_t cache_limit = compute_fixed_cache_limit(cache_memory_limit, block_size_);
+
+  if (block_size <= 0 || cache_limit <= 0 || block_size > cache_limit) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (!try_reserve_store_size(block_size, cache_limit)) {
+    const int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
+    const int64_t wash_size = cache_size >= cache_limit
+        ? cache_size - cache_limit + block_size
+        : block_size - (cache_limit - cache_size);
+    int tmp_ret = OB_SUCCESS;
+    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+    if (OB_TMP_FAIL(sync_wash_mbs(wash_size, wash_blocks))) {
+      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret
+          && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache before allocating memblock",
+            K(tmp_ret), K(block_size), K(cache_size), K(cache_limit), K(wash_size));
+      }
+    } else {
+      free_mbs(mb_list_.resource_mgr_, wash_blocks);
+    }
+
+    if (!try_reserve_store_size(block_size, cache_limit)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+  }
+
+  return ret;
+}
+
+bool ObKVCacheStore::try_reserve_store_size(
+    const int64_t block_size,
+    const int64_t cache_limit)
+{
+  bool reserved = false;
+  int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
+  while (!reserved && can_reserve_cache_size(cache_size, block_size, cache_limit)) {
+    reserved = ATOMIC_BCAS(
+        &global_status_.store_size_, cache_size, cache_size + block_size);
+    if (!reserved) {
+      cache_size = ATOMIC_LOAD(&global_status_.store_size_);
+    }
+  }
+  return reserved;
+}
+
+int ObKVCacheStore::pop_mb_handle_with_recovery(
+    const int64_t block_size,
+    ObKVMemBlockHandle *&mb_handle)
+{
+  int ret = mb_handles_pool_.pop(mb_handle);
+
+  // Handle objects are preallocated at init and published to the free pool in
+  // batches. Publish all unused objects before attempting reclamation.
+  while (OB_ENTRY_NOT_EXIST == ret && try_supply_mb(SUPPLY_MB_NUM_ONCE)) {
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // First reclaim handles whose memblocks have already been released and are
+    // only waiting in the qclock retire station.
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // Then finish reclamation of memblocks that a previous wash has already
+    // retired. This does not select any additional cache block for eviction.
+    int tmp_ret = OB_SUCCESS;
+    uint64_t reclaimed_size = 0;
+    WashCallBack callback(*this, reclaimed_size);
+    if (OB_TMP_FAIL(HazardDomain::get_instance().reclaim(callback))) {
+      COMMON_LOG(WARN, "Fail to reclaim retired KV cache memblocks for mb handle",
+          K(tmp_ret), K(reclaimed_size));
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    // No retired handle is reusable. Retire one full memblock, reclaim it and
+    // retry as the last allocation-pressure fallback.
+    int tmp_ret = OB_SUCCESS;
+    ObICacheWasher::ObCacheMemBlock *wash_blocks = nullptr;
+    if (OB_TMP_FAIL(sync_wash_mbs(block_size, wash_blocks))) {
+      if (OB_CACHE_FREE_BLOCK_NOT_ENOUGH != tmp_ret && OB_SYNC_WASH_MB_TIMEOUT != tmp_ret) {
+        COMMON_LOG(WARN, "Fail to synchronously wash KV cache for mb handle",
+            K(tmp_ret), K(block_size));
+      }
+    } else {
+      free_mbs(mb_list_.resource_mgr_, wash_blocks);
+    }
+    purge_mb_handle_retire_station();
+    ret = mb_handles_pool_.pop(mb_handle);
+  }
+
+  if (OB_ENTRY_NOT_EXIST == ret) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  }
+  return ret;
+}
+
 void ObKVCacheStore::compute_wash_size(int64_t &wash_size)
 {
-  const int64_t memory_budget = lib::get_memory_budget();
+  const int64_t cache_memory_limit = ATOMIC_LOAD(&cache_memory_limit_);
   const int64_t cache_size = ATOMIC_LOAD(&global_status_.store_size_);
-  const int64_t cache_limit = compute_fixed_cache_limit(memory_budget, block_size_);
-  wash_size = compute_fixed_wash_size(cache_size, memory_budget, block_size_);
-  COMMON_LOG(INFO, "Compute fixed KV cache wash size", K(memory_budget), K(cache_limit),
-             K(cache_size), K(wash_size));
+  const int64_t aligned_cache_limit =
+      compute_fixed_cache_limit(cache_memory_limit, block_size_);
+  wash_size = compute_fixed_wash_size(cache_size, cache_memory_limit, block_size_);
+  COMMON_LOG(INFO, "Compute fixed KV cache wash size", K(cache_memory_limit),
+             K(aligned_cache_limit), K(cache_size), K(wash_size));
 }
 
 void ObKVCacheStore::wash_mbs(WashHeap &heap)
