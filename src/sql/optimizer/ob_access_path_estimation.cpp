@@ -18,6 +18,7 @@
 #include "sql/optimizer/ob_access_path_estimation.h"
 #include "sql/optimizer/ob_storage_estimator.h"
 #include "sql/engine/table/ob_table_scan_op.h"
+#include "ob_opt_est_parameter_normal.h"
 #include "sql/optimizer/ob_sel_estimator.h"
 namespace oceanbase {
 using namespace share::schema;
