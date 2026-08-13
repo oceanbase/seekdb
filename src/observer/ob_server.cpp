@@ -43,6 +43,7 @@ int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share:
 #include "lib/ob_running_mode.h"
 #include "lib/task/ob_timer_monitor.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
+#include "lib/trace/ob_trace.h"
 #include "lib/utility/utility.h"
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
@@ -2229,9 +2230,12 @@ int ObServer::init_global_kvcache()
   // The capacity is fixed to twice the initial limit by the memory config.
   // The handle pool should support dynamic expansion in the future.
   const int64_t max_cache_size = GMEMCONF.get_kvcache_memory_capacity();
+  const int64_t cache_memory_limit = GMEMCONF.get_kvcache_memory_limit();
   const ObKVCacheRuntimeOptions runtime_options(
-      GCONF._cache_wash_interval);
-  if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(bucket_num))) {
+      GCONF._cache_wash_interval,
+      cache_memory_limit);
+  if (OB_FAIL(ObKVGlobalCache::get_instance().get_suitable_bucket_num(
+      cache_memory_limit, bucket_num))) {
     LOG_WARN("Failed to get suitable bucket num");
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().init(bucket_num,
                                                    max_cache_size,
@@ -2253,6 +2257,14 @@ int ObServer::init_ob_service(bool need_bootstrap)
   standby::StandbyConfig standby_config;
   standby_config.self_addr_ = config_.self_addr_;
   standby_config.rpc_port_ = static_cast<int32_t>(config_.rpc_port);
+  // SeekDB intentionally uses a loopback self address. Promotion-path cycle
+  // detection still needs a process-unique identity when different hosts use
+  // the same RPC port, so keep routing and identity as separate concepts.
+  const trace::UUID promotion_node_uuid = trace::UUID::gen();
+  standby_config.promotion_node_id_.set_ipv6_addr(
+      promotion_node_uuid.high_,
+      promotion_node_uuid.low_,
+      standby_config.rpc_port_ > 0 ? standby_config.rpc_port_ : 1);
   standby_config.embedded_mode_ = gctx_.is_embedded_mode();
   standby_config.rpc_service_enabled_ = config_.enable_rpc_service;
   standby_config.rpc_tls_enabled_ = config_.enable_rpc_tls;
