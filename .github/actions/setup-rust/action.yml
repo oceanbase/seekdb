@@ -34,60 +34,19 @@ runs:
   steps:
     - name: Install Rust toolchain
       shell: bash
-      working-directory: ${{ github.workspace }}/rust
+      env:
+        SEEKDB_REPO_ROOT: ${{ github.workspace }}
+        SEEKDB_CARGO_RSProxy_MIRROR: ${{ inputs.crates-mirror }}
       run: |
         set -euo pipefail
-
-        if ! command -v rustup >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
-          install_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/seekdb-rust"
-          export CARGO_HOME="${CARGO_HOME:-$install_root/cargo}"
-          export RUSTUP_HOME="${RUSTUP_HOME:-$install_root/rustup}"
-          export PATH="$CARGO_HOME/bin:$PATH"
-          mkdir -p "$install_root" "$CARGO_HOME" "$RUSTUP_HOME"
-
-          rustup_init="$install_root/rustup-init.sh"
-          rustup_init_url="${RUSTUP_INIT_URL:-https://sh.rustup.rs}"
-          if command -v curl >/dev/null 2>&1; then
-            curl --proto '=https' --tlsv1.2 --retry 3 --fail --silent \
-              --show-error --location "$rustup_init_url" --output "$rustup_init"
-          elif command -v wget >/dev/null 2>&1; then
-            wget --tries=3 --quiet -O "$rustup_init" "$rustup_init_url"
-          else
-            echo "setup-rust: curl or wget is required" >&2
-            exit 1
-          fi
-          sh "$rustup_init" -y --profile minimal --default-toolchain none \
-            --no-modify-path
-
-        fi
-
-        # Export the homes unconditionally so later steps (mirror config,
-        # registry cache) can rely on them even when rustup pre-existed.
-        export CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
-        export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
+        # shellcheck source=/dev/null
+        source "${{ github.workspace }}/.github/script/install-rust.sh"
         {
-          echo "CARGO_HOME=$CARGO_HOME"
-          echo "RUSTUP_HOME=$RUSTUP_HOME"
+          echo "CARGO_HOME=${CARGO_HOME}"
+          echo "RUSTUP_HOME=${RUSTUP_HOME}"
         } >> "$GITHUB_ENV"
-
         rustup_bin_dir="$(dirname "$(command -v rustup)")"
-        export PATH="$rustup_bin_dir:$PATH"
         echo "$rustup_bin_dir" >> "$GITHUB_PATH"
-        RUSTUP_AUTO_INSTALL=1 cargo --version
-        rustc --version
-
-    - name: Route cargo through the rsproxy crates mirror
-      if: inputs.crates-mirror == 'true'
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p "$CARGO_HOME"
-        cat >> "$CARGO_HOME/config.toml" <<'EOF'
-        [source.crates-io]
-        replace-with = "rsproxy-sparse"
-        [source.rsproxy-sparse]
-        registry = "sparse+https://rsproxy.cn/index/"
-        EOF
 
     # NOTE: needs a node20-capable runner (same constraint as the ccache action
     # pin in buildbase); disable via `cache: 'false'` on runners that cannot.

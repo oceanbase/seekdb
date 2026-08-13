@@ -41,8 +41,10 @@ ObSrvNetworkFrame::~ObSrvNetworkFrame()
 static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_enabled, int64_t tcp_keepidle, int64_t tcp_keepintvl, int64_t tcp_keepcnt)
 {
   int ret = OB_SUCCESS;
-  tcp_keepidle = max(tcp_keepidle / 1000000L, 1L);
-  tcp_keepintvl = max(tcp_keepintvl / 1000000L, 1L);
+  const int64_t idle_sec = tcp_keepidle / 1000000LL;
+  const int64_t intvl_sec = tcp_keepintvl / 1000000LL;
+  tcp_keepidle = idle_sec < 1 ? 1 : idle_sec;
+  tcp_keepintvl = intvl_sec < 1 ? 1 : intvl_sec;
   if (tcp_keepidle > static_cast<int64_t>(UINT32_MAX)
       || tcp_keepintvl > static_cast<int64_t>(UINT32_MAX)
       || tcp_keepcnt <= 0

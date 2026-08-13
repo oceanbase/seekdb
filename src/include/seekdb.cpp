@@ -27,6 +27,7 @@
 #include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_malloc.h"
+#include "lib/alloc/alloc_func.h"
 #include "lib/resource/ob_resource_mgr.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "observer/ob_inner_sql_result.h"
@@ -778,9 +779,9 @@ static int do_seekdb_open_inner(const char* db_dir, int port) {
         ob_usleep(100 * 1000);  // 100ms
     }
     
-    // Set memory limit to unlimited before init (aligned with main.cpp inner_main)
-    // This is critical for fork scenarios where memory limits may be inherited
-    oceanbase::lib::set_memory_limit(INT_MAX64);
+    // Set memory budget to unlimited before init. Critical for fork scenarios
+    // where inherited limits may be too low for embedded reopen.
+    oceanbase::lib::set_memory_budget(INT_MAX64);
     
     // Note: global_thread_stack_size is already set by the library constructor
     // (seekdb_library_init) when the library is loaded. This ensures it's set

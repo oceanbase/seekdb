@@ -202,6 +202,15 @@ function do_build
       fi
       ANDROID_CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DCMAKE_CXX_STANDARD=20 -DCMAKE_CXX_EXTENSIONS=ON"
       echo_log "Android NDK: $ANDROID_NDK_HOME"
+      # cmake/Rust.cmake cross-compiles sql-nio with `cargo build --target
+      # aarch64-linux-android`; make sure that target exists. Run from rust/ so
+      # rust-toolchain.toml pins the toolchain (the default may be unset).
+      if command -v rustup >/dev/null 2>&1; then
+        (cd "$TOPDIR/rust" && rustup target add aarch64-linux-android)
+      else
+        echo_err "rustup not found in PATH; cannot install the aarch64-linux-android Rust target (needed by sql-nio)"
+        exit 1
+      fi
     fi
 
     "${CMAKE_PATH}" -DCMAKE_EXPORT_COMPILE_COMMANDS=1 ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"

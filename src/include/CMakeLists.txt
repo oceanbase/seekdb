@@ -68,6 +68,7 @@ if(APPLE)
   target_link_libraries(libseekdb
     PRIVATE
       oceanbase_static
+      sql_nio
       -Wl,-exported_symbols_list,${SEEKDB_EXPORT_FILE}
   )
 elseif(ANDROID)
@@ -77,6 +78,7 @@ elseif(ANDROID)
       -Wl,--whole-archive
       oceanbase_static
       -Wl,--no-whole-archive
+      sql_nio
       -Wl,--allow-multiple-definition
       -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/seekdb.version
   )
@@ -104,6 +106,7 @@ elseif(WIN32)
     ob_share_static
     oblib
     ob_malloc
+    sql_nio
     synchronization
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib
   )
@@ -128,6 +131,7 @@ else()
       -Wl,--whole-archive
       oceanbase_static
       -Wl,--no-whole-archive
+      sql_nio
       -static-libstdc++
       -static-libgcc
       -Wl,--allow-multiple-definition

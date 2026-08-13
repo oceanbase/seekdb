@@ -121,6 +121,11 @@ jobs:
               yum install -y epel-release 2>/dev/null || true
               yum install -y ccache 2>/dev/null || true
               git config --global --add safe.directory "$GITHUB_WORKSPACE"
+              # CMake includes cmake/Rust.cmake at configure time; cargo must exist before build.sh.
+              # shellcheck source=/dev/null
+              source .github/script/install-rust.sh
+              export PATH="$CARGO_HOME/bin:$PATH"
+              CARGO_CMAKE="-DCARGO=$(command -v cargo)"
               export CCACHE_DIR="$GITHUB_WORKSPACE/.ccache"
               export CCACHE_COMPILERCHECK=content
               export CCACHE_NOHASHDIR=1
@@ -140,21 +145,19 @@ jobs:
               else
                 PYVER=$(python3 -c "import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")")
               fi
-              bash build.sh release --init $USE_CCACHE -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER --make libseekdb
+              bash build.sh release --init $USE_CCACHE -DBUILD_EMBED_MODE=ON -DPYTHON_VERSION=$PYVER $CARGO_CMAKE --make libseekdb
               [ -n "$USE_CCACHE" ] && ccache -s || true
             '
       - name: Fix ownership (container writes as root)
         run: sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
 
+      - name: Setup Rust (Linux)
+        uses: ./.github/actions/setup-rust
+
       - name: Setup Node.js (Linux)
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-
-      - name: Setup Rust (Linux)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
       - name: Setup Go (Linux)
         uses: actions/setup-go@v5
@@ -303,6 +306,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-libseekdb-${{ matrix.platform }}-
 
+      - name: Setup Rust (macOS)
+        uses: ./.github/actions/setup-rust
+
       - name: Build init (macOS)
         run: bash build.sh init
 
@@ -327,11 +333,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-
-      - name: Setup Rust (macOS)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
       - name: Setup Go (macOS)
         uses: actions/setup-go@v5
@@ -499,6 +500,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-libseekdb-android-arm64-v8a-
 
+      - name: Setup Rust (Android)
+        uses: ./.github/actions/setup-rust
+
       - name: Build libseekdb (Android)
         env:
           BUILD_TYPE: release
@@ -518,11 +522,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-
-      - name: Setup Rust (Android)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
       - name: Setup Go (Android)
         uses: actions/setup-go@v5
@@ -645,6 +644,9 @@ jobs:
           }
           Get-Command ccache | Out-Host
 
+      - name: Setup Rust (Windows)
+        uses: ./.github/actions/setup-rust
+
       - name: Build libseekdb (Windows)
         shell: pwsh
         env:
@@ -721,11 +723,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-
-      - name: Setup Rust (Windows)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
       - name: Setup Go (Windows)
         uses: actions/setup-go@v5
