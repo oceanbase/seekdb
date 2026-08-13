@@ -107,14 +107,15 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_dtl_memory_size()
 
 OB_INLINE int64_t ObDtlChannelMemManager::get_max_memory_limit_size()
 {
-  static const int64_t DTL_MEMORY_PERCENTAGE = 140;
+  static const int64_t DTL_MEMORY_FRACTION_NUMERATOR = 7; // 87.5%
+  static const int64_t DTL_MEMORY_FRACTION_DENOMINATOR = 8;
   const int64_t memory_budget = lib::get_memory_budget();
-  const int64_t quotient = memory_budget / 100;
+  const int64_t quotient = memory_budget / DTL_MEMORY_FRACTION_DENOMINATOR;
   const int64_t remainder_charge =
-      memory_budget % 100 * DTL_MEMORY_PERCENTAGE / 100;
-  return quotient > (INT64_MAX - remainder_charge) / DTL_MEMORY_PERCENTAGE
-      ? INT64_MAX
-      : quotient * DTL_MEMORY_PERCENTAGE + remainder_charge;
+      memory_budget % DTL_MEMORY_FRACTION_DENOMINATOR
+          * DTL_MEMORY_FRACTION_NUMERATOR
+          / DTL_MEMORY_FRACTION_DENOMINATOR;
+  return quotient * DTL_MEMORY_FRACTION_NUMERATOR + remainder_charge;
 }
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()

@@ -2515,8 +2515,8 @@ int read_one_int(const char *file_name, int64_t &value)
 int64_t calculate_scaled_value_by_memory(int64_t min_value, int64_t max_value)
 {
   int64_t memory_budget = get_memory_budget();
-  static const int64_t CALC_MEM_UPPER_BOUND = 64 * (1L << 30);  // 64GB
-  static const int64_t CALC_MEM_LOWER_BOUND = 1L << 29;         // 512MB
+  static const int64_t CALC_MEM_UPPER_BOUND = (512LL << 30) / 5; // 102.4GB
+  static const int64_t CALC_MEM_LOWER_BOUND = (4LL << 30) / 5;   // 0.8GB
 
   // 0.0 <= memory_ratio <= 1.0
   int64_t clamped_memory = MIN(MAX(memory_budget, CALC_MEM_LOWER_BOUND), CALC_MEM_UPPER_BOUND);

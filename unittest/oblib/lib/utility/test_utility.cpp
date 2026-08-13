@@ -43,13 +43,13 @@ TEST(utility, memory_limit_scaled_value_compatibility)
     return static_cast<int64_t>(min_value + ratio * (max_value - min_value));
   };
 
-  set_memory_budget(one_gib / 2);
+  set_memory_budget(one_gib * 4 / 5);
   EXPECT_EQ(old_scaled_value(one_gib),
             calculate_scaled_value_by_memory(min_value, max_value));
-  set_memory_budget(one_gib);
+  set_memory_budget(one_gib * 8 / 5);
   EXPECT_EQ(old_scaled_value(2 * one_gib),
             calculate_scaled_value_by_memory(min_value, max_value));
-  set_memory_budget(64 * one_gib);
+  set_memory_budget(512 * one_gib / 5);
   EXPECT_EQ(old_scaled_value(128 * one_gib),
             calculate_scaled_value_by_memory(min_value, max_value));
   set_memory_budget(128 * one_gib);

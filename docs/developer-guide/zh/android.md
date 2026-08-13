@@ -81,7 +81,7 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
   --log-level INFO"
 ```
 
-Android 上建议显式设置资源参数。`memory_budget` 为 0 或未设置时，默认取 1 GiB 与 cgroup 内存限制或物理内存的 50% 中的较大值；应结合设备可用资源一并设置数据文件和日志文件大小。
+Android 上建议显式设置资源参数。`memory_budget` 为 0 或未设置时，以 cgroup 内存限制或物理内存的 80% 为目标，并在条件允许时至少为系统预留 1 GiB；自动值最小为 1 GiB。应结合设备可用资源一并设置数据文件和日志文件大小。
 
 ### 端口转发
 

@@ -72,18 +72,22 @@ TEST(TestServerMemoryConfig, resolves_automatic_and_explicit_limits)
 {
   EXPECT_EQ(ONE_GIB,
             ObServerMemoryConfig::calculate_automatic_memory_budget(0));
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 50),
+  EXPECT_EQ(ONE_GIB,
+            ObServerMemoryConfig::calculate_automatic_memory_budget(2 * ONE_GIB));
+  EXPECT_EQ(3 * ONE_GIB,
+            ObServerMemoryConfig::calculate_automatic_memory_budget(4 * ONE_GIB));
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 80),
             ObServerMemoryConfig::calculate_automatic_memory_budget(10 * ONE_GIB));
 
-  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 30),
+  EXPECT_EQ(lib::get_memory_by_percentage(10 * ONE_GIB, 40),
             ObServerMemoryConfig::resolve_kvcache_memory_limit(0, 10 * ONE_GIB));
-  EXPECT_EQ(lib::get_memory_by_percentage(4 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(4 * ONE_GIB, 50),
             ObServerMemoryConfig::resolve_memstore_memory_limit(0, 4 * ONE_GIB));
-  EXPECT_EQ(lib::get_memory_by_percentage(4 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(4 * ONE_GIB, 50),
             ObServerMemoryConfig::resolve_vector_memory_limit(0, 4 * ONE_GIB));
-  EXPECT_EQ(4 * ONE_GIB,
+  EXPECT_EQ(lib::get_memory_by_percentage(5 * ONE_GIB, 50),
             ObServerMemoryConfig::resolve_memstore_memory_limit(0, 5 * ONE_GIB));
-  EXPECT_EQ(4 * ONE_GIB,
+  EXPECT_EQ(lib::get_memory_by_percentage(5 * ONE_GIB, 50),
             ObServerMemoryConfig::resolve_vector_memory_limit(0, 5 * ONE_GIB));
 
   EXPECT_EQ(12345, ObServerMemoryConfig::resolve_kvcache_memory_limit(12345, INT64_MAX));
@@ -131,21 +135,25 @@ TEST(TestServerMemoryConfig, reload_uses_explicit_memory_budget)
   EXPECT_EQ(4 * ONE_GIB, memory_config.get_memstore_memory_limit());
   EXPECT_EQ(5 * ONE_GIB, memory_config.get_vector_memory_limit());
 
+  GCONF.kvcache_memory_limit = 0;
   GCONF.memstore_memory_limit = 0;
   GCONF.vector_memory_limit = 0;
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
-  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 40),
+            memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 50),
             memory_config.get_memstore_memory_limit());
-  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 50),
             memory_config.get_vector_memory_limit());
 
   GCONF.memory_limit = 16 * ONE_GIB;
   ASSERT_EQ(OB_SUCCESS, memory_config.reload_config(GCONF));
   EXPECT_EQ(3 * ONE_GIB, memory_config.get_server_memory_budget());
-  EXPECT_EQ(3 * ONE_GIB, memory_config.get_kvcache_memory_limit());
-  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 40),
+            memory_config.get_kvcache_memory_limit());
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 50),
             memory_config.get_memstore_memory_limit());
-  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 80),
+  EXPECT_EQ(lib::get_memory_by_percentage(3 * ONE_GIB, 50),
             memory_config.get_vector_memory_limit());
 }
 

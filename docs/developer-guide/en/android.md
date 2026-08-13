@@ -81,9 +81,9 @@ adb shell "/data/local/tmp/seekdb --nodaemon \
 ```
 
 Explicit resource values are recommended on Android. When `memory_budget` is
-zero or omitted, it defaults to the greater of 1 GiB and 50% of cgroup or
-physical memory; size it together with the data and log files for the available
-device resources.
+zero or omitted, it targets 80% of cgroup or physical memory while reserving at
+least 1 GiB for the system when possible; its minimum automatic value is 1 GiB.
+Size it together with the data and log files for the available device resources.
 
 ### Forward ports
 

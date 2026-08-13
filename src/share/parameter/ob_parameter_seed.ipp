@@ -67,7 +67,8 @@ DEF_PARAM(server_task_queue_size, INT, OB_CLUSTER_PARAMETER, "16384", "[1024,]",
 DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "the logical memory budget used to size caches and buffers. "
-        "0 means max(1G, 50% of cgroup or physical memory). Range: 0, [1G,).",
+        "0 targets 80% of cgroup or physical memory while reserving at least 1G "
+        "for the system when possible. The minimum automatic value is 1G. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
@@ -76,18 +77,18 @@ DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(kvcache_memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::KVCacheMemoryLimitConfigChecker, "[0M,1T]",
-        "the maximum memory used by KV cache. 0 derives the limit from cgroup or physical memory. "
-        "The automatic value is min(1T, 30% of cgroup or physical memory). "
+        "the maximum memory used by KV cache. 0 derives the limit from memory_budget. "
+        "The automatic value is min(1T, 40% of memory_budget). "
         "A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T].",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(memstore_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the maximum memory used by Memstore. 0 derives the limit from memory_budget. "
-        "The automatic value is 80% of memory_budget. "
+        "The automatic value is 50% of memory_budget. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(vector_memory_limit, CAP, OB_CLUSTER_PARAMETER, "0M", "[0M,)",
         "the maximum memory used by the vector module. 0 derives the limit from memory_budget. "
-        "The automatic value is 80% of memory_budget. "
+        "The automatic value is 50% of memory_budget. "
         "Range: [0M,).",
         ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cpu_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
@@ -415,7 +416,7 @@ DEF_PARAM(_temporary_file_io_area_size, INT, OB_CLUSTER_PARAMETER, "1", "[0, 50)
          "memory buffer size of temporary files, as a percentage of total server runtime memory. "
          "Range: [0, 50), percentage",
          ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(_storage_meta_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "20", "[0, 50)",
+DEF_PARAM(_storage_meta_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "13", "[0, 50)",
          "maximum memory for storage metadata, as a percentage of total server runtime memory. "
          "Range: [0, 50), percentage, 0 means no limit to storage meta memory",
          ObParameterAttr(Section::RUNTIME, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1094,8 +1095,8 @@ DEF_PARAM(_partition_wise_plan_enabled, BOOL, OB_CLUSTER_PARAMETER, "True",
 DEF_PARAM(_enable_adaptive_auto_dop, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Enable or disable adaptive auto dop feature.",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-DEF_PARAM(query_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "50", "[0,100]",
-        "the percentage of server runtime memory that can be used by a single SQL. The default value is 50. Range: [0,100]",
+DEF_PARAM(query_memory_limit_percentage, INT, OB_CLUSTER_PARAMETER, "32", "[0,100]",
+        "the percentage of server runtime memory that can be used by a single SQL. The default value is 32. Range: [0,100]",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
 DEF_PARAM(_ndv_runtime_bloom_filter_size, BOOL, OB_CLUSTER_PARAMETER, "True",
